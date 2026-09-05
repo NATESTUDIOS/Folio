@@ -1,0 +1,2049 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>DeployPro · Mobile & Desktop Virtualization Studio</title>
+  
+  <!-- Typography & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <style>
+    /* -------------------------------------------------------------
+       THEME VARIABLES & DESIGN SYSTEM
+    ------------------------------------------------------------- */
+    :root {
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-code: 'JetBrains Mono', 'Fira Code', monospace;
+      --code-font-size: 13.5px;
+      --code-tab-size: 2;
+
+      /* Radii */
+      --radius-xs: 4px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-full: 9999px;
+
+      /* Transitions */
+      --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+      --transition-fast: 0.15s ease;
+      --transition-med: 0.25s var(--ease-smooth);
+    }
+
+    [data-theme="dark"] {
+      --bg-base: #090d14;
+      --bg-surface: #0f1724;
+      --bg-elevated: #162032;
+      --bg-hover: #1f2b42;
+      --bg-active: #24334e;
+      --border-subtle: #1e293b;
+      --border-focus: #3b82f6;
+
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-glow: rgba(79, 70, 229, 0.25);
+
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --info: #0ea5e9;
+
+      --code-bg: #060a10;
+      --dock-shadow: 0 -10px 30px rgba(0,0,0,0.6);
+      --panel-shadow: 0 10px 40px -10px rgba(0,0,0,0.7);
+    }
+
+    [data-theme="light"] {
+      --bg-base: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-elevated: #f1f5f9;
+      --bg-hover: #e2e8f0;
+      --bg-active: #cbd5e1;
+      --border-subtle: #e2e8f0;
+      --border-focus: #4f46e5;
+
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-glow: rgba(79, 70, 229, 0.15);
+
+      --success: #059669;
+      --warning: #d97706;
+      --danger: #dc2626;
+      --info: #0284c7;
+
+      --code-bg: #f8fafc;
+      --dock-shadow: 0 -10px 25px rgba(0,0,0,0.06);
+      --panel-shadow: 0 10px 30px -10px rgba(0,0,0,0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      height: 100vh;
+      height: 100dvh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Shimmer Skeleton */
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .shimmer-active {
+      background: linear-gradient(90deg, 
+        rgba(255,255,255,0.02) 25%, 
+        rgba(255,255,255,0.08) 50%, 
+        rgba(255,255,255,0.02) 75%
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    .pulse-dot {
+      animation: pulse-ring 2s infinite ease-in-out;
+    }
+
+    /* -------------------------------------------------------------
+       HEADER BAR
+    ------------------------------------------------------------- */
+    header.app-header {
+      height: 52px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      z-index: 20;
+      flex-shrink: 0;
+    }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--primary), #818cf8);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 0.95rem;
+      box-shadow: 0 2px 10px var(--primary-glow);
+    }
+
+    .brand-title {
+      font-size: 0.88rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .brand-badge {
+      font-size: 0.65rem;
+      padding: 1px 6px;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-full);
+      font-weight: 600;
+    }
+
+    .view-mode-tabs {
+      display: flex;
+      background: var(--bg-base);
+      padding: 3px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .view-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      padding: 0.4rem 0.85rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      transition: var(--transition-fast);
+    }
+
+    .view-tab.active {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 0.45rem 0.85rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: var(--transition-fast);
+      white-space: nowrap;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--text-muted);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 2px 10px var(--primary-glow);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-icon-only {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border-radius: var(--radius-sm);
+    }
+
+    /* -------------------------------------------------------------
+       WORKSPACE PANES (DESKTOP DEFAULT)
+    ------------------------------------------------------------- */
+    .workspace-stage {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-base);
+    }
+
+    .pane {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      height: 100%;
+      min-width: 0;
+    }
+
+    /* Desktop View States */
+    [data-view="split"] #editorPane { width: 45%; border-right: 1px solid var(--border-subtle); }
+    [data-view="split"] #previewPane { width: 55%; }
+    [data-view="code"] #editorPane { width: 100%; }
+    [data-view="code"] #previewPane { display: none; }
+    [data-view="preview"] #editorPane { display: none; }
+    [data-view="preview"] #previewPane { width: 100%; }
+
+    .pane-header {
+      height: 40px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 0.85rem;
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .pane-title {
+      font-weight: 600;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.7rem;
+      padding: 2px 7px;
+      border-radius: var(--radius-full);
+      font-weight: 500;
+    }
+
+    .badge-status.live { background: rgba(16,185,129,0.15); color: var(--success); }
+    .badge-status.error { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .badge-status.stale { background: rgba(245,158,11,0.15); color: var(--warning); }
+
+    /* Code Editor */
+    .editor-wrapper {
+      flex: 1;
+      display: flex;
+      position: relative;
+      background: var(--code-bg);
+      overflow: hidden;
+    }
+
+    .gutter {
+      width: 42px;
+      background: var(--code-bg);
+      border-right: 1px solid var(--border-subtle);
+      padding: 0.85rem 0;
+      font-family: var(--font-code);
+      font-size: var(--code-font-size);
+      color: var(--text-muted);
+      text-align: right;
+      user-select: none;
+      line-height: 1.6;
+      opacity: 0.6;
+      flex-shrink: 0;
+    }
+
+    .gutter div { padding-right: 8px; }
+
+    textarea.code-editor {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      padding: 0.85rem 1rem;
+      color: var(--text-primary);
+      font-family: var(--font-code);
+      font-size: var(--code-font-size);
+      line-height: 1.6;
+      resize: none;
+      tab-size: var(--code-tab-size);
+      white-space: pre;
+      overflow-y: auto;
+      min-width: 0;
+    }
+
+    /* Preview Canvas Area */
+    .preview-viewport-container {
+      flex: 1;
+      position: relative;
+      background: #06090e;
+      background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
+      background-size: 20px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      padding: 1.5rem;
+    }
+
+    .device-shell {
+      position: relative;
+      background: #000;
+      border-radius: var(--radius-md);
+      box-shadow: 0 25px 60px -15px rgba(0,0,0,0.8), 0 0 0 1px var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: width 0.3s var(--ease-smooth), height 0.3s var(--ease-smooth);
+    }
+
+    .device-screen-bar {
+      height: 24px;
+      background: #111622;
+      border-bottom: 1px solid #1c2638;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      user-select: none;
+    }
+
+    .device-traffic-dots { display: flex; gap: 5px; }
+    .traffic-dot { width: 7px; height: 7px; border-radius: 50%; background: #2a374f; }
+
+    iframe#stageSandbox {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #ffffff;
+    }
+
+    .sandbox-shimmer {
+      position: absolute;
+      inset: 24px 0 0 0;
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 10;
+    }
+
+    .sandbox-shimmer.active { opacity: 1; pointer-events: auto; }
+    .shimmer-box { width: 80%; height: 16px; border-radius: 4px; }
+
+    .device-control-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .device-presets {
+      display: flex;
+      gap: 2px;
+      background: var(--bg-base);
+      padding: 2px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .device-pill {
+      background: transparent;
+      border: none;
+      padding: 3px 8px;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      border-radius: var(--radius-xs);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .device-pill.active { background: var(--bg-elevated); color: var(--text-primary); }
+
+    .dimension-inputs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--font-code);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .dimension-inputs input {
+      width: 46px;
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-xs);
+      color: var(--text-primary);
+      text-align: center;
+      padding: 2px 4px;
+      font-size: 0.72rem;
+    }
+
+    /* -------------------------------------------------------------
+       BOTTOM DOCK (DESKTOP)
+    ------------------------------------------------------------- */
+    .dock-container {
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--dock-shadow);
+      z-index: 15;
+      flex-shrink: 0;
+      transition: height 0.25s var(--ease-smooth);
+    }
+
+    .dock-header {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      user-select: none;
+    }
+
+    .dock-tabs { display: flex; gap: 0.35rem; height: 100%; }
+
+    .dock-tab-btn {
+      height: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 0 0.8rem;
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      cursor: pointer;
+    }
+
+    .dock-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    .dock-counter {
+      font-size: 0.65rem;
+      padding: 1px 5px;
+      border-radius: var(--radius-full);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+    }
+
+    .dock-body {
+      height: 150px;
+      overflow-y: auto;
+      background: var(--code-bg);
+      font-family: var(--font-code);
+      font-size: 0.78rem;
+    }
+
+    .dock-container.collapsed .dock-body { display: none; }
+
+    /* Logs & Audits Layout */
+    .log-row {
+      display: grid;
+      grid-template-columns: 95px 75px 1fr 40px;
+      align-items: center;
+      padding: 6px 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      line-height: 1.4;
+    }
+
+    .log-ts { color: var(--text-muted); font-size: 0.7rem; }
+    .log-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .log-badge.info { background: rgba(14, 165, 233, 0.15); color: var(--info); }
+    .log-badge.success { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .log-badge.warn { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+    .log-badge.error { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+    .log-badge.metric { background: rgba(129, 140, 248, 0.15); color: #818cf8; }
+
+    .log-msg { color: var(--text-primary); white-space: pre-wrap; word-break: break-all; }
+    .log-copy-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; text-align: right; }
+
+    .audit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+      padding: 1rem;
+      font-family: var(--font-sans);
+    }
+
+    .audit-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .audit-metric-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+    .audit-metric-val { font-size: 1.25rem; font-weight: 700; font-family: var(--font-code); color: var(--text-primary); }
+    .audit-metric-sub { font-size: 0.68rem; color: var(--text-secondary); }
+
+    /* -------------------------------------------------------------
+       MOBILE NAVIGATION BAR (Bottom Tab Bar)
+    ------------------------------------------------------------- */
+    .mobile-bottom-bar {
+      display: none; /* hidden on desktop */
+      height: 60px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-subtle);
+      align-items: center;
+      justify-content: space-around;
+      padding: 0 0.5rem;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      z-index: 50;
+      flex-shrink: 0;
+    }
+
+    .mobile-nav-item {
+      flex: 1;
+      height: 100%;
+      background: transparent;
+      border: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      font-weight: 600;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .mobile-nav-item i {
+      font-size: 1.15rem;
+      transition: transform 0.2s ease;
+    }
+
+    .mobile-nav-item.active {
+      color: var(--primary);
+    }
+
+    .mobile-nav-item.active i {
+      transform: translateY(-2px);
+    }
+
+    .mobile-nav-badge {
+      position: absolute;
+      top: 6px;
+      right: calc(50% - 18px);
+      background: var(--primary);
+      color: white;
+      font-size: 0.6rem;
+      padding: 1px 4px;
+      border-radius: var(--radius-full);
+      font-weight: 700;
+    }
+
+    /* -------------------------------------------------------------
+       MODALS & SLIDE-UP SHEETS
+    ------------------------------------------------------------- */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal-window {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      width: 540px;
+      max-width: 92vw;
+      box-shadow: var(--panel-shadow);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: modalSlide 0.2s var(--ease-smooth);
+    }
+
+    @keyframes modalSlide {
+      from { transform: scale(0.96) translateY(8px); opacity: 0; }
+      to { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    .modal-header {
+      padding: 0.9rem 1.1rem;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-title { font-size: 0.92rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
+    .modal-body { padding: 1.1rem; max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; }
+
+    .form-group { display: flex; flex-direction: column; gap: 0.35rem; }
+    .form-label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
+    .form-control {
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.55rem 0.75rem;
+      font-size: 16px; /* 16px prevents iOS Safari auto-zoom on inputs */
+      color: var(--text-primary);
+      outline: none;
+    }
+
+    .snapshot-item {
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .snapshot-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .snapshot-name { font-weight: 600; font-size: 0.82rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .snapshot-time { font-size: 0.7rem; color: var(--text-muted); }
+
+    /* Command Palette */
+    .command-palette {
+      width: 500px;
+      max-width: 90vw;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      box-shadow: var(--panel-shadow);
+      overflow: hidden;
+    }
+
+    .command-search {
+      width: 100%;
+      background: var(--bg-surface);
+      border: none;
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.85rem 1rem;
+      font-size: 16px;
+      color: var(--text-primary);
+      outline: none;
+    }
+
+    .command-list { max-height: 260px; overflow-y: auto; padding: 0.5rem; }
+    .command-item {
+      padding: 0.65rem 0.8rem;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .command-item:hover { background: var(--primary); color: white; }
+
+    /* -------------------------------------------------------------
+       RESPONSIVE ADAPTATIONS (MOBILE BREAKPOINT <= 768px)
+    ------------------------------------------------------------- */
+    @media (max-width: 768px) {
+      /* Hide desktop-only controls */
+      .view-mode-tabs,
+      .dimension-inputs,
+      .desktop-only,
+      .device-presets,
+      #telemetryDock {
+        display: none !important;
+      }
+
+      /* Enable mobile bottom bar */
+      .mobile-bottom-bar {
+        display: flex;
+      }
+
+      /* App Header adjusts for phone */
+      header.app-header {
+        padding: 0 0.75rem;
+        height: 48px;
+      }
+
+      .brand-title span { display: none; }
+      .brand-badge { display: none; }
+
+      .header-actions {
+        gap: 0.4rem;
+      }
+
+      .btn-deploy-main {
+        padding: 0.35rem 0.75rem;
+        font-size: 0.75rem;
+      }
+
+      /* Workspace layout transitions to full screen tabs */
+      .workspace-stage {
+        flex: 1;
+        position: relative;
+        display: block; /* stack layers */
+      }
+
+      .pane {
+        position: absolute;
+        inset: 0;
+        width: 100% !important;
+        height: 100% !important;
+        border: none !important;
+        display: none;
+      }
+
+      /* Mobile tab activation handled via data-mobile-tab on body */
+      body[data-mobile-tab="code"] #editorPane { display: flex; }
+      body[data-mobile-tab="preview"] #previewPane { display: flex; }
+      body[data-mobile-tab="logs"] #mobileLogsPane { display: flex; }
+      body[data-mobile-tab="audit"] #mobileAuditPane { display: flex; }
+
+      /* Gutter on mobile takes less space */
+      .gutter {
+        width: 32px;
+        font-size: 11px;
+      }
+
+      textarea.code-editor {
+        font-size: 13.5px;
+        padding: 0.75rem 0.5rem;
+      }
+
+      /* Preview on mobile removes device shells and frames */
+      .preview-viewport-container {
+        padding: 0 !important;
+        background: transparent !important;
+      }
+
+      .device-shell {
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+      }
+
+      .device-screen-bar {
+        height: 28px;
+        padding: 0 8px;
+      }
+
+      /* Mobile Log and Audit Panes */
+      #mobileLogsPane, #mobileAuditPane {
+        position: absolute;
+        inset: 0;
+        background: var(--code-bg);
+        overflow-y: auto;
+        flex-direction: column;
+      }
+
+      .log-row {
+        grid-template-columns: 75px 65px 1fr 30px;
+        padding: 8px 0.75rem;
+        font-size: 0.72rem;
+      }
+
+      .log-ts { font-size: 0.65rem; }
+
+      .audit-grid {
+        grid-template-columns: 1fr 1fr;
+        padding: 0.75rem;
+        gap: 0.5rem;
+      }
+
+      .audit-metric-val { font-size: 1.1rem; }
+
+      /* Convert Modals to Native Bottom Sheets on Mobile */
+      .modal-backdrop {
+        align-items: flex-end;
+      }
+
+      .modal-window {
+        width: 100vw;
+        max-width: 100vw;
+        border-radius: 20px 20px 0 0;
+        border-bottom: none;
+        max-height: 80vh;
+        animation: sheetUp 0.25s var(--ease-smooth);
+      }
+
+      @keyframes sheetUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+      }
+    }
+  </style>
+</head>
+<body data-view="split" data-mobile-tab="code">
+
+  <!-- =============================================================
+       HEADER BAR
+  ============================================================= -->
+  <header class="app-header">
+    <div class="brand-cluster">
+      <div class="brand-logo">
+        <i class="fa-solid fa-cube"></i>
+      </div>
+      <div class="brand-title">
+        DeployPro
+        <span class="brand-badge">Engine</span>
+      </div>
+    </div>
+
+    <!-- Desktop Split Switcher -->
+    <div class="view-mode-tabs">
+      <button class="view-tab" data-mode="code"><i class="fa-solid fa-code"></i> Editor</button>
+      <button class="view-tab active" data-mode="split"><i class="fa-solid fa-table-columns"></i> Split</button>
+      <button class="view-tab" data-mode="preview"><i class="fa-solid fa-display"></i> Preview</button>
+    </div>
+
+    <!-- Actions -->
+    <div class="header-actions">
+      <!-- Primary Action: Deploy -->
+      <button class="btn btn-primary btn-deploy-main" id="btnDeploy" title="Compile & Simulate (Ctrl + Enter)">
+        <i class="fa-solid fa-bolt-lightning"></i> <span>Deploy</span>
+      </button>
+
+      <!-- Desktop-only items -->
+      <button class="btn desktop-only" id="btnTemplates" title="Starters">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> Starters
+      </button>
+
+      <button class="btn desktop-only" id="btnSnapshots" title="History">
+        <i class="fa-solid fa-clock-rotate-left"></i> History
+      </button>
+
+      <button class="btn btn-icon-only desktop-only" id="btnCmdPalette" title="Command Palette (Ctrl + K)">
+        <i class="fa-solid fa-terminal"></i>
+      </button>
+
+      <!-- More Actions (Mobile Sheet / Settings) -->
+      <button class="btn btn-icon-only" id="btnMobileMore" title="Tools & Preferences">
+        <i class="fa-solid fa-ellipsis-vertical"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- =============================================================
+       MAIN WORKSPACE (CODE & PREVIEW)
+  ============================================================= -->
+  <main class="workspace-stage">
+
+    <!-- 1. CODE EDITOR PANE -->
+    <section class="pane" id="editorPane">
+      <div class="pane-header">
+        <div class="pane-title">
+          <i class="fa-solid fa-file-code"></i> Source
+        </div>
+        <div style="display:flex; gap:0.4rem; align-items:center;">
+          <button class="btn" id="btnFormat" style="padding: 3px 8px; font-size: 0.7rem;"><i class="fa-solid fa-indent"></i> Indent</button>
+          <button class="btn" id="btnClearCode" style="padding: 3px 8px; font-size: 0.7rem;"><i class="fa-solid fa-eraser"></i> Clear</button>
+        </div>
+      </div>
+
+      <div class="editor-wrapper">
+        <div class="gutter" id="lineGutter"></div>
+        <textarea class="code-editor" id="codeEditor" spellcheck="false" placeholder="Write or drop HTML/CSS/JS here..."></textarea>
+      </div>
+    </section>
+
+    <!-- 2. PREVIEW CANVAS PANE -->
+    <section class="pane" id="previewPane">
+      <div class="pane-header">
+        <div class="pane-title">
+          <i class="fa-solid fa-compass-drafting"></i> Sandbox
+          <span class="badge-status live" id="liveBadge">
+            <span class="traffic-dot pulse-dot" style="background:currentColor;"></span>
+            <span id="liveStatusText">Live</span>
+          </span>
+        </div>
+
+        <div class="device-control-bar">
+          <div class="device-presets">
+            <button class="device-pill" data-preset="mobile"><i class="fa-solid fa-mobile-screen"></i> Mobile</button>
+            <button class="device-pill" data-preset="tablet"><i class="fa-solid fa-tablet-screen-button"></i> Tablet</button>
+            <button class="device-pill active" data-preset="desktop"><i class="fa-solid fa-desktop"></i> Desktop</button>
+            <button class="device-pill" data-preset="fluid"><i class="fa-solid fa-maximize"></i> Fluid</button>
+          </div>
+
+          <div class="dimension-inputs">
+            <input type="number" id="inputFrameW" value="1200" title="Viewport Width">
+            <span>×</span>
+            <input type="number" id="inputFrameH" value="800" title="Viewport Height">
+          </div>
+
+          <button class="btn btn-icon-only" id="btnFlipOrientation" title="Rotate" style="width:26px; height:26px;">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Preview Viewport Canvas -->
+      <div class="preview-viewport-container" id="canvasContainer">
+        <div class="device-shell" id="deviceShell" style="width: 100%; height: 100%;">
+          <div class="device-screen-bar">
+            <div class="device-traffic-dots">
+              <span class="traffic-dot"></span>
+              <span class="traffic-dot"></span>
+              <span class="traffic-dot"></span>
+            </div>
+            <span id="deviceUrlDisplay" style="font-family: var(--font-code);">sandbox://isolated-dom</span>
+            <span id="renderTimeDisplay">0.00ms</span>
+          </div>
+
+          <!-- Loading Shimmer -->
+          <div class="sandbox-shimmer shimmer-active" id="previewShimmer">
+            <div class="shimmer-box" style="height: 32px; width: 40%; background: var(--bg-elevated);"></div>
+            <div class="shimmer-box" style="height: 180px; background: var(--bg-elevated);"></div>
+            <div class="shimmer-box" style="height: 80px; width: 90%; background: var(--bg-elevated);"></div>
+          </div>
+
+          <iframe id="stageSandbox" sandbox="allow-scripts allow-modals allow-same-origin" title="Local Preview Sandbox"></iframe>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. MOBILE-ONLY CONSOLE LOGS TAB -->
+    <section class="pane" id="mobileLogsPane">
+      <div class="pane-header">
+        <div class="pane-title"><i class="fa-solid fa-terminal"></i> Runtime Console</div>
+        <div style="display:flex; gap:0.4rem;">
+          <button class="btn" id="btnCopyLogsMobile" style="padding: 3px 8px; font-size: 0.7rem;"><i class="fa-solid fa-copy"></i></button>
+          <button class="btn" id="btnClearLogsMobile" style="padding: 3px 8px; font-size: 0.7rem;"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </div>
+      <div style="flex:1; overflow-y:auto;" id="mobileLogsOutput"></div>
+    </section>
+
+    <!-- 4. MOBILE-ONLY AUDIT METRICS TAB -->
+    <section class="pane" id="mobileAuditPane">
+      <div class="pane-header">
+        <div class="pane-title"><i class="fa-solid fa-gauge-high"></i> Performance Diagnostics</div>
+      </div>
+      <div class="audit-grid" id="mobileAuditGrid">
+        <!-- populated dynamically -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- =============================================================
+       BOTTOM DOCK: LOGS & AUDIT (DESKTOP ONLY)
+  ============================================================= -->
+  <footer class="dock-container" id="telemetryDock">
+    <div class="dock-header">
+      <div class="dock-tabs">
+        <button class="dock-tab-btn active" data-dock="logs">
+          <i class="fa-solid fa-terminal"></i> Console & Logs
+          <span class="dock-counter" id="logCountDesktop">0</span>
+        </button>
+        <button class="dock-tab-btn" data-dock="audit">
+          <i class="fa-solid fa-gauge-high"></i> Performance & DOM Audit
+        </button>
+      </div>
+
+      <div style="display:flex; align-items:center; gap: 0.5rem;">
+        <button class="btn" id="btnCopyAllLogs" style="padding: 2px 7px; font-size: 0.7rem;"><i class="fa-solid fa-copy"></i> Copy Logs</button>
+        <button class="btn" id="btnClearLogs" style="padding: 2px 7px; font-size: 0.7rem;"><i class="fa-solid fa-trash"></i> Clear</button>
+        <button class="btn btn-icon-only" id="btnToggleDock" style="width:24px; height:24px;" title="Collapse Dock">
+          <i class="fa-solid fa-chevron-down" id="dockToggleIcon"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="dock-body" id="dockLogsPanel">
+      <div id="desktopLogsOutput"></div>
+    </div>
+
+    <div class="dock-body" id="dockAuditPanel" style="display: none;">
+      <div class="audit-grid" id="desktopAuditGrid"></div>
+    </div>
+  </footer>
+
+  <!-- =============================================================
+       MOBILE BOTTOM NAVIGATION BAR
+  ============================================================= -->
+  <nav class="mobile-bottom-bar">
+    <button class="mobile-nav-item active" data-tab="code">
+      <i class="fa-solid fa-code"></i>
+      <span>Editor</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="preview">
+      <i class="fa-solid fa-display"></i>
+      <span>Preview</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="logs">
+      <i class="fa-solid fa-terminal"></i>
+      <span>Logs</span>
+      <span class="mobile-nav-badge" id="logCountMobile">0</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="audit">
+      <i class="fa-solid fa-gauge-high"></i>
+      <span>Audit</span>
+    </button>
+  </nav>
+
+  <!-- =============================================================
+       MODAL: MOBILE QUICK-ACTION DRAWER / MORE SHEET
+  ============================================================= -->
+  <div class="modal-backdrop" id="modalMobileActions">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title"><i class="fa-solid fa-bars-staggered"></i> Studio Quick Actions</div>
+        <button class="btn btn-icon-only modal-close" style="width:26px; height:26px;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="snapshot-item" id="sheetBtnStarters" style="cursor:pointer;">
+          <div class="snapshot-meta">
+            <span class="snapshot-name"><i class="fa-solid fa-wand-magic-sparkles" style="color:var(--primary);"></i> Starter Templates</span>
+            <span class="snapshot-time">Load Tailwind, Dashboard, or Clean Canvas</span>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-muted);"></i>
+        </div>
+
+        <div class="snapshot-item" id="sheetBtnSnapshots" style="cursor:pointer;">
+          <div class="snapshot-meta">
+            <span class="snapshot-name"><i class="fa-solid fa-clock-rotate-left" style="color:var(--success);"></i> Snapshot History</span>
+            <span class="snapshot-time">Restore or save local iterations</span>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-muted);"></i>
+        </div>
+
+        <div class="snapshot-item" id="sheetBtnExport" style="cursor:pointer;">
+          <div class="snapshot-meta">
+            <span class="snapshot-name"><i class="fa-solid fa-download" style="color:var(--warning);"></i> Export HTML File</span>
+            <span class="snapshot-time">Download self-contained offline build</span>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-muted);"></i>
+        </div>
+
+        <div class="snapshot-item" id="sheetBtnSettings" style="cursor:pointer;">
+          <div class="snapshot-meta">
+            <span class="snapshot-name"><i class="fa-solid fa-sliders" style="color:var(--info);"></i> Studio Preferences</span>
+            <span class="snapshot-time">Theme, fonts, and editor behavior</span>
+          </div>
+          <i class="fa-solid fa-chevron-right" style="color:var(--text-muted);"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============================================================
+       MODAL: GLOBAL PREFERENCES
+  ============================================================= -->
+  <div class="modal-backdrop" id="modalSettings">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title"><i class="fa-solid fa-sliders"></i> Preferences</div>
+        <button class="btn btn-icon-only modal-close" style="width:26px; height:26px;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">App Appearance Theme</label>
+          <select class="form-control" id="prefTheme">
+            <option value="dark">Pro Dark (Carbon & Slate)</option>
+            <option value="light">Crisp Light (Editorial)</option>
+            <option value="auto">System Sync (Follow OS)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Editor Monospace Font</label>
+          <select class="form-control" id="prefFont">
+            <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+            <option value="'Fira Code', monospace">Fira Code</option>
+            <option value="'SF Mono', Consolas, monospace">System Consolas / Monospace</option>
+          </select>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label">Font Size (px)</label>
+            <input type="number" class="form-control" id="prefFontSize" min="11" max="22" value="13.5">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tab Indent Size</label>
+            <select class="form-control" id="prefTabSize">
+              <option value="2">2 Spaces</option>
+              <option value="4">4 Spaces</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Deployment Automation</label>
+          <label style="display:flex; align-items:center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer;">
+            <input type="checkbox" id="prefAutoDeploy"> Live-recompile on typing (700ms debounce)
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============================================================
+       MODAL: STARTER BOILERPLATES
+  ============================================================= -->
+  <div class="modal-backdrop" id="modalTemplates">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Starters</div>
+        <button class="btn btn-icon-only modal-close" style="width:26px; height:26px;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="snapshot-item" style="cursor:pointer;" data-template="tailwind">
+          <div class="snapshot-meta">
+            <span class="snapshot-name"><i class="fa-solid fa-wind" style="color:#38bdf8;"></i> Modern Landing Hero</span>
+            <span class="snapshot-time">Tailwind CSS CDN pre-configured</span>
+          </div>
+          <button class="btn btn-primary" style="padding:4px 10px;">Load</button>
+        </div>
+
+        <div class="snapshot-item" style="cursor:pointer;" data-template="dashboard">
+          <div class="snapshot-meta">
+            <span class="snapshot-name"><i class="fa-solid fa-chart-line" style="color:#a855f7;"></i> Analytics Widget Card</span>
+            <span class="snapshot-time">Clean isolated card layout</span>
+          </div>
+          <button class="btn btn-primary" style="padding:4px 10px;">Load</button>
+        </div>
+
+        <div class="snapshot-item" style="cursor:pointer;" data-template="blank">
+          <div class="snapshot-meta">
+            <span class="snapshot-name"><i class="fa-solid fa-code" style="color:#10b981;"></i> Minimal Canvas</span>
+            <span class="snapshot-time">Clean canvas with reset</span>
+          </div>
+          <button class="btn btn-primary" style="padding:4px 10px;">Load</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============================================================
+       MODAL: SNAPSHOTS & HISTORY
+  ============================================================= -->
+  <div class="modal-backdrop" id="modalSnapshots">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title"><i class="fa-solid fa-clock-rotate-left"></i> Snapshots</div>
+        <button class="btn btn-icon-only modal-close" style="width:26px; height:26px;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; gap:0.5rem;">
+          <input type="text" id="newSnapTitle" class="form-control" style="flex:1;" placeholder="Label snapshot...">
+          <button class="btn btn-primary" id="btnSaveSnapshot"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size:0.75rem; color:var(--text-muted);" id="snapStorageStats">0 snapshots</span>
+          <button class="btn" id="btnExportHtml" style="font-size:0.72rem; padding: 2px 8px;"><i class="fa-solid fa-download"></i> Export</button>
+        </div>
+        <div id="snapshotList" style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.25rem;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============================================================
+       COMMAND PALETTE (CTRL + K)
+  ============================================================= -->
+  <div class="modal-backdrop" id="modalCmd">
+    <div class="command-palette">
+      <input type="text" class="command-search" id="cmdInput" placeholder="Type a command... (Esc to exit)">
+      <div class="command-list" id="cmdList">
+        <div class="command-item" data-cmd="deploy"><i class="fa-solid fa-bolt"></i> <span>Deploy Sandbox Preview</span> <kbd>Ctrl+Enter</kbd></div>
+        <div class="command-item" data-cmd="split"><i class="fa-solid fa-table-columns"></i> <span>Switch to Split View</span></div>
+        <div class="command-item" data-cmd="preview"><i class="fa-solid fa-display"></i> <span>Maximize Virtual Preview</span></div>
+        <div class="command-item" data-cmd="code"><i class="fa-solid fa-code"></i> <span>Maximize Code Editor</span></div>
+        <div class="command-item" data-cmd="snap"><i class="fa-solid fa-camera"></i> <span>Save Instant Snapshot</span></div>
+        <div class="command-item" data-cmd="clearLogs"><i class="fa-solid fa-trash"></i> <span>Flush Telemetry Logs</span></div>
+        <div class="command-item" data-cmd="export"><i class="fa-solid fa-download"></i> <span>Download Workspace File (.html)</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============================================================
+       CORE SYSTEM JAVASCRIPT
+  ============================================================= -->
+  <script>
+    (function() {
+      'use strict';
+
+      /* --- STORAGE CONSTANTS --- */
+      const STORE_KEY_PREFIX = 'deploypro_';
+      const KEY_CURRENT_DOC = STORE_KEY_PREFIX + 'current_source';
+      const KEY_PREFS = STORE_KEY_PREFIX + 'preferences';
+      const KEY_SNAPSHOTS = STORE_KEY_PREFIX + 'snapshots_v2';
+
+      /* --- TEMPLATES --- */
+      const TEMPLATES = {
+        blank: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      padding: 1.5rem;
+      box-sizing: border-box;
+    }
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      padding: 2rem;
+      border-radius: 12px;
+      text-align: center;
+      max-width: 400px;
+    }
+    h1 { margin: 0 0 0.5rem 0; color: #58a6ff; font-size: 1.5rem; }
+    p { margin: 0; color: #8b949e; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Minimal Canvas</h1>
+    <p>Rendered privately right in your local browser sandbox.</p>
+  </div>
+  <script>
+    console.log("Isolated sandbox initialized at", new Date().toLocaleTimeString());
+  <\/script>
+</body>
+</html>`,
+
+        tailwind: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"><\/script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-6">
+  <div class="max-w-xl text-center space-y-6">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 text-xs font-semibold uppercase tracking-wider">
+      Responsive Ready
+    </div>
+    <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
+      Instant Browser Deployment
+    </h1>
+    <p class="text-slate-400 text-sm leading-relaxed">
+      Build, preview, inspect DOM metrics, and test responsive viewports on desktop or mobile seamlessly.
+    </p>
+    <div class="flex justify-center gap-3">
+      <button class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition shadow-lg shadow-indigo-600/25">
+        Get Started
+      </button>
+    </div>
+  </div>
+  <script>
+    console.info("Tailwind stylesheet dynamically loaded.");
+  <\/script>
+</body>
+</html>`,
+
+        dashboard: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 1.5rem;
+      display: flex;
+      justify-content: center;
+    }
+    .widget {
+      width: 100%;
+      max-width: 480px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+    }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+    .badge { background: #10b98120; color: #10b981; font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 99px; }
+    .metric { font-size: 2.25rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .subtext { font-size: 0.8rem; color: #94a3b8; }
+    .bar-chart { display: flex; gap: 8px; align-items: flex-end; height: 90px; margin-top: 1.5rem; }
+    .bar { flex: 1; background: #6366f1; border-radius: 4px; transition: height 0.5s ease; }
+    .bar:hover { background: #818cf8; }
+  </style>
+</head>
+<body>
+  <div class="widget">
+    <div class="header">
+      <span style="font-weight:600; color:#94a3b8; font-size:0.9rem;">System Throughput</span>
+      <span class="badge">+18.4%</span>
+    </div>
+    <div class="metric">1,429 req/s</div>
+    <div class="subtext">Nominal baseline across edge proxies</div>
+    <div class="bar-chart">
+      <div class="bar" style="height: 45%;"></div>
+      <div class="bar" style="height: 70%;"></div>
+      <div class="bar" style="height: 60%;"></div>
+      <div class="bar" style="height: 90%;"></div>
+      <div class="bar" style="height: 75%;"></div>
+      <div class="bar" style="height: 100%;"></div>
+    </div>
+  </div>
+  <script>
+    console.log("Telemetry widget mounted successfully.");
+  <\/script>
+</body>
+</html>`
+      };
+
+      /* --- DOM REFS --- */
+      const codeEditor = document.getElementById('codeEditor');
+      const lineGutter = document.getElementById('lineGutter');
+      const stageSandbox = document.getElementById('stageSandbox');
+      const previewShimmer = document.getElementById('previewShimmer');
+      const deviceShell = document.getElementById('deviceShell');
+      const liveStatusText = document.getElementById('liveStatusText');
+      const liveBadge = document.getElementById('liveBadge');
+      const renderTimeDisplay = document.getElementById('renderTimeDisplay');
+
+      const desktopLogsOutput = document.getElementById('desktopLogsOutput');
+      const mobileLogsOutput = document.getElementById('mobileLogsOutput');
+      const logCountDesktop = document.getElementById('logCountDesktop');
+      const logCountMobile = document.getElementById('logCountMobile');
+      const telemetryDock = document.getElementById('telemetryDock');
+      const dockToggleIcon = document.getElementById('dockToggleIcon');
+
+      // Audit Containers
+      const desktopAuditGrid = document.getElementById('desktopAuditGrid');
+      const mobileAuditGrid = document.getElementById('mobileAuditGrid');
+
+      // Responsive device inputs
+      const inputFrameW = document.getElementById('inputFrameW');
+      const inputFrameH = document.getElementById('inputFrameH');
+      const devicePills = document.querySelectorAll('.device-pill');
+
+      // Mobile Bottom Bar items
+      const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
+
+      // Modals
+      const modalSettings = document.getElementById('modalSettings');
+      const modalTemplates = document.getElementById('modalTemplates');
+      const modalSnapshots = document.getElementById('modalSnapshots');
+      const modalCmd = document.getElementById('modalCmd');
+      const modalMobileActions = document.getElementById('modalMobileActions');
+
+      /* --- INTERNAL STATE --- */
+      let state = {
+        logs: [],
+        autoDeployTimer: null,
+        prefs: {
+          theme: 'dark',
+          font: "'JetBrains Mono', monospace",
+          fontSize: 13.5,
+          tabSize: 2,
+          autoDeploy: false
+        },
+        auditData: {
+          nodes: 0,
+          parseTime: '0.00ms',
+          payloadSize: '0.00 KB',
+          externalCount: 0
+        }
+      };
+
+      /* -------------------------------------------------------------
+         MOBILE TAB SYSTEM
+      ------------------------------------------------------------- */
+      function setMobileTab(tabName) {
+        document.body.setAttribute('data-mobile-tab', tabName);
+        mobileNavItems.forEach(item => {
+          item.classList.toggle('active', item.dataset.tab === tabName);
+        });
+      }
+
+      mobileNavItems.forEach(item => {
+        item.addEventListener('click', () => {
+          setMobileTab(item.dataset.tab);
+        });
+      });
+
+      /* -------------------------------------------------------------
+         LOG ENGINE (Synchronized between Desktop & Mobile)
+      ------------------------------------------------------------- */
+      function logTelemetry(type, message) {
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}.${String(now.getMilliseconds()).padStart(3,'0')}`;
+        
+        const entry = { id: Date.now() + Math.random(), type, message, timeStr };
+        state.logs.push(entry);
+
+        function createRow() {
+          const row = document.createElement('div');
+          row.className = 'log-row';
+          row.innerHTML = `
+            <span class="log-ts">${timeStr}</span>
+            <div><span class="log-badge ${type}">${type}</span></div>
+            <span class="log-msg">${escapeHtml(message)}</span>
+            <button class="log-copy-btn" title="Copy Log Line"><i class="fa-solid fa-copy"></i></button>
+          `;
+          row.querySelector('.log-copy-btn').addEventListener('click', () => {
+            navigator.clipboard.writeText(`[${timeStr}] [${type.toUpperCase()}] ${message}`);
+            logTelemetry('info', 'Copied line to clipboard');
+          });
+          return row;
+        }
+
+        desktopLogsOutput.appendChild(createRow());
+        mobileLogsOutput.appendChild(createRow());
+
+        const countStr = state.logs.length.toString();
+        logCountDesktop.textContent = countStr;
+        logCountMobile.textContent = countStr;
+
+        // Auto-scroll active container
+        desktopLogsOutput.parentElement.scrollTop = desktopLogsOutput.parentElement.scrollHeight;
+        mobileLogsOutput.scrollTop = mobileLogsOutput.scrollHeight;
+      }
+
+      function escapeHtml(text) {
+        return (text + '').replace(/[&<>"']/g, m => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[m]);
+      }
+
+      /* -------------------------------------------------------------
+         SANDBOX RUNTIME CONSOLE BRIDGE
+      ------------------------------------------------------------- */
+      window.addEventListener('message', (event) => {
+        if (!event.data || event.data.source !== 'deploypro_sandbox') return;
+        const { level, args } = event.data;
+        const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' ');
+        
+        if (level === 'error') logTelemetry('error', `[Runtime] ${msg}`);
+        else if (level === 'warn') logTelemetry('warn', `[Runtime] ${msg}`);
+        else logTelemetry('info', `[Console] ${msg}`);
+      });
+
+      const SANDBOX_INJECTION = `
+        <script>
+          (function() {
+            function forward(level, args) {
+              try {
+                window.parent.postMessage({
+                  source: 'deploypro_sandbox',
+                  level: level,
+                  args: Array.from(args)
+                }, '*');
+              } catch(e) {}
+            }
+            const _log = console.log, _err = console.error, _warn = console.warn, _info = console.info;
+            console.log = function() { forward('info', arguments); _log.apply(console, arguments); };
+            console.error = function() { forward('error', arguments); _err.apply(console, arguments); };
+            console.warn = function() { forward('warn', arguments); _warn.apply(console, arguments); };
+            console.info = function() { forward('info', arguments); _info.apply(console, arguments); };
+
+            window.onerror = function(msg, url, line) {
+              forward('error', ["Uncaught: " + msg + " (Line " + line + ")"]);
+            };
+          })();
+        <\/script>
+      `;
+
+      /* -------------------------------------------------------------
+         AUDIT RENDERING ENGINE
+      ------------------------------------------------------------- */
+      function renderAuditGrids() {
+        const html = `
+          <div class="audit-card">
+            <span class="audit-metric-label">DOM Node Density</span>
+            <span class="audit-metric-val">${state.auditData.nodes}</span>
+            <span class="audit-metric-sub">Total tags in DOM</span>
+          </div>
+          <div class="audit-card">
+            <span class="audit-metric-label">Parse & Paint</span>
+            <span class="audit-metric-val">${state.auditData.parseTime}</span>
+            <span class="audit-metric-sub">Execution duration</span>
+          </div>
+          <div class="audit-card">
+            <span class="audit-metric-label">Payload Footprint</span>
+            <span class="audit-metric-val">${state.auditData.payloadSize}</span>
+            <span class="audit-metric-sub">UTF-8 byte weight</span>
+          </div>
+          <div class="audit-card">
+            <span class="audit-metric-label">External Assets</span>
+            <span class="audit-metric-val">${state.auditData.externalCount}</span>
+            <span class="audit-metric-sub">Remote scripts/CSS</span>
+          </div>
+        `;
+        desktopAuditGrid.innerHTML = html;
+        mobileAuditGrid.innerHTML = html;
+      }
+
+      /* -------------------------------------------------------------
+         COMPILATION & DEPLOYMENT ENGINE
+      ------------------------------------------------------------- */
+      function deploySource(silent = false) {
+        const source = codeEditor.value.trim();
+        if (!source) {
+          logTelemetry('warn', 'Buffer empty. Deployment skipped.');
+          liveBadge.className = 'badge-status stale';
+          liveStatusText.textContent = 'Empty';
+          return;
+        }
+
+        // On mobile: auto-switch to preview tab when user taps Deploy
+        if (window.innerWidth <= 768) {
+          setMobileTab('preview');
+        }
+
+        previewShimmer.classList.add('active');
+        const startPerf = performance.now();
+
+        try {
+          const bytes = new Blob([source]).size;
+          state.auditData.payloadSize = `${(bytes / 1024).toFixed(2)} KB`;
+
+          let compiledHtml = source;
+          if (compiledHtml.includes('<head>')) {
+            compiledHtml = compiledHtml.replace('<head>', '<head>' + SANDBOX_INJECTION);
+          } else {
+            compiledHtml = SANDBOX_INJECTION + compiledHtml;
+          }
+
+          const doc = stageSandbox.contentDocument || stageSandbox.contentWindow.document;
+          doc.open();
+          doc.write(compiledHtml);
+          doc.close();
+
+          const duration = (performance.now() - startPerf).toFixed(2);
+          renderTimeDisplay.textContent = `${duration}ms`;
+          state.auditData.parseTime = `${duration}ms`;
+
+          setTimeout(() => {
+            try {
+              const sandboxDoc = stageSandbox.contentDocument;
+              if (sandboxDoc) {
+                state.auditData.nodes = sandboxDoc.getElementsByTagName('*').length;
+                state.auditData.externalCount = sandboxDoc.querySelectorAll('link[rel="stylesheet"], script[src]').length;
+                renderAuditGrids();
+              }
+            } catch(e) {}
+          }, 80);
+
+          liveBadge.className = 'badge-status live';
+          liveStatusText.textContent = 'Live';
+          if (!silent) logTelemetry('success', `Compiled in ${duration}ms (${(bytes/1024).toFixed(1)} KB)`);
+
+          localStorage.setItem(KEY_CURRENT_DOC, source);
+
+        } catch (err) {
+          liveBadge.className = 'badge-status error';
+          liveStatusText.textContent = 'Failed';
+          logTelemetry('error', `Compilation error: ${err.message}`);
+        } finally {
+          setTimeout(() => previewShimmer.classList.remove('active'), 180);
+        }
+      }
+
+      /* -------------------------------------------------------------
+         LINE NUMBER GUTTER GENERATOR
+      ------------------------------------------------------------- */
+      function updateLineNumbers() {
+        const lines = codeEditor.value.split('\n').length;
+        let gutterHtml = '';
+        for (let i = 1; i <= lines; i++) {
+          gutterHtml += `<div>${i}</div>`;
+        }
+        lineGutter.innerHTML = gutterHtml;
+      }
+
+      codeEditor.addEventListener('input', () => {
+        updateLineNumbers();
+        if (state.prefs.autoDeploy) {
+          clearTimeout(state.autoDeployTimer);
+          state.autoDeployTimer = setTimeout(() => deploySource(true), 700);
+        }
+      });
+
+      codeEditor.addEventListener('scroll', () => {
+        lineGutter.scrollTop = codeEditor.scrollTop;
+      });
+
+      /* -------------------------------------------------------------
+         DEVICE VIEWPORT ENGINE (Desktop)
+      ------------------------------------------------------------- */
+      function setDeviceDimensions(w, h, presetName = null) {
+        inputFrameW.value = w;
+        inputFrameH.value = h;
+
+        if (presetName === 'fluid') {
+          deviceShell.style.width = '100%';
+          deviceShell.style.height = '100%';
+        } else {
+          deviceShell.style.width = `${w}px`;
+          deviceShell.style.height = `${h}px`;
+        }
+
+        devicePills.forEach(pill => {
+          pill.classList.toggle('active', pill.dataset.preset === presetName);
+        });
+
+        logTelemetry('metric', `Viewport: ${w}px × ${h}px`);
+      }
+
+      devicePills.forEach(pill => {
+        pill.addEventListener('click', () => {
+          const mode = pill.dataset.preset;
+          if (mode === 'mobile') setDeviceDimensions(390, 844, 'mobile');
+          else if (mode === 'tablet') setDeviceDimensions(768, 1024, 'tablet');
+          else if (mode === 'desktop') setDeviceDimensions(1200, 780, 'desktop');
+          else if (mode === 'fluid') setDeviceDimensions(window.innerWidth - 300, 750, 'fluid');
+        });
+      });
+
+      inputFrameW.addEventListener('change', () => setDeviceDimensions(inputFrameW.value, inputFrameH.value));
+      inputFrameH.addEventListener('change', () => setDeviceDimensions(inputFrameW.value, inputFrameH.value));
+
+      document.getElementById('btnFlipOrientation').addEventListener('click', () => {
+        const curW = parseInt(inputFrameW.value, 10);
+        const curH = parseInt(inputFrameH.value, 10);
+        setDeviceDimensions(curH, curW);
+      });
+
+      /* -------------------------------------------------------------
+         DESKTOP VIEW MODE SWITCHER (Split / Code / Preview)
+      ------------------------------------------------------------- */
+      const viewModeTabs = document.querySelectorAll('.view-tab');
+      function setViewMode(mode) {
+        document.body.dataset.view = mode;
+        viewModeTabs.forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+        logTelemetry('info', `Layout: ${mode.toUpperCase()}`);
+      }
+
+      viewModeTabs.forEach(tab => {
+        tab.addEventListener('click', () => setViewMode(tab.dataset.mode));
+      });
+
+      /* -------------------------------------------------------------
+         PREFERENCES & THEME MANAGER
+      ------------------------------------------------------------- */
+      function applyPreferences(prefs) {
+        state.prefs = Object.assign(state.prefs, prefs);
+
+        let effectiveTheme = state.prefs.theme;
+        if (effectiveTheme === 'auto') {
+          effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', effectiveTheme);
+
+        document.documentElement.style.setProperty('--font-code', state.prefs.font);
+        document.documentElement.style.setProperty('--code-font-size', `${state.prefs.fontSize}px`);
+        document.documentElement.style.setProperty('--code-tab-size', state.prefs.tabSize);
+
+        localStorage.setItem(KEY_PREFS, JSON.stringify(state.prefs));
+      }
+
+      function loadSavedPreferences() {
+        try {
+          const saved = localStorage.getItem(KEY_PREFS);
+          if (saved) applyPreferences(JSON.parse(saved));
+        } catch(e) {}
+
+        document.getElementById('prefTheme').value = state.prefs.theme;
+        document.getElementById('prefFont').value = state.prefs.font;
+        document.getElementById('prefFontSize').value = state.prefs.fontSize;
+        document.getElementById('prefTabSize').value = state.prefs.tabSize;
+        document.getElementById('prefAutoDeploy').checked = state.prefs.autoDeploy;
+      }
+
+      document.getElementById('prefTheme').addEventListener('change', (e) => applyPreferences({ theme: e.target.value }));
+      document.getElementById('prefFont').addEventListener('change', (e) => applyPreferences({ font: e.target.value }));
+      document.getElementById('prefFontSize').addEventListener('input', (e) => applyPreferences({ fontSize: e.target.value }));
+      document.getElementById('prefTabSize').addEventListener('change', (e) => applyPreferences({ tabSize: e.target.value }));
+      document.getElementById('prefAutoDeploy').addEventListener('change', (e) => applyPreferences({ autoDeploy: e.target.checked }));
+
+      /* -------------------------------------------------------------
+         SNAPSHOTS MANAGER
+      ------------------------------------------------------------- */
+      function getSnapshots() {
+        try {
+          return JSON.parse(localStorage.getItem(KEY_SNAPSHOTS)) || [];
+        } catch(e) { return []; }
+      }
+
+      function renderSnapshotsList() {
+        const list = getSnapshots();
+        const container = document.getElementById('snapshotList');
+        document.getElementById('snapStorageStats').textContent = `${list.length} snapshot(s)`;
+        container.innerHTML = '';
+
+        if (list.length === 0) {
+          container.innerHTML = `<div style="text-align:center; padding:1.5rem; color:var(--text-muted); font-size:0.8rem;">No snapshots saved yet.</div>`;
+          return;
+        }
+
+        list.forEach((snap, idx) => {
+          const item = document.createElement('div');
+          item.className = 'snapshot-item';
+          item.innerHTML = `
+            <div class="snapshot-meta">
+              <span class="snapshot-name">${escapeHtml(snap.name)}</span>
+              <span class="snapshot-time">${new Date(snap.ts).toLocaleDateString()} ${new Date(snap.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · ${(snap.size/1024).toFixed(1)} KB</span>
+            </div>
+            <div style="display:flex; gap:0.4rem;">
+              <button class="btn btn-restore" style="padding: 3px 8px; font-size:0.72rem;"><i class="fa-solid fa-arrow-rotate-left"></i></button>
+              <button class="btn btn-delete" style="padding: 3px 8px; font-size:0.72rem; color:var(--danger);"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          `;
+
+          item.querySelector('.btn-restore').addEventListener('click', () => {
+            codeEditor.value = snap.content;
+            updateLineNumbers();
+            deploySource();
+            closeAllModals();
+            logTelemetry('info', `Restored: "${snap.name}"`);
+          });
+
+          item.querySelector('.btn-delete').addEventListener('click', () => {
+            const updated = getSnapshots().filter((_, i) => i !== idx);
+            localStorage.setItem(KEY_SNAPSHOTS, JSON.stringify(updated));
+            renderSnapshotsList();
+            logTelemetry('warn', `Deleted snapshot: "${snap.name}"`);
+          });
+
+          container.appendChild(item);
+        });
+      }
+
+      document.getElementById('btnSaveSnapshot').addEventListener('click', () => {
+        const titleInput = document.getElementById('newSnapTitle');
+        const name = titleInput.value.trim() || `Snapshot #${Date.now().toString().slice(-4)}`;
+        const content = codeEditor.value;
+        const size = new Blob([content]).size;
+
+        const list = getSnapshots();
+        list.unshift({ name, content, size, ts: Date.now() });
+        localStorage.setItem(KEY_SNAPSHOTS, JSON.stringify(list));
+        titleInput.value = '';
+        renderSnapshotsList();
+        logTelemetry('success', `Snapshot preserved: "${name}"`);
+      });
+
+      /* -------------------------------------------------------------
+         MODAL DIALOGS & MOBILE ACTION SHEET HANDLERS
+      ------------------------------------------------------------- */
+      function openModal(el) {
+        closeAllModals();
+        el.classList.add('open');
+      }
+
+      function closeAllModals() {
+        document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.remove('open'));
+      }
+
+      document.querySelectorAll('.modal-close').forEach(btn => btn.addEventListener('click', closeAllModals));
+      document.querySelectorAll('.modal-backdrop').forEach(b => {
+        b.addEventListener('click', (e) => { if (e.target === b) closeAllModals(); });
+      });
+
+      // Desktop modal triggers
+      document.getElementById('btnSnapshots').addEventListener('click', () => { renderSnapshotsList(); openModal(modalSnapshots); });
+      document.getElementById('btnTemplates').addEventListener('click', () => openModal(modalTemplates));
+      document.getElementById('btnCmdPalette').addEventListener('click', () => {
+        openModal(modalCmd);
+        document.getElementById('cmdInput').focus();
+      });
+
+      // Mobile More Sheet trigger
+      document.getElementById('btnMobileMore').addEventListener('click', () => {
+        openModal(modalMobileActions);
+      });
+
+      // Mobile sheet sub-actions
+      document.getElementById('sheetBtnStarters').addEventListener('click', () => openModal(modalTemplates));
+      document.getElementById('sheetBtnSnapshots').addEventListener('click', () => { renderSnapshotsList(); openModal(modalSnapshots); });
+      document.getElementById('sheetBtnSettings').addEventListener('click', () => openModal(modalSettings));
+      document.getElementById('sheetBtnExport').addEventListener('click', () => { exportHtmlFile(); closeAllModals(); });
+
+      // Template selection cards
+      document.querySelectorAll('[data-template]').forEach(card => {
+        card.addEventListener('click', () => {
+          const key = card.dataset.template;
+          if (TEMPLATES[key]) {
+            codeEditor.value = TEMPLATES[key];
+            updateLineNumbers();
+            deploySource();
+            closeAllModals();
+            logTelemetry('info', `Loaded template: ${key.toUpperCase()}`);
+          }
+        });
+      });
+
+      // Command Palette Execution
+      document.getElementById('cmdList').addEventListener('click', (e) => {
+        const item = e.target.closest('.command-item');
+        if (!item) return;
+        const cmd = item.dataset.cmd;
+        closeAllModals();
+
+        if (cmd === 'deploy') deploySource();
+        else if (cmd === 'split') setViewMode('split');
+        else if (cmd === 'preview') setViewMode('preview');
+        else if (cmd === 'code') setViewMode('code');
+        else if (cmd === 'snap') { renderSnapshotsList(); openModal(modalSnapshots); }
+        else if (cmd === 'clearLogs') flushLogs();
+        else if (cmd === 'export') exportHtmlFile();
+      });
+
+      /* -------------------------------------------------------------
+         TELEMETRY CONTROLS & FLUSH
+      ------------------------------------------------------------- */
+      function flushLogs() {
+        state.logs = [];
+        desktopLogsOutput.innerHTML = '';
+        mobileLogsOutput.innerHTML = '';
+        logCountDesktop.textContent = '0';
+        logCountMobile.textContent = '0';
+        logTelemetry('info', 'Logs cleared');
+      }
+
+      document.getElementById('btnClearLogs').addEventListener('click', flushLogs);
+      document.getElementById('btnClearLogsMobile').addEventListener('click', flushLogs);
+
+      function copyAllLogs() {
+        const fullText = state.logs.map(l => `[${l.timeStr}] [${l.type.toUpperCase()}] ${l.message}`).join('\n');
+        navigator.clipboard.writeText(fullText);
+        logTelemetry('success', 'Logs copied to clipboard');
+      }
+
+      document.getElementById('btnCopyAllLogs').addEventListener('click', copyAllLogs);
+      document.getElementById('btnCopyLogsMobile').addEventListener('click', copyAllLogs);
+
+      // Desktop Dock Tabs
+      const dockTabs = document.querySelectorAll('.dock-tab-btn');
+      dockTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          dockTabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+
+          const isLogs = tab.dataset.dock === 'logs';
+          document.getElementById('dockLogsPanel').style.display = isLogs ? 'block' : 'none';
+          document.getElementById('dockAuditPanel').style.display = isLogs ? 'none' : 'block';
+        });
+      });
+
+      document.getElementById('btnToggleDock').addEventListener('click', () => {
+        telemetryDock.classList.toggle('collapsed');
+        dockToggleIcon.className = telemetryDock.classList.contains('collapsed') 
+          ? 'fa-solid fa-chevron-up' 
+          : 'fa-solid fa-chevron-down';
+      });
+
+      /* -------------------------------------------------------------
+         FILE EXPORT & SOURCE ACTIONS
+      ------------------------------------------------------------- */
+      function exportHtmlFile() {
+        const blob = new Blob([codeEditor.value], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `deploypro-build-${Date.now()}.html`;
+        a.click();
+        URL.revokeObjectURL(url);
+        logTelemetry('info', 'Exported standalone HTML package');
+      }
+
+      document.getElementById('btnExportHtml').addEventListener('click', exportHtmlFile);
+
+      document.getElementById('btnClearCode').addEventListener('click', () => {
+        codeEditor.value = '';
+        updateLineNumbers();
+        deploySource();
+        logTelemetry('warn', 'Editor cleared');
+      });
+
+      document.getElementById('btnFormat').addEventListener('click', () => {
+        const val = codeEditor.value;
+        let formatted = '';
+        let pad = 0;
+        val.split(/>\s*</).forEach(node => {
+          if (node.match(/^\/\w/)) pad -= 1;
+          formatted += '  '.repeat(Math.max(0, pad)) + '<' + node + '>\n';
+          if (node.match(/^<?\w[^>]*[^\/]$/) && !node.startsWith("input") && !node.startsWith("img") && !node.startsWith("br")) pad += 1;
+        });
+        codeEditor.value = formatted.trim();
+        updateLineNumbers();
+        logTelemetry('info', 'Indented HTML structure');
+      });
+
+      /* -------------------------------------------------------------
+         KEYBOARD SHORTCUTS
+      ------------------------------------------------------------- */
+      window.addEventListener('keydown', (e) => {
+        const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+        if (isCmdOrCtrl && e.key === 'Enter') {
+          e.preventDefault();
+          deploySource();
+        }
+        if (isCmdOrCtrl && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          openModal(modalCmd);
+          document.getElementById('cmdInput').focus();
+        }
+        if (e.key === 'Escape') closeAllModals();
+      });
+
+      document.getElementById('btnDeploy').addEventListener('click', () => deploySource());
+
+      /* -------------------------------------------------------------
+         STUDIO BOOT LIFECYCLE
+      ------------------------------------------------------------- */
+      function initializeStudio() {
+        loadSavedPreferences();
+
+        const cachedDoc = localStorage.getItem(KEY_CURRENT_DOC);
+        codeEditor.value = cachedDoc ? cachedDoc : TEMPLATES.dashboard;
+        
+        updateLineNumbers();
+        renderAuditGrids();
+        deploySource(false);
+        logTelemetry('info', 'DeployPro Responsive Core initialized');
+      }
+
+      initializeStudio();
+
+    })();
+  </script>
+</body>
+</html>
