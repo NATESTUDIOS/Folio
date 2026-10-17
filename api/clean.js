@@ -1,4 +1,4 @@
-// api/cron/cleanup.js
+// api/clean.js
 import { db } from "../../utils/firebase.js";
 import { log, newReqId } from "../../utils/log.js";
 
