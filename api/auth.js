@@ -34,7 +34,6 @@ const RATE_LIMITS = {
   changeUsername: { max: 3,   window: 60 * 60 * 1000 },
   firebaseToken:  { max: 60,  window: 60 * 60 * 1000 },
   me:             { max: 300, window: 60 * 60 * 1000 },
-  profileView:    { max: 30,  window: 60 * 1000 },
   profileUpdate:  { max: 10,  window: 60 * 60 * 1000 },
   logs:           { max: 60,  window: 60 * 60 * 1000 },
 };
@@ -103,10 +102,6 @@ const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
 const LOGIN_MAX_FAILURES = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
-/**
- * Write a full user record, with compensating cleanup on failure.
- * If this throws, reserved email/username are released.
- */
 async function createUserRecord({ uid, email, emailLower, passwordHash, username, displayName }) {
   const now = Date.now();
   const record = {
@@ -144,10 +139,6 @@ async function createUserRecord({ uid, email, emailLower, passwordHash, username
   return record;
 }
 
-/**
- * Call notify.js auth bridge. Fire-and-forget — a notify failure
- * must never fail the auth endpoint.
- */
 async function callNotifyBridge(action, uid, extra = {}) {
   try {
     const res = await fetch(`${BASE_URL}/api/notify?action=${action}`, {
@@ -222,7 +213,6 @@ async function handleRegister(req, res, reqId) {
     });
   } catch (err) {
     log("auth.register_failed", { reqId, message: err.message });
-    // Compensating cleanup
     try {
       if (reservedEmailOk) await releaseEmail(emailLower);
       if (assigned) await releaseUsername(assigned.username);
@@ -232,7 +222,6 @@ async function handleRegister(req, res, reqId) {
     return res.status(500).json({ success: false, error: "Registration failed" });
   }
 
-  // Non-blocking: notify bridge seeds notification settings
   callNotifyBridge("auth_signup", uid, { username: assigned.username }).catch(() => {});
 
   await logUserEvent(uid, "auth", "user.registered", {
@@ -263,7 +252,6 @@ async function handleLogin(req, res, reqId) {
     return res.status(400).json({ success: false, error: "Missing credentials" });
   }
 
-  // Second rate limit: per-identifier
   const idHash = crypto.createHash("sha256").update(String(identifier).toLowerCase()).digest("hex").slice(0, 32);
   if (!(await enforceRate(req, res, "loginByIdent", `id_${idHash}`))) return;
 
@@ -273,7 +261,7 @@ async function handleLogin(req, res, reqId) {
     : await getUserByUsername(identifier);
 
   if (!found) {
-    dummyHash(); // timing equalizer
+    dummyHash();
     return res.status(401).json({ success: false, error: "Invalid credentials" });
   }
 
@@ -281,7 +269,6 @@ async function handleLogin(req, res, reqId) {
     return res.status(403).json({ success: false, error: "Account suspended" });
   }
 
-  // Check lockout
   const attemptsRef = db.ref(`loginAttempts/${idHash}`);
   const attemptsSnap = await attemptsRef.once("value");
   const attempts = attemptsSnap.val() || { count: 0, lastAttempt: 0, lockedUntil: 0 };
@@ -307,7 +294,6 @@ async function handleLogin(req, res, reqId) {
     return res.status(401).json({ success: false, error: "Invalid credentials" });
   }
 
-  // Success — clear attempts, update lastLoginAt
   await attemptsRef.remove();
   await db.ref(`users/${found.uid}/lastLoginAt`).set(Date.now());
 
@@ -496,45 +482,6 @@ async function handleMe(req, res, reqId) {
   });
 }
 
-/**
- * GET /profile?username=x — OWNER SELF-VIEW ONLY.
- * Non-owners are redirected to /:username (host handles public render).
- * If the caller is unauthenticated or not the owner, 302 to /:username.
- * If the caller IS the owner, 302 to /profile (client-side page).
- * This endpoint exists so the URL scheme from §4 works, not as a
- * duplicate renderer for profile-template.html.
- */
-async function handleProfileRedirect(req, res, reqId) {
-  if (!(await enforceRate(req, res, "profileView", ipKey(req)))) return;
-
-  const username = String(req.query?.username || "").trim().toLowerCase();
-  if (!username) {
-    return res.status(400).json({ success: false, error: "Missing username" });
-  }
-
-  // Check if this is a previous username → 301 to current
-  const prevSnap = await db.ref(`previousUsernames/${username}`).once("value");
-  if (prevSnap.exists()) {
-    const target = prevSnap.val();
-    return res.redirect(301, `${BASE_URL}/${target}`);
-  }
-
-  // If caller is the owner, redirect to client-side self-view
-  const header = req.headers.authorization || "";
-  if (header.startsWith("Bearer ")) {
-    const decoded = verifySession(header.slice(7).trim());
-    if (decoded) {
-      const byUsername = await getUserByUsername(username);
-      if (byUsername && byUsername.uid === decoded.uid) {
-        return res.redirect(302, `${BASE_URL}/profile`);
-      }
-    }
-  }
-
-  // Non-owner (or anonymous): let host.js render the public view
-  return res.redirect(302, `${BASE_URL}/${username}`);
-}
-
 async function handleProfileUpdate(req, res, reqId) {
   const user = await requireAuth(req, res);
   if (!user) return;
@@ -641,15 +588,12 @@ export default async function handler(req, res) {
   const reqId = newReqId();
   res.setHeader("X-Request-Id", reqId);
 
-  // CORS: allow the PWA origin and dev origin
   res.setHeader("Access-Control-Allow-Origin", BASE_URL);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Credentials", "true");
   if (req.method === "OPTIONS") return res.status(204).end();
 
-  // Action from query string or body (for POST). Vercel rewrites pass
-  // `?action=...` from vercel.json.
   const action = String(req.query?.action || req.body?.action || "").trim();
   const method = req.method;
 
@@ -663,7 +607,6 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "change-username") return await handleChangeUsername(req, res, reqId);
     if (method === "POST" && action === "firebase-token")  return await handleFirebaseToken(req, res, reqId);
     if (method === "GET"  && action === "me")              return await handleMe(req, res, reqId);
-    if (method === "GET"  && action === "profile")         return await handleProfileRedirect(req, res, reqId);
     if (method === "POST" && action === "profile/update")  return await handleProfileUpdate(req, res, reqId);
     if (method === "GET"  && action === "logs")            return await handleLogs(req, res, reqId);
 
