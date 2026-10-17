@@ -1,1083 +1,677 @@
-import { db } from "../utils/firebase.js";
-import crypto from 'crypto';
+// api/auth.js
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { db, auth as firebaseAuth } from "../utils/firebase.js";
+import { log, newReqId } from "../utils/log.js";
+import {
+  signSession, verifySession,
+  requireAuth,
+  hashPassword, verifyPassword, validatePassword, dummyHash,
+  getUser, getUserByEmail, getUserByUsername,
+  cleanUsername, cleanEmail, isReservedUsername,
+  assignUsername, reserveEmail, reserveUsername,
+  releaseEmail, releaseUsername,
+  generateInviteToken, // (not used here — kept off for clarity; see note)
+  getClientIp, hashIp, sanitizeFirebasePath,
+  logUserEvent,
+} from "../utils/users.js";
 
-// ============================================
-// Configuration
-// ============================================
-const USERS_PATH = 'Dev-Users';
-const SESSIONS_PATH = 'Dev-Sessions';
-const DEVICES_PATH = 'Dev-Devices';
-const IP_ACCOUNT_LIMIT = 3; // Max accounts per IP
-const DEVICE_ACCOUNT_LIMIT = 1; // Max accounts per device
-const SESSION_EXPIRY = 7 * 24 * 60 * 60 * 1000; // 7 days
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
+// =========================================================================
+// RATE LIMITS (per-API, per Final Rule #16)
+// =========================================================================
 
-// ============================================
-// Helper Functions
-// ============================================
+const API_NAME = "auth";
 
-// Hash password using crypto (no bcrypt dependency)
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto
-    .pbkdf2Sync(password, salt, 10000, 64, 'sha512')
-    .toString('hex');
-  return `${salt}:${hash}`;
-}
+const RATE_LIMITS = {
+  register:       { max: 5,   window: 60 * 60 * 1000 },
+  login:          { max: 10,  window: 60 * 60 * 1000 },
+  loginByIdent:   { max: 5,   window: 15 * 60 * 1000 },
+  logout:         { max: 30,  window: 60 * 60 * 1000 },
+  refresh:        { max: 20,  window: 60 * 60 * 1000 },
+  changePassword: { max: 5,   window: 60 * 60 * 1000 },
+  changeEmail:    { max: 3,   window: 60 * 60 * 1000 },
+  changeUsername: { max: 3,   window: 60 * 60 * 1000 },
+  firebaseToken:  { max: 60,  window: 60 * 60 * 1000 },
+  me:             { max: 300, window: 60 * 60 * 1000 },
+  profileView:    { max: 30,  window: 60 * 1000 },
+  profileUpdate:  { max: 10,  window: 60 * 60 * 1000 },
+  logs:           { max: 60,  window: 60 * 60 * 1000 },
+};
 
-// Verify password
-function verifyPassword(password, storedHash) {
-  const [salt, hash] = storedHash.split(':');
-  const verifyHash = crypto
-    .pbkdf2Sync(password, salt, 10000, 64, 'sha512')
-    .toString('hex');
-  return hash === verifyHash;
-}
-
-// Generate JWT-like token (simple secure token)
-function generateToken(userId, sessionId) {
-  const payload = `${userId}|${sessionId}|${Date.now()}`;
-  const signature = crypto
-    .createHmac('sha256', JWT_SECRET)
-    .update(payload)
-    .digest('hex');
-  return Buffer.from(`${payload}|${signature}`).toString('base64');
-}
-
-// Verify token
-function verifyToken(token) {
-  try {
-    const decoded = Buffer.from(token, 'base64').toString();
-    const [userId, sessionId, timestamp, signature] = decoded.split('|');
-    
-    const verifyPayload = `${userId}|${sessionId}|${timestamp}`;
-    const verifySignature = crypto
-      .createHmac('sha256', JWT_SECRET)
-      .update(verifyPayload)
-      .digest('hex');
-    
-    if (signature !== verifySignature) return null;
-    
-    // Check expiry (7 days)
-    if (Date.now() - parseInt(timestamp) > SESSION_EXPIRY) return null;
-    
-    return { userId, sessionId };
-  } catch {
-    return null;
-  }
-}
-
-// Generate device fingerprint
-function generateDeviceFingerprint(deviceId) {
-  return crypto
-    .createHash('sha256')
-    .update(deviceId || 'unknown')
-    .digest('hex');
-}
-
-// Generate session ID
-function generateSessionId() {
-  return crypto.randomBytes(32).toString('hex');
-}
-
-// Validation functions
-function validateEmail(email) {
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email);
-}
-
-function validatePassword(password) {
-  // Min 8 chars, at least one letter, one number, one special character
-  const re = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/;
-  return re.test(password);
-}
-
-function validateUsername(username) {
-  // Alphanumeric, underscore, 3-20 chars
-  const re = /^[a-zA-Z0-9_]{3,20}$/;
-  return re.test(username);
-}
-
-// Get client IP
-function getClientIP(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0] || 
-         req.socket?.remoteAddress || 
-         req.connection?.remoteAddress ||
-         'unknown';
-}
-
-// Safe body parser helper
-function getBody(req) {
-  return req.body || {};
-}
-
-// Rate limiting helper
-async function checkRateLimit(ip, action) {
-  const rateLimitRef = db.ref(`RateLimits/${action}/${ip.replace(/\./g, '_')}`);
-  const snapshot = await rateLimitRef.once('value');
+async function checkRateLimit(identifier, action) {
+  const config = RATE_LIMITS[action];
+  if (!config) return { allowed: true, remaining: Infinity, limit: Infinity, reset: null };
   const now = Date.now();
-  
-  if (snapshot.exists()) {
-    const data = snapshot.val();
-    const timeWindow = 60 * 60 * 1000; // 1 hour
-    const maxAttempts = action === 'register' ? 5 : 10;
-    
-    // Clean old attempts
-    const attempts = (data.attempts || []).filter(t => now - t < timeWindow);
-    
-    if (attempts.length >= maxAttempts) {
-      return false;
-    }
-    
-    attempts.push(now);
-    await rateLimitRef.update({ attempts });
-    return true;
-  } else {
-    await rateLimitRef.set({ attempts: [now] });
-    return true;
+  const key = sanitizeFirebasePath(String(identifier).toLowerCase());
+  const ref = db.ref(`rate_limit/${API_NAME}/${action}/${key}`);
+  const snap = await ref.once("value");
+
+  if (!snap.exists()) {
+    await ref.set({ count: 1, first_request: now, last_request: now });
+    return { allowed: true, remaining: config.max - 1, limit: config.max,
+             reset: new Date(now + config.window).toISOString() };
   }
+  const d = snap.val();
+  const resetAt = (d.first_request || now) + config.window;
+  if (now > resetAt) {
+    await ref.set({ count: 1, first_request: now, last_request: now });
+    return { allowed: true, remaining: config.max - 1, limit: config.max,
+             reset: new Date(now + config.window).toISOString() };
+  }
+  if ((d.count || 0) >= config.max) {
+    return { allowed: false, remaining: 0, limit: config.max,
+             reset: new Date(resetAt).toISOString(),
+             retryAfter: Math.ceil((resetAt - now) / 1000) };
+  }
+  await ref.update({ count: (d.count || 0) + 1, last_request: now });
+  return { allowed: true, remaining: config.max - (d.count || 0) - 1,
+           limit: config.max, reset: new Date(resetAt).toISOString() };
 }
 
-// ============================================
-// User Response Formatter - FLATTENED AT ROOT
-// ============================================
-function formatUserForResponse(userData, userId = null) {
-  // Handle both nested and flat structures
-  const isNested = userData.profile !== undefined || userData.metadata !== undefined;
-  
-  const formatted = {
-    id: userId || userData.id || userData.username,
-    username: userData.username || '',
-    email: userData.email || '',
-    displayName: '',
-    bio: '',
-    avatar: null,
-    ip: '',
-    device_id: '',
-    device_hash: '',
-    created_with: 'web',
-    created_at: userData.created_at || null,
-    updated_at: userData.updated_at || null,
-    last_login: userData.last_login || null,
-    email_verified: userData.email_verified || false,
-    is_active: userData.is_active !== false
+function setRateHeaders(res, r) {
+  if (!r) return;
+  if (Number.isFinite(r.limit)) res.setHeader("X-RateLimit-Limit", String(r.limit));
+  if (Number.isFinite(r.remaining)) res.setHeader("X-RateLimit-Remaining", String(r.remaining));
+  if (r.reset) res.setHeader("X-RateLimit-Reset", r.reset);
+}
+
+async function enforceRate(req, res, action, identifier) {
+  const r = await checkRateLimit(identifier, action);
+  setRateHeaders(res, r);
+  if (!r.allowed) {
+    res.status(429).json({
+      success: false,
+      error: "Rate limit exceeded",
+      retryAfter: r.retryAfter,
+      reset: r.reset,
+    });
+    return false;
+  }
+  return true;
+}
+
+function ipKey(req) {
+  return `ip_${hashIp(getClientIp(req))}`;
+}
+
+// =========================================================================
+// HELPERS
+// =========================================================================
+
+const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+
+/**
+ * Write a full user record, with compensating cleanup on failure.
+ * If this throws, reserved email/username are released.
+ */
+async function createUserRecord({ uid, email, emailLower, passwordHash, username, displayName }) {
+  const now = Date.now();
+  const record = {
+    email,
+    emailLower,
+    passwordHash,
+    profile: {
+      username,
+      displayName: displayName || username,
+      bio: "",
+      avatarUrl: null,
+      links: {},
+      ogImageUrl: null,
+    },
+    projectIds: {},
+    settings: {
+      theme: "auto",
+      editorPrefs: {
+        fontSize: 14,
+        tabSize: 2,
+        softTabs: true,
+        lineNumbers: true,
+        wrap: true,
+        lineHeight: 1.5,
+      },
+      globalLimit: 10 * 1024 * 1024,
+      notifications: {},
+    },
+    mode: "active",
+    createdAt: now,
+    updatedAt: now,
+    lastLoginAt: now,
   };
-
-  if (isNested) {
-    // Nested structure
-    formatted.displayName = userData.profile?.displayName || userData.username || '';
-    formatted.bio = userData.profile?.bio || '';
-    formatted.avatar = userData.profile?.avatar || null;
-    formatted.ip = userData.metadata?.ip || '';
-    formatted.device_id = userData.metadata?.device_id || '';
-    formatted.device_hash = userData.metadata?.device_hash || '';
-    formatted.created_with = userData.metadata?.created_with || 'web';
-  } else {
-    // Flat structure
-    formatted.displayName = userData.displayName || userData.username || '';
-    formatted.bio = userData.bio || '';
-    formatted.avatar = userData.avatar || null;
-    formatted.ip = userData.ip || '';
-    formatted.device_id = userData.device_id || '';
-    formatted.device_hash = userData.device_hash || '';
-    formatted.created_with = userData.created_with || 'web';
-  }
-
-  return formatted;
+  await db.ref(`users/${uid}`).set(record);
+  return record;
 }
 
-// ============================================
-// Main API Handler
-// ============================================
+/**
+ * Call notify.js auth bridge. Fire-and-forget — a notify failure
+ * must never fail the auth endpoint.
+ */
+async function callNotifyBridge(action, uid, extra = {}) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/notify?action=${action}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ADMIN_API_KEY || "",
+      },
+      body: JSON.stringify({ uid, ...extra }),
+    });
+    if (!res.ok) {
+      log("auth.notify_bridge_failed", { action, uid, status: res.status });
+    }
+  } catch (err) {
+    log("auth.notify_bridge_error", { action, uid, message: err.message });
+  }
+}
+
+// =========================================================================
+// ENDPOINTS
+// =========================================================================
+
+async function handleRegister(req, res, reqId) {
+  if (!(await enforceRate(req, res, "register", ipKey(req)))) return;
+
+  const { email, password, username, displayName } = req.body || {};
+
+  const emailLower = cleanEmail(email);
+  if (!emailLower) {
+    return res.status(400).json({ success: false, error: "Invalid email" });
+  }
+  const pwErr = validatePassword(password);
+  if (pwErr) return res.status(400).json({ success: false, error: pwErr });
+
+  const cleanedUsername = cleanUsername(username);
+  if (!cleanedUsername) {
+    return res.status(400).json({ success: false, error: "Invalid username (3-30 chars, a-z 0-9 _ -)" });
+  }
+  if (isReservedUsername(cleanedUsername)) {
+    return res.status(400).json({ success: false, error: "Username is reserved" });
+  }
+
+  const existing = await getUserByEmail(emailLower);
+  if (existing) {
+    return res.status(409).json({ success: false, error: "Email already registered" });
+  }
+
+  const uid = "u_" + crypto.randomBytes(10).toString("hex");
+  const passwordHash = hashPassword(password);
+
+  let reservedEmailOk = false;
+  let assigned = null;
+  try {
+    reservedEmailOk = await reserveEmail(emailLower, uid);
+    if (!reservedEmailOk) {
+      return res.status(409).json({ success: false, error: "Email already registered" });
+    }
+
+    assigned = await assignUsername(cleanedUsername, uid);
+    if (!assigned) {
+      await releaseEmail(emailLower);
+      return res.status(409).json({ success: false, error: "Could not allocate a username" });
+    }
+
+    await createUserRecord({
+      uid,
+      email,
+      emailLower,
+      passwordHash,
+      username: assigned.username,
+      displayName,
+    });
+  } catch (err) {
+    log("auth.register_failed", { reqId, message: err.message });
+    // Compensating cleanup
+    try {
+      if (reservedEmailOk) await releaseEmail(emailLower);
+      if (assigned) await releaseUsername(assigned.username);
+    } catch (cleanupErr) {
+      log("auth.register_cleanup_failed", { reqId, message: cleanupErr.message });
+    }
+    return res.status(500).json({ success: false, error: "Registration failed" });
+  }
+
+  // Non-blocking: notify bridge seeds notification settings
+  callNotifyBridge("auth_signup", uid, { username: assigned.username }).catch(() => {});
+
+  await logUserEvent(uid, "auth", "user.registered", {
+    email: emailLower,
+    username: assigned.username,
+    requestedUsername: cleanedUsername,
+    wasModified: assigned.isModified,
+  });
+
+  const sessionToken = signSession(uid, assigned.username);
+
+  return res.status(200).json({
+    success: true,
+    uid,
+    username: assigned.username,
+    requestedUsername: cleanedUsername,
+    usernameModified: assigned.isModified,
+    sessionToken,
+    expiresIn: "30d",
+  });
+}
+
+async function handleLogin(req, res, reqId) {
+  if (!(await enforceRate(req, res, "login", ipKey(req)))) return;
+
+  const { identifier, password } = req.body || {};
+  if (!identifier || !password) {
+    return res.status(400).json({ success: false, error: "Missing credentials" });
+  }
+
+  // Second rate limit: per-identifier
+  const idHash = crypto.createHash("sha256").update(String(identifier).toLowerCase()).digest("hex").slice(0, 32);
+  if (!(await enforceRate(req, res, "loginByIdent", `id_${idHash}`))) return;
+
+  const isEmail = String(identifier).includes("@");
+  const found = isEmail
+    ? await getUserByEmail(identifier)
+    : await getUserByUsername(identifier);
+
+  if (!found) {
+    dummyHash(); // timing equalizer
+    return res.status(401).json({ success: false, error: "Invalid credentials" });
+  }
+
+  if (found.mode === "banned") {
+    return res.status(403).json({ success: false, error: "Account suspended" });
+  }
+
+  // Check lockout
+  const attemptsRef = db.ref(`loginAttempts/${idHash}`);
+  const attemptsSnap = await attemptsRef.once("value");
+  const attempts = attemptsSnap.val() || { count: 0, lastAttempt: 0, lockedUntil: 0 };
+  if (attempts.lockedUntil && attempts.lockedUntil > Date.now()) {
+    return res.status(429).json({
+      success: false,
+      error: "Too many failed attempts. Try again later.",
+      retryAfter: Math.ceil((attempts.lockedUntil - Date.now()) / 1000),
+    });
+  }
+
+  const pwOk = verifyPassword(password, found.passwordHash);
+  if (!pwOk) {
+    log("auth.login.password_failed", { reqId, uid: found.uid, hasHash: !!found.passwordHash });
+    const now = Date.now();
+    const newCount = (attempts.count || 0) + 1;
+    const lockedUntil = newCount >= LOGIN_MAX_FAILURES ? now + LOGIN_LOCK_MS : 0;
+    await attemptsRef.set({
+      count: newCount,
+      lastAttempt: now,
+      lockedUntil,
+    });
+    return res.status(401).json({ success: false, error: "Invalid credentials" });
+  }
+
+  // Success — clear attempts, update lastLoginAt
+  await attemptsRef.remove();
+  await db.ref(`users/${found.uid}/lastLoginAt`).set(Date.now());
+
+  const sessionToken = signSession(found.uid, found.profile?.username || "");
+
+  await logUserEvent(found.uid, "auth", "user.login", {
+    identifierType: isEmail ? "email" : "username",
+  });
+
+  return res.status(200).json({
+    success: true,
+    uid: found.uid,
+    sessionToken,
+    expiresIn: "30d",
+    user: {
+      username: found.profile?.username || null,
+      displayName: found.profile?.displayName || null,
+      email: found.email,
+    },
+  });
+}
+
+async function handleLogout(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "logout", `uid_${user.uid}`))) return;
+
+  callNotifyBridge("auth_logout", user.uid).catch(() => {});
+  await logUserEvent(user.uid, "auth", "user.logout", {});
+
+  return res.status(200).json({ success: true });
+}
+
+async function handleRefresh(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "refresh", `uid_${user.uid}`))) return;
+
+  const exp = user.session?.exp || 0;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const remaining = exp - nowSec;
+
+  if (remaining > 7 * 24 * 60 * 60) {
+    return res.status(200).json({ success: true, sessionToken: null, reason: "not_needed" });
+  }
+
+  const newToken = signSession(user.uid, user.profile?.username || "");
+  return res.status(200).json({ success: true, sessionToken: newToken, expiresIn: "30d" });
+}
+
+async function handleChangePassword(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "changePassword", `uid_${user.uid}`))) return;
+
+  const { currentPassword, newPassword } = req.body || {};
+  if (!verifyPassword(currentPassword, user.passwordHash)) {
+    log("auth.change_password.bad_current", { reqId, uid: user.uid });
+    return res.status(401).json({ success: false, error: "Current password incorrect" });
+  }
+  const pwErr = validatePassword(newPassword);
+  if (pwErr) return res.status(400).json({ success: false, error: pwErr });
+
+  const newHash = hashPassword(newPassword);
+  await db.ref(`users/${user.uid}/passwordHash`).set(newHash);
+  await db.ref(`users/${user.uid}/updatedAt`).set(Date.now());
+  await logUserEvent(user.uid, "auth", "password.changed", {});
+
+  return res.status(200).json({ success: true });
+}
+
+async function handleChangeEmail(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "changeEmail", `uid_${user.uid}`))) return;
+
+  const { password, newEmail } = req.body || {};
+  if (!verifyPassword(password, user.passwordHash)) {
+    return res.status(401).json({ success: false, error: "Password incorrect" });
+  }
+  const newLower = cleanEmail(newEmail);
+  if (!newLower) return res.status(400).json({ success: false, error: "Invalid email" });
+  if (newLower === user.emailLower) {
+    return res.status(400).json({ success: false, error: "That is your current email" });
+  }
+
+  const existing = await getUserByEmail(newLower);
+  if (existing) return res.status(409).json({ success: false, error: "Email already registered" });
+
+  const oldLower = user.emailLower;
+  const reserved = await reserveEmail(newLower, user.uid);
+  if (!reserved) {
+    return res.status(409).json({ success: false, error: "Email already registered" });
+  }
+
+  try {
+    await db.ref(`users/${user.uid}`).update({
+      email: newEmail,
+      emailLower: newLower,
+      updatedAt: Date.now(),
+    });
+    await releaseEmail(oldLower);
+  } catch (err) {
+    log("auth.change_email.write_failed", { reqId, uid: user.uid, message: err.message });
+    try { await releaseEmail(newLower); } catch {}
+    return res.status(500).json({ success: false, error: "Email change failed" });
+  }
+
+  await logUserEvent(user.uid, "auth", "email.changed", {});
+  return res.status(200).json({ success: true });
+}
+
+async function handleChangeUsername(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "changeUsername", `uid_${user.uid}`))) return;
+
+  const { password, newUsername } = req.body || {};
+  if (!verifyPassword(password, user.passwordHash)) {
+    return res.status(401).json({ success: false, error: "Password incorrect" });
+  }
+  const newName = cleanUsername(newUsername);
+  if (!newName) return res.status(400).json({ success: false, error: "Invalid username" });
+  if (isReservedUsername(newName)) return res.status(400).json({ success: false, error: "Username is reserved" });
+  if (newName === user.profile?.username) {
+    return res.status(400).json({ success: false, error: "That is your current username" });
+  }
+
+  const existing = await getUserByUsername(newName);
+  if (existing) return res.status(409).json({ success: false, error: "Username already taken" });
+
+  const oldName = user.profile?.username;
+  const reserved = await reserveUsername(newName, user.uid);
+  if (!reserved) return res.status(409).json({ success: false, error: "Username already taken" });
+
+  try {
+    await db.ref(`users/${user.uid}/profile/username`).set(newName);
+    await db.ref(`users/${user.uid}/updatedAt`).set(Date.now());
+    if (oldName) await db.ref(`previousUsernames/${oldName}`).set(newName);
+    if (oldName) await releaseUsername(oldName);
+  } catch (err) {
+    log("auth.change_username.write_failed", { reqId, uid: user.uid, message: err.message });
+    try { await releaseUsername(newName); } catch {}
+    return res.status(500).json({ success: false, error: "Username change failed" });
+  }
+
+  await logUserEvent(user.uid, "auth", "username.changed", { from: oldName, to: newName });
+
+  const sessionToken = signSession(user.uid, newName);
+  return res.status(200).json({ success: true, sessionToken, username: newName });
+}
+
+async function handleFirebaseToken(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "firebaseToken", `uid_${user.uid}`))) return;
+
+  try {
+    const customToken = await firebaseAuth.createCustomToken(user.uid, {
+      username: user.profile?.username || "",
+    });
+    return res.status(200).json({ success: true, customToken, expiresIn: 3600 });
+  } catch (err) {
+    log("auth.firebase_token_failed", { reqId, uid: user.uid, message: err.message });
+    return res.status(500).json({ success: false, error: "Could not create Firebase token" });
+  }
+}
+
+async function handleMe(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "me", `uid_${user.uid}`))) return;
+
+  return res.status(200).json({
+    success: true,
+    user: {
+      uid: user.uid,
+      email: user.email,
+      profile: user.profile,
+      settings: user.settings,
+      projectIds: user.projectIds || {},
+      mode: user.mode,
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
+    },
+  });
+}
+
+/**
+ * GET /profile?username=x — OWNER SELF-VIEW ONLY.
+ * Non-owners are redirected to /:username (host handles public render).
+ * If the caller is unauthenticated or not the owner, 302 to /:username.
+ * If the caller IS the owner, 302 to /profile (client-side page).
+ * This endpoint exists so the URL scheme from §4 works, not as a
+ * duplicate renderer for profile-template.html.
+ */
+async function handleProfileRedirect(req, res, reqId) {
+  if (!(await enforceRate(req, res, "profileView", ipKey(req)))) return;
+
+  const username = String(req.query?.username || "").trim().toLowerCase();
+  if (!username) {
+    return res.status(400).json({ success: false, error: "Missing username" });
+  }
+
+  // Check if this is a previous username → 301 to current
+  const prevSnap = await db.ref(`previousUsernames/${username}`).once("value");
+  if (prevSnap.exists()) {
+    const target = prevSnap.val();
+    return res.redirect(301, `${BASE_URL}/${target}`);
+  }
+
+  // If caller is the owner, redirect to client-side self-view
+  const header = req.headers.authorization || "";
+  if (header.startsWith("Bearer ")) {
+    const decoded = verifySession(header.slice(7).trim());
+    if (decoded) {
+      const byUsername = await getUserByUsername(username);
+      if (byUsername && byUsername.uid === decoded.uid) {
+        return res.redirect(302, `${BASE_URL}/profile`);
+      }
+    }
+  }
+
+  // Non-owner (or anonymous): let host.js render the public view
+  return res.redirect(302, `${BASE_URL}/${username}`);
+}
+
+async function handleProfileUpdate(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "profileUpdate", `uid_${user.uid}`))) return;
+
+  const { displayName, bio, avatarUrl, links } = req.body || {};
+  const patch = {};
+
+  if (displayName !== undefined) {
+    if (typeof displayName !== "string" || displayName.length < 1 || displayName.length > 60) {
+      return res.status(400).json({ success: false, error: "displayName must be 1–60 chars" });
+    }
+    patch["profile/displayName"] = displayName;
+  }
+  if (bio !== undefined) {
+    if (typeof bio !== "string" || bio.length > 500) {
+      return res.status(400).json({ success: false, error: "bio must be ≤500 chars" });
+    }
+    patch["profile/bio"] = bio;
+  }
+  if (avatarUrl !== undefined) {
+    if (avatarUrl !== null) {
+      try {
+        const u = new URL(avatarUrl);
+        if (u.protocol !== "https:") throw new Error("must be https");
+      } catch {
+        return res.status(400).json({ success: false, error: "avatarUrl must be an HTTPS URL or null" });
+      }
+    }
+    patch["profile/avatarUrl"] = avatarUrl;
+  }
+  if (links !== undefined) {
+    if (typeof links !== "object" || links === null || Array.isArray(links)) {
+      return res.status(400).json({ success: false, error: "links must be an object" });
+    }
+    const cleanLinks = {};
+    for (const [k, v] of Object.entries(links)) {
+      if (typeof k !== "string" || k.length > 40) {
+        return res.status(400).json({ success: false, error: `Invalid link key: ${k}` });
+      }
+      if (typeof v !== "string" || v.length > 500) {
+        return res.status(400).json({ success: false, error: `Invalid link value for ${k}` });
+      }
+      try {
+        const u = new URL(v);
+        if (u.protocol !== "https:") throw new Error("must be https");
+      } catch {
+        return res.status(400).json({ success: false, error: `Link ${k} must be an HTTPS URL` });
+      }
+      cleanLinks[k] = v;
+    }
+    patch["profile/links"] = cleanLinks;
+  }
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ success: false, error: "No fields to update" });
+  }
+
+  patch.updatedAt = Date.now();
+  await db.ref(`users/${user.uid}`).update(patch);
+  await logUserEvent(user.uid, "settings", "profile.updated", {
+    fields: Object.keys(patch).filter(k => k.startsWith("profile/")),
+  });
+
+  const fresh = await getUser(user.uid);
+  return res.status(200).json({ success: true, profile: fresh.profile });
+}
+
+async function handleLogs(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "logs", `uid_${user.uid}`))) return;
+
+  const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 50, 1), 200);
+  const offset = Math.max(parseInt(req.query?.offset, 10) || 0, 0);
+  const typeFilter = String(req.query?.type || "all");
+
+  const snap = await db.ref(`logs/user/${user.uid}`).once("value");
+  if (!snap.exists()) {
+    return res.status(200).json({ success: true, logs: [], total: 0, hasMore: false });
+  }
+
+  const all = [];
+  snap.forEach(child => {
+    const v = child.val();
+    if (typeFilter !== "all" && v.type !== typeFilter) return;
+    all.push({ id: child.key, ...v });
+  });
+  all.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+  const slice = all.slice(offset, offset + limit);
+  return res.status(200).json({
+    success: true,
+    logs: slice,
+    total: all.length,
+    hasMore: offset + limit < all.length,
+  });
+}
+
+// =========================================================================
+// ROUTER
+// =========================================================================
 
 export default async function handler(req, res) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Device-Id');
+  const reqId = newReqId();
+  res.setHeader("X-Request-Id", reqId);
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  // CORS: allow the PWA origin and dev origin
+  res.setHeader("Access-Control-Allow-Origin", BASE_URL);
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  if (req.method === "OPTIONS") return res.status(204).end();
 
-  const body = getBody(req);
-  const action = req.query.action || body.action || null;
-  const clientIP = getClientIP(req);
-  const deviceId = body.device_id || req.query.device_id || req.headers['x-device-id'];
-
-  if (!action && ['POST', 'PUT', 'DELETE'].includes(req.method)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Missing action parameter',
-      message: 'Please provide an action in the query string or request body',
-      hint: 'Example: ?action=register or { "action": "login" }'
-    });
-  }
-
-  // ============================================
-  // PUBLIC: Health Check
-  // ============================================
-  if (req.method === 'GET' && !action) {
-    return res.status(200).json({
-      success: true,
-      message: 'Auth API is running',
-      timestamp: Date.now()
-    });
-  }
+  // Action from query string or body (for POST). Vercel rewrites pass
+  // `?action=...` from vercel.json.
+  const action = String(req.query?.action || req.body?.action || "").trim();
+  const method = req.method;
 
   try {
-    // ============================================
-    // REGISTER - POST /api/auth?action=register
-    // ============================================
-    if (req.method === 'POST' && action === 'register') {
-      const { email, password, username } = body;
-
-      if (!email || !password || !username) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Email, password, and username are required' 
-        });
-      }
-
-      if (!validateEmail(email)) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Invalid email format' 
-        });
-      }
-
-      if (!validatePassword(password)) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Password must be at least 8 characters with letters, numbers, and special characters' 
-        });
-      }
-
-      if (!validateUsername(username)) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Username must be 3-20 characters (letters, numbers, underscore only)' 
-        });
-      }
-
-      const rateLimitOK = await checkRateLimit(clientIP, 'register');
-      if (!rateLimitOK) {
-        return res.status(429).json({ 
-          success: false,
-          error: 'Too many registration attempts. Please try again later.' 
-        });
-      }
-
-      const usersRef = db.ref(USERS_PATH);
-      const emailSnapshot = await usersRef.orderByChild('email').equalTo(email.toLowerCase()).once('value');
-      
-      let emailExists = false;
-      emailSnapshot.forEach(() => { emailExists = true; });
-      
-      if (emailExists) {
-        return res.status(409).json({ 
-          success: false,
-          error: 'Email already registered' 
-        });
-      }
-
-      const usernameSnapshot = await usersRef.orderByChild('username').equalTo(username).once('value');
-      
-      let usernameExists = false;
-      usernameSnapshot.forEach(() => { usernameExists = true; });
-      
-      if (usernameExists) {
-        return res.status(409).json({ 
-          success: false,
-          error: 'Username already taken' 
-        });
-      }
-
-      const deviceHash = generateDeviceFingerprint(deviceId);
-      const deviceRef = db.ref(`${DEVICES_PATH}/${deviceHash}`);
-      const deviceSnapshot = await deviceRef.once('value');
-      
-      if (deviceSnapshot.exists()) {
-        const deviceData = deviceSnapshot.val();
-        if (deviceData.user_ids && deviceData.user_ids.length >= DEVICE_ACCOUNT_LIMIT) {
-          return res.status(403).json({ 
-            success: false,
-            error: 'This device already has an account. One account per device allowed.' 
-          });
-        }
-      }
-
-      const ipRef = db.ref(`${DEVICES_PATH}/by_ip/${clientIP.replace(/\./g, '_')}`);
-      const ipSnapshot = await ipRef.once('value');
-      
-      if (ipSnapshot.exists()) {
-        const ipData = ipSnapshot.val();
-        if (ipData.user_ids && ipData.user_ids.length >= IP_ACCOUNT_LIMIT) {
-          return res.status(403).json({ 
-            success: false,
-            error: `Too many accounts from this IP address (max ${IP_ACCOUNT_LIMIT})` 
-          });
-        }
-      }
-
-      const userId = username;
-      const hashedPassword = hashPassword(password);
-      const now = Date.now();
-
-      // Store with nested structure in Firebase
-      const userData = {
-        id: userId,
-        username: username,
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        created_at: now,
-        updated_at: now,
-        last_login: null,
-        email_verified: false,
-        is_active: true,
-        profile: {
-          displayName: username,
-          bio: '',
-          avatar: null
-        },
-        metadata: {
-          ip: clientIP,
-          device_id: deviceId || 'unknown',
-          device_hash: deviceHash,
-          created_with: 'web'
-        }
-      };
-
-      const userRef = db.ref(`${USERS_PATH}/${userId}`);
-      await userRef.set(userData);
-
-      const deviceData = {
-        device_hash: deviceHash,
-        device_id: deviceId || 'unknown',
-        user_ids: [userId],
-        first_seen: now,
-        last_seen: now,
-        ip_addresses: [clientIP]
-      };
-      await deviceRef.set(deviceData);
-
-      const ipData = {
-        user_ids: [userId],
-        first_seen: now,
-        last_seen: now
-      };
-      await ipRef.set(ipData);
-
-      const sessionId = generateSessionId();
-      const sessionData = {
-        user_id: userId,
-        session_id: sessionId,
-        created_at: now,
-        expires_at: now + SESSION_EXPIRY,
-        device_hash: deviceHash,
-        ip_address: clientIP,
-        user_agent: req.headers['user-agent'] || 'unknown'
-      };
-      const sessionRef = db.ref(`${SESSIONS_PATH}/${sessionId}`);
-      await sessionRef.set(sessionData);
-
-      const token = generateToken(userId, sessionId);
-
-      // Format response - FLATTENED AT ROOT
-      const userResponse = formatUserForResponse(userData, userId);
-
-      return res.status(201).json({
-        success: true,
-        ...userResponse,
-        token: token,
-        session_id: sessionId
-      });
-    }
-
-    // ============================================
-    // LOGIN - POST /api/auth?action=login
-    // ============================================
-    if (req.method === 'POST' && action === 'login') {
-      const { email, password } = body;
-
-      if (!email || !password) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Email and password are required' 
-        });
-      }
-
-      const rateLimitOK = await checkRateLimit(clientIP, 'login');
-      if (!rateLimitOK) {
-        return res.status(429).json({ 
-          success: false,
-          error: 'Too many login attempts. Please try again later.' 
-        });
-      }
-
-      const usersRef = db.ref(USERS_PATH);
-      const snapshot = await usersRef.orderByChild('email').equalTo(email.toLowerCase()).once('value');
-      
-      if (!snapshot.exists()) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid credentials' 
-        });
-      }
-
-      let userData = null;
-      let userId = null;
-      snapshot.forEach((childSnapshot) => {
-        userData = childSnapshot.val();
-        userId = childSnapshot.key;
-      });
-
-      if (!userData.is_active) {
-        return res.status(403).json({ 
-          success: false,
-          error: 'Account is disabled' 
-        });
-      }
-
-      if (!verifyPassword(password, userData.password)) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid credentials' 
-        });
-      }
-
-      const now = Date.now();
-      const deviceHash = generateDeviceFingerprint(deviceId);
-
-      const deviceRef = db.ref(`${DEVICES_PATH}/${deviceHash}`);
-      const deviceSnapshot = await deviceRef.once('value');
-      
-      if (deviceSnapshot.exists()) {
-        const deviceData = deviceSnapshot.val();
-        if (!deviceData.user_ids.includes(userId)) {
-          if (deviceData.user_ids.length >= DEVICE_ACCOUNT_LIMIT) {
-            return res.status(403).json({ 
-              success: false,
-              error: 'This device has reached the maximum number of accounts' 
-            });
-          }
-          deviceData.user_ids.push(userId);
-          await deviceRef.update({
-            user_ids: deviceData.user_ids,
-            last_seen: now
-          });
-        }
-      } else {
-        await deviceRef.set({
-          device_hash: deviceHash,
-          device_id: deviceId || 'unknown',
-          user_ids: [userId],
-          first_seen: now,
-          last_seen: now,
-          ip_addresses: [clientIP]
-        });
-      }
-
-      const ipRef = db.ref(`${DEVICES_PATH}/by_ip/${clientIP.replace(/\./g, '_')}`);
-      const ipSnapshot = await ipRef.once('value');
-      
-      if (ipSnapshot.exists()) {
-        const ipData = ipSnapshot.val();
-        if (!ipData.user_ids.includes(userId)) {
-          ipData.user_ids.push(userId);
-          await ipRef.update({
-            user_ids: ipData.user_ids,
-            last_seen: now
-          });
-        }
-      } else {
-        await ipRef.set({
-          user_ids: [userId],
-          first_seen: now,
-          last_seen: now
-        });
-      }
-
-      const sessionId = generateSessionId();
-      const sessionData = {
-        user_id: userId,
-        session_id: sessionId,
-        created_at: now,
-        expires_at: now + SESSION_EXPIRY,
-        device_hash: deviceHash,
-        ip_address: clientIP,
-        user_agent: req.headers['user-agent'] || 'unknown'
-      };
-      const sessionRef = db.ref(`${SESSIONS_PATH}/${sessionId}`);
-      await sessionRef.set(sessionData);
-
-      const userRef = db.ref(`${USERS_PATH}/${userId}`);
-      await userRef.update({
-        last_login: now,
-        updated_at: now
-      });
-
-      const token = generateToken(userId, sessionId);
-
-      // Get updated user data
-      const updatedSnapshot = await userRef.once('value');
-      const updatedUserData = updatedSnapshot.val();
-
-      // Format response - FLATTENED AT ROOT
-      const userResponse = formatUserForResponse(updatedUserData, userId);
-
-      return res.status(200).json({
-        success: true,
-        ...userResponse,
-        token: token,
-        session_id: sessionId
-      });
-    }
-
-    // ============================================
-    // VERIFY - GET /api/auth?action=verify
-    // ============================================
-    if ((req.method === 'GET' || req.method === 'POST') && action === 'verify') {
-      const token = req.headers.authorization?.replace('Bearer ', '') || 
-                    req.query.token || 
-                    body.token;
-
-      if (!token) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Token required' 
-        });
-      }
-
-      const decoded = verifyToken(token);
-      if (!decoded) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid or expired token' 
-        });
-      }
-
-      const { userId, sessionId } = decoded;
-
-      const sessionRef = db.ref(`${SESSIONS_PATH}/${sessionId}`);
-      const sessionSnapshot = await sessionRef.once('value');
-      
-      if (!sessionSnapshot.exists()) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Session expired' 
-        });
-      }
-
-      const sessionData = sessionSnapshot.val();
-      if (sessionData.user_id !== userId) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid session' 
-        });
-      }
-
-      if (sessionData.expires_at < Date.now()) {
-        await sessionRef.remove();
-        return res.status(401).json({ 
-          success: false,
-          error: 'Session expired' 
-        });
-      }
-
-      const userRef = db.ref(`${USERS_PATH}/${userId}`);
-      const userSnapshot = await userRef.once('value');
-      
-      if (!userSnapshot.exists()) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'User not found' 
-        });
-      }
-
-      const userData = userSnapshot.val();
-
-      // Format response - FLATTENED AT ROOT
-      const userResponse = formatUserForResponse(userData, userId);
-
-      return res.status(200).json({
-        success: true,
-        ...userResponse,
-        session_id: sessionId
-      });
-    }
-
-    // ============================================
-    // LOGOUT - POST /api/auth?action=logout
-    // ============================================
-    if (req.method === 'POST' && action === 'logout') {
-      const token = req.headers.authorization?.replace('Bearer ', '') || body.token;
-
-      if (!token) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Token required' 
-        });
-      }
-
-      const decoded = verifyToken(token);
-      if (!decoded) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid token' 
-        });
-      }
-
-      const { sessionId } = decoded;
-
-      const sessionRef = db.ref(`${SESSIONS_PATH}/${sessionId}`);
-      await sessionRef.remove();
-
-      return res.status(200).json({
-        success: true,
-        message: 'Logged out successfully'
-      });
-    }
-
-    // ============================================
-    // CHANGE PASSWORD - PUT /api/auth?action=change-password
-    // ============================================
-    if (req.method === 'PUT' && action === 'change-password') {
-      const token = req.headers.authorization?.replace('Bearer ', '') || body.token;
-      const { current_password, new_password } = body;
-
-      if (!token) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Token required' 
-        });
-      }
-
-      if (!current_password || !new_password) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Current password and new password are required' 
-        });
-      }
-
-      if (!validatePassword(new_password)) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Password must be at least 8 characters with letters, numbers, and special characters' 
-        });
-      }
-
-      const decoded = verifyToken(token);
-      if (!decoded) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid or expired token' 
-        });
-      }
-
-      const { userId } = decoded;
-
-      const userRef = db.ref(`${USERS_PATH}/${userId}`);
-      const userSnapshot = await userRef.once('value');
-      
-      if (!userSnapshot.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'User not found' 
-        });
-      }
-
-      const userData = userSnapshot.val();
-
-      if (!verifyPassword(current_password, userData.password)) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Current password is incorrect' 
-        });
-      }
-
-      const hashedPassword = hashPassword(new_password);
-      await userRef.update({
-        password: hashedPassword,
-        updated_at: Date.now()
-      });
-
-      return res.status(200).json({
-        success: true,
-        message: 'Password changed successfully'
-      });
-    }
-
-    // ============================================
-    // GET PROFILE - GET /api/auth?action=profile
-    // ============================================
-    if (req.method === 'GET' && action === 'profile') {
-      const token = req.headers.authorization?.replace('Bearer ', '') || req.query.token;
-
-      if (!token) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Token required' 
-        });
-      }
-
-      const decoded = verifyToken(token);
-      if (!decoded) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid or expired token' 
-        });
-      }
-
-      const { userId } = decoded;
-
-      const userRef = db.ref(`${USERS_PATH}/${userId}`);
-      const userSnapshot = await userRef.once('value');
-      
-      if (!userSnapshot.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'User not found' 
-        });
-      }
-
-      const userData = userSnapshot.val();
-
-      // Format response - FLATTENED AT ROOT
-      const userResponse = formatUserForResponse(userData, userId);
-
-      return res.status(200).json({
-        success: true,
-        ...userResponse
-      });
-    }
-
-    // ============================================
-    // UPDATE PROFILE - PUT /api/auth?action=profile
-    // ============================================
-    if (req.method === 'PUT' && action === 'profile') {
-      const token = req.headers.authorization?.replace('Bearer ', '') || body.token;
-      const { displayName, bio, avatar } = body;
-
-      if (!token) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Token required' 
-        });
-      }
-
-      const decoded = verifyToken(token);
-      if (!decoded) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid or expired token' 
-        });
-      }
-
-      const { userId } = decoded;
-
-      const userRef = db.ref(`${USERS_PATH}/${userId}`);
-      const userSnapshot = await userRef.once('value');
-      
-      if (!userSnapshot.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'User not found' 
-        });
-      }
-
-      const updates = {
-        updated_at: Date.now()
-      };
-
-      if (displayName) {
-        updates['profile/displayName'] = displayName;
-      }
-      if (bio !== undefined) {
-        updates['profile/bio'] = bio;
-      }
-      if (avatar !== undefined) {
-        updates['profile/avatar'] = avatar;
-      }
-
-      await userRef.update(updates);
-
-      const updatedSnapshot = await userRef.once('value');
-      const userData = updatedSnapshot.val();
-
-      // Format response - FLATTENED AT ROOT
-      const userResponse = formatUserForResponse(userData, userId);
-
-      return res.status(200).json({
-        success: true,
-        message: 'Profile updated successfully',
-        ...userResponse
-      });
-    }
-
-    // ============================================
-    // DELETE ACCOUNT - DELETE /api/auth?action=delete
-    // ============================================
-    if (req.method === 'DELETE' && action === 'delete') {
-      const token = req.headers.authorization?.replace('Bearer ', '') || req.query.token;
-
-      if (!token) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Token required' 
-        });
-      }
-
-      const decoded = verifyToken(token);
-      if (!decoded) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid or expired token' 
-        });
-      }
-
-      const { userId, sessionId } = decoded;
-
-      const userRef = db.ref(`${USERS_PATH}/${userId}`);
-      const userSnapshot = await userRef.once('value');
-      
-      if (!userSnapshot.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'User not found' 
-        });
-      }
-
-      const userData = userSnapshot.val();
-
-      await userRef.remove();
-      await db.ref(`${SESSIONS_PATH}/${sessionId}`).remove();
-
-      const deviceHash = generateDeviceFingerprint(userData.metadata?.device_id);
-      const deviceRef = db.ref(`${DEVICES_PATH}/${deviceHash}`);
-      const deviceSnapshot = await deviceRef.once('value');
-      
-      if (deviceSnapshot.exists()) {
-        const deviceData = deviceSnapshot.val();
-        deviceData.user_ids = (deviceData.user_ids || []).filter(id => id !== userId);
-        if (deviceData.user_ids.length === 0) {
-          await deviceRef.remove();
-        } else {
-          await deviceRef.update({ user_ids: deviceData.user_ids });
-        }
-      }
-
-      const ipRef = db.ref(`${DEVICES_PATH}/by_ip/${(userData.metadata?.ip || 'unknown').replace(/\./g, '_')}`);
-      const ipSnapshot = await ipRef.once('value');
-      
-      if (ipSnapshot.exists()) {
-        const ipData = ipSnapshot.val();
-        ipData.user_ids = (ipData.user_ids || []).filter(id => id !== userId);
-        if (ipData.user_ids.length === 0) {
-          await ipRef.remove();
-        } else {
-          await ipRef.update({ user_ids: ipData.user_ids });
-        }
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Account deleted successfully'
-      });
-    }
-
-    // ============================================
-    // CHECK USERNAME - GET /api/auth?action=check-username&username=xxx
-    // ============================================
-    if (req.method === 'GET' && action === 'check-username') {
-      const { username } = req.query;
-
-      if (!username) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Username required' 
-        });
-      }
-
-      if (!validateUsername(username)) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Username must be 3-20 characters (letters, numbers, underscore only)' 
-        });
-      }
-
-      const usersRef = db.ref(USERS_PATH);
-      const snapshot = await usersRef.orderByChild('username').equalTo(username).once('value');
-      
-      let exists = false;
-      snapshot.forEach(() => { exists = true; });
-      
-      return res.status(200).json({
-        success: true,
-        available: !exists,
-        username: username
-      });
-    }
-
-    // ============================================
-    // CHECK EMAIL - GET /api/auth?action=check-email&email=xxx
-    // ============================================
-    if (req.method === 'GET' && action === 'check-email') {
-      const { email } = req.query;
-
-      if (!email) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Email required' 
-        });
-      }
-
-      if (!validateEmail(email)) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Invalid email format' 
-        });
-      }
-
-      const usersRef = db.ref(USERS_PATH);
-      const snapshot = await usersRef.orderByChild('email').equalTo(email.toLowerCase()).once('value');
-      
-      let exists = false;
-      snapshot.forEach(() => { exists = true; });
-      
-      return res.status(200).json({
-        success: true,
-        available: !exists,
-        email: email
-      });
-    }
-
-    // ============================================
-    // GET DEVICES - GET /api/auth?action=devices
-    // ============================================
-    if (req.method === 'GET' && action === 'devices') {
-      const token = req.headers.authorization?.replace('Bearer ', '') || req.query.token;
-
-      if (!token) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Token required' 
-        });
-      }
-
-      const decoded = verifyToken(token);
-      if (!decoded) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid or expired token' 
-        });
-      }
-
-      const { userId, sessionId } = decoded;
-
-      const sessionsRef = db.ref(SESSIONS_PATH);
-      const snapshot = await sessionsRef.orderByChild('user_id').equalTo(userId).once('value');
-      
-      const sessions = [];
-      if (snapshot.exists()) {
-        snapshot.forEach((childSnapshot) => {
-          const sessionData = childSnapshot.val();
-          sessions.push({
-            session_id: sessionData.session_id,
-            created_at: sessionData.created_at,
-            expires_at: sessionData.expires_at,
-            device_hash: sessionData.device_hash,
-            ip_address: sessionData.ip_address,
-            user_agent: sessionData.user_agent,
-            is_current: sessionData.session_id === sessionId
-          });
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        sessions: sessions,
-        current_session: sessionId
-      });
-    }
-
-    // ============================================
-    // REVOKE SESSION - DELETE /api/auth?action=revoke-session&session_id=xxx
-    // ============================================
-    if (req.method === 'DELETE' && action === 'revoke-session') {
-      const token = req.headers.authorization?.replace('Bearer ', '') || req.query.token;
-      const { session_id } = req.query;
-
-      if (!token || !session_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Token and session_id are required' 
-        });
-      }
-
-      const decoded = verifyToken(token);
-      if (!decoded) {
-        return res.status(401).json({ 
-          success: false,
-          error: 'Invalid or expired token' 
-        });
-      }
-
-      const { userId } = decoded;
-
-      const sessionRef = db.ref(`${SESSIONS_PATH}/${session_id}`);
-      const sessionSnapshot = await sessionRef.once('value');
-      
-      if (!sessionSnapshot.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'Session not found' 
-        });
-      }
-
-      const sessionData = sessionSnapshot.val();
-      if (sessionData.user_id !== userId) {
-        return res.status(403).json({ 
-          success: false,
-          error: 'Unauthorized' 
-        });
-      }
-
-      if (session_id === decoded.sessionId) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Cannot revoke current session. Use logout instead.' 
-        });
-      }
-
-      await sessionRef.remove();
-
-      return res.status(200).json({
-        success: true,
-        message: 'Session revoked successfully'
-      });
-    }
-
-    // ============================================
-    // 404 - Action not found
-    // ============================================
-    return res.status(404).json({ 
-      success: false,
-      error: 'Action not found',
-      available_actions: [
-        'register', 'login', 'verify', 'logout', 
-        'profile', 'change-password', 'delete',
-        'check-username', 'check-email', 
-        'devices', 'revoke-session'
-      ]
-    });
-
-  } catch (error) {
-    console.error('Auth API Error:', error);
-    return res.status(500).json({ 
-      success: false,
-      error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    if (method === "POST" && action === "register")        return await handleRegister(req, res, reqId);
+    if (method === "POST" && action === "login")           return await handleLogin(req, res, reqId);
+    if (method === "POST" && action === "logout")          return await handleLogout(req, res, reqId);
+    if (method === "POST" && action === "refresh")         return await handleRefresh(req, res, reqId);
+    if (method === "POST" && action === "change-password") return await handleChangePassword(req, res, reqId);
+    if (method === "POST" && action === "change-email")    return await handleChangeEmail(req, res, reqId);
+    if (method === "POST" && action === "change-username") return await handleChangeUsername(req, res, reqId);
+    if (method === "POST" && action === "firebase-token")  return await handleFirebaseToken(req, res, reqId);
+    if (method === "GET"  && action === "me")              return await handleMe(req, res, reqId);
+    if (method === "GET"  && action === "profile")         return await handleProfileRedirect(req, res, reqId);
+    if (method === "POST" && action === "profile/update")  return await handleProfileUpdate(req, res, reqId);
+    if (method === "GET"  && action === "logs")            return await handleLogs(req, res, reqId);
+
+    return res.status(404).json({ success: false, error: `Unknown action: ${action || "(none)"}` });
+  } catch (err) {
+    log("auth.unhandled_error", { reqId, action, method, message: err.message, stack: err.stack });
+    return res.status(500).json({ success: false, error: "Internal error", reqId });
   }
 }
+
+export const config = { runtime: "nodejs" };
