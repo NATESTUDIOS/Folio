@@ -12,13 +12,13 @@ import {
   cleanUsername, cleanEmail, isReservedUsername,
   assignUsername, reserveEmail, reserveUsername,
   releaseEmail, releaseUsername,
-  generateInviteToken, // (not used here — kept off for clarity; see note)
+  generateInviteToken,
   getClientIp, hashIp, sanitizeFirebasePath,
   logUserEvent,
 } from "../utils/users.js";
 
 // =========================================================================
-// RATE LIMITS (per-API, per Final Rule #16)
+// RATE LIMITS
 // =========================================================================
 
 const API_NAME = "auth";
@@ -102,6 +102,17 @@ const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
 const LOGIN_MAX_FAILURES = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
+// Firebase public config — served at GET /api/auth?action=config
+const FIREBASE_PUBLIC_CONFIG = {
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.FIREBASE_DB_URL,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID,
+};
+
 async function createUserRecord({ uid, email, emailLower, passwordHash, username, displayName }) {
   const now = Date.now();
   const record = {
@@ -155,6 +166,19 @@ async function callNotifyBridge(action, uid, extra = {}) {
   } catch (err) {
     log("auth.notify_bridge_error", { action, uid, message: err.message });
   }
+}
+
+// =========================================================================
+// NEW: /config — expose Firebase public config to the client
+// =========================================================================
+
+async function handleConfig(req, res, reqId) {
+  if (!FIREBASE_PUBLIC_CONFIG.apiKey || !FIREBASE_PUBLIC_CONFIG.projectId) {
+    log("auth.config_missing", { reqId });
+    return res.status(500).json({ success: false, error: "Server not configured" });
+  }
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  return res.status(200).json({ success: true, config: FIREBASE_PUBLIC_CONFIG });
 }
 
 // =========================================================================
@@ -286,11 +310,7 @@ async function handleLogin(req, res, reqId) {
     const now = Date.now();
     const newCount = (attempts.count || 0) + 1;
     const lockedUntil = newCount >= LOGIN_MAX_FAILURES ? now + LOGIN_LOCK_MS : 0;
-    await attemptsRef.set({
-      count: newCount,
-      lastAttempt: now,
-      lockedUntil,
-    });
+    await attemptsRef.set({ count: newCount, lastAttempt: now, lockedUntil });
     return res.status(401).json({ success: false, error: "Invalid credentials" });
   }
 
@@ -487,7 +507,7 @@ async function handleProfileUpdate(req, res, reqId) {
   if (!user) return;
   if (!(await enforceRate(req, res, "profileUpdate", `uid_${user.uid}`))) return;
 
-  const { displayName, bio, avatarUrl, links } = req.body || {};
+  const { displayName, bio, avatarUrl, links, avatarDataUrl } = req.body || {};
   const patch = {};
 
   if (displayName !== undefined) {
@@ -513,6 +533,42 @@ async function handleProfileUpdate(req, res, reqId) {
     }
     patch["profile/avatarUrl"] = avatarUrl;
   }
+
+  // ← NEW: avatarDataUrl — base64 data URI, uploads via IMAGE_UPLOAD_API
+  if (avatarDataUrl && typeof avatarDataUrl === "string") {
+    if (avatarDataUrl.length > 3 * 1024 * 1024) {
+      return res.status(413).json({ success: false, error: "Avatar too large (max 2 MB)" });
+    }
+    if (!avatarDataUrl.startsWith("data:image/")) {
+      return res.status(400).json({ success: false, error: "Invalid image data" });
+    }
+    try {
+      const uploadApi = process.env.IMAGE_UPLOAD_API || "https://kx-services.vercel.app/api/tools/imageupload";
+      const upRes = await fetch(uploadApi, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${process.env.ADMIN_API_KEY || ""}`,
+          "x-api-key": process.env.ADMIN_API_KEY || "",
+        },
+        body: JSON.stringify({
+          image: avatarDataUrl.split(",")[1],
+          name: `avatar_${user.uid}_${Date.now()}`,
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+      const upBody = await upRes.json().catch(() => ({}));
+      const uploadedUrl = upBody.data?.url || upBody.data?.display_url;
+      if (!upRes.ok || !uploadedUrl) {
+        throw new Error(upBody?.error?.message || "upload failed");
+      }
+      patch["profile/avatarUrl"] = uploadedUrl;
+    } catch (err) {
+      log("auth.avatar_upload_failed", { reqId, uid: user.uid, message: err.message });
+      return res.status(502).json({ success: false, error: "Avatar upload failed" });
+    }
+  }
+
   if (links !== undefined) {
     if (typeof links !== "object" || links === null || Array.isArray(links)) {
       return res.status(400).json({ success: false, error: "links must be an object" });
@@ -598,6 +654,7 @@ export default async function handler(req, res) {
   const method = req.method;
 
   try {
+    if (method === "GET"  && action === "config")          return await handleConfig(req, res, reqId);
     if (method === "POST" && action === "register")        return await handleRegister(req, res, reqId);
     if (method === "POST" && action === "login")           return await handleLogin(req, res, reqId);
     if (method === "POST" && action === "logout")          return await handleLogout(req, res, reqId);
