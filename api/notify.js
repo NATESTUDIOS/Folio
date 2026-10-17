@@ -1,935 +1,919 @@
-import { db } from "../utils/firebase.js";
-import crypto from 'crypto';
+// api/notify.js
+import crypto from "node:crypto";
+import { db, messaging } from "../utils/firebase.js";
+import { log, newReqId } from "../utils/log.js";
+import {
+  requireAuth, requireAdmin,
+  getClientIp, hashIp, sanitizeFirebasePath,
+} from "../utils/users.js";
 
-// ============================================
-// Configuration
-// ============================================
-const NOTIFICATION_HISTORY_LIMIT = 20;
-const DEFAULT_TOPIC = "general";
-const USERS_PATH = 'Users';
-const NOTIFICATIONS_PATH = 'Notifications';
-const NOTIFICATION_HISTORY_PATH = 'NotificationHistory';
+// =========================================================================
+// CONSTANTS
+// =========================================================================
 
-// ============================================
-// Helper Functions
-// ============================================
+const API_NAME = "notify";
+
+const NOTIFICATION_TYPES = ["system", "analytics", "db", "storage", "project", "invite"];
+const NOTIFICATION_PRIORITIES = ["normal", "high", "urgent"];
+const ACTION_TYPES = ["navigate", "modal", "external", "deep_link"];
+const SOURCE_TYPES = ["project", "invite", "analytics", "db", "storage", "system"];
+
+const NOTIFICATIONS_PATH = "folio/Notifications";
+const SETTINGS_PATH = "folio/NotificationSettings";
+const HISTORY_PATH = "folio/NotificationHistory";
+
+const NOTIFICATION_HISTORY_LIMIT = 50;
+const NOTIFICATION_LIMIT_BUFFER = 10;
+const STORE_CONCURRENCY = 50;
+const SEND_CONCURRENCY = 5;
+
+// =========================================================================
+// RATE LIMITS (per-API, Final Rule #16)
+// =========================================================================
+
+const RATE_LIMITS = {
+  subscribe:      { max: 10,   window: 60 * 60 * 1000 },
+  unsubscribe:    { max: 10,   window: 60 * 60 * 1000 },
+  markRead:       { max: 300,  window: 60 * 60 * 1000 },
+  markAllRead:    { max: 10,   window: 60 * 60 * 1000 },
+  dismiss:        { max: 300,  window: 60 * 60 * 1000 },
+  dismissAllRead: { max: 10,   window: 60 * 60 * 1000 },
+  updateSettings: { max: 20,   window: 60 * 60 * 1000 },
+  list:           { max: 120,  window: 60 * 60 * 1000 },
+  stats:          { max: 120,  window: 60 * 60 * 1000 },
+  getSettings:    { max: 120,  window: 60 * 60 * 1000 },
+  create:         { max: 500,  window: 60 * 60 * 1000 },
+  authBridge:     { max: 200,  window: 60 * 60 * 1000 },
+};
+
+async function checkRateLimit(identifier, action) {
+  const config = RATE_LIMITS[action];
+  if (!config) return { allowed: true, remaining: Infinity, limit: Infinity };
+
+  const now = Date.now();
+  const windowStart = now - config.window;
+  const key = sanitizeFirebasePath(String(identifier).toLowerCase());
+  const ref = db.ref(`rate_limit/${API_NAME}/${action}/${key}`);
+
+  let result = { allowed: true, remaining: config.max - 1, limit: config.max };
+
+  try {
+    await ref.transaction(current => {
+      if (!current || current.first_request < windowStart) {
+        result = { allowed: true, remaining: config.max - 1, limit: config.max };
+        return { count: 1, first_request: now, last_request: now };
+      }
+      if (current.count >= config.max) {
+        const resetAt = current.first_request + config.window;
+        result = {
+          allowed: false,
+          remaining: 0,
+          limit: config.max,
+          reset: resetAt,
+          retryAfter: Math.ceil((resetAt - now) / 1000),
+        };
+        return; // abort
+      }
+      result = { allowed: true, remaining: config.max - current.count - 1, limit: config.max };
+      return {
+        count: current.count + 1,
+        first_request: current.first_request,
+        last_request: now,
+      };
+    });
+  } catch (err) {
+    log("notify.rate_limit_failed", { action, message: err.message });
+    // Fail open — infra failure must not block users
+    return { allowed: true, remaining: config.max, limit: config.max };
+  }
+
+  return result;
+}
+
+function setRateHeaders(res, r) {
+  if (!r) return;
+  if (Number.isFinite(r.limit)) res.setHeader("X-RateLimit-Limit", String(r.limit));
+  if (Number.isFinite(r.remaining)) res.setHeader("X-RateLimit-Remaining", String(r.remaining));
+  if (r.reset) res.setHeader("X-RateLimit-Reset", String(Math.ceil(r.reset / 1000)));
+}
+
+async function enforceRate(res, action, identifier) {
+  const r = await checkRateLimit(identifier, action);
+  setRateHeaders(res, r);
+  if (!r.allowed) {
+    res.status(429).json({
+      success: false,
+      error: "Rate limit exceeded",
+      retryAfter: r.retryAfter,
+    });
+    return false;
+  }
+  return true;
+}
+
+// =========================================================================
+// SERVER CACHE (per-invocation LRU)
+// =========================================================================
+
+const serverCache = new Map();
+const CACHE_TTL = 60 * 1000;
+const CACHE_TTL_ADMIN = 5 * 1000;
+const CACHE_MAX_SIZE = 1000;
+
+function getCacheKey(prefix, identifier, params = {}) {
+  const paramStr = Object.entries(params)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}:${v}`)
+    .join("|");
+  return `${prefix}:${identifier}:${paramStr}`;
+}
+
+function getFromCache(key) {
+  const c = serverCache.get(key);
+  if (!c) return null;
+  if (Date.now() - c.timestamp > c.ttl) { serverCache.delete(key); return null; }
+  return c.data;
+}
+
+function setToCache(key, data, ttl = CACHE_TTL) {
+  if (serverCache.size >= CACHE_MAX_SIZE) {
+    const entries = Array.from(serverCache.entries())
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .slice(0, Math.ceil(CACHE_MAX_SIZE * 0.2));
+    entries.forEach(([k]) => serverCache.delete(k));
+  }
+  serverCache.set(key, { data, timestamp: Date.now(), ttl });
+}
+
+function invalidateCache(prefix, identifier = null) {
+  const toDelete = [];
+  serverCache.forEach((_, key) => {
+    if (key.startsWith(prefix) && (!identifier || key.includes(identifier))) {
+      toDelete.push(key);
+    }
+  });
+  toDelete.forEach(k => serverCache.delete(k));
+  return toDelete.length;
+}
+
+function getCacheStats() {
+  return {
+    size: serverCache.size,
+    maxSize: CACHE_MAX_SIZE,
+    sampleKeys: Array.from(serverCache.keys()).slice(0, 10),
+  };
+}
+
+// =========================================================================
+// HELPERS
+// =========================================================================
+
+const DEFAULT_SETTINGS = {
+  pushEnabled: true,
+  systemAlerts: true,
+  analyticsAlerts: true,
+  dbAlerts: true,
+  storageAlerts: true,
+  projectAlerts: true,
+  inviteAlerts: true,
+  quietHours: { enabled: false, start: "22:00", end: "07:00" },
+};
+
+const TYPE_TO_SETTING = {
+  system: "systemAlerts",
+  analytics: "analyticsAlerts",
+  db: "dbAlerts",
+  storage: "storageAlerts",
+  project: "projectAlerts",
+  invite: "inviteAlerts",
+};
 
 function generateNotificationId() {
-  const timestamp = Date.now();
-  const random = crypto.randomBytes(4).toString('hex');
-  return `notif_${timestamp}_${random}`;
+  return `notif_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
 }
 
-function getClientIP(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0] || 
-         req.socket?.remoteAddress || 
-         req.connection?.remoteAddress ||
-         'unknown';
+function isValidFcmToken(token) {
+  return typeof token === "string" && token.length >= 100 && token.includes(":");
 }
 
-function getUserAgent(req) {
-  return req.headers['user-agent'] || 'unknown';
+function deviceKeyFor(deviceId, token) {
+  return crypto.createHash("sha256")
+    .update(String(deviceId || token))
+    .digest("hex")
+    .slice(0, 24);
 }
 
-// Safe body parser helper
-function getBody(req) {
-  return req.body || {};
-}
-
-// Validate notification data
-function validateNotificationData(title, body) {
-  if (!title || !title.trim()) {
-    return { valid: false, error: "Title is required" };
-  }
-  if (!body || !body.trim()) {
-    return { valid: false, error: "Body is required" };
-  }
-  if (title.length > 100) {
-    return { valid: false, error: "Title too long (max 100 characters)" };
-  }
-  if (body.length > 500) {
-    return { valid: false, error: "Body too long (max 500 characters)" };
-  }
-  return { valid: true };
-}
-
-// Validate topic name
-function validateTopic(topic) {
-  return /^[a-zA-Z0-9-_.~%]+$/.test(topic);
-}
-
-// Store notification for user
-async function storeNotificationForUser(user_id, notificationData) {
-  try {
-    const notificationId = generateNotificationId();
-    const timestamp = Date.now();
-
-    const notificationRecord = {
-      id: notificationId,
-      title: notificationData.title || '',
-      body: notificationData.body || '',
-      timestamp: timestamp,
-      topic: notificationData.topic || 'direct',
-      imageUrl: notificationData.imageUrl || null,
-      link: notificationData.link || null,
-      extra: notificationData.extra || null,
-      message_id: notificationData.message_id || null,
-      delivery_type: notificationData.delivery_type || 'topic',
-      read: false,
-      delivered_at: timestamp
-    };
-
-    await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}/${notificationId}`).set(notificationRecord);
-    await enforceNotificationLimit(user_id);
-    return notificationId;
-  } catch (error) {
-    console.error('Error storing notification:', error);
-    return null;
-  }
-}
-
-// Enforce notification history limit
-async function enforceNotificationLimit(user_id) {
-  try {
-    const notificationsRef = db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}`);
-    const snapshot = await notificationsRef.once('value');
-    if (!snapshot.exists()) return;
-
-    const notifications = [];
-    snapshot.forEach((child) => {
-      notifications.push({
-        key: child.key,
-        timestamp: child.val().timestamp || 0
-      });
-    });
-
-    notifications.sort((a, b) => a.timestamp - b.timestamp);
-
-    if (notifications.length > NOTIFICATION_HISTORY_LIMIT) {
-      const toDelete = notifications.slice(0, notifications.length - NOTIFICATION_HISTORY_LIMIT);
-      const deletePromises = toDelete.map(notif =>
-        db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}/${notif.key}`).remove()
-      );
-      await Promise.all(deletePromises);
+async function runWithConcurrency(items, concurrency, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      try { results[i] = { status: "fulfilled", value: await fn(items[i], i) }; }
+      catch (err) { results[i] = { status: "rejected", reason: err }; }
     }
-  } catch (error) {
-    console.error('Error enforcing notification limit:', error);
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+// =========================================================================
+// FCM
+// =========================================================================
+
+function buildDataMessage({ title, body, imageUrl, link, notificationId, type, userId, extra }) {
+  const data = {};
+  if (title) data.title = String(title);
+  if (body) data.body = String(body);
+  if (imageUrl) data.image = String(imageUrl);
+  if (link) data.link = String(link);
+  if (notificationId) data.notificationId = String(notificationId);
+  if (type) data.type = String(type);
+  if (userId) data.user_id = String(userId);
+  if (extra) data.extra = String(extra);
+  if (Object.keys(data).length === 0) data._empty = "true";
+
+  return {
+    data,
+    android: { priority: "high" },
+    apns: { headers: { "apns-priority": "10" } },
+  };
+}
+
+async function sendOne(message, token) {
+  try {
+    const id = await messaging.send({ ...message, token });
+    return { success: true, messageId: id };
+  } catch (err) {
+    log("notify.fcm_send_failed", { code: err.code, message: err.message });
+    return { success: false, error: err.message };
   }
 }
 
-// Store notifications for multiple users
-async function storeNotificationForUsers(userIds, notificationData) {
+// =========================================================================
+// STORAGE
+// =========================================================================
+
+async function enforceNotificationLimit(userId) {
   try {
-    const storePromises = userIds.map(userId => 
-      storeNotificationForUser(userId, notificationData)
-    );
-    const results = await Promise.allSettled(storePromises);
-    const successCount = results.filter(r => r.status === 'fulfilled').length;
-    console.log(`[Notification History] Stored for ${successCount}/${userIds.length} users`);
-    return successCount;
-  } catch (error) {
-    console.error('Error storing notifications for multiple users:', error);
-    return 0;
+    const snap = await db.ref(`${HISTORY_PATH}/${userId}`).once("value");
+    if (!snap.exists()) return;
+    const entries = [];
+    snap.forEach(child => entries.push({
+      key: child.key,
+      ts: child.val()?.createdAt || child.val()?.timestamp || 0,
+    }));
+    if (entries.length <= NOTIFICATION_HISTORY_LIMIT + NOTIFICATION_LIMIT_BUFFER) return;
+    entries.sort((a, b) => a.ts - b.ts);
+    const toDelete = entries.slice(0, entries.length - NOTIFICATION_HISTORY_LIMIT);
+    const updates = {};
+    toDelete.forEach(e => { updates[e.key] = null; });
+    await db.ref(`${HISTORY_PATH}/${userId}`).update(updates);
+  } catch (err) {
+    log("notify.trim_history_failed", { userId, message: err.message });
   }
 }
 
-// Get users subscribed to a topic
-async function getUsersByTopic(topic) {
-  try {
-    const snapshot = await db.ref(NOTIFICATIONS_PATH).once('value');
-    if (!snapshot.exists()) return [];
+async function storeNotification(userId, data) {
+  const id = generateNotificationId();
+  const record = {
+    id,
+    userId,
+    type: data.type || "system",
+    title: data.title || "",
+    body: data.body || "",
+    category: data.category || "",
+    icon: data.icon || null,
+    priority: data.priority || "normal",
+    read: false,
+    dismissed: false,
+    createdAt: Date.now(),
+    expiresAt: data.expiresAt || null,
+    action: data.action || null,
+    source: data.source || null,
+    metadata: data.metadata || {},
+    imageUrl: data.imageUrl || null,
+    link: data.link || null,
+    pushSent: false,
+    pushDelivered: false,
+    pushOpened: false,
+  };
+  await db.ref(`${HISTORY_PATH}/${userId}/${id}`).set(record);
+  await enforceNotificationLimit(userId);
+  invalidateCache(`notif:list`, userId);
+  invalidateCache(`notif:stats`, userId);
+  return id;
+}
 
-    const userIds = [];
-    snapshot.forEach((child) => {
-      const userData = child.val();
-      if (userData.topics && Array.isArray(userData.topics) && 
-          userData.topics.includes(topic) && userData.token) {
-        userIds.push(child.key);
-      }
+// =========================================================================
+// SETTINGS
+// =========================================================================
+
+function buildDefaultSettings(userId) {
+  return {
+    userId,
+    ...DEFAULT_SETTINGS,
+    quietHours: { ...DEFAULT_SETTINGS.quietHours },
+    updatedAt: Date.now(),
+  };
+}
+
+async function getUserSettings(userId) {
+  const cacheKey = getCacheKey("notif:settings", userId);
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
+  const snap = await db.ref(`${SETTINGS_PATH}/${userId}`).once("value");
+  const settings = snap.exists() ? snap.val() : buildDefaultSettings(userId);
+  setToCache(cacheKey, settings);
+  return settings;
+}
+
+async function updateUserSettings(userId, patch) {
+  const merged = {
+    ...DEFAULT_SETTINGS,
+    ...patch,
+    userId,
+    updatedAt: Date.now(),
+  };
+  if (patch.quietHours) {
+    merged.quietHours = { ...DEFAULT_SETTINGS.quietHours, ...patch.quietHours };
+  } else {
+    const existing = await getUserSettings(userId);
+    merged.quietHours = existing.quietHours || { ...DEFAULT_SETTINGS.quietHours };
+  }
+  await db.ref(`${SETTINGS_PATH}/${userId}`).set(merged);
+  invalidateCache("notif:settings", userId);
+  return merged;
+}
+
+// =========================================================================
+// STATS
+// =========================================================================
+
+async function getNotificationStats(userId) {
+  const cacheKey = getCacheKey("notif:stats", userId);
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
+  const snap = await db.ref(`${HISTORY_PATH}/${userId}`).once("value");
+  const stats = { total: 0, unread: 0, dismissed: 0 };
+  for (const t of NOTIFICATION_TYPES) stats[t] = 0;
+
+  if (snap.exists()) {
+    snap.forEach(child => {
+      const n = child.val();
+      if (n.dismissed) { stats.dismissed++; return; }
+      stats.total++;
+      const t = n.type || "system";
+      if (stats[t] !== undefined) stats[t]++;
+      if (!n.read) stats.unread++;
     });
-    return userIds;
-  } catch (error) {
-    console.error('Error getting users by topic:', error);
-    return [];
   }
+  setToCache(cacheKey, stats);
+  return stats;
 }
 
-// Get user token
-async function getUserToken(user_id) {
+// =========================================================================
+// CRUD
+// =========================================================================
+
+async function markRead(userId, notificationId) {
+  const ref = db.ref(`${HISTORY_PATH}/${userId}/${notificationId}`);
+  const snap = await ref.once("value");
+  if (!snap.exists()) throw new Error("Notification not found");
+  await ref.update({ read: true, readAt: Date.now() });
+  invalidateCache("notif:list", userId);
+  invalidateCache("notif:stats", userId);
+}
+
+async function markAllRead(userId) {
+  const snap = await db.ref(`${HISTORY_PATH}/${userId}`).once("value");
+  if (!snap.exists()) return 0;
+  let updated = 0;
+  const patch = {};
+  snap.forEach(child => {
+    const n = child.val();
+    if (!n.read && !n.dismissed) {
+      patch[`${child.key}/read`] = true;
+      patch[`${child.key}/readAt`] = Date.now();
+      updated++;
+    }
+  });
+  if (updated > 0) await db.ref(`${HISTORY_PATH}/${userId}`).update(patch);
+  invalidateCache("notif:list", userId);
+  invalidateCache("notif:stats", userId);
+  return updated;
+}
+
+async function dismissOne(userId, notificationId) {
+  const ref = db.ref(`${HISTORY_PATH}/${userId}/${notificationId}`);
+  const snap = await ref.once("value");
+  if (!snap.exists()) throw new Error("Notification not found");
+  await ref.update({ dismissed: true, dismissedAt: Date.now() });
+  invalidateCache("notif:list", userId);
+  invalidateCache("notif:stats", userId);
+}
+
+async function dismissAllRead(userId) {
+  const snap = await db.ref(`${HISTORY_PATH}/${userId}`).once("value");
+  if (!snap.exists()) return 0;
+  let dismissed = 0;
+  const patch = {};
+  snap.forEach(child => {
+    const n = child.val();
+    if (n.read && !n.dismissed) {
+      patch[`${child.key}/dismissed`] = true;
+      patch[`${child.key}/dismissedAt`] = Date.now();
+      dismissed++;
+    }
+  });
+  if (dismissed > 0) await db.ref(`${HISTORY_PATH}/${userId}`).update(patch);
+  invalidateCache("notif:list", userId);
+  invalidateCache("notif:stats", userId);
+  return dismissed;
+}
+
+async function listNotifications(userId, { type = "all", limit = 20, offset = 0, sort = "desc" }) {
+  const cacheKey = getCacheKey("notif:list", userId, { type, limit, offset, sort });
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
+  const snap = await db.ref(`${HISTORY_PATH}/${userId}`).once("value");
+  const rows = [];
+  if (snap.exists()) {
+    snap.forEach(child => {
+      const n = child.val();
+      if (n.dismissed) return;
+      rows.push({ id: child.key, ...n });
+    });
+  }
+  const filtered = type === "all" ? rows : rows.filter(r => r.type === type);
+  filtered.sort((a, b) => {
+    const at = a.createdAt || 0, bt = b.createdAt || 0;
+    return sort === "desc" ? bt - at : at - bt;
+  });
+  const slice = filtered.slice(offset, offset + limit);
+  const result = {
+    notifications: slice,
+    total: filtered.length,
+    hasMore: offset + limit < filtered.length,
+  };
+  setToCache(cacheKey, result);
+  return result;
+}
+
+// =========================================================================
+// DEVICE TOKENS
+// =========================================================================
+
+async function registerDeviceToken(userId, token, deviceId) {
+  if (!isValidFcmToken(token)) throw new Error("Invalid FCM token format");
+  const dk = deviceKeyFor(deviceId, token);
+  const ref = db.ref(`${NOTIFICATIONS_PATH}/${userId}`);
+  const snap = await ref.once("value");
+  const existing = snap.exists() ? snap.val() : {};
+  const tokens = existing.tokens || {};
+  tokens[dk] = {
+    token: token.trim(),
+    addedAt: tokens[dk]?.addedAt || Date.now(),
+    lastSeenAt: Date.now(),
+  };
+  await ref.update({ tokens, lastUpdated: Date.now() });
+  invalidateCache("notif:tokens", userId);
+  return { deviceKey: dk };
+}
+
+async function unregisterDeviceToken(userId, deviceId) {
+  const ref = db.ref(`${NOTIFICATIONS_PATH}/${userId}`);
+  const snap = await ref.once("value");
+  if (!snap.exists()) return { removed: 0 };
+  const data = snap.val();
+  const tokens = data.tokens || {};
+  if (deviceId) {
+    const dk = deviceKeyFor(deviceId, "");
+    if (tokens[dk]) {
+      delete tokens[dk];
+      await ref.update({ tokens, lastUpdated: Date.now() });
+      invalidateCache("notif:tokens", userId);
+      return { removed: 1 };
+    }
+    // Also try matching deviceId-derived keys (any token suffix)
+    let removed = 0;
+    for (const [k, v] of Object.entries(tokens)) {
+      if (k.startsWith(dk.slice(0, 12)) || v.token === deviceId) {
+        delete tokens[k]; removed++;
+      }
+    }
+    if (removed > 0) {
+      await ref.update({ tokens, lastUpdated: Date.now() });
+      invalidateCache("notif:tokens", userId);
+    }
+    return { removed };
+  }
+  const count = Object.keys(tokens).length;
+  await ref.update({ tokens: {}, lastUpdated: Date.now() });
+  invalidateCache("notif:tokens", userId);
+  return { removed: count };
+}
+
+async function getUserTokens(userId) {
+  const cacheKey = getCacheKey("notif:tokens", userId);
+  const cached = getFromCache(cacheKey);
+  if (cached) return cached;
+
+  const snap = await db.ref(`${NOTIFICATIONS_PATH}/${userId}/tokens`).once("value");
+  if (!snap.exists()) return [];
+  const tokens = [];
+  snap.forEach(child => {
+    const v = child.val();
+    if (v && v.token) tokens.push(v.token);
+  });
+  setToCache(cacheKey, tokens);
+  return tokens;
+}
+
+// =========================================================================
+// SEND
+// =========================================================================
+
+async function sendNotificationWithPush(userId, data) {
+  const id = await storeNotification(userId, data);
+  const settings = await getUserSettings(userId);
+  const settingKey = TYPE_TO_SETTING[data.type] || "systemAlerts";
+  const pushOn = settings.pushEnabled && settings[settingKey];
+
+  let pushResult = { success: false, reason: "push_disabled" };
+  if (pushOn) {
+    const tokens = await getUserTokens(userId);
+    if (tokens.length === 0) {
+      pushResult = { success: false, reason: "no_tokens" };
+    } else {
+      const baseMessage = buildDataMessage({
+        title: data.title,
+        body: data.body,
+        imageUrl: data.imageUrl,
+        link: data.link,
+        notificationId: id,
+        type: data.type,
+        userId,
+        extra: JSON.stringify({
+          type: data.type,
+          notificationId: id,
+          action: data.action || null,
+        }),
+      });
+      const results = await runWithConcurrency(tokens, SEND_CONCURRENCY, t => sendOne(baseMessage, t));
+      const delivered = results.filter(r => r.status === "fulfilled" && r.value.success).length;
+      pushResult = { success: delivered > 0, tokensAttempted: tokens.length, tokensDelivered: delivered };
+    }
+  }
+
+  await db.ref(`${HISTORY_PATH}/${userId}/${id}`).update({
+    pushSent: pushOn,
+    pushDelivered: pushResult.success,
+    pushDeliveredAt: pushResult.success ? Date.now() : null,
+  }).catch(() => {});
+
+  return { notificationId: id, pushSent: pushOn, pushResult };
+}
+
+// =========================================================================
+// AUTH BRIDGE
+// =========================================================================
+
+async function bridgeOnSignup(uid) {
+  const result = { settingsSeeded: false, notificationsSeeded: false };
+  const settingsSnap = await db.ref(`${SETTINGS_PATH}/${uid}`).once("value");
+  if (!settingsSnap.exists()) {
+    await db.ref(`${SETTINGS_PATH}/${uid}`).set(buildDefaultSettings(uid));
+    result.settingsSeeded = true;
+  }
+  const notifSnap = await db.ref(`${NOTIFICATIONS_PATH}/${uid}`).once("value");
+  if (!notifSnap.exists()) {
+    await db.ref(`${NOTIFICATIONS_PATH}/${uid}`).set({
+      tokens: {},
+      lastUpdated: Date.now(),
+    });
+    result.notificationsSeeded = true;
+  }
+  return result;
+}
+
+async function bridgeOnLogout(uid, deviceId) {
+  if (deviceId) {
+    return unregisterDeviceToken(uid, deviceId);
+  }
+  return unregisterDeviceToken(uid, null);
+}
+
+async function bridgeOnBan(uid) {
+  await db.ref(`${NOTIFICATIONS_PATH}/${uid}`).update({
+    tokens: {},
+    bannedAt: Date.now(),
+    lastUpdated: Date.now(),
+  });
+  invalidateCache("notif:tokens", uid);
+  return { tokensCleared: true };
+}
+
+async function bridgeOnUnban(uid) {
+  await db.ref(`${NOTIFICATIONS_PATH}/${uid}`).update({
+    bannedAt: null,
+    lastUpdated: Date.now(),
+  }).catch(() => {});
+  return { restored: true };
+}
+
+// =========================================================================
+// HANDLERS
+// =========================================================================
+
+async function handleSubscribe(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(res, "subscribe", `uid_${user.uid}`))) return;
+
+  const { token, deviceId } = req.body || {};
+  if (!token) return res.status(400).json({ success: false, error: "Missing token" });
   try {
-    const snapshot = await db.ref(`${NOTIFICATIONS_PATH}/${user_id}/token`).once('value');
-    return snapshot.exists() ? snapshot.val() : null;
-  } catch (error) {
-    console.error('Error getting user token:', error);
-    return null;
+    const { deviceKey } = await registerDeviceToken(user.uid, token, deviceId || null);
+    return res.status(200).json({ success: true, deviceKey });
+  } catch (err) {
+    return res.status(400).json({ success: false, error: err.message });
   }
 }
 
-// ============================================
-// Main API Handler
-// ============================================
+async function handleUnsubscribe(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(res, "unsubscribe", `uid_${user.uid}`))) return;
+
+  const { deviceId } = req.body || {};
+  const r = await unregisterDeviceToken(user.uid, deviceId || null);
+  return res.status(200).json({ success: true, removed: r.removed });
+}
+
+async function handleMarkRead(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(res, "markRead", `uid_${user.uid}`))) return;
+
+  const { notificationId } = req.body || {};
+  if (!notificationId) return res.status(400).json({ success: false, error: "Missing notificationId" });
+  try {
+    await markRead(user.uid, notificationId);
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    return res.status(404).json({ success: false, error: err.message });
+  }
+}
+
+async function handleMarkAllRead(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(res, "markAllRead", `uid_${user.uid}`))) return;
+
+  const updated = await markAllRead(user.uid);
+  return res.status(200).json({ success: true, updated });
+}
+
+async function handleDismiss(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(res, "dismiss", `uid_${user.uid}`))) return;
+
+  const { notificationId } = req.body || {};
+  if (!notificationId) return res.status(400).json({ success: false, error: "Missing notificationId" });
+  try {
+    await dismissOne(user.uid, notificationId);
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    return res.status(404).json({ success: false, error: err.message });
+  }
+}
+
+async function handleDismissAllRead(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(res, "dismissAllRead", `uid_${user.uid}`))) return;
+
+  const dismissed = await dismissAllRead(user.uid);
+  return res.status(200).json({ success: true, dismissed });
+}
+
+async function handleUpdateSettings(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(res, "updateSettings", `uid_${user.uid}`))) return;
+
+  const allowedKeys = ["pushEnabled", "systemAlerts", "analyticsAlerts", "dbAlerts",
+                       "storageAlerts", "projectAlerts", "inviteAlerts", "quietHours"];
+  const patch = {};
+  for (const k of allowedKeys) {
+    if (req.body?.[k] !== undefined) patch[k] = req.body[k];
+  }
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ success: false, error: "No settings to update" });
+  }
+  // Type checks
+  for (const k of allowedKeys) {
+    if (k === "quietHours") continue;
+    if (patch[k] !== undefined && typeof patch[k] !== "boolean") {
+      return res.status(400).json({ success: false, error: `${k} must be boolean` });
+    }
+  }
+  if (patch.quietHours) {
+    if (typeof patch.quietHours !== "object" || patch.quietHours === null) {
+      return res.status(400).json({ success: false, error: "quietHours must be an object" });
+    }
+  }
+
+  const updated = await updateUserSettings(user.uid, patch);
+  return res.status(200).json({ success: true, settings: updated });
+}
+
+async function handleList(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(res, "list", `uid_${user.uid}`))) return;
+
+  const type = String(req.query?.type || "all");
+  const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 20, 1), 100);
+  const offset = Math.max(parseInt(req.query?.offset, 10) || 0, 0);
+  const sort = req.query?.sort === "asc" ? "asc" : "desc";
+
+  const result = await listNotifications(user.uid, { type, limit, offset, sort });
+  return res.status(200).json({ success: true, ...result });
+}
+
+async function handleStats(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(res, "stats", `uid_${user.uid}`))) return;
+
+  const stats = await getNotificationStats(user.uid);
+  return res.status(200).json({ success: true, stats });
+}
+
+async function handleGetSettings(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(res, "getSettings", `uid_${user.uid}`))) return;
+
+  const settings = await getUserSettings(user.uid);
+  return res.status(200).json({ success: true, settings });
+}
+
+async function handleCreate(req, res, reqId) {
+  if (!requireAdmin(req, res)) return;
+  if (!(await enforceRate(res, "create", `admin_${hashIp(getClientIp(req))}`))) return;
+
+  const { uid, title, body, type = "system", priority = "normal",
+          imageUrl, link, actionType, actionUrl, actionPayload,
+          sourceType, sourceId, category, icon } = req.body || {};
+
+  if (!uid) return res.status(400).json({ success: false, error: "Missing uid" });
+  if (!title || !body) return res.status(400).json({ success: false, error: "Missing title or body" });
+  if (!NOTIFICATION_TYPES.includes(type)) {
+    return res.status(400).json({ success: false, error: `Invalid type: ${NOTIFICATION_TYPES.join(", ")}` });
+  }
+  if (!NOTIFICATION_PRIORITIES.includes(priority)) {
+    return res.status(400).json({ success: false, error: "Invalid priority" });
+  }
+  if (actionType && !ACTION_TYPES.includes(actionType)) {
+    return res.status(400).json({ success: false, error: "Invalid actionType" });
+  }
+  if (sourceType && !SOURCE_TYPES.includes(sourceType)) {
+    return res.status(400).json({ success: false, error: "Invalid sourceType" });
+  }
+
+  let parsedPayload = null;
+  if (actionPayload) {
+    try { parsedPayload = typeof actionPayload === "string" ? JSON.parse(actionPayload) : actionPayload; }
+    catch { return res.status(400).json({ success: false, error: "actionPayload must be valid JSON" }); }
+  }
+
+  const data = {
+    type, title, body,
+    category: category || "",
+    icon: icon || null,
+    priority,
+    imageUrl: imageUrl || null,
+    link: link || null,
+    action: actionType ? { type: actionType, url: actionUrl || null, payload: parsedPayload } : null,
+    source: sourceType ? { type: sourceType, id: sourceId || null } : null,
+  };
+
+  const result = await sendNotificationWithPush(uid, data);
+  return res.status(200).json({ success: true, ...result });
+}
+
+async function handleAuthSignup(req, res, reqId) {
+  if (!requireAdmin(req, res)) return;
+  if (!(await enforceRate(res, "authBridge", `admin_${hashIp(getClientIp(req))}`))) return;
+
+  const { uid } = req.body || {};
+  if (!uid) return res.status(400).json({ success: false, error: "Missing uid" });
+  const result = await bridgeOnSignup(uid);
+  return res.status(200).json({ success: true, ...result });
+}
+
+async function handleAuthLogout(req, res, reqId) {
+  if (!requireAdmin(req, res)) return;
+  if (!(await enforceRate(res, "authBridge", `admin_${hashIp(getClientIp(req))}`))) return;
+
+  const { uid, deviceId } = req.body || {};
+  if (!uid) return res.status(400).json({ success: false, error: "Missing uid" });
+  const result = await bridgeOnLogout(uid, deviceId || null);
+  return res.status(200).json({ success: true, ...result });
+}
+
+async function handleAuthBan(req, res, reqId) {
+  if (!requireAdmin(req, res)) return;
+  if (!(await enforceRate(res, "authBridge", `admin_${hashIp(getClientIp(req))}`))) return;
+
+  const { uid } = req.body || {};
+  if (!uid) return res.status(400).json({ success: false, error: "Missing uid" });
+  const result = await bridgeOnBan(uid);
+  return res.status(200).json({ success: true, ...result });
+}
+
+async function handleAuthUnban(req, res, reqId) {
+  if (!requireAdmin(req, res)) return;
+  if (!(await enforceRate(res, "authBridge", `admin_${hashIp(getClientIp(req))}`))) return;
+
+  const { uid } = req.body || {};
+  if (!uid) return res.status(400).json({ success: false, error: "Missing uid" });
+  const result = await bridgeOnUnban(uid);
+  return res.status(200).json({ success: true, ...result });
+}
+
+async function handleHealth(req, res, reqId) {
+  return res.status(200).json({
+    success: true,
+    status: "ok",
+    types: NOTIFICATION_TYPES,
+    settings: Object.keys(DEFAULT_SETTINGS),
+    cache: getCacheStats(),
+    fcmReady: !!messaging,
+  });
+}
+
+// =========================================================================
+// ROUTER
+// =========================================================================
+
+const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
 
 export default async function handler(req, res) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  const reqId = newReqId();
+  res.setHeader("X-Request-Id", reqId);
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  // CORS — Folio origin only
+  const origin = req.headers.origin;
+  if (!origin || origin === BASE_URL) {
+    res.setHeader("Access-Control-Allow-Origin", origin || BASE_URL);
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", BASE_URL);
   }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  if (req.method === "OPTIONS") return res.status(204).end();
 
-  // ✅ FIXED: Safe extraction with optional chaining
-  const body = getBody(req);
-  const action = req.query.action || body.action || null;
-  const clientIP = getClientIP(req);
-  const userAgent = getUserAgent(req);
-
-  // ✅ FIXED: Validate action exists for methods that need it
-  if (!action && ['POST', 'PUT', 'DELETE'].includes(req.method)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Missing action parameter',
-      message: 'Please provide an action in the query string or request body',
-      hint: 'Example: ?action=subscribe or { "action": "send-topic" }'
-    });
-  }
-
-  // ============================================
-  // Health Check
-  // ============================================
-  if (req.method === 'GET' && !action) {
-    return res.status(200).json({
-      success: true,
-      message: 'Notifications API is running',
-      timestamp: Date.now(),
-      default_topic: DEFAULT_TOPIC,
-      history_limit: NOTIFICATION_HISTORY_LIMIT,
-      endpoints: [
-        'POST ?action=send-topic',
-        'POST ?action=send-user',
-        'POST ?action=send-all',
-        'POST ?action=subscribe',
-        'POST ?action=unsubscribe',
-        'GET ?action=history&user_id=xxx',
-        'GET ?action=notification&user_id=xxx&notification_id=xxx',
-        'DELETE ?action=history&user_id=xxx',
-        'DELETE ?action=notification&user_id=xxx&notification_id=xxx',
-        'GET ?action=count&user_id=xxx',
-        'GET ?action=user&user_id=xxx',
-        'POST ?action=migrate',
-        'GET ?action=topics&user_id=xxx'
-      ]
-    });
-  }
+  const action = String(req.query?.action || req.body?.action || "").trim();
+  const method = req.method;
 
   try {
-    // ============================================
-    // SEND TO TOPIC - POST ?action=send-topic
-    // ============================================
-    if (req.method === 'POST' && action === 'send-topic') {
-      const { title, body, topic = DEFAULT_TOPIC, imageUrl, link, extra } = body;
-
-      const validation = validateNotificationData(title, body);
-      if (!validation.valid) {
-        return res.status(400).json({ 
-          success: false,
-          error: validation.error 
-        });
-      }
-
-      if (!validateTopic(topic)) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'Invalid topic name' 
-        });
-      }
-
-      // Get users subscribed to this topic
-      const userIds = await getUsersByTopic(topic);
-      
-      // Store notifications in history
-      let storedCount = 0;
-      if (userIds.length > 0) {
-        storedCount = await storeNotificationForUsers(userIds, {
-          title: title.trim(),
-          body: body.trim(),
-          topic,
-          imageUrl,
-          link,
-          extra,
-          message_id: `topic_${Date.now()}`,
-          delivery_type: 'topic'
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Notification sent to topic',
-        topic: topic,
-        users_notified: userIds.length,
-        history_stored: storedCount,
-        timestamp: Date.now()
-      });
-    }
-
-    // ============================================
-    // SEND TO USER - POST ?action=send-user
-    // ============================================
-    if (req.method === 'POST' && action === 'send-user') {
-      const { user_id, title, body, imageUrl, link, extra } = body;
-
-      if (!user_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id is required' 
-        });
-      }
-
-      const validation = validateNotificationData(title, body);
-      if (!validation.valid) {
-        return res.status(400).json({ 
-          success: false,
-          error: validation.error 
-        });
-      }
-
-      // Check if user has a token
-      const token = await getUserToken(user_id);
-      if (!token) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'User not found or has no device token' 
-        });
-      }
-
-      // Store notification in history
-      const notificationId = await storeNotificationForUser(user_id, {
-        title: title.trim(),
-        body: body.trim(),
-        topic: 'direct',
-        imageUrl,
-        link,
-        extra,
-        message_id: `user_${Date.now()}`,
-        delivery_type: 'direct'
-      });
-
-      return res.status(200).json({
-        success: true,
-        message: 'Notification sent to user',
-        user_id,
-        notification_id: notificationId,
-        timestamp: Date.now()
-      });
-    }
-
-    // ============================================
-    // SEND TO ALL - POST ?action=send-all
-    // ============================================
-    if (req.method === 'POST' && action === 'send-all') {
-      const { title, body, imageUrl, link, extra } = body;
-
-      const validation = validateNotificationData(title, body);
-      if (!validation.valid) {
-        return res.status(400).json({ 
-          success: false,
-          error: validation.error 
-        });
-      }
-
-      // Get all users with tokens
-      const userIds = await getUsersByTopic(DEFAULT_TOPIC);
-      
-      // Store notifications for all users
-      let storedCount = 0;
-      if (userIds.length > 0) {
-        storedCount = await storeNotificationForUsers(userIds, {
-          title: title.trim(),
-          body: body.trim(),
-          topic: DEFAULT_TOPIC,
-          imageUrl,
-          link,
-          extra,
-          message_id: `broadcast_${Date.now()}`,
-          delivery_type: 'broadcast'
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Broadcast notification sent to all users',
-        topic: DEFAULT_TOPIC,
-        users_notified: userIds.length,
-        history_stored: storedCount,
-        timestamp: Date.now()
-      });
-    }
-
-    // ============================================
-    // SUBSCRIBE - POST ?action=subscribe
-    // ============================================
-    if (req.method === 'POST' && action === 'subscribe') {
-      const { user_id, token, topic, topics } = body;
-
-      if (!user_id || !token) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id and token are required' 
-        });
-      }
-
-      // Normalize topics
-      let finalTopics = Array.isArray(topics) && topics.length > 0
-        ? topics
-        : typeof topic === 'string' && topic.trim()
-        ? [topic.trim()]
-        : [DEFAULT_TOPIC];
-
-      finalTopics = [...new Set(finalTopics.map(t => t.trim()).filter(t => t.length > 0))];
-
-      // Ensure default topic is included
-      if (!finalTopics.includes(DEFAULT_TOPIC)) {
-        finalTopics.push(DEFAULT_TOPIC);
-      }
-
-      // Validate topics
-      const invalidTopics = finalTopics.filter(t => !validateTopic(t));
-      if (invalidTopics.length > 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid topic names',
-          invalid_topics: invalidTopics
-        });
-      }
-
-      // Get existing user data
-      const existingSnap = await db.ref(`${NOTIFICATIONS_PATH}/${user_id}`).once('value');
-      const existingData = existingSnap.val();
-
-      // Store token and topics
-      await db.ref(`${NOTIFICATIONS_PATH}/${user_id}`).set({
-        token: token.trim(),
-        topics: finalTopics,
-        lastUpdated: Date.now(),
-        ip: clientIP,
-        user_agent: userAgent
-      });
-
-      // Also update user's type if they have one
-      try {
-        const userSnapshot = await db.ref(`${USERS_PATH}/${user_id}`).once('value');
-        if (userSnapshot.exists()) {
-          const userData = userSnapshot.val();
-          if (userData.type && !finalTopics.includes(userData.type) && userData.type !== 'general') {
-            const updatedTopics = [...finalTopics, userData.type];
-            await db.ref(`${NOTIFICATIONS_PATH}/${user_id}/topics`).set(updatedTopics);
-            finalTopics = updatedTopics;
-          }
-        }
-      } catch (syncError) {
-        console.warn('Failed to sync user type:', syncError.message);
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Successfully subscribed',
-        user_id,
-        subscribed_to: finalTopics,
-        count: finalTopics.length,
-        timestamp: Date.now()
-      });
-    }
-
-    // ============================================
-    // UNSUBSCRIBE - POST ?action=unsubscribe
-    // ============================================
-    if (req.method === 'POST' && action === 'unsubscribe') {
-      const { user_id, topics } = body;
-
-      if (!user_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id is required' 
-        });
-      }
-
-      const snap = await db.ref(`${NOTIFICATIONS_PATH}/${user_id}`).once('value');
-      if (!snap.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'User not found' 
-        });
-      }
-
-      const userData = snap.val();
-      const currentTopics = userData.topics || [];
-      
-      let topicsToUnsubscribe;
-      if (topics) {
-        topicsToUnsubscribe = Array.isArray(topics) ? topics : [topics];
-      } else {
-        // Unsubscribe from all except default
-        topicsToUnsubscribe = currentTopics.filter(t => t !== DEFAULT_TOPIC);
-      }
-
-      // Remove topics
-      const remainingTopics = currentTopics.filter(t => !topicsToUnsubscribe.includes(t));
-      
-      // Ensure default topic stays if no other topics
-      if (remainingTopics.length === 0 && !topicsToUnsubscribe.includes(DEFAULT_TOPIC)) {
-        remainingTopics.push(DEFAULT_TOPIC);
-      }
-
-      await db.ref(`${NOTIFICATIONS_PATH}/${user_id}`).update({
-        topics: remainingTopics,
-        lastUpdated: Date.now()
-      });
-
-      return res.status(200).json({
-        success: true,
-        message: 'Successfully unsubscribed',
-        user_id,
-        unsubscribed_from: topicsToUnsubscribe,
-        remaining_topics: remainingTopics,
-        timestamp: Date.now()
-      });
-    }
-
-    // ============================================
-    // GET HISTORY - GET ?action=history&user_id=xxx
-    // ============================================
-    if (req.method === 'GET' && action === 'history') {
-      const { user_id, limit = NOTIFICATION_HISTORY_LIMIT, offset = 0, sort = 'desc', delivery_type } = req.query;
-
-      if (!user_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id is required' 
-        });
-      }
-
-      const snapshot = await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}`).once('value');
-      if (!snapshot.exists()) {
-        return res.status(200).json({
-          success: true,
-          notifications: [],
-          total: 0,
-          has_more: false
-        });
-      }
-
-      let notifications = [];
-      snapshot.forEach((child) => {
-        notifications.push({
-          id: child.key,
-          ...child.val()
-        });
-      });
-
-      // Apply filters
-      if (delivery_type) {
-        notifications = notifications.filter(n => n.delivery_type === delivery_type);
-      }
-
-      // Sort
-      notifications.sort((a, b) => sort === 'desc' ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
-
-      const startIndex = parseInt(offset);
-      const endIndex = startIndex + parseInt(limit);
-
-      const paginated = notifications.slice(startIndex, endIndex);
-
-      return res.status(200).json({
-        success: true,
-        notifications: paginated,
-        total: notifications.length,
-        has_more: notifications.length > endIndex,
-        limit: parseInt(limit),
-        offset: parseInt(offset)
-      });
-    }
-
-    // ============================================
-    // GET SINGLE NOTIFICATION - GET ?action=notification&user_id=xxx&notification_id=xxx
-    // ============================================
-    if (req.method === 'GET' && action === 'notification') {
-      const { user_id, notification_id } = req.query;
-
-      if (!user_id || !notification_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id and notification_id are required' 
-        });
-      }
-
-      const snapshot = await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}/${notification_id}`).once('value');
-      if (!snapshot.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'Notification not found' 
-        });
-      }
-
-      // Mark as read
-      await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}/${notification_id}/read`).set(true);
-
-      return res.status(200).json({
-        success: true,
-        notification: {
-          id: notification_id,
-          ...snapshot.val()
-        }
-      });
-    }
-
-    // ============================================
-    // MARK AS READ - PUT ?action=read&user_id=xxx&notification_id=xxx
-    // ============================================
-    if (req.method === 'PUT' && action === 'read') {
-      const { user_id, notification_id } = req.query;
-
-      if (!user_id || !notification_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id and notification_id are required' 
-        });
-      }
-
-      const snapshot = await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}/${notification_id}`).once('value');
-      if (!snapshot.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'Notification not found' 
-        });
-      }
-
-      await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}/${notification_id}/read`).set(true);
-
-      return res.status(200).json({
-        success: true,
-        message: 'Notification marked as read',
-        notification_id
-      });
-    }
-
-    // ============================================
-    // MARK ALL AS READ - PUT ?action=read-all&user_id=xxx
-    // ============================================
-    if (req.method === 'PUT' && action === 'read-all') {
-      const { user_id } = req.query;
-
-      if (!user_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id is required' 
-        });
-      }
-
-      const snapshot = await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}`).once('value');
-      if (!snapshot.exists()) {
-        return res.status(200).json({
-          success: true,
-          message: 'No notifications to mark as read',
-          count: 0
-        });
-      }
-
-      const updates = {};
-      snapshot.forEach((child) => {
-        updates[`${child.key}/read`] = true;
-      });
-
-      await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}`).update(updates);
-
-      return res.status(200).json({
-        success: true,
-        message: 'All notifications marked as read',
-        count: snapshot.numChildren()
-      });
-    }
-
-    // ============================================
-    // DELETE NOTIFICATION - DELETE ?action=notification&user_id=xxx&notification_id=xxx
-    // ============================================
-    if (req.method === 'DELETE' && action === 'notification') {
-      const { user_id, notification_id } = req.query;
-
-      if (!user_id || !notification_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id and notification_id are required' 
-        });
-      }
-
-      const snapshot = await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}/${notification_id}`).once('value');
-      if (!snapshot.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'Notification not found' 
-        });
-      }
-
-      await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}/${notification_id}`).remove();
-
-      return res.status(200).json({
-        success: true,
-        message: 'Notification deleted',
-        notification_id
-      });
-    }
-
-    // ============================================
-    // DELETE ALL HISTORY - DELETE ?action=history&user_id=xxx&all=true
-    // ============================================
-    if (req.method === 'DELETE' && action === 'history') {
-      const { user_id, all } = req.query;
-
-      if (!user_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id is required' 
-        });
-      }
-
-      if (all === 'true') {
-        await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}`).remove();
-        return res.status(200).json({
-          success: true,
-          message: 'All notifications deleted',
-          user_id
-        });
-      }
-
-      return res.status(400).json({ 
-        success: false,
-        error: 'Set all=true to delete all history' 
-      });
-    }
-
-    // ============================================
-    // GET UNREAD COUNT - GET ?action=unread&user_id=xxx
-    // ============================================
-    if (req.method === 'GET' && action === 'unread') {
-      const { user_id } = req.query;
-
-      if (!user_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id is required' 
-        });
-      }
-
-      const snapshot = await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}`).once('value');
-      if (!snapshot.exists()) {
-        return res.status(200).json({
-          success: true,
-          user_id,
-          unread_count: 0
-        });
-      }
-
-      let unreadCount = 0;
-      snapshot.forEach((child) => {
-        const notification = child.val();
-        if (!notification.read) {
-          unreadCount++;
-        }
-      });
-
-      return res.status(200).json({
-        success: true,
-        user_id,
-        unread_count: unreadCount
-      });
-    }
-
-    // ============================================
-    // GET COUNT - GET ?action=count&user_id=xxx
-    // ============================================
-    if (req.method === 'GET' && action === 'count') {
-      const { user_id } = req.query;
-
-      if (!user_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id is required' 
-        });
-      }
-
-      const snapshot = await db.ref(`${NOTIFICATION_HISTORY_PATH}/${user_id}`).once('value');
-      const count = snapshot.exists() ? snapshot.numChildren() : 0;
-
-      return res.status(200).json({
-        success: true,
-        user_id,
-        count,
-        limit: NOTIFICATION_HISTORY_LIMIT,
-        has_more_history: count >= NOTIFICATION_HISTORY_LIMIT
-      });
-    }
-
-    // ============================================
-    // GET USER TOPICS - GET ?action=topics&user_id=xxx
-    // ============================================
-    if (req.method === 'GET' && action === 'topics') {
-      const { user_id } = req.query;
-
-      if (!user_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id is required' 
-        });
-      }
-
-      const snapshot = await db.ref(`${NOTIFICATIONS_PATH}/${user_id}`).once('value');
-      if (!snapshot.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'User not found' 
-        });
-      }
-
-      const userData = snapshot.val();
-      return res.status(200).json({
-        success: true,
-        user_id,
-        topics: userData.topics || [],
-        token: userData.token ? 'present' : 'missing',
-        lastUpdated: userData.lastUpdated
-      });
-    }
-
-    // ============================================
-    // GET USER INFO - GET ?action=user&user_id=xxx
-    // ============================================
-    if (req.method === 'GET' && action === 'user') {
-      const { user_id } = req.query;
-
-      if (!user_id) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'user_id is required' 
-        });
-      }
-
-      const snapshot = await db.ref(`${NOTIFICATIONS_PATH}/${user_id}`).once('value');
-      if (!snapshot.exists()) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'User not found' 
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        user_id,
-        ...snapshot.val()
-      });
-    }
-
-    // ============================================
-    // MIGRATE USERS - POST ?action=migrate
-    // ============================================
-    if (req.method === 'POST' && action === 'migrate') {
-      const { from_topic, to_topic } = body;
-
-      const sourceTopic = from_topic || DEFAULT_TOPIC;
-      const targetTopic = to_topic || DEFAULT_TOPIC;
-
-      const snap = await db.ref(NOTIFICATIONS_PATH).once('value');
-      if (!snap.exists()) {
-        return res.status(200).json({
-          success: true,
-          message: 'No users to migrate',
-          updated: 0
-        });
-      }
-
-      let updated = 0;
-      const promises = [];
-
-      snap.forEach((child) => {
-        const userData = child.val();
-        if (userData.topics && Array.isArray(userData.topics)) {
-          if (userData.topics.includes(sourceTopic) && !userData.topics.includes(targetTopic)) {
-            const updatedTopics = [...userData.topics, targetTopic];
-            promises.push(
-              db.ref(`${NOTIFICATIONS_PATH}/${child.key}`).update({
-                topics: updatedTopics,
-                lastUpdated: Date.now()
-              }).then(() => updated++)
-            );
-          }
-        }
-      });
-
-      await Promise.all(promises);
-
-      return res.status(200).json({
-        success: true,
-        message: 'Migration completed',
-        updated_users: updated,
-        source_topic: sourceTopic,
-        target_topic: targetTopic,
-        total_users: snap.numChildren()
-      });
-    }
-
-    // ============================================
-    // GET TOPIC SUBSCRIBERS - GET ?action=subscribers&topic=xxx
-    // ============================================
-    if (req.method === 'GET' && action === 'subscribers') {
-      const { topic } = req.query;
-
-      if (!topic) {
-        return res.status(400).json({ 
-          success: false,
-          error: 'topic is required' 
-        });
-      }
-
-      const userIds = await getUsersByTopic(topic);
-
-      return res.status(200).json({
-        success: true,
-        topic,
-        subscribers: userIds,
-        count: userIds.length
-      });
-    }
-
-    // ============================================
-    // 404 - Action not found
-    // ============================================
-    return res.status(404).json({
-      success: false,
-      error: 'Action not found',
-      available_actions: [
-        'send-topic',
-        'send-user', 
-        'send-all',
-        'subscribe',
-        'unsubscribe',
-        'history',
-        'notification',
-        'read',
-        'read-all',
-        'unread',
-        'count',
-        'topics',
-        'user',
-        'migrate',
-        'subscribers'
-      ]
-    });
-
-  } catch (error) {
-    console.error('Notifications API Error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    // User endpoints
+    if (method === "POST" && action === "subscribe")       return await handleSubscribe(req, res, reqId);
+    if (method === "POST" && action === "unsubscribe")     return await handleUnsubscribe(req, res, reqId);
+    if (method === "POST" && action === "mark_read")       return await handleMarkRead(req, res, reqId);
+    if (method === "POST" && action === "mark_all_read")   return await handleMarkAllRead(req, res, reqId);
+    if (method === "POST" && action === "dismiss")         return await handleDismiss(req, res, reqId);
+    if (method === "POST" && action === "dismiss_all_read") return await handleDismissAllRead(req, res, reqId);
+    if (method === "POST" && action === "update_settings") return await handleUpdateSettings(req, res, reqId);
+    if (method === "GET"  && action === "list")            return await handleList(req, res, reqId);
+    if (method === "GET"  && action === "stats")           return await handleStats(req, res, reqId);
+    if (method === "GET"  && action === "get_settings")    return await handleGetSettings(req, res, reqId);
+
+    // Admin / bridge endpoints
+    if (method === "POST" && action === "create")          return await handleCreate(req, res, reqId);
+    if (method === "POST" && action === "auth_signup")     return await handleAuthSignup(req, res, reqId);
+    if (method === "POST" && action === "auth_logout")     return await handleAuthLogout(req, res, reqId);
+    if (method === "POST" && action === "auth_ban")        return await handleAuthBan(req, res, reqId);
+    if (method === "POST" && action === "auth_unban")      return await handleAuthUnban(req, res, reqId);
+
+    // Health
+    if (method === "GET"  && action === "health")          return await handleHealth(req, res, reqId);
+
+    return res.status(400).json({ success: false, error: `Unknown action: ${action || "(none)"}` });
+  } catch (err) {
+    log("notify.unhandled_error", { reqId, action, method, message: err.message, stack: err.stack });
+    return res.status(500).json({ success: false, error: "Internal error", reqId });
   }
 }
+
+export const config = { runtime: "nodejs" };
