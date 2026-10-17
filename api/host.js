@@ -121,10 +121,6 @@ function shortId(pid) {
   return pid.replace(/[^a-z0-9]/gi, "").slice(-8);
 }
 
-/**
- * Read a static HTML file from public/. Cached in memory per cold start.
- * Templates are static with {{PLACEHOLDER}} tokens (playbook §2 Rule 5).
- */
 const templateCache = new Map();
 function readTemplate(name) {
   if (templateCache.has(name)) return templateCache.get(name);
@@ -134,10 +130,6 @@ function readTemplate(name) {
   return content;
 }
 
-/**
- * Replace {{KEY}} tokens. Values are stringified, HTML-escaped for
- * text contexts. For raw HTML injection, wrap value in { raw: "..." }.
- */
 function applyTemplate(template, vars) {
   return template.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_, key) => {
     if (!(key in vars)) return "";
@@ -149,10 +141,6 @@ function applyTemplate(template, vars) {
   });
 }
 
-/**
- * Look up a project by owner username + slug.
- * Returns { pid, project } or null.
- */
 async function findProjectBySlug(username, slug) {
   const owner = await getUserByUsername(username);
   if (!owner) return null;
@@ -166,9 +154,6 @@ async function findProjectBySlug(username, slug) {
   return found;
 }
 
-/**
- * Look up a project by owner uid + slug. Faster than by-slug scan.
- */
 async function findProjectByUidAndSlug(uid, slug) {
   const user = await getUser(uid);
   if (!user) return null;
@@ -184,10 +169,6 @@ async function findProjectByUidAndSlug(uid, slug) {
   return null;
 }
 
-/**
- * Compute language breakdown from a set of file paths.
- * Preset mapping — no full AST analysis in v1.
- */
 const LANG_MAP = {
   html: "HTML", htm: "HTML",
   css: "CSS", scss: "CSS", sass: "CSS", less: "CSS",
@@ -220,9 +201,6 @@ function computeLanguageBreakdown(publicFiles, fileContents) {
   return { breakdown, totalLines: total, computedAt: Date.now() };
 }
 
-/**
- * Inject meta tags + tracker into a file's contents (typically index.html).
- */
 function injectHead(html, metaTags, pid) {
   const tags = [];
   const title = metaTags?.title || "";
@@ -242,7 +220,6 @@ function injectHead(html, metaTags, pid) {
   if (desc) tags.push(`<meta name="twitter:description" content="${escapeHtml(desc)}">`);
   if (og) tags.push(`<meta name="twitter:image" content="${escapeHtml(og)}">`);
 
-  // Insert before </head> if present, else at top
   const headClose = html.search(/<\/head>/i);
   if (headClose >= 0) {
     return html.slice(0, headClose) + tags.join("\n") + "\n" + html.slice(headClose);
@@ -265,10 +242,6 @@ function escapeHtml(s) {
   }[c]));
 }
 
-/**
- * Vercel deploy payload from a files map.
- * files: { "path/name.ext": "content", ... }
- */
 function buildVercelPayload(name, files, metaTags) {
   const vercelFiles = [];
   for (const [filePath, content] of Object.entries(files)) {
@@ -389,7 +362,7 @@ async function handleDeploy(req, res, reqId) {
     success: true,
     deploymentId: deployment.id || null,
     stateUrl,
-    url, // may be provisional until ready
+    url,
   });
 }
 
@@ -413,7 +386,6 @@ async function handleRedeploy(req, res, reqId) {
     return res.status(400).json({ success: false, error: "Version has no files" });
   }
 
-  // Reuse the deploy path
   return handleDeploy({ ...req, body: { pid, files, versionId } }, res, reqId);
 }
 
@@ -451,7 +423,6 @@ async function handleDbSet(req, res, reqId) {
   const access = await checkProjectKeyOrRole(req, res, pid, "editor");
   if (!access) return;
 
-  // Validate size
   const payload = data !== undefined ? data : value;
   const serialized = JSON.stringify(payload ?? null);
   if (serialized.length > 10 * 1024 * 1024) {
@@ -474,7 +445,6 @@ async function handleDbSet(req, res, reqId) {
     return res.status(500).json({ success: false, error: "Write failed" });
   }
 
-  // Update analytics counter
   await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
     const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
     c.writes = (c.writes || 0) + 1;
@@ -482,14 +452,12 @@ async function handleDbSet(req, res, reqId) {
     return c;
   }).catch(() => {});
 
-  // Log
   await logProjectEvent(pid, uidForLog, "db", "db.written", {
     key: key || null,
     bytes: serialized.length,
     viaApiKey: access.uid === "api",
   });
 
-  // Storage warning (80% threshold) — best effort
   try {
     const sizeSnap = await db.ref(`projectData/${pid}`).once("value");
     const totalSize = JSON.stringify(sizeSnap.val() || {}).length;
@@ -516,7 +484,6 @@ async function handleDbGet(req, res, reqId) {
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "dbGet", `pid_${pid}`))) return;
 
-  // Auth path: project key OR explicit role OR public visibility
   const key = req.headers["x-project-key"];
   let authorized = false;
   let uidForLog = null;
@@ -920,6 +887,20 @@ async function handleShare(req, res, reqId) {
     ? `<div class="empty-note">This project hasn't been deployed to a live site yet.</div>`
     : "";
 
+  // ← NEW: inject window.__PROJECT__ for public.js
+  const projectJson = {
+    pid,
+    name: project.name || slug,
+    slug,
+    description: project.description || "",
+    ownerUsername: owner.profile?.username || username,
+    isOwner: isOwnerViewer,
+    liveUrl: project.visibility?.liveSite === "public" ? (project.deployment?.url || null) : null,
+    codePublic: project.visibility?.code === "public",
+    languages: project.languages?.breakdown || {},
+  };
+  const projectScript = `<script>window.__PROJECT__ = ${JSON.stringify(projectJson).replace(/</g, "\\u003c")};</script>`;
+
   const tmpl = readTemplate("project-template.html");
   const html = applyTemplate(tmpl, {
     PROJECT_NAME: project.name || slug,
@@ -935,6 +916,7 @@ async function handleShare(req, res, reqId) {
     TWITTER_IMAGE_META: { raw: twitterImageMeta },
     CANONICAL_URL: `${BASE_URL}/${username}/${slug}`,
     EMPTY_NOTE: { raw: emptyNote },
+    INJECT_PROJECT_SCRIPT: { raw: projectScript },
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -948,7 +930,6 @@ async function handleProfilePublic(req, res, reqId) {
   const username = String(req.query?.username || "").trim().toLowerCase();
   if (!username) return res.status(400).send("Missing username");
 
-  // Previous username → 301 to new
   const prevSnap = await db.ref(`previousUsernames/${username}`).once("value");
   if (prevSnap.exists()) {
     return res.redirect(301, `${BASE_URL}/${prevSnap.val()}`);
@@ -1010,6 +991,17 @@ async function handleProfilePublic(req, res, reqId) {
     ? `<meta name="twitter:image" content="${escapeHtml(user.profile.ogImageUrl)}">`
     : "";
 
+  // ← NEW: inject window.__PROFILE__ for public.js
+  const profileJson = {
+    username,
+    displayName: user.profile?.displayName || username,
+    bio: user.profile?.bio || "",
+    avatarUrl: user.profile?.avatarUrl || null,
+    isOwner,
+    projectCount: projectList.length,
+  };
+  const profileScript = `<script>window.__PROFILE__ = ${JSON.stringify(profileJson).replace(/</g, "\\u003c")};</script>`;
+
   const tmpl = readTemplate("profile-template.html");
   const html = applyTemplate(tmpl, {
     DISPLAY_NAME: user.profile?.displayName || username,
@@ -1025,6 +1017,7 @@ async function handleProfilePublic(req, res, reqId) {
     OG_IMAGE_META: { raw: ogImageMeta },
     TWITTER_IMAGE_META: { raw: twitterImageMeta },
     CANONICAL_URL: `${BASE_URL}/${username}`,
+    INJECT_PROFILE_SCRIPT: { raw: profileScript },
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
