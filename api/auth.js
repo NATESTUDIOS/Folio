@@ -1,8 +1,6 @@
 // api/auth.js
-import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
-import { db, auth as firebaseAuth } from "../utils/firebase.js";
+import { db } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import {
   signSession, verifySession,
@@ -12,7 +10,6 @@ import {
   cleanUsername, cleanEmail, isReservedUsername,
   assignUsername, reserveEmail, reserveUsername,
   releaseEmail, releaseUsername,
-  generateInviteToken,
   getClientIp, hashIp, sanitizeFirebasePath,
   logUserEvent,
 } from "../utils/users.js";
@@ -32,7 +29,6 @@ const RATE_LIMITS = {
   changePassword: { max: 5,   window: 60 * 60 * 1000 },
   changeEmail:    { max: 3,   window: 60 * 60 * 1000 },
   changeUsername: { max: 3,   window: 60 * 60 * 1000 },
-  firebaseToken:  { max: 60,  window: 60 * 60 * 1000 },
   me:             { max: 300, window: 60 * 60 * 1000 },
   profileUpdate:  { max: 10,  window: 60 * 60 * 1000 },
   logs:           { max: 60,  window: 60 * 60 * 1000 },
@@ -102,17 +98,6 @@ const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
 const LOGIN_MAX_FAILURES = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
-// Firebase public config — served at GET /api/auth?action=config
-const FIREBASE_PUBLIC_CONFIG = {
-  apiKey: process.env.FIREBASE_API_KEY,
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-  databaseURL: process.env.FIREBASE_DB_URL,
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined,
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.FIREBASE_APP_ID,
-};
-
 async function createUserRecord({ uid, email, emailLower, passwordHash, username, displayName }) {
   const now = Date.now();
   const record = {
@@ -169,16 +154,16 @@ async function callNotifyBridge(action, uid, extra = {}) {
 }
 
 // =========================================================================
-// NEW: /config — expose Firebase public config to the client
+// VAPID (Web Push)
 // =========================================================================
 
-async function handleConfig(req, res, reqId) {
-  if (!FIREBASE_PUBLIC_CONFIG.apiKey || !FIREBASE_PUBLIC_CONFIG.projectId) {
-    log("auth.config_missing", { reqId });
-    return res.status(500).json({ success: false, error: "Server not configured" });
+async function handleVapid(req, res, reqId) {
+  const key = process.env.VAPID_PUBLIC_KEY;
+  if (!key) {
+    return res.status(503).json({ success: false, error: "Push not configured" });
   }
-  res.setHeader("Cache-Control", "public, max-age=3600");
-  return res.status(200).json({ success: true, config: FIREBASE_PUBLIC_CONFIG });
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  return res.status(200).json({ success: true, publicKey: key });
 }
 
 // =========================================================================
@@ -466,22 +451,6 @@ async function handleChangeUsername(req, res, reqId) {
   return res.status(200).json({ success: true, sessionToken, username: newName });
 }
 
-async function handleFirebaseToken(req, res, reqId) {
-  const user = await requireAuth(req, res);
-  if (!user) return;
-  if (!(await enforceRate(req, res, "firebaseToken", `uid_${user.uid}`))) return;
-
-  try {
-    const customToken = await firebaseAuth.createCustomToken(user.uid, {
-      username: user.profile?.username || "",
-    });
-    return res.status(200).json({ success: true, customToken, expiresIn: 3600 });
-  } catch (err) {
-    log("auth.firebase_token_failed", { reqId, uid: user.uid, message: err.message });
-    return res.status(500).json({ success: false, error: "Could not create Firebase token" });
-  }
-}
-
 async function handleMe(req, res, reqId) {
   const user = await requireAuth(req, res);
   if (!user) return;
@@ -534,7 +503,6 @@ async function handleProfileUpdate(req, res, reqId) {
     patch["profile/avatarUrl"] = avatarUrl;
   }
 
-  // ← NEW: avatarDataUrl — base64 data URI, uploads via IMAGE_UPLOAD_API
   if (avatarDataUrl && typeof avatarDataUrl === "string") {
     if (avatarDataUrl.length > 3 * 1024 * 1024) {
       return res.status(413).json({ success: false, error: "Avatar too large (max 2 MB)" });
@@ -654,7 +622,7 @@ export default async function handler(req, res) {
   const method = req.method;
 
   try {
-    if (method === "GET"  && action === "config")          return await handleConfig(req, res, reqId);
+    if (method === "GET"  && action === "vapid")           return await handleVapid(req, res, reqId);
     if (method === "POST" && action === "register")        return await handleRegister(req, res, reqId);
     if (method === "POST" && action === "login")           return await handleLogin(req, res, reqId);
     if (method === "POST" && action === "logout")          return await handleLogout(req, res, reqId);
@@ -662,7 +630,6 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "change-password") return await handleChangePassword(req, res, reqId);
     if (method === "POST" && action === "change-email")    return await handleChangeEmail(req, res, reqId);
     if (method === "POST" && action === "change-username") return await handleChangeUsername(req, res, reqId);
-    if (method === "POST" && action === "firebase-token")  return await handleFirebaseToken(req, res, reqId);
     if (method === "GET"  && action === "me")              return await handleMe(req, res, reqId);
     if (method === "POST" && action === "profile/update")  return await handleProfileUpdate(req, res, reqId);
     if (method === "GET"  && action === "logs")            return await handleLogs(req, res, reqId);
