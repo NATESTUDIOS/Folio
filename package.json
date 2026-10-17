@@ -1,16 +1,52 @@
 {
-  "name": "exploits",
+  "name": "folio",
   "version": "1.0.0",
-  "description": "Exploits Platform - Portfolio management",
+  "description": "Offline-first code editor and project workspace for web developers on Android.",
+  "private": true,
   "type": "module",
-
-  "dependencies": {
-    "firebase-admin": "^11.11.0",
-    "crypto": "^1.0.1",
-    "@sparticuz/chromium": "^121.0.0",
-    "puppeteer-core": "^21.0.0",
-    "axios": "^1.7.0"
+  "license": "MIT",
+  "author": {
+    "name": "Folio",
+    "url": "https://foliostudios.vercel.app"
   },
- 
-  "author": "Natestudios"
+  "homepage": "https://foliostudios.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/folio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/folio/issues"
+  },
+  "keywords": [
+    "pwa",
+    "code-editor",
+    "offline-first",
+    "android",
+    "mobile",
+    "codemirror",
+    "vercel",
+    "firebase",
+    "portfolio"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel deploy --prod",
+    "deploy:preview": "vercel deploy",
+    "logs": "vercel logs",
+    "env:pull": "vercel env pull .env.local",
+    "clean": "rm -rf .vercel node_modules"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.1",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "vercel": "^39.0.0"
+  },
+  "volta": {
+    "node": "20.18.0"
+  }
 }
