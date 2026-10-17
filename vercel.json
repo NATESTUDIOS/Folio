@@ -11,10 +11,10 @@
     { "source": "/dashboard", "destination": "/dashboard.html" },
     { "source": "/invite", "destination": "/invite.html" },
     { "source": "/offline", "destination": "/offline.html" },
-    { "source": "/p/:pid", "destination": "/api/host?action=short&pid=:pid" },
+    { "source": "/p/:pid", "destination": "/api/host?action=share&pid=:pid" },
     { "source": "/:username/:project/:file", "destination": "/api/host?action=share&username=:username&project=:project&file=:file" },
     { "source": "/:username/:project", "destination": "/api/host?action=share&username=:username&project=:project" },
-    { "source": "/:username", "destination": "/api/auth?action=profile&username=:username" }
+    { "source": "/:username", "destination": "/api/host?action=profile&username=:username" }
   ],
   "headers": [
     {
@@ -38,6 +38,18 @@
       ]
     },
     {
+      "source": "/js/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/css/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, must-revalidate" }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
@@ -49,5 +61,8 @@
   ],
   "redirects": [
     { "source": "/", "destination": "/app", "permanent": false }
+  ],
+  "crons": [
+    { "path": "/api/cron/cleanup", "schedule": "0 * * * *" }
   ]
 }
