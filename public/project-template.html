@@ -7,7 +7,6 @@
 <meta name="description" content="{{OG_DESCRIPTION}}">
 <link rel="canonical" href="{{CANONICAL_URL}}">
 
-<!-- Open Graph -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Folio">
 <meta property="og:title" content="{{OG_TITLE}}">
@@ -15,7 +14,6 @@
 <meta property="og:url" content="{{CANONICAL_URL}}">
 {{OG_IMAGE_META}}
 
-<!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{OG_TITLE}}">
 <meta name="twitter:description" content="{{OG_DESCRIPTION}}">
@@ -27,193 +25,41 @@
 
 <style>
   :root {
-    --bg: #0b0e14;
-    --bg-soft: #10141c;
-    --bg-card: #161b25;
-    --border: #262d3a;
-    --border-soft: #1c2230;
-    --text: #e6edf3;
-    --text-soft: #adbac7;
-    --text-muted: #7d8590;
-    --accent: #7c5cff;
-    --accent-soft: rgba(124, 92, 255, 0.14);
-    --green: #2ea043;
-    --yellow: #d29922;
-    --red: #f85149;
-    --radius: 14px;
-    --radius-sm: 8px;
+    --bg: #0b0e14; --bg-soft: #10141c; --bg-card: #161b25;
+    --border: #262d3a; --border-soft: #1c2230;
+    --text: #e6edf3; --text-soft: #adbac7; --text-muted: #7d8590;
+    --accent: #F59E0B; --accent-soft: rgba(245, 158, 11, 0.14);
+    --radius: 14px; --radius-sm: 8px;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   }
-
   * { box-sizing: border-box; }
-
-  html, body {
-    margin: 0;
-    padding: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 16px;
-    line-height: 1.55;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
-
-  .container {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 24px 20px 64px;
-  }
-
-  /* Top nav */
-  .topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: 20px;
-    margin-bottom: 24px;
-    border-bottom: 1px solid var(--border-soft);
-  }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 700;
-    color: var(--text);
-    font-size: 18px;
-    letter-spacing: -0.01em;
-  }
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 20px 64px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid var(--border-soft); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); font-size: 18px; letter-spacing: -0.01em; }
   .brand img { width: 24px; height: 24px; border-radius: 6px; }
-  .topbar-link {
-    color: var(--text-soft);
-    font-size: 14px;
-  }
-
-  /* Project header */
-  .project-head {
-    margin-bottom: 32px;
-  }
-  .owner-line {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--text-muted);
-    font-size: 14px;
-    margin-bottom: 8px;
-  }
-  .owner-line a {
-    color: var(--text-soft);
-    font-weight: 500;
-  }
+  .topbar-link { color: var(--text-soft); font-size: 14px; }
+  .project-head { margin-bottom: 32px; }
+  .owner-line { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 14px; margin-bottom: 8px; }
+  .owner-line a { color: var(--text-soft); font-weight: 500; }
   .owner-line a:hover { color: var(--text); }
-
-  h1.project-title {
-    margin: 0 0 12px;
-    font-size: clamp(28px, 5vw, 40px);
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-    color: var(--text);
-    word-break: break-word;
-  }
-
-  p.project-desc {
-    margin: 0 0 20px;
-    color: var(--text-soft);
-    font-size: 17px;
-    line-height: 1.55;
-    max-width: 680px;
-  }
-
-  /* Language badges */
-  .lang-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 24px;
-  }
-  .lang-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-soft);
-    font-size: 13px;
-    color: var(--text-soft);
-    font-family: var(--mono);
-  }
-  .lang-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
-  }
-
-  /* Action buttons */
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 32px;
-  }
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 18px;
-    border-radius: var(--radius-sm);
-    font-size: 15px;
-    font-weight: 600;
-    text-decoration: none;
-    transition: all 0.15s ease;
-    border: 1px solid var(--border);
-    background: var(--bg-card);
-    color: var(--text);
-    cursor: pointer;
-  }
+  h1.project-title { margin: 0 0 12px; font-size: clamp(28px, 5vw, 40px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; color: var(--text); word-break: break-word; }
+  p.project-desc { margin: 0 0 20px; color: var(--text-soft); font-size: 17px; line-height: 1.55; max-width: 680px; }
+  .lang-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  .lang-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--bg-card); border: 1px solid var(--border-soft); font-size: 13px; color: var(--text-soft); font-family: var(--mono); }
+  .lang-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 32px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600; text-decoration: none; transition: all 0.15s ease; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); cursor: pointer; }
   .btn:hover { text-decoration: none; background: var(--bg-soft); border-color: var(--accent); }
-  .btn.primary {
-    background: var(--accent);
-    color: #ffffff;
-    border-color: var(--accent);
-  }
-  .btn.primary:hover { background: #6a4eeb; border-color: #6a4eeb; }
-  .btn svg { width: 16px; height: 16px; }
-
-  /* Empty state */
-  .empty-note {
-    padding: 16px 20px;
-    border-radius: var(--radius-sm);
-    background: var(--bg-card);
-    border: 1px solid var(--border-soft);
-    color: var(--text-muted);
-    font-size: 14px;
-    margin-bottom: 32px;
-  }
-
-  /* Footer */
-  footer {
-    margin-top: 64px;
-    padding-top: 24px;
-    border-top: 1px solid var(--border-soft);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-    color: var(--text-muted);
-    font-size: 13px;
-  }
+  .btn.primary { background: var(--accent); color: #0b0e14; border-color: var(--accent); }
+  .btn.primary:hover { background: #e08c00; }
+  .empty-note { padding: 16px 20px; border-radius: var(--radius-sm); background: var(--bg-card); border: 1px solid var(--border-soft); color: var(--text-muted); font-size: 14px; margin-bottom: 32px; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border-soft); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; color: var(--text-muted); font-size: 13px; }
   footer a { color: var(--text-soft); }
   footer a:hover { color: var(--text); }
-
   @media (max-width: 480px) {
     .container { padding: 20px 16px 48px; }
     .actions { flex-direction: column; }
@@ -259,19 +105,10 @@
   </footer>
 </div>
 
-<script>
-// View counter — posts to /api/host?action=view (bot/owner filtered server-side).
-(function(){
-  try {
-    fetch("/api/host?action=view", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: "{{OWNER_USERNAME}}" }),
-      credentials: "omit",
-      keepalive: true,
-    }).catch(function(){});
-  } catch (e) {}
-})();
+{{INJECT_PROJECT_SCRIPT}}
+<script type="module">
+  import { initProjectTemplate } from "/js/public.js";
+  initProjectTemplate();
 </script>
 </body>
 </html>
