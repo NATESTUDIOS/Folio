@@ -12,17 +12,10 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET must be set to a 32+ character secret");
 }
 
-/**
- * Sign a 30-day session JWT.
- * Playbook §5: stateless, no revocation in v1.
- */
 export function signSession(uid, username) {
   return jwt.sign({ uid, username }, JWT_SECRET, { expiresIn: "30d" });
 }
 
-/**
- * Verify a session JWT. Returns the decoded payload, or null if invalid.
- */
 export function verifySession(token) {
   if (!token || typeof token !== "string") return null;
   try {
@@ -41,10 +34,6 @@ const SCRYPT_r = 8;
 const SCRYPT_p = 1;
 const KEYLEN = 64;
 
-/**
- * Hash a password. Format: `scrypt$N$r$p$saltHex$hashHex`.
- * Parameters embedded so future upgrades don't invalidate old hashes.
- */
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16);
   const hash = crypto.scryptSync(password, salt, KEYLEN, {
@@ -53,10 +42,6 @@ export function hashPassword(password) {
   return `scrypt$${SCRYPT_N}$${SCRYPT_r}$${SCRYPT_p}$${salt.toString("hex")}$${hash.toString("hex")}`;
 }
 
-/**
- * Verify a password against a stored hash. Returns boolean.
- * Returns false on any parse error (caller logs hasHash at API layer).
- */
 export function verifyPassword(password, encoded) {
   try {
     if (typeof encoded !== "string") return false;
@@ -74,10 +59,6 @@ export function verifyPassword(password, encoded) {
   }
 }
 
-/**
- * Validate password policy. Returns an error string, or null if valid.
- * Playbook §5: min 8, letter + number. Unicode-aware.
- */
 export function validatePassword(password) {
   if (typeof password !== "string") return "Password must be a string";
   if (password.length < 8) return "Password must be at least 8 characters";
@@ -87,10 +68,6 @@ export function validatePassword(password) {
   return null;
 }
 
-/**
- * Timing equalizer for login when the identifier doesn't resolve.
- * Runs a full scrypt cycle so timing matches a real verify.
- */
 export function dummyHash() {
   const salt = crypto.randomBytes(16);
   crypto.scryptSync("dummy-password", salt, KEYLEN, {
@@ -102,12 +79,6 @@ export function dummyHash() {
 // Auth middleware
 // =========================================================================
 
-/**
- * Require a valid session JWT and an active (non-banned) account.
- * On failure: sends a response and returns null. Caller pattern:
- *   const user = await requireAuth(req, res); if (!user) return;
- * On success: returns the full user record plus uid.
- */
 export async function requireAuth(req, res) {
   const header = req.headers.authorization || "";
   if (!header.startsWith("Bearer ")) {
@@ -131,11 +102,6 @@ export async function requireAuth(req, res) {
   return { uid: decoded.uid, ...user, session: decoded };
 }
 
-/**
- * Require the ADMIN_API_KEY header. Used by internal-only endpoints
- * (notify auth bridge) and cron.
- * On failure: sends a response and returns false.
- */
 export function requireAdmin(req, res) {
   const key = req.headers["x-api-key"] || req.headers["admin-api-key"] || "";
   const expected = process.env.ADMIN_API_KEY || "";
@@ -155,10 +121,6 @@ export function requireAdmin(req, res) {
 // User lookup
 // =========================================================================
 
-/**
- * Fetch a user's RTDB record. Returns null if missing.
- * Returns the record with `uid` merged in for convenience.
- */
 export async function getUser(uid) {
   if (!uid) return null;
   const snap = await db.ref(`users/${uid}`).once("value");
@@ -166,9 +128,6 @@ export async function getUser(uid) {
   return { uid, ...snap.val() };
 }
 
-/**
- * Fetch a user by normalized email. Uses /emails/{emailLower} index.
- */
 export async function getUserByEmail(emailLower) {
   if (!emailLower) return null;
   const cleaned = cleanEmail(emailLower);
@@ -178,9 +137,6 @@ export async function getUserByEmail(emailLower) {
   return getUser(snap.val());
 }
 
-/**
- * Fetch a user by normalized username. Uses /usernames/{cleaned} index.
- */
 export async function getUserByUsername(username) {
   const cleaned = cleanUsername(username);
   if (!cleaned) return null;
@@ -189,9 +145,6 @@ export async function getUserByUsername(username) {
   return getUser(snap.val());
 }
 
-/**
- * Returns true if the user's mode is "banned".
- */
 export async function isBanned(uid) {
   const snap = await db.ref(`users/${uid}/mode`).once("value");
   return snap.exists() && snap.val() === "banned";
@@ -214,11 +167,6 @@ export function isReservedUsername(username) {
   return RESERVED.has(String(username || "").toLowerCase());
 }
 
-/**
- * Normalize and validate a username. Returns cleaned string or null.
- * Reserved check is applied at claim time, not here, so that
- * `cleanUsername` is safe to use for lookup of already-assigned names.
- */
 export function cleanUsername(username) {
   if (!username || typeof username !== "string") return null;
   const s = username.trim().toLowerCase();
@@ -226,9 +174,6 @@ export function cleanUsername(username) {
   return s;
 }
 
-/**
- * Normalize and validate an email. Returns lowercased string or null.
- */
 export function cleanEmail(email) {
   if (!email || typeof email !== "string") return null;
   const s = email.trim().toLowerCase();
@@ -238,17 +183,9 @@ export function cleanEmail(email) {
 }
 
 // =========================================================================
-// Username auto-suffix + reservations (transactions)
+// Username auto-suffix + reservations
 // =========================================================================
 
-/**
- * Reserve a unique username for a uid. Tries the requested name,
- * then `name1`, `name2`, ... up to 9999, then `name_<random>`.
- * Returns { username, isModified } or null if the base is invalid.
- *
- * Playbook §5: auto-suffix on register. Returns the assigned name
- * (may differ from requested).
- */
 export async function assignUsername(baseUsername, uid) {
   const cleaned = cleanUsername(baseUsername);
   if (!cleaned || isReservedUsername(cleaned)) return null;
@@ -256,12 +193,11 @@ export async function assignUsername(baseUsername, uid) {
   const maxBaseLen = 26;
   const base = cleaned.length > maxBaseLen ? cleaned.slice(0, maxBaseLen) : cleaned;
 
-  // Numeric suffixes: name, name1, name2, ... name9999
   for (let i = 0; i <= 9999; i++) {
     const candidate = i === 0 ? base : `${base}${i}`;
     if (isReservedUsername(candidate)) continue;
     const result = await db.ref(`usernames/${candidate}`).transaction(cur => {
-      if (cur !== null) return; // taken — abort
+      if (cur !== null) return;
       return uid;
     });
     if (result.committed) {
@@ -269,7 +205,6 @@ export async function assignUsername(baseUsername, uid) {
     }
   }
 
-  // Random suffix fallback
   for (let attempt = 0; attempt < 10; attempt++) {
     const suffix = crypto.randomBytes(3).toString("hex");
     const candidate = `${base}_${suffix}`;
@@ -285,9 +220,6 @@ export async function assignUsername(baseUsername, uid) {
   return null;
 }
 
-/**
- * Atomically reserve an email for a uid. Returns true if committed.
- */
 export async function reserveEmail(emailLower, uid) {
   const cleaned = cleanEmail(emailLower);
   if (!cleaned) return false;
@@ -298,10 +230,6 @@ export async function reserveEmail(emailLower, uid) {
   return result.committed;
 }
 
-/**
- * Atomically reserve an explicit username for a uid. Returns true if committed.
- * Used by /change-username (no auto-suffix; caller handles 409).
- */
 export async function reserveUsername(username, uid) {
   const cleaned = cleanUsername(username);
   if (!cleaned) return false;
@@ -328,13 +256,6 @@ export async function releaseUsername(username) {
 // Project permissions
 // =========================================================================
 
-/**
- * Returns the caller's EXPLICIT role on a project, or null.
- * Public visibility is NOT treated as a role here — endpoints that
- * allow public reads call hasVisibility() with the specific axis.
- *
- * Roles: "owner" | "editor" | "commenter" | "viewer" | null
- */
 export async function canAccessProject(uid, pid) {
   if (!uid || !pid) return null;
   const snap = await db.ref(`projects/${pid}`).once("value");
@@ -345,11 +266,6 @@ export async function canAccessProject(uid, pid) {
   return role || null;
 }
 
-/**
- * Returns true if `visibility/{axis}` on the project is "public".
- * Use for read-only access paths (share page, /db/get, /share language
- * breakdown, etc.) instead of granting a synthetic viewer role.
- */
 export async function hasVisibility(pid, axis) {
   if (!pid || !axis) return false;
   const snap = await db.ref(`projects/${pid}/visibility/${axis}`).once("value");
@@ -358,12 +274,6 @@ export async function hasVisibility(pid, axis) {
 
 const ROLE_RANK = { viewer: 1, commenter: 2, editor: 3, owner: 4 };
 
-/**
- * Require the caller to have at least `minRole` on the project.
- * On failure: sends 401/403/404 and returns null.
- * On success: returns { uid, role }.
- * Caller pattern: const p = await requireProjectRole(...); if (!p) return;
- */
 export async function requireProjectRole(req, res, pid, minRole) {
   const user = await requireAuth(req, res);
   if (!user) return null;
@@ -394,28 +304,15 @@ export async function canEditProject(uid, pid) {
 // Project API keys
 // =========================================================================
 
-/**
- * Generate a new project API key. Returns { key, hash }.
- * Caller stores `hash` and returns `key` once to the user.
- * Playbook §5: never stored plaintext.
- */
 export function generateApiKey() {
   const key = "fol_" + crypto.randomBytes(24).toString("hex");
   return { key, hash: hashApiKey(key) };
 }
 
-/**
- * Plain SHA-256 of the key.
- * Playbook: "192-bit entropy makes HMAC-peppering redundant."
- */
 export function hashApiKey(key) {
   return crypto.createHash("sha256").update(String(key)).digest("hex");
 }
 
-/**
- * Verify a candidate key against the stored hash for a project.
- * Constant-time compare.
- */
 export async function verifyProjectKey(pid, candidate) {
   if (!pid || !candidate) return false;
   const snap = await db.ref(`projects/${pid}/apiKeyHash`).once("value");
@@ -438,12 +335,9 @@ export function generateInviteToken() {
 }
 
 // =========================================================================
-// Request + path helpers (shared by all APIs)
+// Request + path helpers
 // =========================================================================
 
-/**
- * Best-effort client IP from Vercel's forwarded headers.
- */
 export function getClientIp(req) {
   const xff = req.headers["x-forwarded-for"];
   if (typeof xff === "string" && xff.length) {
@@ -455,17 +349,10 @@ export function getClientIp(req) {
   return req.socket?.remoteAddress || "unknown";
 }
 
-/**
- * Stable 16-hex hash of an IP for rate-limit keys and analytics dedupe.
- */
 export function hashIp(ip) {
   return crypto.createHash("sha256").update(String(ip)).digest("hex").slice(0, 16);
 }
 
-/**
- * Sanitize a string for use as an RTDB path segment.
- * Removes `. # $ [ ] / \` and trims to 100 chars.
- */
 export function sanitizeFirebasePath(input) {
   if (!input || typeof input !== "string") return "unknown";
   return input
@@ -480,7 +367,7 @@ export function sanitizeFirebasePath(input) {
 }
 
 // =========================================================================
-// Activity logs (server-written only)
+// Activity logs
 // =========================================================================
 
 const LOG_LIMIT = 500;
@@ -499,10 +386,6 @@ async function trimLogs(path, max = LOG_LIMIT) {
   await db.ref(path).update(updates);
 }
 
-/**
- * Append a user-scoped log entry, then trim.
- * Playbook §13: server-written only (.write: false in rules).
- */
 export async function logUserEvent(uid, type, action, meta = {}) {
   if (!uid) return;
   const logId = `log_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
@@ -515,9 +398,6 @@ export async function logUserEvent(uid, type, action, meta = {}) {
   await trimLogs(`logs/user/${uid}`);
 }
 
-/**
- * Append a project-scoped log entry, then trim.
- */
 export async function logProjectEvent(pid, uid, type, action, meta = {}) {
   if (!pid) return;
   const logId = `log_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
