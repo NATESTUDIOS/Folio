@@ -1,3 +1,4 @@
+// utils/firebase.js
 import admin from "firebase-admin";
 
 const svc = JSON.parse(process.env.FIREBASE_SERVICE_KEY || "{}");
@@ -11,5 +12,4 @@ if (!admin.apps.length) {
 
 export const db = admin.database();
 export const messaging = admin.messaging();
-export const auth = admin.auth();
 export const serverTimestamp = admin.database.ServerValue.TIMESTAMP;
