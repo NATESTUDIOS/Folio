@@ -906,8 +906,18 @@ async function handleShare(req, res, reqId) {
 
   const langs = project.languages?.breakdown
     ? Object.entries(project.languages.breakdown)
-        .map(([name, pct]) => `<span class="badge">${escapeHtml(name)} ${pct}%</span>`)
-        .join(" ")
+        .map(([name, pct]) => `<span class="lang-badge"><span class="lang-dot"></span>${escapeHtml(name)} ${pct}%</span>`)
+        .join("")
+    : "";
+
+  const ogImageMeta = project.metaTags?.ogImage
+    ? `<meta property="og:image" content="${escapeHtml(project.metaTags.ogImage)}">`
+    : "";
+  const twitterImageMeta = project.metaTags?.ogImage
+    ? `<meta name="twitter:image" content="${escapeHtml(project.metaTags.ogImage)}">`
+    : "";
+  const emptyNote = !project.deployment?.url
+    ? `<div class="empty-note">This project hasn't been deployed to a live site yet.</div>`
     : "";
 
   const tmpl = readTemplate("project-template.html");
@@ -921,8 +931,10 @@ async function handleShare(req, res, reqId) {
     EDITOR_BUTTON: { raw: editorBtn },
     OG_TITLE: project.metaTags?.title || project.name || slug,
     OG_DESCRIPTION: project.metaTags?.description || project.description || "",
-    OG_IMAGE: project.metaTags?.ogImage || "",
+    OG_IMAGE_META: { raw: ogImageMeta },
+    TWITTER_IMAGE_META: { raw: twitterImageMeta },
     CANONICAL_URL: `${BASE_URL}/${username}/${slug}`,
+    EMPTY_NOTE: { raw: emptyNote },
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -963,31 +975,56 @@ async function handleProfilePublic(req, res, reqId) {
   }
 
   const grid = projectList.map(pr => `
-    <a class="card" href="${BASE_URL}/${escapeHtml(username)}/${escapeHtml(pr.slug)}">
+    <a class="project-card" href="${BASE_URL}/${escapeHtml(username)}/${escapeHtml(pr.slug)}">
       <h3>${escapeHtml(pr.name || pr.slug)}</h3>
       <p>${escapeHtml(pr.description)}</p>
-      <div class="badges">${Object.entries(pr.languages).map(([n, v]) => `<span class="badge">${escapeHtml(n)} ${v}%</span>`).join(" ")}</div>
+      <div class="card-badges">${Object.entries(pr.languages).map(([n, v]) =>
+        `<span class="lang-badge"><span class="lang-dot"></span>${escapeHtml(n)} ${v}%</span>`
+      ).join("")}</div>
     </a>
-  `).join("") || "<p>No public projects yet.</p>";
+  `).join("") || `<div class="empty-state"><h3>No public projects yet</h3><p>When ${escapeHtml(username)} publishes a project, it will appear here.</p></div>`;
 
   const ownerControls = isOwner
-    ? `<div class="owner-controls"><a class="btn" href="${BASE_URL}/app">Open editor</a></div>`
+    ? `<div class="owner-controls"><a class="btn primary" href="${BASE_URL}/app">Open editor</a></div>`
+    : "";
+
+  const avatarHtml = user.profile?.avatarUrl
+    ? `<img src="${escapeHtml(user.profile.avatarUrl)}" alt="${escapeHtml(user.profile.displayName || username)}">`
+    : escapeHtml((user.profile?.displayName || username).charAt(0).toUpperCase());
+
+  const bioBlock = user.profile?.bio
+    ? `<p class="bio">${escapeHtml(user.profile.bio)}</p>`
+    : "";
+
+  const linksEntries = Object.entries(user.profile?.links || {});
+  const linksBlock = linksEntries.length
+    ? `<div class="links">${linksEntries.map(([k, v]) =>
+        `<a href="${escapeHtml(v)}" target="_blank" rel="noopener">${escapeHtml(k)}</a>`
+      ).join("")}</div>`
+    : "";
+
+  const ogImageMeta = user.profile?.ogImageUrl
+    ? `<meta property="og:image" content="${escapeHtml(user.profile.ogImageUrl)}">`
+    : "";
+  const twitterImageMeta = user.profile?.ogImageUrl
+    ? `<meta name="twitter:image" content="${escapeHtml(user.profile.ogImageUrl)}">`
     : "";
 
   const tmpl = readTemplate("profile-template.html");
   const html = applyTemplate(tmpl, {
     DISPLAY_NAME: user.profile?.displayName || username,
     USERNAME: username,
-    BIO: user.profile?.bio || "",
-    AVATAR_URL: user.profile?.avatarUrl || "",
-    LINKS: { raw: Object.entries(user.profile?.links || {}).map(([k, v]) =>
-      `<a href="${escapeHtml(v)}" target="_blank" rel="noopener">${escapeHtml(k)}</a>`).join(" ") },
-    PROJECT_GRID: { raw: grid },
+    AVATAR: { raw: avatarHtml },
+    BIO_BLOCK: { raw: bioBlock },
+    LINKS_BLOCK: { raw: linksBlock },
     OWNER_CONTROLS: { raw: ownerControls },
-    CANONICAL_URL: `${BASE_URL}/${username}`,
+    PROJECT_GRID: { raw: grid },
+    PROJECT_COUNT: String(projectList.length),
     OG_TITLE: user.profile?.displayName || username,
     OG_DESCRIPTION: user.profile?.bio || "",
-    OG_IMAGE: user.profile?.ogImageUrl || "",
+    OG_IMAGE_META: { raw: ogImageMeta },
+    TWITTER_IMAGE_META: { raw: twitterImageMeta },
+    CANONICAL_URL: `${BASE_URL}/${username}`,
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -995,7 +1032,7 @@ async function handleProfilePublic(req, res, reqId) {
   return res.status(200).send(html);
 }
 
-async function tryOwnerViewer(req, pid) {
+async function tryOwnerView(req, pid) {
   const header = req.headers.authorization || "";
   if (!header.startsWith("Bearer ")) return false;
   const { verifySession } = await import("../utils/users.js");
