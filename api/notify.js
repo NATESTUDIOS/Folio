@@ -1,11 +1,31 @@
 // api/notify.js
 import crypto from "node:crypto";
+import webpush from "web-push";
 import { db, messaging } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import {
   requireAuth, requireAdmin,
   getClientIp, hashIp, sanitizeFirebasePath,
 } from "../utils/users.js";
+
+// =========================================================================
+// VAPID — Web Push delivery
+// =========================================================================
+
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:hello@folio.app";
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    log("notify.vapid_ready", { subject: VAPID_SUBJECT });
+  } catch (err) {
+    log("notify.vapid_init_failed", { message: err.message });
+  }
+} else {
+  log("notify.vapid_missing", { note: "Web Push delivery disabled" });
+}
 
 // =========================================================================
 // CONSTANTS
@@ -28,7 +48,7 @@ const STORE_CONCURRENCY = 50;
 const SEND_CONCURRENCY = 5;
 
 // =========================================================================
-// RATE LIMITS (per-API, Final Rule #16)
+// RATE LIMITS
 // =========================================================================
 
 const RATE_LIMITS = {
@@ -72,7 +92,7 @@ async function checkRateLimit(identifier, action) {
           reset: resetAt,
           retryAfter: Math.ceil((resetAt - now) / 1000),
         };
-        return; // abort
+        return;
       }
       result = { allowed: true, remaining: config.max - current.count - 1, limit: config.max };
       return {
@@ -83,7 +103,6 @@ async function checkRateLimit(identifier, action) {
     });
   } catch (err) {
     log("notify.rate_limit_failed", { action, message: err.message });
-    // Fail open — infra failure must not block users
     return { allowed: true, remaining: config.max, limit: config.max };
   }
 
@@ -112,7 +131,7 @@ async function enforceRate(res, action, identifier) {
 }
 
 // =========================================================================
-// SERVER CACHE (per-invocation LRU)
+// SERVER CACHE
 // =========================================================================
 
 const serverCache = new Map();
@@ -192,10 +211,6 @@ function generateNotificationId() {
   return `notif_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
 }
 
-function isValidFcmToken(token) {
-  return typeof token === "string" && token.length >= 100 && token.includes(":");
-}
-
 function deviceKeyFor(deviceId, token) {
   return crypto.createHash("sha256")
     .update(String(deviceId || token))
@@ -219,7 +234,87 @@ async function runWithConcurrency(items, concurrency, fn) {
 }
 
 // =========================================================================
-// FCM
+// TOKEN VALIDATION — detect FCM token OR Web Push subscription
+// =========================================================================
+
+/**
+ * A token is either:
+ *   - FCM token: string with ":" and length >= 100
+ *   - Web Push subscription: JSON string of { endpoint, keys: { p256dh, auth } }
+ * Returns { kind: "fcm" | "webpush", payload } or null if invalid.
+ */
+function detectTokenKind(token) {
+  if (typeof token !== "string" || token.length === 0) return null;
+
+  // Try Web Push subscription first
+  if (token.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(token);
+      if (parsed.endpoint && parsed.keys && parsed.keys.p256dh && parsed.keys.auth) {
+        return { kind: "webpush", payload: parsed };
+      }
+    } catch {
+      // fall through
+    }
+    return null;
+  }
+
+  // FCM token heuristic
+  if (token.length >= 100 && token.includes(":")) {
+    return { kind: "fcm", payload: token };
+  }
+
+  return null;
+}
+
+// =========================================================================
+// WEB PUSH DELIVERY
+// =========================================================================
+
+function buildWebPushPayload({ title, body, imageUrl, link, notificationId, type, userId, extra }) {
+  return JSON.stringify({
+    title: title || "",
+    body: body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    image: imageUrl || undefined,
+    tag: notificationId || undefined,
+    data: {
+      title: title || "",
+      body: body || "",
+      image: imageUrl || undefined,
+      link: link || "/app",
+      notificationId: notificationId || "",
+      type: type || "system",
+      user_id: userId || "",
+      extra: extra || "",
+    },
+  });
+}
+
+async function sendWebPushOne(payloadString, subscriptionJson) {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+    return { success: false, error: "VAPID not configured" };
+  }
+  try {
+    const subscription = typeof subscriptionJson === "string"
+      ? JSON.parse(subscriptionJson)
+      : subscriptionJson;
+    await webpush.sendNotification(subscription, payloadString, { TTL: 60 * 60 * 24 });
+    return { success: true };
+  } catch (err) {
+    // 404/410 = subscription expired/unsubscribed — treat as soft failure
+    const statusCode = err?.statusCode || 0;
+    if (statusCode === 404 || statusCode === 410) {
+      return { success: false, error: "subscription_gone", expired: true };
+    }
+    log("notify.webpush_send_failed", { statusCode, message: err.message });
+    return { success: false, error: err.message };
+  }
+}
+
+// =========================================================================
+// FCM DELIVERY
 // =========================================================================
 
 function buildDataMessage({ title, body, imageUrl, link, notificationId, type, userId, extra }) {
@@ -241,7 +336,7 @@ function buildDataMessage({ title, body, imageUrl, link, notificationId, type, u
   };
 }
 
-async function sendOne(message, token) {
+async function sendFcmOne(message, token) {
   try {
     const id = await messaging.send({ ...message, token });
     return { success: true, messageId: id };
@@ -469,7 +564,11 @@ async function listNotifications(userId, { type = "all", limit = 20, offset = 0,
 // =========================================================================
 
 async function registerDeviceToken(userId, token, deviceId) {
-  if (!isValidFcmToken(token)) throw new Error("Invalid FCM token format");
+  const detected = detectTokenKind(token);
+  if (!detected) {
+    throw new Error("Invalid token (must be FCM token or Web Push subscription)");
+  }
+
   const dk = deviceKeyFor(deviceId, token);
   const ref = db.ref(`${NOTIFICATIONS_PATH}/${userId}`);
   const snap = await ref.once("value");
@@ -477,12 +576,13 @@ async function registerDeviceToken(userId, token, deviceId) {
   const tokens = existing.tokens || {};
   tokens[dk] = {
     token: token.trim(),
+    kind: detected.kind,
     addedAt: tokens[dk]?.addedAt || Date.now(),
     lastSeenAt: Date.now(),
   };
   await ref.update({ tokens, lastUpdated: Date.now() });
   invalidateCache("notif:tokens", userId);
-  return { deviceKey: dk };
+  return { deviceKey: dk, kind: detected.kind };
 }
 
 async function unregisterDeviceToken(userId, deviceId) {
@@ -499,7 +599,6 @@ async function unregisterDeviceToken(userId, deviceId) {
       invalidateCache("notif:tokens", userId);
       return { removed: 1 };
     }
-    // Also try matching deviceId-derived keys (any token suffix)
     let removed = 0;
     for (const [k, v] of Object.entries(tokens)) {
       if (k.startsWith(dk.slice(0, 12)) || v.token === deviceId) {
@@ -528,14 +627,26 @@ async function getUserTokens(userId) {
   const tokens = [];
   snap.forEach(child => {
     const v = child.val();
-    if (v && v.token) tokens.push(v.token);
+    if (v && v.token) {
+      tokens.push({ token: v.token, kind: v.kind || "fcm", deviceKey: child.key });
+    }
   });
   setToCache(cacheKey, tokens);
   return tokens;
 }
 
+async function removeExpiredToken(userId, deviceKey) {
+  try {
+    await db.ref(`${NOTIFICATIONS_PATH}/${userId}/tokens/${deviceKey}`).remove();
+    invalidateCache("notif:tokens", userId);
+    log("notify.token_removed_expired", { userId, deviceKey });
+  } catch (err) {
+    log("notify.token_remove_failed", { userId, deviceKey, message: err.message });
+  }
+}
+
 // =========================================================================
-// SEND
+// SEND — fans out to both FCM and Web Push
 // =========================================================================
 
 async function sendNotificationWithPush(userId, data) {
@@ -545,12 +656,19 @@ async function sendNotificationWithPush(userId, data) {
   const pushOn = settings.pushEnabled && settings[settingKey];
 
   let pushResult = { success: false, reason: "push_disabled" };
+
   if (pushOn) {
     const tokens = await getUserTokens(userId);
     if (tokens.length === 0) {
       pushResult = { success: false, reason: "no_tokens" };
     } else {
-      const baseMessage = buildDataMessage({
+      const extraPayload = JSON.stringify({
+        type: data.type,
+        notificationId: id,
+        action: data.action || null,
+      });
+
+      const fcmMessage = buildDataMessage({
         title: data.title,
         body: data.body,
         imageUrl: data.imageUrl,
@@ -558,15 +676,46 @@ async function sendNotificationWithPush(userId, data) {
         notificationId: id,
         type: data.type,
         userId,
-        extra: JSON.stringify({
-          type: data.type,
-          notificationId: id,
-          action: data.action || null,
-        }),
+        extra: extraPayload,
       });
-      const results = await runWithConcurrency(tokens, SEND_CONCURRENCY, t => sendOne(baseMessage, t));
+
+      const webpushPayload = buildWebPushPayload({
+        title: data.title,
+        body: data.body,
+        imageUrl: data.imageUrl,
+        link: data.link,
+        notificationId: id,
+        type: data.type,
+        userId,
+        extra: extraPayload,
+      });
+
+      const expiredDeviceKeys = [];
+      const results = await runWithConcurrency(tokens, SEND_CONCURRENCY, async (entry) => {
+        if (entry.kind === "webpush") {
+          const r = await sendWebPushOne(webpushPayload, entry.token);
+          if (r.expired) expiredDeviceKeys.push(entry.deviceKey);
+          return r;
+        }
+        // default: FCM
+        return await sendFcmOne(fcmMessage, entry.token);
+      });
+
       const delivered = results.filter(r => r.status === "fulfilled" && r.value.success).length;
-      pushResult = { success: delivered > 0, tokensAttempted: tokens.length, tokensDelivered: delivered };
+      pushResult = {
+        success: delivered > 0,
+        tokensAttempted: tokens.length,
+        tokensDelivered: delivered,
+        byKind: {
+          fcm: tokens.filter(t => t.kind === "fcm").length,
+          webpush: tokens.filter(t => t.kind === "webpush").length,
+        },
+      };
+
+      // Clean up expired Web Push subscriptions
+      if (expiredDeviceKeys.length > 0) {
+        Promise.all(expiredDeviceKeys.map(dk => removeExpiredToken(userId, dk))).catch(() => {});
+      }
     }
   }
 
@@ -638,8 +787,8 @@ async function handleSubscribe(req, res, reqId) {
   const { token, deviceId } = req.body || {};
   if (!token) return res.status(400).json({ success: false, error: "Missing token" });
   try {
-    const { deviceKey } = await registerDeviceToken(user.uid, token, deviceId || null);
-    return res.status(200).json({ success: true, deviceKey });
+    const { deviceKey, kind } = await registerDeviceToken(user.uid, token, deviceId || null);
+    return res.status(200).json({ success: true, deviceKey, kind });
   } catch (err) {
     return res.status(400).json({ success: false, error: err.message });
   }
@@ -717,7 +866,6 @@ async function handleUpdateSettings(req, res, reqId) {
   if (Object.keys(patch).length === 0) {
     return res.status(400).json({ success: false, error: "No settings to update" });
   }
-  // Type checks
   for (const k of allowedKeys) {
     if (k === "quietHours") continue;
     if (patch[k] !== undefined && typeof patch[k] !== "boolean") {
@@ -857,7 +1005,10 @@ async function handleHealth(req, res, reqId) {
     types: NOTIFICATION_TYPES,
     settings: Object.keys(DEFAULT_SETTINGS),
     cache: getCacheStats(),
-    fcmReady: !!messaging,
+    delivery: {
+      fcm: !!messaging,
+      webpush: !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY),
+    },
   });
 }
 
@@ -871,7 +1022,6 @@ export default async function handler(req, res) {
   const reqId = newReqId();
   res.setHeader("X-Request-Id", reqId);
 
-  // CORS — Folio origin only
   const origin = req.headers.origin;
   if (!origin || origin === BASE_URL) {
     res.setHeader("Access-Control-Allow-Origin", origin || BASE_URL);
