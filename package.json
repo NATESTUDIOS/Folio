@@ -28,9 +28,7 @@
     "firebase",
     "portfolio"
   ],
-  "engines": {
-    "node": ">=20.0.0"
-  },
+  "engines": { "node": "24.x" },
   "scripts": {
     "dev": "vercel dev",
     "deploy": "vercel deploy --prod",
