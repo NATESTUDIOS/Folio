@@ -14,9 +14,20 @@
 
     { "source": "/p/:pid", "destination": "/api/host?action=share&pid=:pid" },
 
-    { "source": "/:username/:project/:file", "destination": "/api/host?action=share&username=:username&project=:project&file=:file" },
-    { "source": "/:username/:project", "destination": "/api/host?action=share&username=:username&project=:project" },
-    { "source": "/:username", "destination": "/api/host?action=profile&username=:username" }
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+
+    {
+      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|favicon\\.ico$|robots\\.txt$|register$|profile$|project$|tools$|settings$|analytics$|offline$)[^/]+)/:project/:file",
+      "destination": "/api/host?action=share&username=:username&project=:project&file=:file"
+    },
+    {
+      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|favicon\\.ico$|robots\\.txt$|register$|profile$|project$|tools$|settings$|analytics$|offline$)[^/]+)/:project",
+      "destination": "/api/host?action=share&username=:username&project=:project"
+    },
+    {
+      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|favicon\\.ico$|robots\\.txt$|register$|profile$|project$|tools$|settings$|analytics$|offline$)[^/]+)",
+      "destination": "/api/host?action=profile&username=:username"
+    }
   ],
   "headers": [
     {
