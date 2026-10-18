@@ -2,7 +2,7 @@
 // Folio — Service Worker
 // ============================================================
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 
 // Pre-cache list. Add a trailing slash to folio? (no).
