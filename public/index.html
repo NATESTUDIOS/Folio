@@ -1,0 +1,2730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Folio — Code in your pocket</title>
+<meta name="description" content="Folio is a mobile-first, offline-first code editor.">
+<meta name="theme-color" content="#0a0c10" id="metaThemeColor">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://esm.sh">
+<link rel="dns-prefetch" href="https://esm.sh">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="/app.css">
+
+<script>
+(function() {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    var resolved = pref;
+    if (pref === "auto") {
+      resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+    }
+    if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<script src="/install.js" defer></script>
+<script src="/update.js" defer></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(function () {});
+    });
+  }
+</script>
+</head>
+<body>
+
+<noscript>
+  <div class="noscript-banner">Folio needs JavaScript. Enable it and reload.</div>
+</noscript>
+
+<div class="app-shell" id="appShell">
+
+  <!-- ═══════════ RAIL ═══════════ -->
+  <aside class="rail" id="rail" aria-label="Main navigation">
+    <div class="rail-top">
+      <button class="rail-item" data-panel="files" aria-label="Files" title="Files">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </button>
+      <button class="rail-item" data-panel="search" aria-label="Search" title="Search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <button class="rail-item" data-panel="versions" aria-label="Versions" title="Versions">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </button>
+      <button class="rail-item" data-panel="changes" aria-label="Changes" title="Changes">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="rail-item" data-panel="outline" aria-label="Outline" title="Outline">
+        <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      </button>
+      <div class="rail-divider"></div>
+      <button class="rail-item" data-panel="notepad" aria-label="Notes" title="Notes">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+      </button>
+    </div>
+    <div class="rail-bottom">
+      <button class="rail-item" data-panel="projects" aria-label="Projects" title="All projects">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ═══════════ HEADER ═══════════ -->
+  <header class="header" id="header">
+    <div class="header-left">
+      <button class="header-menu-btn" id="menuBtn" aria-label="Menu">
+        <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <nav class="breadcrumb" aria-label="Breadcrumb" id="breadcrumb">
+        <span class="breadcrumb-segment current">No project</span>
+      </nav>
+      <span class="dirty-dot" id="dirtyDot"></span>
+      <button class="header-action-btn header-save-btn" id="saveBtn" aria-label="Save" title="Save (Ctrl+S)">
+        <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      </button>
+    </div>
+    <div class="header-right">
+      <button class="header-action-btn" id="installBtn" data-folio-install-button aria-label="Install app" title="Install Folio" hidden>
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+      <a href="/settings" class="header-action-btn" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </a>
+      <button class="header-action-btn" id="debugBtn" aria-label="Info" title="Debug info">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ═══════════ BODY ═══════════ -->
+  <div class="app-body" id="appBody">
+
+    <aside class="sidebar" id="sidebar" aria-label="Sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title" id="sidebarTitle">Files</span>
+        <button class="sidebar-close" id="sidebarCloseBtn" aria-label="Close sidebar">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sidebar-tabs" id="sidebarTabs"></div>
+      <div class="sidebar-body" id="sidebarBody"></div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <main class="editor-area" id="editorArea">
+      <div class="tabs hidden" id="tabs" role="tablist"></div>
+      <div class="editor-container" id="editorContainer"></div>
+      <div class="editor-loading hide" id="editorLoading">
+        <div class="spinner"></div>
+        <span>Loading editor…</span>
+      </div>
+      <div class="editor-empty visible" id="editorEmpty">
+        <div class="editor-empty-icon">
+          <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        </div>
+        <h2 class="editor-empty-title" id="emptyTitle">No project open</h2>
+        <p class="editor-empty-desc">Create a project or open an existing one to start coding.</p>
+        <div class="editor-empty-actions">
+          <button class="btn btn-primary" id="emptyNewProject">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New project
+          </button>
+          <button class="btn btn-secondary" id="emptyOpenProject">
+            <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            Open project
+          </button>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- ═══════════ TOOLBAR ═══════════ -->
+  <div class="toolbar" id="toolbar">
+    <div class="toolbar-row" role="toolbar" aria-label="Editor actions">
+      <button class="toolbar-btn" id="tbSave" aria-label="Save">
+        <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+        <span class="toolbar-btn-label">Save</span>
+      </button>
+      <button class="toolbar-btn" id="tbUndo" aria-label="Undo">
+        <svg viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+        <span class="toolbar-btn-label">Undo</span>
+      </button>
+      <button class="toolbar-btn" id="tbRedo" aria-label="Redo">
+        <svg viewBox="0 0 24 24"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
+        <span class="toolbar-btn-label">Redo</span>
+      </button>
+      <button class="toolbar-btn" id="tbSearch" aria-label="Find">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span class="toolbar-btn-label">Find</span>
+      </button>
+      <button class="toolbar-btn" id="tbFormat" aria-label="Format">
+        <svg viewBox="0 0 24 24"><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="3" y2="12"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
+        <span class="toolbar-btn-label">Format</span>
+      </button>
+      <button class="toolbar-btn" id="tbMore" aria-label="More">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+        <span class="toolbar-btn-label">More</span>
+      </button>
+    </div>
+    <div class="toolbar-row toolbar-row--secondary" id="toolbarRow2">
+      <button class="toolbar-btn" id="tbNewFile" aria-label="New file">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        <span class="toolbar-btn-label">New</span>
+      </button>
+      <button class="toolbar-btn" id="tbCopy" aria-label="Copy">
+        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span class="toolbar-btn-label">Copy</span>
+      </button>
+      <button class="toolbar-btn" id="tbCut" aria-label="Cut">
+        <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+        <span class="toolbar-btn-label">Cut</span>
+      </button>
+      <button class="toolbar-btn" id="tbPaste" aria-label="Paste">
+        <svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+        <span class="toolbar-btn-label">Paste</span>
+      </button>
+      <button class="toolbar-btn" id="tbSelectAll" aria-label="Select all">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span class="toolbar-btn-label">Select</span>
+      </button>
+      <button class="toolbar-btn" id="tbSymbols" aria-label="Symbols">
+        <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+        <span class="toolbar-btn-label">Symbols</span>
+      </button>
+      <button class="toolbar-btn" id="tbCommit" aria-label="Commit">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="22"/></svg>
+        <span class="toolbar-btn-label">Commit</span>
+      </button>
+      <button class="toolbar-btn" id="tbPreview" aria-label="Preview">
+        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span class="toolbar-btn-label">Preview</span>
+      </button>
+      <button class="toolbar-btn" id="tbReset" aria-label="Reset">
+        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+        <span class="toolbar-btn-label">Reset</span>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════ OVERLAYS ═══════════ -->
+<div class="backdrop" id="backdrop"></div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <h2 class="sheet-title" id="sheetTitle">Panel</h2>
+    <button class="sheet-close" id="sheetClose" aria-label="Close">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+  <div class="sheet-footer hidden" id="sheetFooter"></div>
+</div>
+
+<div class="sheet" id="confirmDialog" role="alertdialog" aria-modal="true">
+  <div class="sheet-handle"></div>
+  <div class="sheet-body">
+    <div class="confirm-body">
+      <div class="confirm-icon" id="confirmIcon">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <h2 class="confirm-title" id="confirmTitle">Confirm</h2>
+      <p class="confirm-message" id="confirmMessage">Are you sure?</p>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary" id="confirmCancel">Cancel</button>
+        <button class="btn btn-danger" id="confirmOk">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+<!-- ═══════════ ICON SPRITE ═══════════ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="icon-folder-open" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 12h18"/></symbol>
+    <symbol id="icon-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
+    <symbol id="icon-file-code" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="10 13 8 15 10 17"/><polyline points="14 13 16 15 14 17"/></symbol>
+    <symbol id="icon-file-json" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
+    <symbol id="icon-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></symbol>
+    <symbol id="icon-file-image" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="10" cy="14" r="2"/><path d="m20 18-4-4-6 6"/></symbol>
+    <symbol id="icon-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+    <symbol id="icon-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></symbol>
+    <symbol id="icon-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></symbol>
+    <symbol id="icon-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></symbol>
+    <symbol id="icon-folder-plus" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></symbol>
+    <symbol id="icon-file-plus" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></symbol>
+    <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+    <symbol id="icon-chevron-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></symbol>
+    <symbol id="icon-hash" viewBox="0 0 24 24"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></symbol>
+    <symbol id="icon-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+    <symbol id="icon-move" viewBox="0 0 24 24"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></symbol>
+    <symbol id="icon-collapse" viewBox="0 0 24 24"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></symbol>
+    <symbol id="icon-expand" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></symbol>
+    <symbol id="icon-console" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+  </defs>
+</svg>
+
+<script type="module">
+"use strict";
+
+console.log("[Folio] Boot");
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CONSTANTS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const STORAGE_KEYS = {
+  theme: "folio.theme",
+  prefs: "folio.editorPrefs",
+  lastProject: "folio.lastProject",
+  lastFile: "folio.lastFile",
+};
+const DB_NAME = "folio";
+const DB_VERSION = 1;
+const AUTOSAVE_DELAY = 2000;
+const SYNTAX_JSON_URL = "/syntax.json";
+
+const DEFAULT_PREFS = {
+  fontSize: 14,
+  tabSize: 2,
+  lineNumbers: true,
+  wordWrap: true,
+};
+
+const TAG = {
+  scriptOpen:  "<" + "script>",
+  scriptClose: "<" + "/script>",
+  styleOpen:   "<" + "style>",
+  styleClose:  "<" + "/style>",
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   HELPERS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const $ = (id) => document.getElementById(id);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k === "style" && typeof v === "object") Object.assign(node.style, v);
+    else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
+    else if (v === true) node.setAttribute(k, "");
+    else node.setAttribute(k, v);
+  }
+  for (const child of children.flat()) {
+    if (child == null || child === false) continue;
+    node.appendChild(typeof child === "string" || typeof child === "number"
+      ? document.createTextNode(String(child)) : child);
+  }
+  return node;
+}
+
+function icon(name, size = 16) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `#icon-${name}`);
+  svg.appendChild(use);
+  return svg;
+}
+
+function formatBytes(n) {
+  if (!n || n < 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${units[i]}`;
+}
+
+function relativeTime(ts) {
+  if (!ts) return "—";
+  const diff = Date.now() - ts;
+  if (diff < 60000) return "Just now";
+  const m = Math.floor(diff / 60000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function fileIcon(path) {
+  const ext = path.split(".").pop()?.toLowerCase();
+  const map = {
+    html: "file-code", htm: "file-code",
+    css: "file-code",
+    js: "file-code", mjs: "file-code", cjs: "file-code",
+    jsx: "file-code", ts: "file-code", tsx: "file-code",
+    py: "file-code",
+    json: "file-json",
+    md: "file-text", txt: "file-text",
+    yml: "file-text", yaml: "file-text",
+    png: "file-image", jpg: "file-image", jpeg: "file-image",
+    gif: "file-image", svg: "file-image", webp: "file-image",
+  };
+  return map[ext] || "file";
+}
+
+function isTextFile(path) {
+  return /\.(html?|css|js|mjs|cjs|jsx|tsx?|py|json|md|txt|ya?ml)$/i.test(path);
+}
+
+function isPlaceholder(path) {
+  return /(^|\/)\.gitkeep$/i.test(path) || /(^|\/)\.keep$/i.test(path);
+}
+
+function debounce(fn, ms) {
+  let t = null;
+  return function(...args) {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), ms);
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TOAST  (exposed as window.toast so install.js/update.js can use it)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const toastQueue = [];
+let toastActive = null;
+
+function toast(message, opts = {}) {
+  const { type = "info", duration } = opts;
+  const d = duration ?? (type === "error" || type === "warning" ? 5000 : 3000);
+  toastQueue.push({ message, type, duration: d });
+  if (!toastActive) drainToast();
+}
+window.toast = toast;
+
+function drainToast() {
+  const next = toastQueue.shift();
+  if (!next) { toastActive = null; return; }
+  toastActive = next;
+  const container = $("toastContainer");
+  if (!container) { toastActive = null; return; }
+  const node = el("div", { class: `toast toast-${next.type}`, role: "status" },
+    el("span", { class: "toast-dot" }),
+    el("span", { class: "toast-message" }, next.message)
+  );
+  container.appendChild(node);
+  requestAnimationFrame(() => node.classList.add("show"));
+  setTimeout(() => {
+    node.classList.remove("show");
+    setTimeout(() => {
+      node.remove();
+      toastActive = null;
+      drainToast();
+    }, 250);
+  }, next.duration);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SHEET & CONFIRM  (window.confirm exposed for update.js)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+let sheetOpen = false;
+
+function openSheet({ title, body, footer, onClose }) {
+  const sheet = $("sheet");
+  const backdrop = $("backdrop");
+  const titleEl = $("sheetTitle");
+  const bodyEl = $("sheetBody");
+  const footerEl = $("sheetFooter");
+  if (!sheet || !bodyEl) return;
+
+  sheet._onClose = onClose || null;
+  if (titleEl) titleEl.textContent = title || "Panel";
+  bodyEl.innerHTML = "";
+  if (body instanceof Node) bodyEl.appendChild(body);
+  else if (typeof body === "string") bodyEl.innerHTML = body;
+
+  if (footerEl) {
+    footerEl.innerHTML = "";
+    if (footer instanceof Node) {
+      footerEl.appendChild(footer);
+      footerEl.classList.remove("hidden");
+    } else if (Array.isArray(footer) && footer.length) {
+      footer.forEach(n => footerEl.appendChild(n));
+      footerEl.classList.remove("hidden");
+    } else {
+      footerEl.classList.add("hidden");
+    }
+  }
+
+  backdrop?.classList.add("visible");
+  sheet.classList.add("open");
+  sheetOpen = true;
+}
+
+function closeSheet() {
+  if (!sheetOpen) return;
+  const sheet = $("sheet");
+  const backdrop = $("backdrop");
+  if (!sheet) return;
+  sheet.classList.remove("open");
+  backdrop?.classList.remove("visible");
+  sheetOpen = false;
+  const cb = sheet._onClose;
+  sheet._onClose = null;
+  setTimeout(() => {
+    $("sheetBody").innerHTML = "";
+    $("sheetFooter").innerHTML = "";
+    if (cb) try { cb(); } catch (e) { console.error(e); }
+  }, 300);
+}
+
+let confirmResolve = null;
+
+function confirm({ title, message, confirmLabel = "Confirm", danger = false }) {
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+    const dialog = $("confirmDialog");
+    const backdrop = $("backdrop");
+    const iconEl = $("confirmIcon");
+    if (!dialog) { resolve(false); return; }
+
+    $("confirmTitle").textContent = title || "Are you sure?";
+    $("confirmMessage").textContent = message || "";
+    $("confirmOk").textContent = confirmLabel;
+    if (danger) {
+      $("confirmOk").className = "btn btn-danger";
+      if (iconEl) iconEl.className = "confirm-icon";
+    } else {
+      $("confirmOk").className = "btn btn-primary";
+      if (iconEl) iconEl.className = "confirm-icon info";
+    }
+    backdrop?.classList.add("visible");
+    dialog.classList.add("open");
+    setTimeout(() => $("confirmOk")?.focus(), 50);
+  });
+}
+window.confirm = confirm;
+
+function resolveConfirm(value) {
+  const dialog = $("confirmDialog");
+  const backdrop = $("backdrop");
+  dialog?.classList.remove("open");
+  if (!sheetOpen) backdrop?.classList.remove("visible");
+  const r = confirmResolve;
+  confirmResolve = null;
+  if (r) r(value);
+}
+
+$("confirmOk")?.addEventListener("click", () => resolveConfirm(true));
+$("confirmCancel")?.addEventListener("click", () => resolveConfirm(false));
+$("confirmDialog")?.addEventListener("click", (e) => {
+  if (e.target === $("confirmDialog")) resolveConfirm(false);
+});
+$("backdrop")?.addEventListener("click", () => {
+  if ($("confirmDialog")?.classList.contains("open")) { resolveConfirm(false); return; }
+  if (sheetOpen) closeSheet();
+});
+$("sheetClose")?.addEventListener("click", closeSheet);
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if ($("confirmDialog")?.classList.contains("open")) { resolveConfirm(false); return; }
+    if (sheetOpen) closeSheet();
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PREFERENCES
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const prefs = { ...DEFAULT_PREFS };
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.prefs);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.fontSize === "number") prefs.fontSize = parsed.fontSize;
+      if (typeof parsed.tabSize === "number") prefs.tabSize = parsed.tabSize;
+      if (typeof parsed.lineNumbers === "boolean") prefs.lineNumbers = parsed.lineNumbers;
+      if (typeof parsed.wordWrap === "boolean") prefs.wordWrap = parsed.wordWrap;
+    }
+  } catch {}
+}
+
+function savePrefs() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.prefs, JSON.stringify(prefs));
+  } catch {}
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function applyTheme(mode) {
+  let resolved = mode;
+  if (mode === "auto") {
+    resolved = window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+  if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
+  else document.documentElement.removeAttribute("data-theme");
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INDEXEDDB
+   ═══════════════════════════════════════════════════════════════════════ */
+
+let dbConn = null;
+
+async function openDB() {
+  if (dbConn) return dbConn;
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      dbConn = req.result;
+      resolve(dbConn);
+    };
+    req.onupgradeneeded = (event) => {
+      const conn = event.target.result;
+      if (!conn.objectStoreNames.contains("projects")) {
+        conn.createObjectStore("projects", { keyPath: "pid" });
+      }
+      if (!conn.objectStoreNames.contains("files")) {
+        const store = conn.createObjectStore("files", { keyPath: ["pid", "path"] });
+        store.createIndex("pid", "pid");
+      }
+      if (!conn.objectStoreNames.contains("versions")) {
+        const store = conn.createObjectStore("versions", { keyPath: "vid" });
+        store.createIndex("pid", "pid");
+      }
+      if (!conn.objectStoreNames.contains("projectMeta")) {
+        conn.createObjectStore("projectMeta", { keyPath: "pid" });
+      }
+    };
+  });
+}
+
+function dbWrap(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbTx(store, mode = "readonly") {
+  return dbConn.transaction(store, mode).objectStore(store);
+}
+
+const db = {
+  async listProjects() {
+    const all = await dbWrap(dbTx("projects").getAll());
+    return all.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  },
+  async getProject(pid) { return dbWrap(dbTx("projects").get(pid)); },
+  async putProject(p) { return dbWrap(dbTx("projects", "readwrite").put(p)); },
+  async deleteProject(pid) {
+    await dbWrap(dbTx("projects", "readwrite").delete(pid));
+    const files = await dbWrap(dbTx("files").index("pid").getAll(pid));
+    for (const f of files) await dbWrap(dbTx("files", "readwrite").delete([f.pid, f.path]));
+    const versions = await dbWrap(dbTx("versions").index("pid").getAll(pid));
+    for (const v of versions) await dbWrap(dbTx("versions", "readwrite").delete(v.vid));
+  },
+  async listFiles(pid) { return dbWrap(dbTx("files").index("pid").getAll(pid)); },
+  async getFile(pid, path) { return dbWrap(dbTx("files").get([pid, path])); },
+  async putFile(pid, path, content) {
+    return dbWrap(dbTx("files", "readwrite").put({ pid, path, content, updatedAt: Date.now() }));
+  },
+  async deleteFile(pid, path) { return dbWrap(dbTx("files", "readwrite").delete([pid, path])); },
+  async listVersions(pid) {
+    const all = await dbWrap(dbTx("versions").index("pid").getAll(pid));
+    return all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  },
+  async getVersion(vid) { return dbWrap(dbTx("versions").get(vid)); },
+  async putVersion(v) { return dbWrap(dbTx("versions", "readwrite").put(v)); },
+  async deleteVersion(vid) { return dbWrap(dbTx("versions", "readwrite").delete(vid)); },
+  async getProjectMeta(pid) {
+    const m = await dbWrap(dbTx("projectMeta").get(pid));
+    return m || { pid, notepad: "" };
+  },
+  async setProjectMeta(pid, patch) {
+    const current = await this.getProjectMeta(pid);
+    return dbWrap(dbTx("projectMeta", "readwrite").put({ ...current, ...patch, pid }));
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CODEMIRROR
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const cm = {
+  view: null,
+  modules: null,
+  commands: null,
+  mergeMod: null,
+  lintMod: null,
+  _loading: null,
+  _autosaveTimer: null,
+  _initToken: 0,
+  _syntaxMap: null,
+  _syntaxMapPromise: null,
+  _langCache: new Map(),
+  _prettierCache: new Map(),
+
+  async loadSyntaxMap() {
+    if (this._syntaxMap) return this._syntaxMap;
+    if (this._syntaxMapPromise) return this._syntaxMapPromise;
+    this._syntaxMapPromise = (async () => {
+      try {
+        const res = await fetch(SYNTAX_JSON_URL, { cache: "force-cache" });
+        if (!res.ok) throw new Error("syntax.json " + res.status);
+        const map = await res.json();
+        this._syntaxMap = map || {};
+        return this._syntaxMap;
+      } catch (err) {
+        console.warn("[CM] syntax.json unavailable, using built-in fallbacks:", err);
+        this._syntaxMap = {
+          html: "https://esm.sh/@codemirror/lang-html@6.4.6",
+          htm: "https://esm.sh/@codemirror/lang-html@6.4.6",
+          css: "https://esm.sh/@codemirror/lang-css@6.2.1",
+          js: "https://esm.sh/@codemirror/lang-javascript@6.2.1",
+          mjs: "https://esm.sh/@codemirror/lang-javascript@6.2.1",
+          cjs: "https://esm.sh/@codemirror/lang-javascript@6.2.1",
+          jsx: "https://esm.sh/@codemirror/lang-javascript@6.2.1",
+          ts: "https://esm.sh/@codemirror/lang-javascript@6.2.1",
+          tsx: "https://esm.sh/@codemirror/lang-javascript@6.2.1",
+          json: "https://esm.sh/@codemirror/lang-json@6.0.1",
+          md: "https://esm.sh/@codemirror/lang-markdown@6.2.3",
+          markdown: "https://esm.sh/@codemirror/lang-markdown@6.2.3",
+        };
+        return this._syntaxMap;
+      }
+    })();
+    try { return await this._syntaxMapPromise; }
+    catch { this._syntaxMapPromise = null; throw new Error("syntax map load failed"); }
+  },
+
+  async loadModules() {
+    if (this.modules) return this.modules;
+    if (this._loading) return this._loading;
+
+    const STATE_VER = "@codemirror/state@6.3.1";
+    const pin = (url) => `${url}${url.includes("?") ? "&" : "?"}deps=${STATE_VER}`;
+
+    this._loading = (async () => {
+      const [
+        basicSetup,
+        oneDark,
+        searchMod,
+        commandsMod,
+        viewMod,
+        stateMod,
+        lintMod,
+        mergeMod,
+      ] = await Promise.all([
+        import(pin("https://esm.sh/@codemirror/basic-setup@0.20.0")),
+        import(pin("https://esm.sh/@codemirror/theme-one-dark@6.1.2")),
+        import(pin("https://esm.sh/@codemirror/search@6.5.0")),
+        import(pin("https://esm.sh/@codemirror/commands@6.3.0")),
+        import(pin("https://esm.sh/@codemirror/view@6.22.0")),
+        import("https://esm.sh/" + STATE_VER),
+        import(pin("https://esm.sh/@codemirror/lint@6.5.0")),
+        import(pin("https://esm.sh/@codemirror/merge@6.4.0")),
+      ]);
+
+      this.modules = {
+        basicSetup: basicSetup.basicSetup,
+        EditorView: viewMod.EditorView,
+        EditorState: stateMod.EditorState,
+        keymap: viewMod.keymap,
+        oneDark: oneDark.oneDark,
+      };
+      this.commands = {
+        undo: commandsMod.undo,
+        redo: commandsMod.redo,
+        openSearchPanel: searchMod.openSearchPanel,
+      };
+      this.lintMod = lintMod;
+      this.mergeMod = mergeMod;
+      return this.modules;
+    })();
+
+    try { return await this._loading; }
+    catch (e) { this._loading = null; throw e; }
+  },
+
+  async getLanguageExtension(path) {
+    const ext = (path.split(".").pop() || "").toLowerCase();
+    if (!ext) return null;
+    if (this._langCache.has(ext)) return this._langCache.get(ext);
+
+    const map = await this.loadSyntaxMap();
+    const url = map[ext];
+    if (!url) return null;
+
+    try {
+      const mod = await import(url);
+
+      if (typeof mod.default === "function") {
+        const extFn = mod.default();
+        this._langCache.set(ext, extFn);
+        return extFn;
+      }
+      const fnNames = ["html","css","javascript","json","markdown","python","java","cpp","rust","go","php","sql","xml","yaml","vue","liquid","sass","less","wast"];
+      for (const fn of fnNames) {
+        if (typeof mod[fn] === "function") {
+          const extFn = mod[fn]();
+          this._langCache.set(ext, extFn);
+          return extFn;
+        }
+      }
+      // legacy-modes fallback (StreamParser)
+      const parser =
+        mod.default?.token ? mod.default :
+        mod.shell?.token ? mod.shell :
+        mod.dockerfile?.token ? mod.dockerfile :
+        mod.diff?.token ? mod.diff :
+        Object.values(mod).find(v => v && typeof v === "object" && typeof v.token === "function");
+      if (parser) {
+        const { StreamLanguage } = await import(
+          "https://esm.sh/@codemirror/language@6.10.1?deps=@codemirror/state@6.3.1&deps=@codemirror/view@6.22.0"
+        );
+        const extFn = StreamLanguage.define(parser);
+        this._langCache.set(ext, extFn);
+        return extFn;
+      }
+      this._langCache.set(ext, null);
+      return null;
+    } catch (err) {
+      console.warn("[CM] language pack failed for", ext, err);
+      this._langCache.set(ext, null);
+      return null;
+    }
+  },
+
+  detectLanguage(path) {
+    if (!path) return "text";
+    const ext = path.split(".").pop()?.toLowerCase();
+    if (!ext) return "text";
+    if (ext === "css") return "css";
+    if (["js", "mjs", "cjs", "jsx", "ts", "tsx"].includes(ext)) return "javascript";
+    if (ext === "json") return "json";
+    if (["md", "markdown"].includes(ext)) return "markdown";
+    if (["html", "htm"].includes(ext)) return "html";
+    return "text";
+  },
+
+  buildTheme() {
+    return this.modules.EditorView.theme({
+      "&": { fontSize: prefs.fontSize + "px" },
+      ".cm-content": { fontSize: prefs.fontSize + "px", tabSize: prefs.tabSize },
+    });
+  },
+
+  async init(container, content, path) {
+    const m = await this.loadModules();
+    const token = ++this._initToken;
+
+    if (this.view) { this.view.destroy(); this.view = null; }
+
+    const extensions = [
+      m.basicSetup,
+      m.oneDark,
+      this.buildTheme(),
+      m.EditorView.contentAttributes.of({ inputstyle: "contenteditable" }),
+    ];
+
+    const langExt = await this.getLanguageExtension(path);
+    if (langExt && token === this._initToken) extensions.push(langExt);
+
+    if (prefs.wordWrap) extensions.push(m.EditorView.lineWrapping);
+    if (!prefs.lineNumbers) extensions.push(m.EditorView.theme({ ".cm-lineNumbers": { display: "none" } }));
+
+    if (this.detectLanguage(path) === "json" && this.lintMod) {
+      try {
+        const jsonMod = await import("https://esm.sh/@codemirror/lang-json@6.0.1?deps=@codemirror/state@6.3.1");
+        if (jsonMod.jsonParseLinter && token === this._initToken) {
+          extensions.push(this.lintMod.linter(jsonMod.jsonParseLinter()));
+        }
+      } catch {}
+    }
+
+    extensions.push(m.EditorView.updateListener.of((update) => {
+      if (update.docChanged) {
+        if (token !== this._initToken) return;
+        workspace.markDirty();
+        this.scheduleAutosave();
+      }
+    }));
+
+    const state = m.EditorState.create({
+      doc: content || "",
+      extensions,
+    });
+
+    if (token !== this._initToken) return null;
+
+    this.view = new m.EditorView({ state, parent: container });
+
+    this.view.contentDOM.addEventListener("blur", () => {
+      if (workspace.activeFile && workspace.dirtyFiles.has(workspace.activeFile)) {
+        workspace.saveActiveFile({ silent: true });
+      }
+    });
+
+    return this.view;
+  },
+
+  scheduleAutosave() {
+    if (this._autosaveTimer) clearTimeout(this._autosaveTimer);
+    this._autosaveTimer = setTimeout(() => {
+      if (workspace.activeFile && workspace.dirtyFiles.has(workspace.activeFile)) {
+        workspace.saveActiveFile({ silent: true });
+      }
+    }, AUTOSAVE_DELAY);
+  },
+
+  getContent() { return this.view?.state.doc.toString() || ""; },
+
+  getSelection() {
+    if (!this.view) return "";
+    const sel = this.view.state.selection.main;
+    return this.view.state.sliceDoc(sel.from, sel.to);
+  },
+
+  selectAll() {
+    if (!this.view) return;
+    this.view.dispatch({ selection: { anchor: 0, head: this.view.state.doc.length } });
+    this.view.focus();
+  },
+
+  replaceSelection(text) {
+    if (!this.view) return;
+    const sel = this.view.state.selection.main;
+    this.view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: text },
+      selection: { anchor: sel.from + text.length },
+    });
+    this.view.focus();
+  },
+
+  insertText(text) {
+    if (!this.view) return;
+    const sel = this.view.state.selection.main;
+    this.view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: text },
+      selection: { anchor: sel.from + text.length },
+    });
+    this.view.focus();
+  },
+
+  undo() {
+    if (!this.view || !this.commands) return;
+    this.commands.undo(this.view);
+  },
+
+  redo() {
+    if (!this.view || !this.commands) return;
+    this.commands.redo(this.view);
+  },
+
+  openSearch() {
+    if (!this.view || !this.commands) return;
+    this.commands.openSearchPanel(this.view);
+  },
+
+  goToLine(lineNumber) {
+    if (!this.view) return;
+    try {
+      const clamped = Math.max(1, Math.min(lineNumber, this.view.state.doc.lines));
+      const line = this.view.state.doc.line(clamped);
+      this.view.dispatch({
+        selection: { anchor: line.from },
+        scrollIntoView: true,
+      });
+      this.view.focus();
+    } catch {}
+  },
+
+  setContent(text) {
+    if (!this.view) return;
+    this.view.dispatch({
+      changes: { from: 0, to: this.view.state.doc.length, insert: text },
+    });
+  },
+
+  async formatCurrent() {
+    if (!this.view || !workspace.activeFile) {
+      toast("Open a file first", { type: "info" });
+      return;
+    }
+    const lang = this.detectLanguage(workspace.activeFile);
+    const original = this.getContent();
+
+    if (lang === "json") {
+      try {
+        const parsed = JSON.parse(original);
+        const formatted = JSON.stringify(parsed, null, prefs.tabSize);
+        this.setContent(formatted);
+        workspace.markDirty();
+        toast("Formatted JSON", { type: "success" });
+      } catch {
+        toast("Invalid JSON — can't format", { type: "error" });
+      }
+      return;
+    }
+
+    const parserMap = { html: "html", css: "css", javascript: "babel", markdown: "markdown" };
+    const parser = parserMap[lang];
+    if (!parser) {
+      toast(`No formatter for ${lang}`, { type: "info" });
+      return;
+    }
+
+    try {
+      const prettier = await this.loadPrettier();
+      const plugin = await this.loadPrettierPlugin(parser);
+      const formatted = await prettier.format(original, {
+        parser,
+        plugins: plugin ? [plugin] : [],
+        tabWidth: prefs.tabSize,
+        useTabs: false,
+        printWidth: 100,
+      });
+      this.setContent(formatted);
+      workspace.markDirty();
+      toast("Formatted " + lang, { type: "success" });
+    } catch (err) {
+      console.error("[Format]", err);
+      toast("Format failed: " + (err.message || "syntax error"), { type: "error" });
+    }
+  },
+
+  async loadPrettier() {
+    if (this._prettierCache.has("prettier")) return this._prettierCache.get("prettier");
+    const mod = await import("https://esm.sh/prettier@3.2.5/standalone");
+    this._prettierCache.set("prettier", mod.default || mod);
+    return mod.default || mod;
+  },
+
+  async loadPrettierPlugin(parser) {
+    const pluginMap = { html: "html", css: "postcss", babel: "babel", markdown: "markdown" };
+    const name = pluginMap[parser];
+    if (!name) return null;
+    if (this._prettierCache.has("plugin-" + name)) return this._prettierCache.get("plugin-" + name);
+    const mod = await import(`https://esm.sh/prettier@3.2.5/plugins/${name}`);
+    const plugin = mod.default || mod;
+    this._prettierCache.set("plugin-" + name, plugin);
+    return plugin;
+  },
+
+  async openDiff(oldContent, newContent, title) {
+    const m = this.modules;
+    const merge = this.mergeMod;
+    if (!m || !merge) { toast("Diff unavailable", { type: "error" }); return; }
+
+    const container = el("div", { class: "diff-container" });
+    const view = new m.EditorView({
+      state: m.EditorState.create({
+        doc: newContent,
+        extensions: [
+          m.basicSetup,
+          m.oneDark,
+          merge.unifiedMergeView({ original: oldContent, highlightChanges: true, gutter: true }),
+          m.EditorView.editable.of(false),
+        ],
+      }),
+      parent: container,
+    });
+
+    openSheet({
+      title: title || "Changes",
+      body: container,
+      onClose: () => view.destroy(),
+    });
+  },
+
+  destroy() {
+    if (this.view) { this.view.destroy(); this.view = null; }
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   WORKSPACE  (exposed as window.workspace so update.js can detect dirty)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const workspace = {
+  currentProject: null,
+  openFiles: [],
+  activeFile: null,
+  dirtyFiles: new Set(),
+  expandedFolders: new Set(),
+  fileFilter: "",
+  fileStats: new Map(),
+  _fileCache: new Map(),
+
+  get dirty() { return this.dirtyFiles.size > 0; },
+
+  async loadLastProject() {
+    let pid = null;
+    try { pid = localStorage.getItem(STORAGE_KEYS.lastProject); } catch {}
+    if (!pid) return null;
+    const project = await db.getProject(pid);
+    if (!project) return null;
+    await this.openProject(project);
+    return project;
+  },
+
+  async openProject(project) {
+    this.currentProject = project;
+    try { localStorage.setItem(STORAGE_KEYS.lastProject, project.pid); } catch {}
+    this.activeFile = null;
+    this.openFiles = [];
+    this.dirtyFiles.clear();
+    this.expandedFolders.clear();
+    this.fileFilter = "";
+    this.fileStats.clear();
+    this._fileCache.clear();
+    this.updateBreadcrumb();
+    this.updateTabs();
+    this.updateDirtyDot();
+    renderSidebar();
+
+    let files = [];
+    try { files = await db.listFiles(project.pid); } catch (err) {
+      console.error("[Workspace] listFiles failed:", err);
+      this.showEmpty("Failed to load files");
+      return;
+    }
+    const realFiles = files.filter(f => !isPlaceholder(f.path));
+
+    if (realFiles.length > 0) {
+      let lastPath = null;
+      try { lastPath = localStorage.getItem(STORAGE_KEYS.lastFile); } catch {}
+      const target = (lastPath && realFiles.find(f => f.path === lastPath)) || realFiles[0];
+      await this.openFile(target.path);
+    } else {
+      this.showEmpty("No files yet — create one from the sidebar");
+    }
+  },
+
+  async openFile(path) {
+    if (!this.currentProject) return;
+    const file = await db.getFile(this.currentProject.pid, path);
+    if (!file) { toast("File not found", { type: "error" }); return; }
+
+    if (!this.openFiles.includes(path)) this.openFiles.push(path);
+    this.activeFile = path;
+    try { localStorage.setItem(STORAGE_KEYS.lastFile, path); } catch {}
+    this.updateBreadcrumb();
+    this.updateTabs();
+    this.updateDirtyDot();
+    renderSidebar();
+
+    const container = $("editorContainer");
+    const loading = $("editorLoading");
+    const empty = $("editorEmpty");
+    if (!container) return;
+
+    if (!cm.modules) {
+      loading?.classList.remove("hide");
+      empty?.classList.remove("visible");
+    }
+
+    try {
+      container.innerHTML = "";
+      await cm.init(container, file.content, path);
+      loading?.classList.add("hide");
+      empty?.classList.remove("visible");
+    } catch (err) {
+      console.error("[Workspace] Editor failed:", err);
+      loading?.classList.add("hide");
+      this.showError();
+    }
+  },
+
+  async closeFile(path, { skipConfirm = false } = {}) {
+    if (!skipConfirm && path === this.activeFile && this.dirtyFiles.has(path)) {
+      const ok = await confirm({
+        title: "Discard unsaved changes?",
+        message: `${path.split("/").pop()} has unsaved changes.`,
+        confirmLabel: "Discard",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    const idx = this.openFiles.indexOf(path);
+    if (idx >= 0) this.openFiles.splice(idx, 1);
+    this.dirtyFiles.delete(path);
+    if (this.activeFile === path) {
+      if (this.openFiles.length > 0) {
+        await this.openFile(this.openFiles[this.openFiles.length - 1]);
+      } else {
+        this.activeFile = null;
+        this.showEmpty("No file open");
+      }
+    }
+    this.updateTabs();
+    this.updateDirtyDot();
+  },
+
+  markDirty() {
+    if (!this.activeFile) return;
+    const was = this.dirtyFiles.size;
+    this.dirtyFiles.add(this.activeFile);
+    if (this.dirtyFiles.size !== was) {
+      this.updateDirtyDot();
+      this.updateTabs();
+    }
+  },
+
+  async saveActiveFile({ silent = false } = {}) {
+    if (!this.currentProject || !this.activeFile) {
+      if (!silent) toast("No file open", { type: "info" });
+      return;
+    }
+
+    let content;
+    if (cm.view) {
+      content = cm.getContent();
+    } else {
+      const cached = this._fileCache.get(this.activeFile);
+      if (cached == null) {
+        if (!silent) toast("Editor not ready — nothing to save", { type: "info" });
+        return;
+      }
+      content = cached;
+    }
+
+    try {
+      await db.putFile(this.currentProject.pid, this.activeFile, content);
+      this._fileCache.delete(this.activeFile);
+      const project = await db.getProject(this.currentProject.pid);
+      if (project) {
+        project.updatedAt = Date.now();
+        await db.putProject(project);
+      }
+      this.fileStats.delete(this.activeFile);
+      this.dirtyFiles.delete(this.activeFile);
+      this.updateDirtyDot();
+      this.updateTabs();
+      if (!silent) toast("Saved " + this.activeFile.split("/").pop(), { type: "success" });
+    } catch (err) {
+      if (err?.name === "QuotaExceededError") {
+        toast("Storage full. Delete old versions or projects.", { type: "error", duration: 8000 });
+      } else {
+        console.error("[Save]", err);
+        toast("Couldn't save", { type: "error" });
+      }
+    }
+  },
+
+  updateDirtyDot() {
+    $("dirtyDot")?.classList.toggle("visible", this.dirty);
+    $("saveBtn")?.classList.toggle("has-unsaved", this.dirty);
+  },
+
+  updateBreadcrumb() {
+    const breadcrumb = $("breadcrumb");
+    if (!breadcrumb) return;
+    breadcrumb.innerHTML = "";
+    if (!this.currentProject) {
+      const s = document.createElement("span");
+      s.className = "breadcrumb-segment current";
+      s.textContent = "No project";
+      breadcrumb.appendChild(s);
+      return;
+    }
+    const proj = document.createElement("span");
+    proj.className = this.activeFile ? "breadcrumb-segment" : "breadcrumb-segment current";
+    proj.textContent = this.currentProject.name;
+    breadcrumb.appendChild(proj);
+    if (this.activeFile) {
+      const sep = document.createElement("span");
+      sep.className = "breadcrumb-sep";
+      sep.textContent = "›";
+      breadcrumb.appendChild(sep);
+      const f = document.createElement("span");
+      f.className = "breadcrumb-segment current";
+      f.textContent = this.activeFile.split("/").pop();
+      breadcrumb.appendChild(f);
+    }
+  },
+
+  updateTabs() {
+    const tabsEl = $("tabs");
+    if (!tabsEl) return;
+    if (this.openFiles.length === 0) {
+      tabsEl.classList.add("hidden");
+      tabsEl.innerHTML = "";
+      return;
+    }
+    tabsEl.classList.remove("hidden");
+    tabsEl.innerHTML = "";
+    for (const path of this.openFiles) {
+      const isActive = path === this.activeFile;
+      const isDirty = this.dirtyFiles.has(path);
+      const name = path.split("/").pop();
+      const tab = el("button", {
+        class: `tab${isActive ? " active" : ""}`,
+        type: "button",
+        onclick: () => this.openFile(path),
+      },
+        el("span", { class: "tab-name" }, name),
+        isDirty ? el("span", { class: "tab-dirty" }) : null,
+        el("button", {
+          class: "tab-close",
+          type: "button",
+          "aria-label": "Close",
+          onclick: (e) => { e.stopPropagation(); this.closeFile(path); },
+        }, icon("x", 10))
+      );
+      tabsEl.appendChild(tab);
+    }
+  },
+
+  showEmpty(message) {
+    cm.destroy();
+    const container = $("editorContainer");
+    if (container) container.innerHTML = "";
+    $("editorEmpty")?.classList.add("visible");
+    $("tabs")?.classList.add("hidden");
+    if (message) {
+      const t = $("emptyTitle");
+      if (t) t.textContent = message;
+    }
+  },
+
+  showError() {
+    const container = $("editorContainer");
+    if (!container) return;
+    container.innerHTML = `
+      <div class="editor-empty visible" style="display:flex">
+        <div class="editor-empty-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <h2 class="editor-empty-title">Editor failed to load</h2>
+        <p class="editor-empty-desc">CodeMirror needs internet the first time. Check your connection.</p>
+        <div class="editor-empty-actions">
+          <button class="btn btn-primary" id="retryEditorBtn">Try again</button>
+        </div>
+      </div>
+    `;
+    $("editorEmpty")?.classList.remove("visible");
+    $("retryEditorBtn")?.addEventListener("click", () => {
+      if (this.activeFile) { container.innerHTML = ""; this.openFile(this.activeFile); }
+    });
+  },
+};
+window.workspace = workspace;
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SIDEBAR
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const sidebarState = { tab: "files", visible: false };
+
+const SIDEBAR_TABS = [
+  { id: "files", label: "Files" },
+  { id: "search", label: "Search" },
+  { id: "versions", label: "Versions" },
+  { id: "changes", label: "Changes" },
+  { id: "outline", label: "Outline" },
+  { id: "notepad", label: "Notes" },
+];
+
+function openSidebar(tab) {
+  if (tab) sidebarState.tab = tab;
+  sidebarState.visible = true;
+  const sidebarEl = $("sidebar");
+  if (sidebarEl) {
+    renderSidebar();
+    sidebarEl.classList.add("open");
+  }
+  if (window.innerWidth < 768) $("sidebarBackdrop")?.classList.add("visible");
+  else $("sidebarBackdrop")?.classList.remove("visible");
+  $$(".rail-item[data-panel]").forEach(item => {
+    item.classList.toggle("active", item.dataset.panel === sidebarState.tab);
+  });
+}
+
+function closeSidebar() {
+  sidebarState.visible = false;
+  $("sidebar")?.classList.remove("open");
+  $("sidebarBackdrop")?.classList.remove("visible");
+  $$(".rail-item[data-panel]").forEach(item => item.classList.remove("active"));
+}
+
+let sidebarRenderToken = 0;
+
+function renderSidebar() {
+  const tabsEl = $("sidebarTabs");
+  const bodyEl = $("sidebarBody");
+  const titleEl = $("sidebarTitle");
+  if (!tabsEl || !bodyEl) return;
+  const token = ++sidebarRenderToken;
+
+  tabsEl.innerHTML = "";
+  for (const t of SIDEBAR_TABS) {
+    tabsEl.appendChild(el("button", {
+      class: `sidebar-tab${t.id === sidebarState.tab ? " active" : ""}`,
+      type: "button",
+      onclick: () => { sidebarState.tab = t.id; renderSidebar(); },
+    }, t.label));
+  }
+
+  if (titleEl) {
+    const current = SIDEBAR_TABS.find(t => t.id === sidebarState.tab);
+    titleEl.textContent = current?.label || "Panel";
+  }
+
+  bodyEl.innerHTML = "";
+  bodyEl.scrollTop = 0;
+
+  const paint = (fn) => {
+    Promise.resolve(fn(bodyEl)).catch(err => {
+      if (token !== sidebarRenderToken) return;
+      console.error("[Sidebar] render failed:", err);
+      bodyEl.innerHTML = "";
+      bodyEl.appendChild(el("div", { class: "empty-state", style: "padding:24px 8px" },
+        el("div", { class: "empty-state-title", style: "font-size:13px" }, "Panel failed to load"),
+        el("div", { class: "empty-state-desc", style: "font-size:11px" }, String(err?.message || err))
+      ));
+    });
+  };
+
+  switch (sidebarState.tab) {
+    case "files":   paint(renderFilesSidebar); break;
+    case "search":  paint(renderSearchSidebar); break;
+    case "versions":paint(renderVersionsSidebar); break;
+    case "changes": paint(renderChangesSidebar); break;
+    case "outline": paint(renderOutlineSidebar); break;
+    case "notepad": paint(renderNotepadSidebar); break;
+  }
+}
+
+/* ── Files ── */
+
+async function renderFilesSidebar(container) {
+  if (!workspace.currentProject) {
+    container.appendChild(el("div", { class: "empty-state", style: "padding:24px 8px" },
+      el("div", { class: "empty-state-title" }, "No project open"),
+      el("div", { class: "empty-state-desc" }, "Create or open a project to see files."),
+      el("button", {
+        class: "btn btn-primary btn-sm", type: "button", style: "margin-top:8px",
+        onclick: createNewProject,
+      }, icon("plus", 14), " New project"),
+      el("button", {
+        class: "btn btn-secondary btn-sm", type: "button", style: "margin-top:4px",
+        onclick: renderProjectsPanel,
+      }, icon("folder", 14), " Open project")
+    ));
+    return;
+  }
+
+  let files = [];
+  try { files = await db.listFiles(workspace.currentProject.pid); }
+  catch (err) {
+    container.appendChild(el("div", { class: "empty-state", style: "padding:24px 8px" },
+      el("div", { class: "empty-state-title", style: "font-size:13px" }, "Couldn't load files"),
+      el("div", { class: "empty-state-desc", style: "font-size:11px" }, String(err?.message || err)),
+      el("button", {
+        class: "btn btn-secondary btn-sm", type: "button", style: "margin-top:8px",
+        onclick: () => renderSidebar(),
+      }, "Retry")
+    ));
+    return;
+  }
+
+  const visibleFiles = files.filter(f => !isPlaceholder(f.path));
+
+  const header = el("div", { class: "sidebar-section-title" },
+    el("span", null, `Files (${visibleFiles.length})`),
+    el("div", { class: "sidebar-actions" },
+      el("button", { class: "sidebar-action-btn", type: "button", title: "New file",
+        onclick: () => createFilePrompt() }, icon("file-plus", 14)),
+      el("button", { class: "sidebar-action-btn", type: "button", title: "New folder",
+        onclick: () => createFolderPrompt() }, icon("folder-plus", 14)),
+      el("button", { class: "sidebar-action-btn", type: "button", title: "Import file",
+        onclick: importFile }, icon("upload", 14)),
+      el("button", { class: "sidebar-action-btn", type: "button", title: "Collapse all",
+        onclick: collapseAllFolders }, icon("collapse", 14)),
+      el("button", { class: "sidebar-action-btn", type: "button", title: "Expand all",
+        onclick: expandAllFolders }, icon("expand", 14))
+    )
+  );
+  container.appendChild(header);
+
+  const filterInput = el("input", {
+    type: "search", class: "sidebar-filter", placeholder: "Filter files…",
+    value: workspace.fileFilter,
+    oninput: (e) => { workspace.fileFilter = e.target.value; refreshTree(); },
+  });
+  container.appendChild(filterInput);
+
+  const treeContainer = el("div", { class: "tree-container" });
+  container.appendChild(treeContainer);
+
+  async function refreshTree() {
+    if (!treeContainer.isConnected) return;
+    treeContainer.innerHTML = "";
+    const filtered = workspace.fileFilter
+      ? visibleFiles.filter(f => f.path.toLowerCase().includes(workspace.fileFilter.toLowerCase()))
+      : visibleFiles;
+
+    if (filtered.length === 0) {
+      treeContainer.appendChild(el("div", { class: "empty-state", style: "padding:24px 8px" },
+        el("div", { class: "empty-state-title", style: "font-size:13px" }, "No files yet"),
+        el("button", {
+          class: "btn btn-primary btn-sm", type: "button", style: "margin-top:8px",
+          onclick: () => createFilePrompt(),
+        }, "Create first file")
+      ));
+      return;
+    }
+
+    const tree = buildTree(filtered.map(f => f.path));
+    try {
+      await renderTreeNodes(treeContainer, tree, 0);
+    } catch (err) {
+      console.error("[Tree]", err);
+      if (treeContainer.isConnected) {
+        treeContainer.appendChild(el("div", { class: "empty-state", style: "padding:24px 8px" },
+          el("div", { class: "empty-state-title", style: "font-size:13px" }, "Tree render failed")
+        ));
+      }
+    }
+  }
+
+  await refreshTree();
+}
+
+function buildTree(paths) {
+  const root = { name: "", children: {}, files: [], path: "" };
+  for (const path of paths) {
+    const parts = path.split("/");
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i];
+      if (!node.children[part]) {
+        node.children[part] = {
+          name: part, children: {}, files: [],
+          path: parts.slice(0, i + 1).join("/"), isFolder: true,
+        };
+      }
+      node = node.children[part];
+    }
+    node.files.push({ name: parts[parts.length - 1], path });
+  }
+  return root;
+}
+
+async function getFileStat(pid, path) {
+  const cached = workspace.fileStats.get(path);
+  if (cached) return cached;
+  try {
+    const file = await db.getFile(pid, path);
+    if (!file) return null;
+    let stat;
+    if (isTextFile(path)) {
+      stat = { type: "lines", value: file.content.split("\n").length };
+    } else {
+      stat = { type: "bytes", value: file.content.length };
+    }
+    workspace.fileStats.set(path, stat);
+    return stat;
+  } catch { return null; }
+}
+
+async function renderTreeNodes(container, node, depth) {
+  const folderNames = Object.keys(node.children).sort();
+  for (const folderName of folderNames) {
+    const folder = node.children[folderName];
+    const isExpanded = workspace.fileFilter ? true : workspace.expandedFolders.has(folder.path);
+
+    const folderRow = el("div", {
+      class: `tree-node is-folder${isExpanded ? " expanded" : ""}`,
+      style: `--depth:${depth}`,
+      onclick: (e) => {
+        if (e.target.closest(".tree-node-action")) return;
+        if (workspace.expandedFolders.has(folder.path)) workspace.expandedFolders.delete(folder.path);
+        else workspace.expandedFolders.add(folder.path);
+        renderSidebar();
+      },
+    },
+      el("svg", { class: "tree-node-chevron", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2.5", "stroke-linecap": "round", "stroke-linejoin": "round" },
+        (() => {
+          const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+          poly.setAttribute("points", "9 18 15 12 9 6");
+          return poly;
+        })()
+      ),
+      el("span", { class: "tree-node-icon" }, icon(isExpanded ? "folder-open" : "folder", 14)),
+      el("span", { class: "tree-node-name" }, folderName),
+      el("div", { class: "tree-node-actions" },
+        el("button", { class: "tree-node-action", type: "button", title: "New file",
+          onclick: (e) => { e.stopPropagation(); createFilePrompt(folder.path); } }, icon("file-plus", 12)),
+        el("button", { class: "tree-node-action", type: "button", title: "Rename folder",
+          onclick: (e) => { e.stopPropagation(); renameFolder(folder.path); } }, icon("edit", 12)),
+        el("button", { class: "tree-node-action danger", type: "button", title: "Delete folder",
+          onclick: (e) => { e.stopPropagation(); deleteFolder(folder.path); } }, icon("trash", 12))
+      )
+    );
+    container.appendChild(folderRow);
+
+    if (isExpanded) {
+      const childrenEl = el("div", { class: "tree-children expanded" });
+      container.appendChild(childrenEl);
+      await renderTreeNodes(childrenEl, folder, depth + 1);
+    }
+  }
+
+  const files = node.files.sort((a, b) => a.name.localeCompare(b.name));
+  for (const file of files) {
+    if (isPlaceholder(file.path)) continue;
+    const isActive = file.path === workspace.activeFile;
+    const stat = await getFileStat(workspace.currentProject.pid, file.path);
+    const statText = stat
+      ? (stat.type === "lines" ? `${stat.value}L` : formatBytes(stat.value))
+      : "";
+
+    const fileRow = el("div", {
+      class: `tree-node${isActive ? " active" : ""}`,
+      style: `--depth:${depth}`,
+      onclick: () => workspace.openFile(file.path),
+      oncontextmenu: (e) => { e.preventDefault(); showFileContextMenu(file.path); },
+    },
+      el("span", { class: "tree-node-icon" }, icon(fileIcon(file.path), 14)),
+      el("span", { class: "tree-node-name" }, file.name),
+      statText ? el("span", { class: "tree-node-stat" }, statText) : null,
+      el("div", { class: "tree-node-actions" },
+        el("button", { class: "tree-node-action", type: "button", title: "Rename",
+          onclick: (e) => { e.stopPropagation(); renameFile(file.path); } }, icon("edit", 12)),
+        el("button", { class: "tree-node-action danger", type: "button", title: "Delete",
+          onclick: (e) => { e.stopPropagation(); deleteFile(file.path); } }, icon("trash", 12))
+      )
+    );
+    container.appendChild(fileRow);
+  }
+}
+
+/* ── File operations ── */
+
+async function createFilePrompt(parentPath = "") {
+  if (!workspace.currentProject) { toast("No project", { type: "warning" }); return; }
+  const name = prompt("File name (e.g. index.html):");
+  if (!name) return;
+  const cleaned = name.trim().replace(/[^a-zA-Z0-9._/-]/g, "");
+  if (!cleaned) return;
+  const path = parentPath ? `${parentPath}/${cleaned}` : cleaned;
+  const existing = await db.getFile(workspace.currentProject.pid, path);
+  if (existing) { toast("File already exists", { type: "warning" }); return; }
+  await db.putFile(workspace.currentProject.pid, path, "");
+  toast(`Created ${path}`, { type: "success" });
+  await workspace.openFile(path);
+  renderSidebar();
+}
+
+async function createFolderPrompt(parentPath = "") {
+  if (!workspace.currentProject) { toast("No project", { type: "warning" }); return; }
+  const name = prompt("Folder name:");
+  if (!name) return;
+  const cleaned = name.trim().replace(/[^a-zA-Z0-9._-]/g, "");
+  if (!cleaned) return;
+  const folderPath = parentPath ? `${parentPath}/${cleaned}` : cleaned;
+  const placeholderPath = `${folderPath}/.gitkeep`;
+  const existing = await db.getFile(workspace.currentProject.pid, placeholderPath);
+  if (existing) { toast("Folder already exists", { type: "warning" }); return; }
+  await db.putFile(workspace.currentProject.pid, placeholderPath, "");
+  workspace.expandedFolders.add(folderPath);
+  toast(`Created ${folderPath}`, { type: "success" });
+  renderSidebar();
+}
+
+async function deleteFile(path) {
+  if (!workspace.currentProject) return;
+  const ok = await confirm({
+    title: `Delete ${path.split("/").pop()}?`,
+    message: "This can't be undone.",
+    confirmLabel: "Delete", danger: true,
+  });
+  if (!ok) return;
+  await db.deleteFile(workspace.currentProject.pid, path);
+  workspace.fileStats.delete(path);
+  workspace.dirtyFiles.delete(path);
+  const idx = workspace.openFiles.indexOf(path);
+  if (idx >= 0) workspace.openFiles.splice(idx, 1);
+  if (workspace.activeFile === path) {
+    workspace.activeFile = null;
+    if (workspace.openFiles.length > 0) {
+      await workspace.openFile(workspace.openFiles[workspace.openFiles.length - 1]);
+    } else {
+      workspace.showEmpty("No file open");
+    }
+  }
+  toast("File deleted", { type: "info" });
+  renderSidebar();
+}
+
+async function deleteFolder(path) {
+  if (!workspace.currentProject) return;
+  const files = await db.listFiles(workspace.currentProject.pid);
+  const inFolder = files.filter(f => f.path.startsWith(path + "/"));
+  if (inFolder.length === 0) { toast("Empty folder", { type: "info" }); return; }
+  const ok = await confirm({
+    title: `Delete folder ${path.split("/").pop()}?`,
+    message: `Deletes ${inFolder.length} file${inFolder.length === 1 ? "" : "s"}. Cannot be undone.`,
+    confirmLabel: "Delete folder", danger: true,
+  });
+  if (!ok) return;
+  for (const f of inFolder) {
+    await db.deleteFile(workspace.currentProject.pid, f.path);
+    workspace.fileStats.delete(f.path);
+    workspace.dirtyFiles.delete(f.path);
+  }
+  workspace.expandedFolders.delete(path);
+  toast("Folder deleted", { type: "info" });
+  renderSidebar();
+}
+
+async function renameFile(oldPath) {
+  if (!workspace.currentProject) return;
+  const newName = prompt("New name:", oldPath.split("/").pop());
+  if (!newName) return;
+  const dir = oldPath.includes("/") ? oldPath.slice(0, oldPath.lastIndexOf("/")) : "";
+  const newPath = dir ? `${dir}/${newName.trim()}` : newName.trim();
+  if (newPath === oldPath) return;
+  const existing = await db.getFile(workspace.currentProject.pid, newPath);
+  if (existing) { toast("File already exists", { type: "warning" }); return; }
+  const file = await db.getFile(workspace.currentProject.pid, oldPath);
+  if (!file) return;
+  await db.putFile(workspace.currentProject.pid, newPath, file.content);
+  await db.deleteFile(workspace.currentProject.pid, oldPath);
+  workspace.fileStats.delete(oldPath);
+  const idx = workspace.openFiles.indexOf(oldPath);
+  if (idx >= 0) workspace.openFiles[idx] = newPath;
+  if (workspace.activeFile === oldPath) workspace.activeFile = newPath;
+  if (workspace.dirtyFiles.has(oldPath)) {
+    workspace.dirtyFiles.delete(oldPath);
+    workspace.dirtyFiles.add(newPath);
+  }
+  workspace.updateTabs();
+  toast("Renamed", { type: "success" });
+  renderSidebar();
+}
+
+async function renameFolder(path) {
+  if (!workspace.currentProject) return;
+  const newName = prompt("New folder name:", path.split("/").pop());
+  if (!newName) return;
+  const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+  const newPath = parent ? `${parent}/${newName.trim()}` : newName.trim();
+  if (newPath === path) return;
+
+  const files = await db.listFiles(workspace.currentProject.pid);
+  const inFolder = files.filter(f => f.path.startsWith(path + "/"));
+  for (const f of inFolder) {
+    const newFilePath = newPath + f.path.slice(path.length);
+    await db.putFile(workspace.currentProject.pid, newFilePath, f.content);
+    await db.deleteFile(workspace.currentProject.pid, f.path);
+    workspace.fileStats.delete(f.path);
+    const idx = workspace.openFiles.indexOf(f.path);
+    if (idx >= 0) workspace.openFiles[idx] = newFilePath;
+    if (workspace.activeFile === f.path) workspace.activeFile = newFilePath;
+    if (workspace.dirtyFiles.has(f.path)) {
+      workspace.dirtyFiles.delete(f.path);
+      workspace.dirtyFiles.add(newFilePath);
+    }
+  }
+  toast("Folder renamed", { type: "success" });
+  renderSidebar();
+}
+
+async function duplicateFile(path) {
+  if (!workspace.currentProject) return;
+  const file = await db.getFile(workspace.currentProject.pid, path);
+  if (!file) return;
+  const ext = path.includes(".") ? "." + path.split(".").pop() : "";
+  const base = ext ? path.slice(0, -ext.length) : path;
+  let counter = 1;
+  let newPath = `${base}-copy${ext}`;
+  while (await db.getFile(workspace.currentProject.pid, newPath)) {
+    counter++;
+    newPath = `${base}-copy-${counter}${ext}`;
+  }
+  await db.putFile(workspace.currentProject.pid, newPath, file.content);
+  toast(`Duplicated to ${newPath.split("/").pop()}`, { type: "success" });
+  renderSidebar();
+}
+
+async function importFile() {
+  if (!workspace.currentProject) { toast("No project", { type: "warning" }); return; }
+  const input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  input.onchange = async () => {
+    const files = Array.from(input.files);
+    let imported = 0;
+    for (const file of files) {
+      try {
+        const content = await file.text();
+        const path = file.name;
+        const existing = await db.getFile(workspace.currentProject.pid, path);
+        if (existing) {
+          const ok = await confirm({
+            title: `${path} exists`,
+            message: "Overwrite the existing file?",
+            confirmLabel: "Overwrite", danger: true,
+          });
+          if (!ok) continue;
+        }
+        await db.putFile(workspace.currentProject.pid, path, content);
+        imported++;
+      } catch (err) {
+        console.error("Import failed:", file.name, err);
+      }
+    }
+    if (imported > 0) {
+      toast(`Imported ${imported} file${imported === 1 ? "" : "s"}`, { type: "success" });
+      renderSidebar();
+    }
+  };
+  input.click();
+}
+
+async function collapseAllFolders() {
+  workspace.expandedFolders.clear();
+  renderSidebar();
+}
+
+async function expandAllFolders() {
+  if (!workspace.currentProject) return;
+  const files = await db.listFiles(workspace.currentProject.pid);
+  const folders = new Set();
+  for (const f of files) {
+    const parts = f.path.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      folders.add(parts.slice(0, i).join("/"));
+    }
+  }
+  workspace.expandedFolders = folders;
+  renderSidebar();
+}
+
+function showFileContextMenu(path, isFolder = false) {
+  const body = el("div", { class: "panel" },
+    el("div", { class: "panel-section" },
+      el("span", { class: "panel-section-title", style: "font-family:var(--font-mono);text-transform:none;font-size:11px" }, path),
+      el("div", { style: "display:flex;flex-direction:column;gap:4px" },
+        !isFolder ? el("button", {
+          class: "btn btn-secondary btn-block", type: "button", style: "justify-content:flex-start",
+          onclick: () => { closeSheet(); workspace.openFile(path); },
+        }, icon("file", 14), " Open") : null,
+        !isFolder ? el("button", {
+          class: "btn btn-secondary btn-block", type: "button", style: "justify-content:flex-start",
+          onclick: () => { closeSheet(); duplicateFile(path); },
+        }, icon("copy", 14), " Duplicate") : null,
+        el("button", {
+          class: "btn btn-secondary btn-block", type: "button", style: "justify-content:flex-start",
+          onclick: () => { closeSheet(); isFolder ? renameFolder(path) : renameFile(path); },
+        }, icon("edit", 14), " Rename"),
+        el("button", {
+          class: "btn btn-danger btn-block", type: "button", style: "justify-content:flex-start;margin-top:4px",
+          onclick: () => { closeSheet(); isFolder ? deleteFolder(path) : deleteFile(path); },
+        }, icon("trash", 14), " Delete")
+      )
+    )
+  );
+  openSheet({ title: isFolder ? "Folder" : "File", body });
+}
+
+/* ── Search ── */
+
+function renderSearchSidebar(container) {
+  if (!workspace.currentProject) {
+    container.innerHTML = `<div class="empty-state" style="padding:24px 8px"><div class="empty-state-title">No project</div></div>`;
+    return;
+  }
+  const results = el("div", { class: "search-results" });
+  const input = el("input", {
+    type: "search", class: "sidebar-filter", placeholder: "Search across all files…",
+    oninput: debounce(async (e) => {
+      const query = e.target.value.trim();
+      if (!query) { results.innerHTML = ""; return; }
+      try { await doSearch(query, results); }
+      catch (err) { console.error("[Search]", err); }
+    }, 300),
+  });
+  container.appendChild(input);
+  container.appendChild(results);
+}
+
+async function doSearch(query, resultsEl) {
+  resultsEl.innerHTML = "";
+  const files = await db.listFiles(workspace.currentProject.pid);
+  const lower = query.toLowerCase();
+  let totalMatches = 0;
+
+  for (const file of files) {
+    if (!isTextFile(file.path) || isPlaceholder(file.path)) continue;
+    const lines = file.content.split("\n");
+    const matches = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].toLowerCase().includes(lower)) {
+        matches.push({ line: i + 1, content: lines[i].trim().slice(0, 120) });
+      }
+    }
+    if (matches.length === 0) continue;
+    totalMatches += matches.length;
+
+    const fileBlock = el("div", { class: "search-file-block" },
+      el("div", { class: "search-file-path" },
+        icon(fileIcon(file.path), 12),
+        el("span", null, file.path),
+        el("span", { class: "search-file-count" }, `${matches.length}`)
+      )
+    );
+    for (const m of matches) {
+      fileBlock.appendChild(el("div", {
+        class: "search-match",
+        onclick: async () => {
+          await workspace.openFile(file.path);
+          setTimeout(() => cm.goToLine(m.line), 100);
+        },
+      },
+        el("span", { class: "search-match-line" }, String(m.line)),
+        el("span", { class: "search-match-content" }, m.content)
+      ));
+    }
+    resultsEl.appendChild(fileBlock);
+  }
+
+  if (totalMatches === 0) {
+    resultsEl.appendChild(el("div", { class: "empty-state", style: "padding:24px 8px" },
+      el("div", { class: "empty-state-title", style: "font-size:13px" }, "No matches"),
+      el("div", { class: "empty-state-desc", style: "font-size:11px" }, `Nothing found for "${query}"`)
+    ));
+  }
+}
+
+/* ── Versions ── */
+
+async function renderVersionsSidebar(container) {
+  if (!workspace.currentProject) {
+    container.innerHTML = `<div class="empty-state" style="padding:24px 8px"><div class="empty-state-title">No project</div></div>`;
+    return;
+  }
+  const versions = await db.listVersions(workspace.currentProject.pid);
+
+  container.appendChild(el("div", { class: "sidebar-section-title" },
+    el("span", null, `Versions (${versions.length})`),
+    el("div", { class: "sidebar-actions" },
+      el("button", {
+        class: "sidebar-action-btn", type: "button", title: "Commit version",
+        onclick: renderCommitPanel,
+      }, icon("plus", 14))
+    )
+  ));
+
+  if (versions.length === 0) {
+    container.appendChild(el("div", { class: "empty-state", style: "padding:24px 8px" },
+      el("div", { class: "empty-state-title", style: "font-size:13px" }, "No versions yet"),
+      el("div", { class: "empty-state-desc", style: "font-size:11px" }, "Commit a snapshot to save progress.")
+    ));
+    return;
+  }
+
+  const list = el("div", { class: "version-list" });
+  for (let i = 0; i < versions.length; i++) {
+    const v = versions[i];
+    const prev = versions[i + 1];
+
+    list.appendChild(el("div", { class: "version-item" },
+      el("div", { class: "version-message" }, v.message),
+      el("div", { class: "version-meta" },
+        el("span", null, relativeTime(v.createdAt)),
+        el("span", null, `${Object.keys(v.files || {}).length} files`)
+      ),
+      el("div", { style: "display:flex;gap:4px;margin-top:6px;flex-wrap:wrap" },
+        el("button", {
+          class: "btn btn-secondary btn-sm", type: "button", style: "flex:1",
+          onclick: () => restoreVersion(v.vid),
+        }, "Restore"),
+        prev ? el("button", {
+          class: "btn btn-secondary btn-sm", type: "button",
+          onclick: () => showVersionDiff(prev, v),
+        }, "Diff") : null,
+        el("button", {
+          class: "btn btn-ghost btn-sm btn-icon", type: "button", style: "color:var(--danger)",
+          onclick: () => deleteVersionConfirm(v.vid),
+        }, icon("trash", 12))
+      )
+    ));
+  }
+  container.appendChild(list);
+}
+
+async function showVersionDiff(prevVersion, curVersion) {
+  const paths = new Set([
+    ...Object.keys(prevVersion.files || {}),
+    ...Object.keys(curVersion.files || {}),
+  ]);
+
+  const listBody = el("div", { class: "panel" },
+    el("div", { class: "panel-section" },
+      el("span", { class: "panel-section-title" }, `${prevVersion.message} → ${curVersion.message}`),
+      el("div", { style: "display:flex;flex-direction:column;gap:2px;max-height:60vh;overflow:auto" },
+        ...Array.from(paths).map(p => {
+          const before = prevVersion.files[p] || "";
+          const after = curVersion.files[p] || "";
+          if (before === after) return null;
+          return el("button", {
+            class: "btn btn-secondary btn-block", type: "button",
+            style: "justify-content:flex-start;font-family:var(--font-mono);font-size:12px",
+            onclick: () => {
+              closeSheet();
+              setTimeout(() => cm.openDiff(before, after, p), 250);
+            },
+          }, icon("code", 14), " " + p);
+        }).filter(Boolean)
+      )
+    )
+  );
+  openSheet({ title: "Compare versions", body: listBody });
+}
+
+async function restoreVersion(vid) {
+  const version = await db.getVersion(vid);
+  if (!version) return;
+  const files = await db.listFiles(workspace.currentProject.pid);
+
+  const snapshot = {};
+  for (const f of files) {
+    if (isPlaceholder(f.path)) continue;
+    snapshot[f.path] = f.content;
+  }
+  const autoVid = `v_auto_${Date.now()}`;
+  try {
+    await db.putVersion({
+      vid: autoVid,
+      pid: workspace.currentProject.pid,
+      message: `Auto-snapshot before restoring "${version.message}"`,
+      files: snapshot,
+      createdAt: Date.now(),
+    });
+  } catch (err) {
+    console.warn("[Restore] auto-snapshot failed:", err);
+  }
+
+  const ok = await confirm({
+    title: "Restore this version?",
+    message: `Replaces ${files.length} file${files.length === 1 ? "" : "s"} with the version from ${relativeTime(version.createdAt)}. Current state was auto-saved as a new version.`,
+    confirmLabel: "Restore", danger: true,
+  });
+  if (!ok) return;
+
+  for (const f of files) {
+    await db.deleteFile(workspace.currentProject.pid, f.path);
+    workspace.fileStats.delete(f.path);
+  }
+  workspace._fileCache.clear();
+
+  for (const [path, content] of Object.entries(version.files || {})) {
+    await db.putFile(workspace.currentProject.pid, path, content);
+  }
+
+  workspace.dirtyFiles.clear();
+  const firstPath = Object.keys(version.files || {})[0];
+  if (workspace.activeFile && version.files[workspace.activeFile]) {
+    await workspace.openFile(workspace.activeFile);
+  } else if (firstPath) {
+    await workspace.openFile(firstPath);
+  } else {
+    workspace.showEmpty("Version was empty");
+  }
+  toast("Version restored", { type: "success" });
+  renderSidebar();
+}
+
+async function deleteVersionConfirm(vid) {
+  const ok = await confirm({
+    title: "Delete this version?",
+    message: "This can't be undone.",
+    confirmLabel: "Delete", danger: true,
+  });
+  if (!ok) return;
+  await db.deleteVersion(vid);
+  toast("Version deleted", { type: "info" });
+  renderSidebar();
+}
+
+/* ── Changes ── */
+
+async function renderChangesSidebar(container) {
+  if (!workspace.currentProject) {
+    container.innerHTML = `<div class="empty-state" style="padding:24px 8px"><div class="empty-state-title">No project</div></div>`;
+    return;
+  }
+  container.appendChild(el("div", { class: "sidebar-section-title" }, el("span", null, "Changes")));
+
+  if (workspace.dirtyFiles.size === 0) {
+    container.appendChild(el("div", { class: "empty-state", style: "padding:24px 8px" },
+      el("div", { class: "empty-state-title", style: "font-size:13px" }, "No unsaved changes"),
+      el("div", { class: "empty-state-desc", style: "font-size:11px" }, "Edit a file to see changes.")
+    ));
+    return;
+  }
+
+  for (const path of workspace.dirtyFiles) {
+    container.appendChild(el("div", { class: "list-row", style: "padding:8px 10px;font-size:12px" },
+      icon(fileIcon(path), 12),
+      el("span", { class: "list-row-name" }, path.split("/").pop()),
+      el("span", { class: "list-row-value", style: "font-size:10px" }, "modified")
+    ));
+  }
+
+  container.appendChild(el("button", {
+    class: "btn btn-primary btn-block", type: "button", style: "margin-top:12px",
+    onclick: () => workspace.saveActiveFile(),
+  }, icon("save", 14), " Save current file"));
+}
+
+/* ── Outline ── */
+
+function renderOutlineSidebar(container) {
+  if (!cm.view) {
+    container.innerHTML = `<div class="empty-state" style="padding:24px 8px"><div class="empty-state-title" style="font-size:13px">No file open</div></div>`;
+    return;
+  }
+  container.appendChild(el("div", { class: "sidebar-section-title" }, el("span", null, "Outline")));
+
+  const content = cm.getContent();
+  const path = workspace.activeFile || "";
+  const lang = cm.detectLanguage(path);
+  const items = extractOutline(content, lang);
+
+  if (items.length === 0) {
+    container.appendChild(el("div", { class: "empty-state", style: "padding:24px 8px" },
+      el("div", { class: "empty-state-title", style: "font-size:13px" }, "No sections found")
+    ));
+    return;
+  }
+
+  for (const item of items) {
+    container.appendChild(el("div", {
+      class: "tree-node",
+      style: `--depth:${Math.max(0, (item.level || 1) - 1)}`,
+      onclick: () => cm.goToLine(item.line + 1),
+    },
+      icon(item.icon || "hash", 12),
+      el("span", { class: "tree-node-name" }, item.name),
+      el("span", { style: "font-size:10px;color:var(--text-faint)" }, String(item.line + 1))
+    ));
+  }
+}
+
+function extractOutline(content, lang) {
+  const items = [];
+  const lines = content.split("\n");
+  if (lang === "html") {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const idMatch = line.match(/<(\w+)[^>]*id=["']([^"']+)["']/);
+      if (idMatch) {
+        const tag = idMatch[1].toLowerCase();
+        const level = tag.startsWith("h") && tag.length === 2 ? parseInt(tag[1]) : 3;
+        items.push({ name: `#${idMatch[2]}`, line: i, level, icon: "hash" });
+      }
+      const headingMatch = line.match(/<h([1-6])[^>]*>(.*?)<\/h\1>/);
+      if (headingMatch && !idMatch) {
+        const level = parseInt(headingMatch[1]);
+        const name = headingMatch[2].replace(/<[^>]+>/g, "").trim();
+        if (name) items.push({ name, line: i, level, icon: "hash" });
+      }
+    }
+  } else if (lang === "css") {
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(/^\s*([.#][\w-]+|\w+)\s*[{,]/);
+      if (match) items.push({ name: match[1], line: i, level: 1, icon: "code" });
+    }
+  } else if (lang === "javascript") {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const funcMatch = line.match(/(?:function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>)/);
+      if (funcMatch) {
+        const name = funcMatch[1] || funcMatch[2];
+        if (name) items.push({ name, line: i, level: 1, icon: "code" });
+      }
+      const classMatch = line.match(/class\s+(\w+)/);
+      if (classMatch) items.push({ name: classMatch[1], line: i, level: 1, icon: "hash" });
+    }
+  } else if (lang === "json") {
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(/^\s*"([^"]+)"\s*:/);
+      if (match) items.push({ name: match[1], line: i, level: 1, icon: "hash" });
+    }
+  } else if (lang === "markdown") {
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(/^(#{1,6})\s+(.+)$/);
+      if (match) items.push({ name: match[2], line: i, level: match[1].length, icon: "hash" });
+    }
+  }
+  return items;
+}
+
+/* ── Notepad ── */
+
+async function renderNotepadSidebar(container) {
+  if (!workspace.currentProject) {
+    container.innerHTML = `<div class="empty-state" style="padding:24px 8px"><div class="empty-state-title">No project</div></div>`;
+    return;
+  }
+  container.appendChild(el("div", { class: "sidebar-section-title" }, el("span", null, "Notes")));
+  const meta = await db.getProjectMeta(workspace.currentProject.pid);
+  const area = el("textarea", { class: "notepad", placeholder: "Project notes, ideas, snippets…" });
+  area.value = meta.notepad || "";
+  area.addEventListener("blur", async () => {
+    await db.setProjectMeta(workspace.currentProject.pid, { notepad: area.value });
+    toast("Notes saved", { type: "success", duration: 1200 });
+  });
+  container.appendChild(area);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PROJECTS PANEL
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function renderProjectsPanel() {
+  const projects = await db.listProjects();
+  const body = el("div", { class: "panel" },
+    el("div", { class: "panel-section" },
+      el("div", { class: "panel-section-header" },
+        el("span", { class: "panel-section-title" }, `Projects (${projects.length})`),
+        el("button", {
+          class: "btn btn-primary btn-sm", type: "button",
+          onclick: () => { closeSheet(); setTimeout(createNewProject, 250); },
+        }, icon("plus", 14), " New")
+      ),
+      projects.length === 0
+        ? el("div", { class: "empty-state" },
+            el("div", { class: "empty-state-icon" }, icon("folder", 24)),
+            el("div", { class: "empty-state-title" }, "No projects yet"),
+            el("div", { class: "empty-state-desc" }, "Create your first project.")
+          )
+        : el("div", { class: "flex flex-col gap-2" },
+            ...projects.map(p => el("div", {
+              class: "list-row", style: "cursor:pointer",
+              onclick: async () => { closeSheet(); await workspace.openProject(p); },
+            },
+              el("div", { style: "flex:1;min-width:0" },
+                el("div", { class: "font-semibold" }, p.name),
+                el("div", { class: "text-xs text-muted" }, relativeTime(p.updatedAt))
+              ),
+              el("button", {
+                class: "btn btn-ghost btn-sm btn-icon", type: "button", style: "color:var(--danger)",
+                onclick: async (e) => {
+                  e.stopPropagation();
+                  const ok = await confirm({
+                    title: `Delete ${p.name}?`,
+                    message: "All files and versions will be deleted. Cannot be undone.",
+                    confirmLabel: "Delete project", danger: true,
+                  });
+                  if (!ok) return;
+                  await db.deleteProject(p.pid);
+                  if (workspace.currentProject?.pid === p.pid) {
+                    workspace.currentProject = null;
+                    workspace.activeFile = null;
+                    workspace.showEmpty("No project open");
+                    try { localStorage.removeItem(STORAGE_KEYS.lastProject); } catch {}
+                  }
+                  toast("Project deleted", { type: "info" });
+                  closeSheet();
+                  setTimeout(renderProjectsPanel, 250);
+                },
+              }, icon("trash", 14))
+            ))
+          )
+    )
+  );
+  openSheet({ title: "Projects", body });
+}
+
+async function createNewProject() {
+  const name = prompt("Project name:");
+  if (!name) return;
+  const cleaned = name.trim();
+  if (!cleaned) return;
+  const pid = `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const slug = cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "") || "project";
+
+  const project = { pid, name: cleaned, slug, createdAt: Date.now(), updatedAt: Date.now() };
+  await db.putProject(project);
+  await db.putFile(pid, "index.html", `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${cleaned}</title>
+</head>
+<body>
+  <h1>${cleaned}</h1>
+  <p>Edit this file to get started.</p>
+</body>
+</html>`);
+  await db.putFile(pid, "style.css", `body {
+  font-family: system-ui, sans-serif;
+  margin: 2rem;
+  background: #0a0c10;
+  color: #e8ecf1;
+}
+`);
+  toast(`Created ${cleaned}`, { type: "success" });
+  await workspace.openProject(project);
+  renderSidebar();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   COMMIT PANEL
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function renderCommitPanel() {
+  if (!workspace.currentProject) { toast("No project", { type: "warning" }); return; }
+
+  const textarea = el("textarea", {
+    class: "textarea", placeholder: "Describe what changed…", rows: "4",
+  });
+
+  const body = el("div", { class: "panel" },
+    el("div", { class: "panel-section" },
+      el("span", { class: "panel-section-title" }, "Commit message"),
+      textarea
+    )
+  );
+
+  const footer = el("div", { style: "display:flex;gap:8px;width:100%" },
+    el("button", { class: "btn btn-secondary", type: "button", onclick: closeSheet }, "Cancel"),
+    el("button", {
+      class: "btn btn-primary", type: "button",
+      onclick: async () => {
+        const msg = textarea.value.trim();
+        if (!msg) { toast("Add a message", { type: "warning" }); return; }
+
+        if (workspace.activeFile && workspace.dirtyFiles.has(workspace.activeFile)) {
+          await workspace.saveActiveFile({ silent: true });
+        }
+
+        const files = await db.listFiles(workspace.currentProject.pid);
+        const snapshot = {};
+        for (const f of files) {
+          if (isPlaceholder(f.path)) continue;
+          snapshot[f.path] = f.content;
+        }
+        const vid = `v_${Date.now()}`;
+        await db.putVersion({
+          vid,
+          pid: workspace.currentProject.pid,
+          message: msg,
+          files: snapshot,
+          createdAt: Date.now(),
+        });
+        closeSheet();
+        toast("Version committed", { type: "success" });
+        renderSidebar();
+      },
+    }, icon("save", 14), " Commit")
+  );
+  openSheet({ title: "Commit changes", body, footer });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PREVIEW
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function renderPreviewPanel() {
+  if (!workspace.currentProject) { toast("No project", { type: "warning" }); return; }
+  const files = await db.listFiles(workspace.currentProject.pid);
+  const htmlFile = files.find(f => f.path.endsWith(".html") || f.path.endsWith(".htm"));
+  if (!htmlFile) {
+    openSheet({
+      title: "Preview",
+      body: el("div", { class: "empty-state" },
+        el("div", { class: "empty-state-title" }, "No HTML file"),
+        el("div", { class: "empty-state-desc" }, "Add an index.html to preview.")
+      ),
+    });
+    return;
+  }
+
+  const fileMap = {};
+  for (const f of files) fileMap[f.path] = f.content;
+  let html = htmlFile.content;
+
+  html = html.replace(/<link[^>]*href=["']([^"']+\.css)["'][^>]*>/gi, (match, href) => {
+    const path = href.replace(/^\.\//, "");
+    if (fileMap[path]) return TAG.styleOpen + "\n" + fileMap[path] + "\n" + TAG.styleClose;
+    return match;
+  });
+
+  const scriptSrcRegex = new RegExp("<" + "script[^>]*src=[\"']([^\"']+\\.js)[\"'][^>]*><" + "/script>", "gi");
+  html = html.replace(scriptSrcRegex, (match, src) => {
+    const path = src.replace(/^\.\//, "");
+    if (fileMap[path]) return TAG.scriptOpen + "\n" + fileMap[path] + "\n" + TAG.scriptClose;
+    return match;
+  });
+
+  const consoleBridge = [
+    "<" + "script>",
+    "(function(){",
+    "  var orig = { log: console.log, warn: console.warn, error: console.error };",
+    "  ['log','warn','error'].forEach(function(level){",
+    "    console[level] = function(){",
+    "      try { window.parent.postMessage({ __folio: 'console', level: level, args: Array.prototype.slice.call(arguments).map(String) }, '*'); } catch(e) {}",
+    "      return orig[level].apply(console, arguments);",
+    "    };",
+    "  });",
+    "})();",
+    "<" + "/script>",
+  ].join("\n");
+  html = html.replace(/<head[^>]*>/i, (match) => match + consoleBridge);
+
+  let iframeEl = null;
+  let consoleEl = null;
+
+  const buildBody = () => {
+    iframeEl = el("iframe", {
+      style: "width:100%;height:100%;border:none;display:block",
+      sandbox: "allow-scripts allow-forms allow-modals",
+    });
+    iframeEl.srcdoc = html;
+
+    consoleEl = el("div", { class: "preview-console" },
+      el("div", { class: "preview-console-title" }, "Console")
+    );
+
+    return el("div", { class: "panel" },
+      el("div", { class: "preview-frame" }, iframeEl),
+      el("div", { style: "display:flex;gap:8px;margin-top:8px" },
+        el("button", {
+          class: "btn btn-secondary btn-sm", type: "button", style: "flex:1",
+          onclick: () => { iframeEl.srcdoc = html; },
+        }, icon("refresh", 14), " Refresh"),
+        el("button", {
+          class: "btn btn-secondary btn-sm", type: "button", style: "flex:1",
+          onclick: () => {
+            const blob = new Blob([html], { type: "text/html" });
+            window.open(URL.createObjectURL(blob), "_blank");
+          },
+        }, " Open in tab")
+      ),
+      consoleEl
+    );
+  };
+
+  const listener = (event) => {
+    const data = event.data || {};
+    if (data.__folio !== "console" || !consoleEl) return;
+    consoleEl.appendChild(el("div", { class: `preview-console-line preview-console-${data.level || "log"}` },
+      el("span", { class: "preview-console-dot" }),
+      el("span", null, (data.args || []).join(" "))
+    ));
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  };
+  window.addEventListener("message", listener);
+
+  openSheet({
+    title: "Preview: " + htmlFile.path.split("/").pop(),
+    body: buildBody(),
+    onClose: () => window.removeEventListener("message", listener),
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SYMBOLS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function renderSymbolsPanel() {
+  const symbols = ["{","}","(",")","[","]","<",">","=",";",":",".",",",'"',"'","`","&","|","$","#","/","\\","!","?","%","^","~","@"];
+  const body = el("div", { class: "panel" },
+    el("div", { class: "panel-section" },
+      el("span", { class: "panel-section-title" }, "Insert symbol"),
+      el("div", { style: "display:flex;flex-wrap:wrap;gap:6px" },
+        ...symbols.map(s => el("button", {
+          class: "btn btn-secondary btn-sm", type: "button",
+          style: "font-family:var(--font-mono);min-width:44px;min-height:44px;font-size:16px",
+          onclick: () => {
+            if (!cm.view) { toast("Open a file first", { type: "info" }); return; }
+            cm.insertText(s);
+          },
+        }, s))
+      )
+    )
+  );
+  openSheet({ title: "Symbols", body });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DEBUG
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function renderDebugPanel() {
+  const projects = await db.listProjects();
+  const files = workspace.currentProject ? await db.listFiles(workspace.currentProject.pid) : [];
+  const body = el("div", { class: "panel" },
+    el("div", { class: "panel-section" },
+      el("span", { class: "panel-section-title" }, "Debug info"),
+      el("div", { class: "card card-compact" },
+        el("div", { class: "text-sm" }, "DB: ", dbConn ? "✓ open" : "✗ closed"),
+        el("div", { class: "text-sm" }, "CodeMirror: ", cm.modules ? "✓ loaded" : "✗ not loaded"),
+        el("div", { class: "text-sm" }, "Syntax map: ", cm._syntaxMap ? "✓ loaded" : "✗ not loaded"),
+        el("div", { class: "text-sm" }, "Projects: ", String(projects.length)),
+        el("div", { class: "text-sm" }, "Current: ", workspace.currentProject?.name || "none"),
+        el("div", { class: "text-sm" }, "Files: ", String(files.length)),
+        el("div", { class: "text-sm" }, "Active: ", workspace.activeFile || "none"),
+        el("div", { class: "text-sm" }, "Dirty files: ", String(workspace.dirtyFiles.size)),
+        el("div", { class: "text-sm" }, "Install prompt: ", window.FOLIO?.install?.isInstalled?.() ? "installed" : "not installed"),
+        el("div", { class: "text-sm" }, "SW: ", navigator.serviceWorker?.controller ? "controlled" : "no controller")
+      )
+    )
+  );
+  openSheet({ title: "Debug", body });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   WIRING
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function wireAll() {
+  $$(".rail-item[data-panel]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const panel = btn.dataset.panel;
+      if (panel === "projects") renderProjectsPanel();
+      else openSidebar(panel);
+    });
+  });
+
+  $("saveBtn")?.addEventListener("click", () => workspace.saveActiveFile());
+  $("menuBtn")?.addEventListener("click", () => {
+    openSidebar(sidebarState.tab);
+    if (window.innerWidth < 768) $("sidebarBackdrop")?.classList.add("visible");
+  });
+  $("debugBtn")?.addEventListener("click", renderDebugPanel);
+
+  // Hide install icon if install.js hides it. Keep the element visible by default
+  // only if there's no install button elsewhere — install.js toggles .style.display.
+  $("installBtn")?.removeAttribute("hidden");
+
+  $("sidebarCloseBtn")?.addEventListener("click", closeSidebar);
+  $("sidebarBackdrop")?.addEventListener("click", closeSidebar);
+
+  $("emptyNewProject")?.addEventListener("click", createNewProject);
+  $("emptyOpenProject")?.addEventListener("click", renderProjectsPanel);
+
+  $("tbSave")?.addEventListener("click", () => workspace.saveActiveFile());
+  $("tbUndo")?.addEventListener("click", () => {
+    if (!cm.view) { toast("Open a file first", { type: "info" }); return; }
+    cm.undo();
+  });
+  $("tbRedo")?.addEventListener("click", () => {
+    if (!cm.view) { toast("Open a file first", { type: "info" }); return; }
+    cm.redo();
+  });
+  $("tbSearch")?.addEventListener("click", () => {
+    if (!cm.view) { toast("Open a file first", { type: "info" }); return; }
+    cm.openSearch();
+  });
+  $("tbFormat")?.addEventListener("click", () => cm.formatCurrent());
+  $("tbMore")?.addEventListener("click", () => {
+    $("toolbarRow2")?.classList.toggle("visible");
+  });
+
+  $("tbNewFile")?.addEventListener("click", () => createFilePrompt());
+  $("tbCopy")?.addEventListener("click", async () => {
+    if (!cm.view) { toast("Open a file first", { type: "info" }); return; }
+    const text = cm.getSelection();
+    if (!text) { toast("Select text first", { type: "info" }); return; }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Copied", { type: "success", duration: 1500 });
+    } catch { toast("Couldn't copy", { type: "error" }); }
+  });
+  $("tbCut")?.addEventListener("click", async () => {
+    if (!cm.view) { toast("Open a file first", { type: "info" }); return; }
+    const text = cm.getSelection();
+    if (!text) { toast("Select text first", { type: "info" }); return; }
+    try {
+      await navigator.clipboard.writeText(text);
+      cm.replaceSelection("");
+      workspace.markDirty();
+      toast("Cut", { type: "success", duration: 1500 });
+    } catch { toast("Couldn't cut", { type: "error" }); }
+  });
+  $("tbPaste")?.addEventListener("click", async () => {
+    if (!cm.view) { toast("Open a file first", { type: "info" }); return; }
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) { toast("Clipboard empty", { type: "info" }); return; }
+      cm.replaceSelection(text);
+      workspace.markDirty();
+      toast("Pasted", { type: "success", duration: 1500 });
+    } catch { toast("Clipboard access denied", { type: "error" }); }
+  });
+  $("tbSelectAll")?.addEventListener("click", () => {
+    if (!cm.view) { toast("Open a file first", { type: "info" }); return; }
+    cm.selectAll();
+  });
+  $("tbSymbols")?.addEventListener("click", renderSymbolsPanel);
+  $("tbCommit")?.addEventListener("click", renderCommitPanel);
+  $("tbPreview")?.addEventListener("click", renderPreviewPanel);
+  $("tbReset")?.addEventListener("click", async () => {
+    const ok = await confirm({
+      title: "Reset all data?",
+      message: "Deletes all projects, files, versions, settings. Cannot be undone.",
+      confirmLabel: "Reset everything", danger: true,
+    });
+    if (!ok) return;
+    indexedDB.deleteDatabase(DB_NAME);
+    try { localStorage.clear(); } catch {}
+    setTimeout(() => location.reload(), 500);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key === "s") {
+      e.preventDefault();
+      workspace.saveActiveFile();
+      return;
+    }
+    if (mod && !e.shiftKey && e.key === "k") {
+      e.preventDefault();
+      renderProjectsPanel();
+      return;
+    }
+    if (mod && e.shiftKey && e.key === "F") {
+      e.preventDefault();
+      openSidebar("search");
+      setTimeout(() => $("sidebarBody")?.querySelector("input")?.focus(), 100);
+      return;
+    }
+    if (mod && !e.shiftKey && e.key === "g") {
+      e.preventDefault();
+      if (!cm.view) return;
+      const line = prompt(`Go to line (1–${cm.view.state.doc.lines}):`);
+      if (line) cm.goToLine(parseInt(line, 10));
+      return;
+    }
+    if (mod && e.key === "b") {
+      e.preventDefault();
+      if (sidebarState.visible) closeSidebar();
+      else openSidebar(sidebarState.tab);
+      return;
+    }
+  });
+
+  // Guard against accidental data loss — cooperates with update.js
+  // (update.js calls window.confirm before reloading if dirty, so the user
+  // already has a chance to cancel. This guard catches tab close / navigation.)
+  window.addEventListener("beforeunload", (e) => {
+    if (workspace.dirty && !(window.FOLIO?.update?.isPaused?.())) {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    }
+  });
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth >= 768 && sidebarState.visible) {
+      $("sidebarBackdrop")?.classList.remove("visible");
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   BOOT
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function boot() {
+  console.log("[Boot] Starting");
+
+  try {
+    const savedTheme = localStorage.getItem(STORAGE_KEYS.theme) || "dark";
+    applyTheme(savedTheme);
+  } catch {}
+
+  loadPrefs();
+
+  try {
+    await openDB();
+    console.log("[Boot] DB opened");
+  } catch (err) {
+    console.error("[Boot] DB failed:", err);
+    toast("Storage initialization failed", { type: "error" });
+    return;
+  }
+
+  try { await navigator.storage?.persist?.(); } catch {}
+
+  wireAll();
+  console.log("[Boot] Wired");
+
+  if (window.innerWidth >= 768) {
+    openSidebar("files");
+  } else {
+    renderSidebar();
+    $$(".rail-item[data-panel]").forEach(item => {
+      item.classList.toggle("active", item.dataset.panel === "files");
+    });
+  }
+
+  try {
+    const project = await workspace.loadLastProject();
+    if (!project) $("editorEmpty")?.classList.add("visible");
+  } catch (err) {
+    console.error("[Boot] Load failed:", err);
+  }
+
+  console.log("[Boot] Complete");
+}
+
+boot();
+</script>
+
+</body>
+</html>
