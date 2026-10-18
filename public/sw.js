@@ -2,13 +2,20 @@
 // Folio — Service Worker
 // ============================================================
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 
-// Pre-cache list. Add a trailing slash to folio? (no).
-// Update this list when you add a page or a shared asset.
+// Cross-origin hosts we want to allow through the fetch handler
+// so we can cache them for offline use.
+const CDN_HOSTS = new Set([
+  'deno.land',
+  'esm.sh',
+]);
+
+// ── Pre-cache list ──────────────────────────────────────────
+// Same-origin assets + the CodeMirror ESM bundle from deno.land.
 const CACHED_FILES = [
-  // HTML pages
+  // ── HTML pages ──────────────────────────────────────────
   '/',
   '/index.html',
   '/register.html',
@@ -19,38 +26,57 @@ const CACHED_FILES = [
   '/analytics.html',
   '/offline.html',
 
-  // Shared styles (3 CSS — adjust names if different)
-  '/app.css',
-  '/theme.css',
-  '/css.css',           // <-- third CSS. Rename to your actual filename.
-
-  // Editor support data
-  '/syntax.json',
+  // ── PWA metadata ────────────────────────────────────────
   '/manifest.json',
 
-  // Icons
+  // ── Icons ───────────────────────────────────────────────
   '/icon.jpg',
   '/icons/icon-144.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 
-  // Scripts
+  // ── Scripts ─────────────────────────────────────────────
   '/install.js',
   '/update.js',
+
+  // ── CodeMirror via deno.land ────────────────────────────
+  // Core modules
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/codemirror/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/view/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/state/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/commands/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/search/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/lint/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/merge/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/language/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/theme-one-dark/dist/index.js',
+
+  // Language packs
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-html/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-css/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-javascript/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-json/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-markdown/dist/index.js',
+  'https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-python/dist/index.js',
 ];
 
 // Routes served as the "app shell" → cache-first.
-// Everything else → network-first.
 const SHELL_ROUTES = new Set([
   '/',
   '/index.html',
   '/app',
 ]);
 
-// Requests we must never intercept.
+// ── Bypass rules ────────────────────────────────────────────
+// Anything we should NEVER intercept.
 function shouldBypass(url, request) {
   if (request.method !== 'GET') return true;
-  if (url.origin !== self.location.origin) return true;
+
+  // Cross-origin: only allow through the CDN hosts we explicitly
+  // want to cache. All other cross-origin requests pass through.
+  if (url.origin !== self.location.origin) {
+    if (!CDN_HOSTS.has(url.hostname)) return true;
+  }
 
   // Serverless APIs
   if (url.pathname.startsWith('/api/')) return true;
@@ -60,7 +86,6 @@ function shouldBypass(url, request) {
   if (url.pathname.includes('firebase-messaging-sw.js')) return true;
   if (url.pathname.includes('/__/firebase/')) return true;
 
-  // CodeMirror CDN is cross-origin — already excluded above.
   return false;
 }
 
@@ -119,6 +144,7 @@ self.addEventListener('activate', (event) => {
 //  - Shell routes         → cache-first
 //  - Other navigations    → network-first → cache → offline.html
 //  - Static assets        → stale-while-revalidate
+//  - CDN assets           → stale-while-revalidate
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('fetch', (event) => {
   const req = event.request;
@@ -127,14 +153,12 @@ self.addEventListener('fetch', (event) => {
 
   if (shouldBypass(url, req)) return;
 
-  // ── Shell routes: cache-first, fall back to network ──
-  const isShell = SHELL_ROUTES.has(url.pathname);
-
-  // ── Navigation requests ──
+  // Navigation requests
   const isNav = req.mode === 'navigate' ||
     (req.headers.get('accept') || '').includes('text/html');
 
   if (isNav) {
+    const isShell = SHELL_ROUTES.has(url.pathname);
     if (isShell) {
       event.respondWith(cacheFirstShell(req));
     } else {
@@ -143,7 +167,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── Static assets: stale-while-revalidate ──
+  // Everything else (same-origin assets + CDN modules) →
+  // stale-while-revalidate
   event.respondWith(staleWhileRevalidate(req));
 });
 
@@ -181,10 +206,20 @@ async function staleWhileRevalidate(req) {
   const cached = await cache.match(req, { ignoreSearch: true });
 
   const network = fetch(req).then(res => {
-    if (res && res.ok) cache.put(req, res.clone()).catch(() => {});
+    // Only cache ok responses from allowed origins
+    if (res && res.ok) {
+      try {
+        const url = new URL(req.url);
+        const allowed =
+          url.origin === self.location.origin ||
+          CDN_HOSTS.has(url.hostname);
+        if (allowed) cache.put(req, res.clone()).catch(() => {});
+      } catch {}
+    }
     return res;
   }).catch(() => null);
 
+  // Cache-first if we have it, otherwise wait for network, otherwise 404
   return cached || await network || new Response('', { status: 404 });
 }
 
@@ -229,22 +264,15 @@ self.addEventListener('message', (event) => {
 
 // ═══════════════════════════════════════════════════════════
 // Push + notification click — Phase 4 stubs
-// Kept so FCM wiring drops in without touching routing.
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('push', (event) => {
-  // TODO (Phase 4): parse payload, show notification
   console.debug('[Folio SW] push received (not yet handled)');
 });
 
 self.addEventListener('notificationclick', (event) => {
-  // TODO (Phase 4): route by notification type
   event.notification.close();
 });
 
-// ═══════════════════════════════════════════════════════════
-// Notify clients of new SW versions (used by update.js)
-// (Fired automatically by the browser on update; we forward it.)
-// ═══════════════════════════════════════════════════════════
 self.addEventListener('messageerror', () => {});
 
 console.log(`[Folio SW] loaded ${CACHE_VERSION}`);
