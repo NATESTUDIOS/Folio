@@ -19,9 +19,15 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://esm.sh">
-<link rel="dns-prefetch" href="https://esm.sh">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script type="importmap">
+{
+  "imports": {
+    "codemirror/": "https://deno.land/x/codemirror_esm@v6.0.1/esm/"
+  }
+}
+</script>
 
 <script>
 (function(){
@@ -106,7 +112,6 @@
   --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
 }
 
-/* Mobile (compact) */
 @media (max-width: 639px) {
   :root {
     --rail-w: 0px;
@@ -118,7 +123,6 @@
   html, body { font-size: 12px; }
 }
 
-/* Tablet (medium) */
 @media (min-width: 640px) and (max-width: 1023px) {
   :root {
     --rail-w: 52px;
@@ -1101,7 +1105,6 @@ svg { display: block; }
 }
 .sheet-footer .btn { flex: 1; }
 
-/* Symbols sheet — hidden by default, no blur, editor stays visible */
 .symbols-sheet {
   position: fixed;
   left: 0; right: 0;
@@ -1926,24 +1929,11 @@ const STORAGE = {
 const DB_NAME = 'folio';
 const DB_VERSION = 2;
 const AUTOSAVE_DELAY = 2000;
-const SYNTAX_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 
 const DEFAULT_PREFS = {
   fontSize: 14, lineHeight: 1.5, tabSize: 2, softTabs: true,
   lineNumbers: true, wordWrap: true, activeLine: true, bracketMatching: true,
   jsLint: true, jsonLint: true, autosaveDelay: 2000, formatOnSave: false,
-};
-
-const FALLBACK_SYNTAX = {
-  html: 'https://esm.sh/@codemirror/lang-html@6.4.6',
-  htm: 'https://esm.sh/@codemirror/lang-html@6.4.6',
-  css: 'https://esm.sh/@codemirror/lang-css@6.2.1',
-  js: 'https://esm.sh/@codemirror/lang-javascript@6.2.1',
-  mjs: 'https://esm.sh/@codemirror/lang-javascript@6.2.1',
-  cjs: 'https://esm.sh/@codemirror/lang-javascript@6.2.1',
-  json: 'https://esm.sh/@codemirror/lang-json@6.0.1',
-  md: 'https://esm.sh/@codemirror/lang-markdown@6.2.3',
-  markdown: 'https://esm.sh/@codemirror/lang-markdown@6.2.3',
 };
 
 const SETUP_PAGES = [
@@ -1961,7 +1951,7 @@ const S = {
   dirtyFiles: new Set(), expandedFolders: new Set(), fileFilter: '',
   prefs: { ...DEFAULT_PREFS }, previewMode: 'fullscreen',
   sidebarPanel: 'files', sidebarOpen: false, symbolsOpen: false,
-  syntaxMap: null, ctrlLatch: false,
+  ctrlLatch: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -2199,7 +2189,6 @@ async function openDB() {
         store.createIndex('pid', 'pid');
       }
       if (!conn.objectStoreNames.contains('projectMeta')) conn.createObjectStore('projectMeta', { keyPath: 'pid' });
-      if (!conn.objectStoreNames.contains('syntaxCache')) conn.createObjectStore('syntaxCache', { keyPath: 'key' });
       if (!conn.objectStoreNames.contains('syncQueue')) conn.createObjectStore('syncQueue', { keyPath: 'id', autoIncrement: true });
     };
   });
@@ -2251,21 +2240,12 @@ const db = {
     const current = await this.getProjectMeta(pid);
     return dbWrap(dbTx('projectMeta', 'readwrite').put({ ...current, ...patch, pid }));
   },
-  async getSyntaxCache() {
-    const c = await dbWrap(dbTx('syntaxCache').get('map'));
-    return c || null;
-  },
-  async setSyntaxCache(map) {
-    return dbWrap(dbTx('syntaxCache', 'readwrite').put({ key: 'map', map, fetchedAt: Date.now() }));
-  },
   async enqueueSync(op) {
     if (!S.session) return;
     return dbWrap(dbTx('syncQueue', 'readwrite').add({ ...op, ts: Date.now() }));
   },
 };
 
-// Tag pieces (safe to keep literal):
-// Built via concat so the literal close-tag sequence never appears in source.
 const TAG_SCRIPT_OPEN  = '<' + 'script>';
 const TAG_SCRIPT_CLOSE = '<' + '/script>';
 const TAG_STYLE_OPEN   = '<' + 'style>';
@@ -2279,117 +2259,88 @@ const cm = {
   lintMod: null,
   _loading: null,
   _initToken: 0,
-  _langCache: new Map(),
   _prettierCache: new Map(),
 
-  async loadSyntaxMap() {
-    if (S.syntaxMap) return S.syntaxMap;
-    try {
-      const cached = await db.getSyntaxCache();
-      if (cached && (Date.now() - cached.fetchedAt) < SYNTAX_CACHE_TTL) {
-        S.syntaxMap = cached.map;
-        return S.syntaxMap;
-      }
-    } catch {}
-    try {
-      let res = await fetch('/syntax.json', { cache: 'force-cache' });
-      if (!res.ok) res = await fetch('/synthax.json', { cache: 'force-cache' });
-      if (res.ok) {
-        const map = await res.json();
-        S.syntaxMap = map;
-        try { await db.setSyntaxCache(map); } catch {}
-        return map;
-      }
-    } catch {}
-    S.syntaxMap = FALLBACK_SYNTAX;
-    return S.syntaxMap;
-  },
-
   async loadModules() {
-  if (this.modules) return this.modules;
-  if (this._loading) return this._loading;
+    if (this.modules) return this.modules;
+    if (this._loading) return this._loading;
 
-  // Shared peer versions — pinned via ?external so every package shares ONE instance.
-  // esm.sh's ?external is more reliable than ?deps for forcing shared singletons.
-  const SHARED = 'external=@codemirror/state,@codemirror/view,@codemirror/language,@codemirror/commands,@codemirror/search,@codemirror/lint,@lezer/common,@lezer/highlight,@lezer/lr';
+    this._loading = (async () => {
+      const [codemirrorPkg, oneDark, searchMod, commandsMod, viewMod, stateMod, lintMod, mergeMod, langMod] = await Promise.all([
+        import('codemirror/codemirror/dist/index.js'),
+        import('codemirror/theme-one-dark/dist/index.js'),
+        import('codemirror/search/dist/index.js'),
+        import('codemirror/commands/dist/index.js'),
+        import('codemirror/view/dist/index.js'),
+        import('codemirror/state/dist/index.js'),
+        import('codemirror/lint/dist/index.js'),
+        import('codemirror/merge/dist/index.js'),
+        import('codemirror/language/dist/index.js'),
+      ]);
 
-  const withExt = (url) => `${url}${url.includes('?') ? '&' : '?'}${SHARED}`;
+      this.modules = {
+        basicSetup: codemirrorPkg.basicSetup,
+        EditorView: viewMod.EditorView,
+        EditorState: stateMod.EditorState,
+        keymap: viewMod.keymap,
+        oneDark: oneDark.oneDark,
+      };
+      this.commands = {
+        undo: commandsMod.undo,
+        redo: commandsMod.redo,
+        openSearchPanel: searchMod.openSearchPanel,
+      };
+      this.lintMod = lintMod;
+      this.mergeMod = mergeMod;
 
-  this._loading = (async () => {
-    // Load the base modules FIRST, unpinned, to guarantee correct shape.
-    const stateMod = await import('https://esm.sh/@codemirror/state@6.3.1');
-    const viewMod  = await import('https://esm.sh/@codemirror/view@6.22.0');
-    const langMod  = await import('https://esm.sh/@codemirror/language@6.10.1');
-
-    // Then everything else that depends on them.
-    const [codemirrorPkg, oneDark, searchMod, commandsMod, lintMod, mergeMod] = await Promise.all([
-      import(withExt('https://esm.sh/codemirror@6.0.2')),
-      import(withExt('https://esm.sh/@codemirror/theme-one-dark@6.1.2')),
-      import(withExt('https://esm.sh/@codemirror/search@6.5.0')),
-      import(withExt('https://esm.sh/@codemirror/commands@6.3.0')),
-      import(withExt('https://esm.sh/@codemirror/lint@6.5.0')),
-      import(withExt('https://esm.sh/@codemirror/merge@6.4.0')),
-    ]);
-
-    this.modules = {
-      basicSetup: codemirrorPkg.basicSetup,
-      EditorView: viewMod.EditorView,
-      EditorState: stateMod.EditorState,
-      keymap: viewMod.keymap,
-      oneDark: oneDark.oneDark,
-    };
-    this.commands = {
-      undo: commandsMod.undo,
-      redo: commandsMod.redo,
-      openSearchPanel: searchMod.openSearchPanel,
-    };
-    this.lintMod = lintMod;
-    this.mergeMod = mergeMod;
-
-    // Verify the critical facades exist before anyone calls .of on them.
-    const missing = [];
-    if (!this.modules.EditorView) missing.push('EditorView');
-    if (!this.modules.EditorState) missing.push('EditorState');
-    if (!this.modules.basicSetup) missing.push('basicSetup');
-    if (!this.modules.EditorView?.contentAttributes) missing.push('EditorView.contentAttributes');
-    if (!this.modules.EditorView?.lineWrapping) missing.push('EditorView.lineWrapping');
-    if (missing.length) {
-      this._loading = null;
-      this.modules = null;
-      throw new Error('CodeMirror modules missing: ' + missing.join(', '));
-    }
-
-    return this.modules;
-  })();
-
-  try { return await this._loading; }
-  catch (e) { this._loading = null; throw e; }
-},
-  async getLanguageExtension(path) {
-    const ext = (path.split('.').pop() || '').toLowerCase();
-    if (!ext) return null;
-    if (this._langCache.has(ext)) return this._langCache.get(ext);
-    const map = await this.loadSyntaxMap();
-    const url = map[ext];
-    if (!url) return null;
-    try {
-      const mod = await import(url);
-      const fnNames = ['html', 'css', 'javascript', 'json', 'markdown', 'python'];
-      let extFn = null;
-      if (typeof mod.default === 'function') extFn = mod.default();
-      else {
-        for (const fn of fnNames) {
-          if (typeof mod[fn] === 'function') { extFn = mod[fn](); break; }
+      this.getLanguageExtension = async (path) => {
+        if (!path) return null;
+        const ext = (path.split('.').pop() || '').toLowerCase();
+        try {
+          switch (ext) {
+            case 'html': case 'htm': case 'xhtml': {
+              const m = await import('codemirror/lang-html/dist/index.js');
+              return m.html();
+            }
+            case 'css': case 'scss': case 'less': {
+              const m = await import('codemirror/lang-css/dist/index.js');
+              return m.css();
+            }
+            case 'js': case 'mjs': case 'cjs': case 'jsx': case 'ts': case 'tsx': {
+              const m = await import('codemirror/lang-javascript/dist/index.js');
+              return m.javascript({ jsx: true, typescript: ext === 'ts' || ext === 'tsx' });
+            }
+            case 'json': case 'jsonc': case 'json5': {
+              const m = await import('codemirror/lang-json/dist/index.js');
+              return m.json();
+            }
+            case 'md': case 'markdown': case 'mdx': {
+              const m = await import('codemirror/lang-markdown/dist/index.js');
+              return m.markdown();
+            }
+            case 'py': case 'pyi': case 'pyw': {
+              const m = await import('codemirror/lang-python/dist/index.js');
+              return m.python();
+            }
+            default: return null;
+          }
+        } catch (err) {
+          console.warn('[CM] language pack failed for', ext, err);
+          return null;
         }
+      };
+
+      if (!this.modules.EditorView || !this.modules.EditorState || !this.modules.basicSetup) {
+        this._loading = null;
+        this.modules = null;
+        throw new Error('CodeMirror modules loaded with wrong shape');
       }
-      if (extFn) this._langCache.set(ext, extFn);
-      else this._langCache.set(ext, null);
-      return extFn;
-    } catch (err) {
-      console.warn('[CM] language pack failed for', ext, err);
-      this._langCache.set(ext, null);
-      return null;
-    }
+
+      return this.modules;
+    })();
+
+    try { return await this._loading; }
+    catch (e) { this._loading = null; throw e; }
   },
 
   detectLanguage(path) {
@@ -2431,14 +2382,15 @@ const cm = {
 
     if (S.prefs.wordWrap) extensions.push(m.EditorView.lineWrapping);
     if (!S.prefs.lineNumbers) extensions.push(m.EditorView.theme({ '.cm-lineNumbers': { display: 'none' } }));
-if (this.detectLanguage(path) === 'json' && this.lintMod) {
-  try {
-    const jsonMod = await import('https://esm.sh/@codemirror/lang-json@6.0.1?external=@codemirror/state,@codemirror/view,@codemirror/language');
-    if (jsonMod.jsonParseLinter && token === this._initToken) {
-      extensions.push(this.lintMod.linter(jsonMod.jsonParseLinter()));
+
+    if (this.detectLanguage(path) === 'json' && this.lintMod) {
+      try {
+        const m2 = await import('codemirror/lang-json/dist/index.js');
+        if (m2.jsonParseLinter && token === this._initToken) {
+          extensions.push(this.lintMod.linter(m2.jsonParseLinter()));
+        }
+      } catch {}
     }
-  } catch {}
-}
 
     extensions.push(m.EditorView.updateListener.of((update) => {
       if (update.docChanged) {
@@ -3709,7 +3661,6 @@ function shiftEditorForSymbols(open) {
   }
 }
 
-/* Ctrl modifier latch */
 function setCtrlLatch(on) {
   S.ctrlLatch = on;
   const btn = $('tbCtrl');
@@ -4140,8 +4091,6 @@ async function boot() {
   console.log('[Boot] Wired');
 
   if (window.innerWidth >= 1024) openSidebar('files');
-
-  cm.loadSyntaxMap().then(() => console.log('[Boot] Syntax map loaded'));
 
   try { S.projects = await db.listProjects(); }
   catch (err) { console.error('[Boot] projects load:', err); }
