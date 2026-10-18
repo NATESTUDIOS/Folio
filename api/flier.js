@@ -1,23 +1,22 @@
 // api/flier.js
 // ═══════════════════════════════════════════════════════════════════
-//  FLIER — universal image generator  (v2.0.1 · Folio fork)
+//  FLIER — universal image generator  (v2.1.0-folio)
 //  ────────────────────────────────────────────────────────────────
 //
-//  Forked from KOFA-X flier v2.0.1. Folio changes (marked "← FOLIO"):
+//  Folio changes:
 //    • ALLOWED_DOMAINS → Folio origins
 //    • log/newReqId imported from ../utils/log.js
 //    • IMAGE_UPLOAD_API env-overridable
-//    • buildSvg / renderPng / uploadPng exported for metatag.js
-//    • Version string → "2.0.1-folio"
-//
-//  Everything else unchanged: 16 templates, glyph table, sanitizer,
-//  cache, upload flow, Resvg rendering pipeline.
+//    • buildSvg / renderPng / uploadPng exported
+//    • NEW: action=avatar/preview — 5 base64 variants, NO upload
+//    • avatar/preview is public (IP rate-limited, no admin key)
+//    • Version string → "2.1.0-folio"
 // ═══════════════════════════════════════════════════════════════════
 
 import { Resvg } from "@resvg/resvg-js";
 import * as cheerio from "cheerio";
 import crypto from "crypto";
-import { log, newReqId } from "../utils/log.js"; // ← FOLIO
+import { log, newReqId } from "../utils/log.js";
 
 // ═══════════════════════════════════════════════════════════════════
 //  BUNDLED FONT
@@ -60,10 +59,9 @@ function initFont() {
 
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 const IMAGE_UPLOAD_API =
-  process.env.IMAGE_UPLOAD_API || // ← FOLIO: env-overridable
+  process.env.IMAGE_UPLOAD_API ||
   "https://kx-services.vercel.app/api/tools/imageupload";
 
-// ← FOLIO: Folio origins only
 const ALLOWED_DOMAINS = [
   "folios",
   "folios.vercel.app",
@@ -80,6 +78,7 @@ const SIZES = {
   "1200x630": { w: 1200, h: 630 },
   "1200x1200": { w: 1200, h: 1200 },
   "1600x900": { w: 1600, h: 900 },
+  "512x512": { w: 512, h: 512 },
 };
 
 const MAX_TEXT = {
@@ -109,11 +108,147 @@ const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT_IP = 40;
 const RATE_LIMIT_KEY = 200;
 
+// Avatar preview rate limit: 20 per hour per IP
+const AVATAR_RATE_WINDOW_MS = 60 * 60 * 1000;
+const AVATAR_RATE_LIMIT_IP = 20;
+
 const PREVIEW_CACHE_MAX = 200;
 const PREVIEW_CACHE_TTL = 5 * 60 * 1000;
 
 // ═══════════════════════════════════════════════════════════════════
-//  STROKE FONT — glyph table
+//  AVATAR VARIANTS
+// ═══════════════════════════════════════════════════════════════════
+
+const AVATAR_VARIANTS = [
+  {
+    id: "v1",
+    kind: "initials-solid",
+    label: "Initials",
+    template: "hero-short",
+    style: { variant: "dark", pattern: "none" },
+  },
+  {
+    id: "v2",
+    kind: "initials-gradient",
+    label: "Gradient",
+    template: "hero-short",
+    style: { variant: "dark", pattern: "none" },
+    colors: { primary: "#F59E0B", accent: "#f97316" },
+  },
+  {
+    id: "v3",
+    kind: "username-dark",
+    label: "Username",
+    template: "poster-centered",
+    style: { variant: "light", pattern: "none", align: "center" },
+  },
+  {
+    id: "v4",
+    kind: "initials-pattern",
+    label: "Patterned",
+    template: "random-lines-top",
+    style: { variant: "dark", pattern: "dots" },
+  },
+  {
+    id: "v5",
+    kind: "fullname-badge",
+    label: "Badge",
+    template: "image-badge-overlay",
+    style: { variant: "dark", pattern: "none", align: "center" },
+  },
+];
+
+function initialsFrom(displayName, username) {
+  const src = (displayName || username || "?").trim();
+  const parts = src.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return src.slice(0, 2).toUpperCase();
+}
+
+function buildAvatarBody(variant, { username, displayName }) {
+  const initials = initialsFrom(displayName, username);
+  const base = {
+    mode: "preview",
+    type: "template",
+    template: variant.template,
+    size: "512x512",
+    data: {
+      text: {},
+      style: { ...(variant.style || {}) },
+      images: {},
+    },
+  };
+
+  if (variant.colors) {
+    base.data.style.colors = { ...variant.colors };
+  }
+
+  switch (variant.id) {
+    case "v1":
+      base.data.text.headline = initials;
+      base.data.style.colors = { primary: "#F59E0B", accent: "#fbbf24" };
+      break;
+    case "v2":
+      base.data.text.headline = initials;
+      base.data.style.colors = { primary: "#F59E0B", accent: "#f97316" };
+      break;
+    case "v3":
+      base.data.text.headline = username ? `@${username}` : initials;
+      base.data.style.colors = { primary: "#1a1f2a", accent: "#F59E0B" };
+      break;
+    case "v4":
+      base.data.text.headline = initials;
+      base.data.style.pattern = "dots";
+      base.data.style.colors = { primary: "#F59E0B", accent: "#fbbf24" };
+      break;
+    case "v5":
+      base.data.text.headline = displayName || username || initials;
+      base.data.text.kicker = initials;
+      base.data.style.colors = { primary: "#F59E0B", accent: "#fbbf24" };
+      break;
+    default:
+      base.data.text.headline = initials;
+  }
+
+  return base;
+}
+
+async function generateAvatarVariants({ username, displayName }, reqId) {
+  initFont();
+  const results = [];
+
+  for (const variant of AVATAR_VARIANTS) {
+    try {
+      const body = normalizeInput(buildAvatarBody(variant, { username, displayName }));
+      const { svg, dims } = await buildSvg(body);
+      const png = await renderPng(svg, dims, reqId);
+
+      if (png.length > MAX_OUTPUT_BYTES) {
+        log("avatar.variant_too_large", { reqId, id: variant.id, bytes: png.length });
+        continue;
+      }
+
+      results.push({
+        id: variant.id,
+        kind: variant.kind,
+        label: variant.label,
+        dataUrl: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
+        width: dims.w,
+        height: dims.h,
+        bytes: png.length,
+      });
+    } catch (err) {
+      log("avatar.variant_failed", { reqId, id: variant.id, message: err.message });
+    }
+  }
+
+  return results;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  STROKE FONT — glyph table (unchanged)
 // ═══════════════════════════════════════════════════════════════════
 
 const GLYPHS = {
@@ -826,10 +961,11 @@ function isAdmin(req) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  RATE LIMIT (in-memory — matches KOFA-X)
+//  RATE LIMIT (in-memory)
 // ═══════════════════════════════════════════════════════════════════
 
 const RL = new Map();
+const AVATAR_RL = new Map();
 
 function rateLimit(id, max) {
   const now = Date.now();
@@ -847,6 +983,25 @@ function rateLimit(id, max) {
     ok: b.count <= max,
     remaining: Math.max(0, max - b.count),
     limit: max,
+  };
+}
+
+function avatarRateLimit(id) {
+  const now = Date.now();
+  let b = AVATAR_RL.get(id);
+  if (!b || now - b.start > AVATAR_RATE_WINDOW_MS) {
+    b = { count: 0, start: now };
+    AVATAR_RL.set(id, b);
+  }
+  b.count++;
+  if (AVATAR_RL.size > 5000) {
+    const first = AVATAR_RL.keys().next().value;
+    if (first) AVATAR_RL.delete(first);
+  }
+  return {
+    ok: b.count <= AVATAR_RATE_LIMIT_IP,
+    remaining: Math.max(0, AVATAR_RATE_LIMIT_IP - b.count),
+    limit: AVATAR_RATE_LIMIT_IP,
   };
 }
 
@@ -1793,7 +1948,7 @@ function resolveTheme(data) {
   return {
     variant: effectiveVariant,
     colors: {
-      primary: cleanColor(colors.primary, "#ff4fb2"),
+      primary: cleanColor(colors.primary, "#F59E0B"),
       text: cleanColor(colors.text, palette.text),
       accent: cleanColor(colors.accent, "#fbbf24"),
       muted: cleanColor(colors.muted, palette.muted),
@@ -1802,7 +1957,7 @@ function resolveTheme(data) {
     font: cleanFont(style.font),
     align: cleanAlign(style.align || "center"),
     watermark: cleanBool(style.watermark, true),
-    watermarkText: cleanText(style.watermarkText || "KOFA X", 40),
+    watermarkText: cleanText(style.watermarkText || "FOLIO", 40),
     pattern: cleanPattern(style.pattern || "none"),
     radius: cleanNumber(style.radius, 0, 80, 24),
     accentPosition: cleanAccentPosition(style.accentPosition || "top-left"),
@@ -1810,8 +1965,8 @@ function resolveTheme(data) {
     background: {
       type: ["solid", "gradient", "image"].includes(bg.type) ? bg.type : "gradient",
       color: cleanColor(bg.color, "#0a0a0d"),
-      from: cleanColor(bg.from, "#ff4fb2"),
-      to: cleanColor(bg.to, "#a855f7"),
+      from: cleanColor(bg.from, "#F59E0B"),
+      to: cleanColor(bg.to, "#f97316"),
       angle: cleanNumber(bg.angle, 0, 360, 135),
       overlay: cleanColor(bg.overlay, "rgba(0,0,0,0.55)"),
       blur: cleanNumber(bg.blur, 0, 40, 0),
@@ -1884,7 +2039,7 @@ function tpl_hero_short(data, theme, dims) {
   const pad = Math.round(W * 0.08);
   const boxW = W - pad * 2;
 
-  const headSize = Math.round(H * 0.13);
+  const headSize = Math.round(H * 0.30);
   const lines = wrap(applyHeadlineCase(t.headline, theme.headlineCase), charsFor(boxW, headSize, "black"));
   const lh = Math.round(headSize * 1.02);
   let y = (H - lines.length * lh) / 2 + headSize * 0.85;
@@ -1897,7 +2052,6 @@ function tpl_hero_short(data, theme, dims) {
   if (t.footer) {
     out.push(textNode({ x: W / 2, y: H - pad, text: t.footer, anchor: "middle", size: Math.round(H * 0.024), weight: "bold", fill: theme.colors.primary }));
   }
-  out.push(accentCorner(dims, theme));
   out.push(watermark(dims, theme));
   return svgWrap(dims, theme, out.join("\n"));
 }
@@ -2109,7 +2263,7 @@ function tpl_newspaper_classic(data, theme, dims) {
   out.push(`<rect x="${pad}" y="${pad}" width="${boxW}" height="${H - pad * 2}" fill="none" stroke="${ink}" stroke-width="${frameT}"/>`);
 
   let y = pad + innerPad + mastSize;
-  const mastText = (t.kicker || "THE DAILY KOFA").toUpperCase();
+  const mastText = (t.kicker || "THE DAILY FOLIO").toUpperCase();
   out.push(textNode({ x: W / 2, y, text: mastText, anchor: "middle", size: mastSize, weight: "black", letterSpacing: mastSize * 0.28, fill: ink }));
 
   y += Math.round(mastSize * 0.5);
@@ -2201,7 +2355,7 @@ function tpl_random_lines_top(data, theme, dims) {
   const t = data.text;
   const pad = Math.round(W * 0.09);
   const boxW = W - pad * 2;
-  const headSize = Math.round(H * 0.082);
+  const headSize = Math.round(H * 0.30);
   const subSize = Math.round(H * 0.030);
   const rng = seededRandom(t.headline || t.body || "lines");
 
@@ -3092,7 +3246,6 @@ async function uploadPng(pngBuffer, name, reqId) {
   return data;
 }
 
-// ← FOLIO: export for metatag.js
 export { buildSvg, renderPng, uploadPng };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -3101,7 +3254,7 @@ export { buildSvg, renderPng, uploadPng };
 
 export const config = {
   api: { bodyParser: { sizeLimit: "10mb" } },
-  maxDuration: 30,
+  maxDuration: 60,
 };
 
 export default async function handler(req, res) {
@@ -3119,7 +3272,68 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: "Origin not allowed" });
   }
 
-  // ══════════════ GET ══════════════
+  const action = String(req.query?.action || req.body?.action || "").trim();
+
+  // ══════════════════ AVATAR (PUBLIC — NO ADMIN KEY) ══════════════════
+  if (action === "avatar/preview") {
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+
+    const rl = avatarRateLimit(`avatar:${ipHash(req)}`);
+    setRateHeaders(res, rl);
+    if (!rl.ok) {
+      log("avatar.rate_limit", { reqId });
+      return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip" });
+    }
+
+    const { username, displayName } = req.body || {};
+    if (!username || typeof username !== "string") {
+      return res.status(400).json({ success: false, error: "Missing username" });
+    }
+    if (username.length < 1 || username.length > 40) {
+      return res.status(400).json({ success: false, error: "Invalid username length" });
+    }
+
+    const safeUsername = String(username).slice(0, 40).replace(/[^a-zA-Z0-9_-]/g, "");
+    const safeDisplayName = String(displayName || username).slice(0, 60).trim();
+
+    try {
+      const variants = await generateAvatarVariants(
+        { username: safeUsername, displayName: safeDisplayName },
+        reqId,
+      );
+
+      if (variants.length === 0) {
+        return res.status(500).json({ success: false, error: "Could not generate avatars" });
+      }
+
+      log("avatar.preview.done", {
+        reqId,
+        count: variants.length,
+        ms: Date.now() - t0,
+        totalBytes: variants.reduce((s, v) => s + v.bytes, 0),
+      });
+
+      res.setHeader("Cache-Control", "private, max-age=300");
+      return res.status(200).json({
+        success: true,
+        variants: variants.map(v => ({
+          id: v.id,
+          kind: v.kind,
+          label: v.label,
+          dataUrl: v.dataUrl,
+          width: v.width,
+          height: v.height,
+        })),
+      });
+    } catch (err) {
+      log("avatar.preview.error", { reqId, message: err.message, stack: err.stack });
+      return res.status(500).json({ success: false, error: "Avatar generation failed" });
+    }
+  }
+
+  // ══════════════════ GET ══════════════════
   if (req.method === "GET") {
     if (!isAdmin(req)) {
       log("auth.reject", { reqId, method: "GET" });
@@ -3132,11 +3346,14 @@ export default async function handler(req, res) {
       initFont();
       return res.status(200).json({
         success: true,
-        version: "2.0.1-folio", // ← FOLIO
+        version: "2.1.0-folio",
         sizes: Object.keys(SIZES),
         types: ["template", "svg", "html"],
         modes: ["preview", "upload", "both"],
         templates: TEMPLATE_META,
+        actions: {
+          "avatar/preview": "POST — generate 5 avatar variants (public, IP rate-limited)",
+        },
         text: {
           mode: fontFamily ? "bundled-font" : "stroke-fallback",
           family: fontFamily || null,
@@ -3155,7 +3372,7 @@ export default async function handler(req, res) {
           headlineCase: ["auto", "upper", "title", "sentence"],
           accentPosition: ["top-left", "top-right", "bottom-left", "bottom-right"],
         },
-        watermark: { default: true, text: "KOFA X" },
+        watermark: { default: true, text: "FOLIO" },
         limits: {
           maxOutputBytes: MAX_OUTPUT_BYTES,
           maxOutputEdge: MAX_OUTPUT_EDGE,
@@ -3163,13 +3380,6 @@ export default async function handler(req, res) {
           maxImageBytes: MAX_IMAGE_BYTES,
           maxSvgChars: MAX_SVG_CHARS,
           maxHtmlChars: MAX_HTML_CHARS,
-        },
-        examples: {
-          note: "All requests require X-API-Key or Authorization: Bearer",
-          minimal: "/api/flier?text=Ship%20it",
-          event: "/api/flier?text=Hackathon&template=event-poster&date=Mar%2014&location=Lagos",
-          stat: "/api/flier?metric=300%25&metricLabel=growth%20in%20Q1&template=stat-hero",
-          split: "/api/flier?text=Introducing%20Folio&template=split-image-side&image=https://...",
         },
       });
     }
@@ -3257,13 +3467,13 @@ export default async function handler(req, res) {
     }
   }
 
-  // ══════════════ POST ══════════════
+  // ══════════════════ POST ══════════════════
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   if (!isAdmin(req)) {
-    log("auth.reject", { reqId, method: "POST" });
+    log("auth.reject", { reqId, method: "POST", action });
     return res.status(401).json({ error: "Admin credentials required" });
   }
 
