@@ -61,8 +61,5 @@
   ],
   "redirects": [
     { "source": "/", "destination": "/app", "permanent": false }
-  ],
-  "crons": [
-    { "path": "/api/cron/cleanup", "schedule": "0 * * * *" }
   ]
 }
