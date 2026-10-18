@@ -1,0 +1,2720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Folio — Profile</title>
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --theme-primary: #F59E0B;
+  --theme-primary-hover: #fbbf24;
+  --theme-primary-glow: rgba(245, 158, 11, 0.40);
+  --theme-primary-soft: rgba(245, 158, 11, 0.14);
+
+  --theme-bg: #0a0c10;
+  --theme-surface: #0f1218;
+  --theme-surface-card: rgba(21, 25, 34, 0.72);
+  --theme-surface-card-solid: #151922;
+  --theme-surface-elevated: #1a1f2a;
+  --theme-text: #e8ecf1;
+  --theme-text-secondary: rgba(232, 236, 241, 0.72);
+  --theme-text-tertiary: rgba(232, 236, 241, 0.44);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.05);
+  --theme-glass-border: rgba(255, 255, 255, 0.09);
+  --theme-overlay: rgba(10, 12, 16, 0.85);
+  --theme-card-border: rgba(255, 255, 255, 0.08);
+  --theme-divider: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(26, 31, 42, 0.88);
+
+  --theme-success: #10B981;
+  --theme-success-soft: rgba(16, 185, 129, 0.14);
+  --theme-danger: #EF4444;
+  --theme-danger-soft: rgba(239, 68, 68, 0.12);
+  --theme-warning: #D97706;
+  --theme-warning-soft: rgba(217, 119, 6, 0.14);
+  --theme-info: #3B82F6;
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.10) 0%, transparent 55%);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --rail-w: 60px;
+  --content-max: 1080px;
+
+  --r-xs: 6px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', Consolas, Monaco, monospace;
+}
+
+[data-theme="light"] {
+  --theme-primary: #D97706;
+  --theme-primary-hover: #B45309;
+  --theme-primary-glow: rgba(217, 119, 6, 0.28);
+  --theme-primary-soft: rgba(217, 119, 6, 0.10);
+  --theme-bg: #f7f8fa;
+  --theme-surface: #ffffff;
+  --theme-surface-card: rgba(255, 255, 255, 0.85);
+  --theme-surface-card-solid: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-text: #121316;
+  --theme-text-secondary: rgba(18, 19, 22, 0.72);
+  --theme-text-tertiary: rgba(18, 19, 22, 0.48);
+  --theme-glass-bg: rgba(255, 255, 255, 0.75);
+  --theme-glass-border: rgba(0, 0, 0, 0.08);
+  --theme-overlay: rgba(18, 19, 22, 0.55);
+  --theme-card-border: rgba(0, 0, 0, 0.07);
+  --theme-divider: rgba(0, 0, 0, 0.06);
+  --input-bg: #ffffff;
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(217, 119, 6, 0.08) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: var(--theme-bg);
+  font-family: var(--font);
+  color: var(--theme-text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
+  background-attachment: fixed;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border: none; background: none; padding: 0; }
+a { color: var(--theme-primary); text-decoration: none; }
+svg { display: block; }
+.hidden { display: none !important; }
+.mono { font-family: var(--font-mono); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SHELL
+   ═══════════════════════════════════════════════════════════ */
+.app { display: flex; width: 100%; min-height: 100vh; min-height: 100dvh; }
+
+.rail {
+  display: none;
+  width: var(--rail-w);
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-glass-border);
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(16px + var(--safe-top)) 0 calc(16px + var(--safe-bottom));
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  flex-shrink: 0;
+  z-index: 90;
+}
+@media (min-width: 1024px) { .rail { display: flex; } }
+
+.rail-top, .rail-bottom { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+.rail-logo {
+  width: 40px; height: 40px; border-radius: 11px; overflow: hidden;
+  margin-bottom: 16px; background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--theme-primary);
+}
+.rail-logo img { width: 100%; height: 100%; object-fit: cover; }
+.rail-logo svg { width: 20px; height: 20px; stroke-width: 2; }
+
+.rail-btn {
+  width: 40px; height: 40px; border-radius: 11px;
+  color: var(--theme-text-tertiary);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s var(--ease); position: relative;
+}
+.rail-btn svg { width: 20px; height: 20px; stroke-width: 2; stroke: currentColor; fill: none; }
+.rail-btn:hover { color: var(--theme-text-secondary); background: var(--theme-glass-bg); }
+.rail-btn.active { color: var(--theme-primary); background: var(--theme-primary-soft); }
+.rail-btn.active::before {
+  content: ''; position: absolute; left: -12px; top: 50%;
+  transform: translateY(-50%); width: 3px; height: 22px;
+  border-radius: 0 3px 3px 0; background: var(--theme-primary);
+}
+.rail-divider { width: 24px; height: 1px; background: var(--theme-divider); margin: 6px 0; }
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN
+   ═══════════════════════════════════════════════════════════ */
+.main {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  padding-bottom: calc(80px + var(--safe-bottom));
+}
+@media (min-width: 1024px) { .main { padding-bottom: calc(24px + var(--safe-bottom)); } }
+
+.main-inner {
+  width: 100%; max-width: var(--content-max);
+  margin: 0 auto;
+  padding: calc(16px + var(--safe-top)) 16px 0;
+  flex: 1; display: flex; flex-direction: column; gap: 16px;
+}
+@media (min-width: 1024px) { .main-inner { padding: 24px 24px 0; } }
+
+/* ═══════════════════════════════════════════════════════════
+   PROFILE HEADER
+   ═══════════════════════════════════════════════════════════ */
+.profile-header {
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-lg);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.profile-header::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at top left, var(--theme-primary-soft) 0%, transparent 60%);
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.profile-header-inner { position: relative; display: flex; flex-direction: column; gap: 14px; }
+
+@media (min-width: 640px) {
+  .profile-header-inner { flex-direction: row; align-items: flex-start; }
+}
+
+.profile-avatar {
+  width: 84px; height: 84px; border-radius: 22px;
+  overflow: hidden; flex-shrink: 0;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex; align-items: center; justify-content: center;
+  color: #0a0c10; font-weight: 800; font-size: 28px;
+  position: relative; cursor: pointer;
+  transition: transform 0.2s var(--ease);
+}
+.profile-avatar:hover { transform: scale(1.02); }
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.profile-avatar-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.55); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.2s;
+}
+.profile-avatar:hover .profile-avatar-overlay { opacity: 1; }
+.profile-avatar-overlay svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+
+.profile-info { flex: 1; min-width: 0; }
+
+.profile-name {
+  font-size: 22px; font-weight: 800;
+  letter-spacing: -0.5px; color: var(--theme-text);
+  margin-bottom: 3px; line-height: 1.2;
+  overflow-wrap: break-word;
+}
+.profile-handle {
+  font-size: 13px; font-weight: 600;
+  color: var(--theme-primary);
+  font-family: var(--font-mono);
+  margin-bottom: 8px;
+}
+.profile-bio {
+  font-size: 13px; line-height: 1.55;
+  color: var(--theme-text-secondary);
+  margin-bottom: 10px;
+  max-width: 65ch;
+  overflow-wrap: break-word;
+}
+.profile-bio.empty { color: var(--theme-text-tertiary); font-style: italic; }
+
+.profile-meta {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  font-size: 11.5px; color: var(--theme-text-tertiary); font-weight: 600;
+}
+.profile-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.profile-meta svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+.profile-links {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 10px;
+}
+.profile-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 8px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 11.5px; font-weight: 600;
+  transition: all 0.2s var(--ease);
+}
+.profile-link:hover {
+  border-color: var(--theme-primary-glow);
+  color: var(--theme-primary);
+  text-decoration: none;
+}
+.profile-link svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+
+.profile-actions {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 12px;
+}
+@media (min-width: 640px) {
+  .profile-actions { margin-top: 0; flex-direction: column; align-items: flex-end; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════════════════════════ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px; padding: 10px 16px; border-radius: 10px;
+  font-size: 13px; font-weight: 700;
+  border: 1px solid transparent;
+  transition: all 0.2s var(--ease);
+  white-space: nowrap; min-height: 38px; font-family: inherit;
+}
+.btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary { background: var(--theme-primary); color: #0a0c10; }
+[data-theme="light"] .btn-primary { color: #ffffff; }
+.btn-primary:hover:not(:disabled) { background: var(--theme-primary-hover); }
+
+.btn-secondary { background: var(--theme-glass-bg); color: var(--theme-text); border-color: var(--theme-card-border); }
+.btn-secondary:hover:not(:disabled) { background: var(--theme-surface-elevated); border-color: var(--theme-primary-glow); }
+
+.btn-ghost { background: transparent; color: var(--theme-text-secondary); border-color: transparent; }
+.btn-ghost:hover:not(:disabled) { color: var(--theme-text); background: var(--theme-glass-bg); }
+
+.btn-danger { background: var(--theme-danger); color: #ffffff; }
+.btn-danger:hover:not(:disabled) { background: #dc2626; }
+
+.btn-outline-danger { background: transparent; color: var(--theme-danger); border-color: rgba(239, 68, 68, 0.3); }
+.btn-outline-danger:hover:not(:disabled) { background: var(--theme-danger-soft); }
+
+.btn-sm { padding: 6px 12px; font-size: 12px; min-height: 30px; border-radius: 8px; }
+.btn-sm svg { width: 12px; height: 12px; }
+.btn-block { width: 100%; }
+.btn-icon { padding: 8px; min-width: 34px; }
+
+/* ═══════════════════════════════════════════════════════════
+   TABS
+   ═══════════════════════════════════════════════════════════ */
+.tabs-bar {
+  display: flex; gap: 2px;
+  overflow-x: auto; scrollbar-width: none;
+  border-bottom: 1px solid var(--theme-divider);
+  margin-bottom: -4px;
+}
+.tabs-bar::-webkit-scrollbar { display: none; }
+
+.tab {
+  padding: 10px 14px 12px;
+  font-size: 13px; font-weight: 700;
+  color: var(--theme-text-tertiary);
+  white-space: nowrap; flex-shrink: 0;
+  position: relative;
+  transition: color 0.2s var(--ease);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tab:hover { color: var(--theme-text); }
+.tab.active { color: var(--theme-primary); }
+.tab.active::after {
+  content: ''; position: absolute; bottom: -1px; left: 10px; right: 10px;
+  height: 2px; background: var(--theme-primary); border-radius: 2px 2px 0 0;
+}
+.tab-count {
+  padding: 1px 6px; border-radius: 6px;
+  background: var(--theme-glass-bg);
+  font-size: 10.5px; font-weight: 800;
+  color: var(--theme-text-tertiary);
+}
+.tab.active .tab-count { background: var(--theme-primary-soft); color: var(--theme-primary); }
+
+/* ═══════════════════════════════════════════════════════════
+   CARDS
+   ═══════════════════════════════════════════════════════════ */
+.card {
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+}
+.card-title {
+  font-size: 13px; font-weight: 800; color: var(--theme-text);
+  display: flex; align-items: center; gap: 8px;
+}
+.card-title svg { width: 15px; height: 15px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; }
+.card-body { padding: 16px; }
+.card-body.tight { padding: 12px 16px; }
+
+/* ═══════════════════════════════════════════════════════════
+   PANEL LAYOUT
+   ═══════════════════════════════════════════════════════════ */
+.panel { display: none; flex-direction: column; gap: 16px; animation: panelIn 0.28s var(--ease); }
+.panel.active { display: flex; }
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FIELDS
+   ═══════════════════════════════════════════════════════════ */
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.field:last-child { margin-bottom: 0; }
+.field-label {
+  font-size: 11px; font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.field-hint { font-size: 11px; color: var(--theme-text-tertiary); line-height: 1.4; }
+
+.input, .textarea {
+  width: 100%; padding: 11px 13px;
+  background: var(--input-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  color: var(--theme-text);
+  font-size: 14px; font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s var(--ease);
+}
+.input:focus, .textarea:focus { border-color: var(--theme-primary); }
+.input::placeholder, .textarea::placeholder { color: var(--theme-text-tertiary); }
+.input:read-only { opacity: 0.7; cursor: not-allowed; }
+.textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
+@media (min-width: 640px) { .input, .textarea { font-size: 13.5px; padding: 10px 12px; } }
+
+/* ═══════════════════════════════════════════════════════════
+   MODAL / BOTTOM SHEET
+   ═══════════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 700;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex; align-items: flex-end; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.25s var(--ease);
+  padding: 0;
+}
+.modal-overlay.active { opacity: 1; pointer-events: all; }
+@media (min-width: 640px) { .modal-overlay { align-items: center; padding: 20px; } }
+
+.modal {
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 24px 24px 0 0;
+  padding: 20px 20px calc(20px + var(--safe-bottom));
+  max-width: 100%; width: 100%;
+  max-height: 90vh; overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform 0.32s var(--ease);
+}
+.modal-overlay.active .modal { transform: translateY(0); }
+@media (min-width: 640px) {
+  .modal {
+    border-radius: 20px;
+    max-width: 520px;
+    padding: 24px;
+    transform: scale(0.94);
+  }
+  .modal-overlay.active .modal { transform: scale(1); }
+}
+
+.modal-handle {
+  width: 40px; height: 4px; border-radius: 2px;
+  background: var(--theme-glass-border);
+  margin: 0 auto 16px;
+}
+@media (min-width: 640px) { .modal-handle { display: none; } }
+
+.modal-title {
+  font-size: 17px; font-weight: 800;
+  color: var(--theme-text); letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+.modal-desc {
+  font-size: 13px; color: var(--theme-text-secondary);
+  line-height: 1.5; margin-bottom: 16px;
+}
+.modal-actions { display: flex; gap: 8px; margin-top: 20px; }
+.modal-actions .btn { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════
+   FULLSCREEN OVERLAY (Avatar Studio)
+   ═══════════════════════════════════════════════════════════ */
+.fullscreen-overlay {
+  position: fixed; inset: 0; z-index: 800;
+  background: var(--theme-bg);
+  display: flex; flex-direction: column;
+  transform: translateY(100%);
+  opacity: 0; pointer-events: none;
+  transition: transform 0.35s var(--ease), opacity 0.25s var(--ease);
+  overflow: hidden;
+}
+.fullscreen-overlay.active { transform: translateY(0); opacity: 1; pointer-events: all; }
+@media (min-width: 640px) {
+  .fullscreen-overlay {
+    transform: scale(0.97);
+    background: var(--theme-overlay);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 20px;
+    align-items: center;
+    justify-content: center;
+  }
+  .fullscreen-overlay.active { transform: scale(1); }
+}
+
+.overlay-inner {
+  width: 100%; max-width: 720px;
+  margin: 0 auto; background: var(--theme-bg);
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden; height: 100%;
+}
+@media (min-width: 640px) {
+  .overlay-inner {
+    background: var(--theme-surface-card-solid);
+    border: 1px solid var(--theme-glass-border);
+    border-radius: 20px;
+    max-height: 92vh;
+    height: auto;
+  }
+}
+
+.overlay-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(14px + var(--safe-top)) 16px 14px;
+  border-bottom: 1px solid var(--theme-divider);
+  flex-shrink: 0; background: var(--theme-bg);
+}
+@media (min-width: 640px) { .overlay-header { padding: 16px 20px; background: transparent; } }
+
+.overlay-title {
+  flex: 1; font-size: 17px; font-weight: 800;
+  color: var(--theme-text); letter-spacing: -0.3px;
+}
+.overlay-sub { font-size: 11.5px; color: var(--theme-text-tertiary); font-weight: 600; margin-top: 1px; }
+
+.overlay-close {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.overlay-close:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.overlay-close svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+.overlay-body {
+  flex: 1; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 16px;
+  min-height: 0;
+}
+@media (min-width: 640px) { .overlay-body { padding: 20px; } }
+
+.overlay-footer {
+  padding: 14px 16px calc(14px + var(--safe-bottom));
+  border-top: 1px solid var(--theme-divider);
+  display: flex; gap: 8px; flex-shrink: 0;
+  background: var(--theme-bg);
+}
+@media (min-width: 640px) { .overlay-footer { padding: 14px 20px; background: transparent; } }
+.overlay-footer .btn { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════
+   AVATAR STUDIO
+   ═══════════════════════════════════════════════════════════ */
+.studio-preview {
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 14px;
+  aspect-ratio: 1;
+  max-width: 320px;
+  margin: 0 auto;
+  overflow: hidden;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.studio-preview img {
+  width: 100%; height: 100%; object-fit: contain;
+  display: block;
+}
+.studio-preview-loading {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.4);
+  opacity: 0; transition: opacity 0.2s;
+}
+.studio-preview-loading.visible { opacity: 1; }
+.studio-preview-loading .loading-spinner {
+  width: 32px; height: 32px;
+  border: 3px solid var(--theme-primary-soft);
+  border-top-color: var(--theme-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.studio-tabs {
+  display: flex; gap: 4px;
+  padding: 4px;
+  background: var(--theme-glass-bg);
+  border-radius: 10px;
+}
+.studio-tab {
+  flex: 1; padding: 8px;
+  border-radius: 7px;
+  font-size: 12px; font-weight: 700;
+  color: var(--theme-text-tertiary);
+  transition: all 0.2s var(--ease);
+}
+.studio-tab.active {
+  background: var(--theme-surface-elevated);
+  color: var(--theme-text);
+}
+
+.studio-panel { display: none; flex-direction: column; gap: 12px; }
+.studio-panel.active { display: flex; }
+
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+@media (min-width: 480px) { .templates-grid { grid-template-columns: repeat(4, 1fr); } }
+
+.template-tile {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: var(--theme-surface-elevated);
+  border: 2px solid transparent;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.15s;
+  cursor: pointer;
+  padding: 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+}
+.template-tile:hover { transform: scale(1.03); }
+.template-tile.selected {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 3px var(--theme-primary-soft);
+}
+.template-tile-icon {
+  width: 22px; height: 22px;
+  color: var(--theme-text-tertiary);
+  display: flex; align-items: center; justify-content: center;
+}
+.template-tile-icon svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.template-tile-label {
+  font-size: 9px; font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-align: center; line-height: 1.2;
+  padding: 0 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+.template-tile.selected .template-tile-label { color: var(--theme-primary); }
+
+.studio-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.studio-row-label {
+  font-size: 11.5px; font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.studio-row-inputs {
+  display: flex; gap: 6px; align-items: center;
+  flex-wrap: wrap;
+}
+
+.pill-group {
+  display: flex; gap: 4px; flex-wrap: wrap;
+}
+.pill {
+  padding: 5px 11px;
+  border-radius: 7px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 11.5px; font-weight: 700;
+  transition: all 0.2s var(--ease);
+}
+.pill:hover { border-color: var(--theme-primary-glow); color: var(--theme-text); }
+.pill.active { background: var(--theme-primary); color: #0a0c10; border-color: var(--theme-primary); }
+[data-theme="light"] .pill.active { color: #fff; }
+
+.color-input {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--theme-card-border);
+  background: var(--theme-glass-bg);
+  cursor: pointer;
+  padding: 2px;
+}
+.color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.color-input::-webkit-color-swatch { border: none; border-radius: 6px; }
+
+.studio-size-options {
+  display: flex; gap: 4px; flex-wrap: wrap;
+}
+
+.range-input {
+  width: 100%;
+  accent-color: var(--theme-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   NOTIFICATIONS
+   ═══════════════════════════════════════════════════════════ */
+.notif-filters {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.notif-chip {
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 11.5px; font-weight: 700;
+  transition: all 0.2s var(--ease);
+}
+.notif-chip:hover { border-color: var(--theme-primary-glow); color: var(--theme-text); }
+.notif-chip.active { background: var(--theme-primary); color: #0a0c10; border-color: var(--theme-primary); }
+[data-theme="light"] .notif-chip.active { color: #fff; }
+
+.notif-item {
+  display: flex; gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+  transition: background 0.15s;
+  position: relative;
+}
+.notif-item:hover { background: var(--theme-glass-bg); }
+.notif-item:last-child { border-bottom: none; }
+.notif-item.unread { background: rgba(245, 158, 11, 0.03); }
+
+.notif-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 6px;
+  background: transparent;
+}
+.notif-item.unread .notif-dot { background: var(--theme-primary); }
+
+.notif-icon-wrap {
+  width: 32px; height: 32px;
+  border-radius: 9px;
+  background: var(--theme-glass-bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.notif-icon-wrap svg { width: 15px; height: 15px; stroke: var(--theme-text-tertiary); fill: none; stroke-width: 2.2; }
+
+.notif-content { flex: 1; min-width: 0; }
+.notif-title {
+  font-size: 13px; font-weight: 700;
+  color: var(--theme-text);
+  margin-bottom: 2px;
+  overflow-wrap: break-word;
+}
+.notif-body {
+  font-size: 12px; color: var(--theme-text-secondary);
+  line-height: 1.4; margin-bottom: 4px;
+  overflow-wrap: break-word;
+}
+.notif-time {
+  font-size: 10.5px; color: var(--theme-text-tertiary);
+  font-weight: 600;
+}
+.notif-action {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 6px; padding: 4px 10px;
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  border-radius: 7px;
+  font-size: 11px; font-weight: 700;
+  color: var(--theme-primary);
+  text-decoration: none;
+}
+.notif-action:hover { background: var(--theme-primary); color: #0a0c10; text-decoration: none; }
+[data-theme="light"] .notif-action:hover { color: #fff; }
+.notif-action svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+.notif-dismiss {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  color: var(--theme-text-tertiary);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; opacity: 0;
+  transition: all 0.15s;
+}
+.notif-item:hover .notif-dismiss { opacity: 1; }
+.notif-dismiss:hover { background: var(--theme-danger-soft); color: var(--theme-danger); }
+.notif-dismiss svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+/* ═══════════════════════════════════════════════════════════
+   ACTIVITY LOG
+   ═══════════════════════════════════════════════════════════ */
+.log-item {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.log-item:last-child { border-bottom: none; }
+.log-time {
+  font-size: 10.5px; color: var(--theme-text-tertiary);
+  font-family: var(--font-mono); font-weight: 600;
+  min-width: 60px; flex-shrink: 0; padding-top: 2px;
+}
+.log-body { flex: 1; min-width: 0; }
+.log-type {
+  display: inline-block;
+  padding: 1px 6px; border-radius: 4px;
+  background: var(--theme-glass-bg);
+  font-size: 9px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--theme-text-tertiary);
+  margin-bottom: 3px;
+}
+.log-action {
+  font-size: 12.5px; color: var(--theme-text);
+  font-weight: 600; line-height: 1.4;
+  overflow-wrap: break-word;
+}
+.log-meta-btn {
+  font-size: 10.5px; font-weight: 700;
+  color: var(--theme-primary); background: none;
+  margin-top: 3px;
+}
+.log-meta {
+  margin-top: 6px; padding: 8px;
+  background: var(--theme-surface-elevated);
+  border-radius: 6px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--theme-text-secondary);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROJECTS GRID
+   ═══════════════════════════════════════════════════════════ */
+.projects-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 12px;
+}
+@media (min-width: 640px) { .projects-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { .projects-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.project-card {
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  display: flex; gap: 10px; align-items: center;
+}
+.project-card:hover { border-color: var(--theme-primary-glow); transform: translateY(-2px); }
+.project-card-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; flex-shrink: 0;
+  color: var(--theme-primary); font-weight: 800; font-size: 14px;
+}
+.project-card-icon img { width: 100%; height: 100%; object-fit: cover; }
+.project-card-info { flex: 1; min-width: 0; }
+.project-card-name {
+  font-size: 13px; font-weight: 700; color: var(--theme-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-bottom: 2px;
+}
+.project-card-meta {
+  font-size: 10.5px; color: var(--theme-text-tertiary); font-weight: 600;
+  display: flex; gap: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SKELETON / EMPTY / ERROR
+   ═══════════════════════════════════════════════════════════ */
+.skeleton {
+  background: linear-gradient(90deg, var(--theme-divider) 0%, var(--theme-glass-border) 50%, var(--theme-divider) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 8px;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.empty-state {
+  padding: 40px 20px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.empty-state-icon {
+  width: 48px; height: 48px;
+  border-radius: 14px;
+  background: var(--theme-glass-bg);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--theme-text-tertiary); margin-bottom: 4px;
+}
+.empty-state-icon svg { width: 22px; height: 22px; stroke-width: 2; }
+.empty-state-title { font-size: 14px; font-weight: 700; color: var(--theme-text); }
+.empty-state-desc { font-size: 12px; color: var(--theme-text-tertiary); line-height: 1.45; max-width: 320px; }
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: calc(16px + var(--safe-bottom));
+  left: 50%; transform: translateX(-50%);
+  z-index: 1000; width: 92%; max-width: 380px;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+@media (min-width: 1024px) {
+  .toast-container { left: auto; right: 20px; transform: none; bottom: 20px; }
+}
+
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+  font-size: 13px; font-weight: 500;
+  color: var(--theme-text);
+  transform: translateY(20px); opacity: 0;
+  transition: all 0.3s var(--ease-spring);
+  pointer-events: all;
+  overflow-wrap: break-word;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast svg { width: 15px; height: 15px; flex-shrink: 0; }
+.toast.success svg { stroke: var(--theme-success); }
+.toast.error svg { stroke: var(--theme-danger); }
+.toast.info svg { stroke: var(--theme-primary); }
+.toast.warning svg { stroke: var(--theme-warning); }
+
+/* ═══════════════════════════════════════════════════════════
+   LOADING OVERLAY
+   ═══════════════════════════════════════════════════════════ */
+.loading-overlay {
+  position: fixed; inset: 0; z-index: 900;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center;
+  flex-direction: column; gap: 14px; padding: 24px;
+}
+.loading-overlay.active { display: flex; }
+.loading-spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--theme-primary-soft);
+  border-top-color: var(--theme-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-title { font-size: 15px; font-weight: 700; color: var(--theme-text); }
+.loading-desc { font-size: 12.5px; color: var(--theme-text-secondary); text-align: center; max-width: 320px; line-height: 1.5; }
+
+/* ═══════════════════════════════════════════════════════════
+   BOTTOM NAV
+   ═══════════════════════════════════════════════════════════ */
+.bottom-nav {
+  position: fixed;
+  bottom: calc(8px + var(--safe-bottom));
+  left: 50%; transform: translateX(-50%);
+  width: calc(100% - 24px); max-width: 400px;
+  background: var(--theme-surface-card-solid);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 18px; padding: 6px;
+  display: flex; justify-content: space-around; align-items: center;
+  z-index: 100;
+}
+@media (min-width: 1024px) { .bottom-nav { display: none; } }
+
+.nav-btn {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  color: var(--theme-text-tertiary);
+  text-decoration: none;
+  transition: all 0.2s var(--ease);
+  font-size: 10px; font-weight: 700;
+}
+.nav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2.1; }
+.nav-btn.active { color: var(--theme-primary); background: var(--theme-primary-soft); }
+.nav-btn:active { transform: scale(0.94); }
+
+/* ═══════════════════════════════════════════════════════════
+   MISC
+   ═══════════════════════════════════════════════════════════ */
+.inline-link {
+  font-size: 11px; color: var(--theme-primary);
+  font-weight: 700; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ═══════════ RAIL ═══════════ -->
+  <aside class="rail" aria-label="Main navigation">
+    <div class="rail-top">
+      <a class="rail-logo" href="/" aria-label="Folio">
+        <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
+      </a>
+      <a class="rail-btn" href="/" data-rail="editor" aria-label="Editor">
+        <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </a>
+      <a class="rail-btn" href="/projects" data-rail="projects" aria-label="Projects">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </a>
+      <a class="rail-btn" href="/analytics" data-rail="analytics" aria-label="Analytics">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+      </a>
+      <a class="rail-btn" href="/settings" data-rail="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </a>
+    </div>
+    <div class="rail-bottom">
+      <div class="rail-divider"></div>
+      <a class="rail-btn active" href="/profile" data-rail="profile" aria-label="Profile">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </a>
+    </div>
+  </aside>
+
+  <!-- ═══════════ MAIN ═══════════ -->
+  <main class="main">
+    <div class="main-inner" id="mainInner">
+      <div id="bootLoader" style="display:flex;flex-direction:column;gap:14px;padding-top:20px;">
+        <div class="skeleton" style="height:140px;border-radius:18px;"></div>
+        <div class="skeleton" style="height:40px;border-radius:10px;"></div>
+        <div class="skeleton" style="height:200px;border-radius:18px;"></div>
+      </div>
+      <div id="content" class="hidden"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════ BOTTOM NAV ═══════════ -->
+<nav class="bottom-nav" aria-label="Main navigation" id="bottomNav">
+  <a class="nav-btn" href="/">
+    <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    <span>Editor</span>
+  </a>
+  <a class="nav-btn" href="/projects">
+    <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    <span>Projects</span>
+  </a>
+  <a class="nav-btn active" href="/profile">
+    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    <span>Profile</span>
+  </a>
+  <a class="nav-btn" href="/settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <span>Settings</span>
+  </a>
+</nav>
+
+<!-- ═══════════ MODAL ═══════════ -->
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
+  <div class="modal" id="modalContent">
+    <div class="modal-handle"></div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ═══════════ AVATAR STUDIO (fullscreen) ═══════════ -->
+<div class="fullscreen-overlay" id="avatarStudio" role="dialog" aria-modal="true">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <div style="flex:1;min-width:0;">
+        <div class="overlay-title">Avatar Studio</div>
+        <div class="overlay-sub" id="studioSubtitle">Craft your avatar</div>
+      </div>
+      <button class="overlay-close" id="studioClose" aria-label="Close">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="overlay-body" id="studioBody"></div>
+    <div class="overlay-footer">
+      <button class="btn btn-secondary" id="studioDownload">Download</button>
+      <button class="btn btn-primary" id="studioSave">Save as avatar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ LOADING ═══════════ -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-title" id="loadingTitle">Loading…</div>
+  <div class="loading-desc" id="loadingDesc"></div>
+</div>
+
+<!-- ═══════════ TOAST ═══════════ -->
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════════════════════
+
+  const API_BASE = 'https://foliostudios.vercel.app/api';
+  const API_AUTH = API_BASE + '/auth';
+  const API_HOST = API_BASE + '/host';
+  const API_FLIER = API_BASE + '/flier';
+  const API_NOTIFY = API_BASE + '/notify';
+  const API_ANALYTICS = API_BASE + '/analytics';
+
+  const STORAGE = {
+    session: 'folio.session',
+    user: 'folio.user',
+    theme: 'folio.theme',
+    lastTab: 'folio.profile.lastTab',
+    avatarPrefs: 'folio.profile.avatarPrefs',
+  };
+
+  const TABS = [
+    { id: 'profile', label: 'Profile' },
+    { id: 'projects', label: 'Projects', countKey: 'projects' },
+    { id: 'notifications', label: 'Notifications', countKey: 'notifications' },
+    { id: 'activity', label: 'Activity' },
+  ];
+
+  const TEMPLATES = [
+    { id: 'hero-short', label: 'Hero' },
+    { id: 'poster-centered', label: 'Poster' },
+    { id: 'quote-card', label: 'Quote' },
+    { id: 'image-badge-overlay', label: 'Badge' },
+    { id: 'stat-hero', label: 'Stat' },
+    { id: 'newspaper-classic', label: 'Newspaper' },
+    { id: 'random-lines-top', label: 'Lines' },
+    { id: 'event-poster', label: 'Event' },
+    { id: 'feature-image-top', label: 'Feature' },
+    { id: 'split-image-side', label: 'Split' },
+    { id: 'strip-bottom', label: 'Strip' },
+    { id: 'product-grid-2', label: 'Grid' },
+    { id: 'image-shadow-bottom', label: 'Shadow' },
+    { id: 'image-blur-text', label: 'Blur' },
+    { id: 'image-card-side-text', label: 'Card' },
+    { id: 'poster-centered', label: 'Classic' },
+  ];
+
+  // ═══════════════════════════════════════════════════════════
+  // SVG
+  // ═══════════════════════════════════════════════════════════
+
+  const SVG = {
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    alertTriangle: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+    search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+    external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+    user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+    logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    mail: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+    github: '<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>',
+    twitter: '<path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/>',
+    globe: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+    key: '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    chevronRight: '<polyline points="9 18 15 12 9 6"/>',
+    chevronDown: '<polyline points="6 9 12 15 18 9"/>',
+    trash2: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+    home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    palette: '<circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
+    type: '<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>',
+    grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+  };
+
+  const svg = (name, size = 16, sw = 2.2) =>
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${SVG[name] || ''}</svg>`;
+
+  // ═══════════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════════
+
+  const S = {
+    session: null,
+    user: null,
+    uid: null,
+    profile: null,
+    settings: null,
+    projects: [],
+    profileAnalytics: null,
+    notifications: [],
+    notificationStats: null,
+    notificationFilter: 'all',
+    logs: [],
+    logsHasMore: false,
+    logsOffset: 0,
+    logsFilter: 'all',
+    activeTab: 'profile',
+    // Studio
+    studioOpen: false,
+    studioTemplate: 'hero-short',
+    studioSize: '1080x1080',
+    studioContentType: 'initials',
+    studioContentText: '',
+    studioContentImageUrl: '',
+    studioContentEmoji: '🚀',
+    studioStyle: {
+      variant: 'dark',
+      pattern: 'none',
+      align: 'center',
+      headlineCase: 'upper',
+      radius: 24,
+      primaryColor: '#F59E0B',
+      accentColor: '#f97316',
+      bgType: 'gradient',
+      bgFrom: '#F59E0B',
+      bgTo: '#f97316',
+      bgAngle: 135,
+      watermark: false,
+    },
+    studioPreviewUrl: null,
+    studioLoading: false,
+    studioTab: 'templates',
+  };
+
+  const $ = id => document.getElementById(id);
+  const escapeHTML = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escapeAttr = s => String(s ?? '').replace(/"/g, '&quot;');
+
+  // ═══════════════════════════════════════════════════════════
+  // UTILS
+  // ═══════════════════════════════════════════════════════════
+
+  function timeAgo(ts) {
+    if (!ts) return '—';
+    const diff = Date.now() - ts;
+    if (diff < 60000) return 'just now';
+    const m = Math.floor(diff / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `${d}d ago`;
+    if (d < 365) return `${Math.floor(d / 30)}mo ago`;
+    return `${Math.floor(d / 365)}y ago`;
+  }
+
+  function formatDate(ts) {
+    if (!ts) return '—';
+    return new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function getInitials(name) {
+    const s = String(name || '').trim();
+    if (!s) return '?';
+    const parts = s.split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  function getAvatarColor(seed) {
+    const colors = [
+      'linear-gradient(135deg, #F59E0B, #f97316)',
+      'linear-gradient(135deg, #0284c7, #0369a1)',
+      'linear-gradient(135deg, #a855f7, #6d28d9)',
+      'linear-gradient(135deg, #10B981, #059669)',
+      'linear-gradient(135deg, #ec4899, #be185d)',
+      'linear-gradient(135deg, #06b6d4, #0891b2)',
+    ];
+    let hash = 0;
+    const s = String(seed || '');
+    for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+  }
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  function relativeTimeShort(ts) {
+    if (!ts) return '—';
+    return timeAgo(ts);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TOAST
+  // ═══════════════════════════════════════════════════════════
+
+  function toast(msg, type = 'info', duration = 2800) {
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    const icon = type === 'success' ? 'check' : type === 'error' ? 'alert' : type === 'warning' ? 'alertTriangle' : 'info';
+    el.innerHTML = svg(icon, 15, 2.4) + '<span></span>';
+    el.querySelector('span').textContent = msg;
+    $('toastContainer').appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOADING / MODAL
+  // ═══════════════════════════════════════════════════════════
+
+  function showLoading(title, desc) {
+    $('loadingTitle').textContent = title || 'Loading…';
+    $('loadingDesc').textContent = desc || '';
+    $('loadingOverlay').classList.add('active');
+  }
+
+  function hideLoading() { $('loadingOverlay').classList.remove('active'); }
+
+  function openModal(html) {
+    $('modalBody').innerHTML = html;
+    $('modalOverlay').classList.add('active');
+  }
+
+  function closeModal() {
+    $('modalOverlay').classList.remove('active');
+    setTimeout(() => { $('modalBody').innerHTML = ''; }, 250);
+  }
+
+  function confirmModal(title, desc, confirmLabel, danger, onConfirm) {
+    openModal(`
+      <div class="modal-title">${escapeHTML(title)}</div>
+      <div class="modal-desc">${escapeHTML(desc)}</div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="modalConfirmBtn">${escapeHTML(confirmLabel)}</button>
+      </div>
+    `);
+    $('modalConfirmBtn').addEventListener('click', () => { closeModal(); onConfirm(); });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SESSION / API
+  // ═══════════════════════════════════════════════════════════
+
+  function readSession() {
+    try { S.session = localStorage.getItem(STORAGE.session); } catch {}
+    try {
+      const raw = localStorage.getItem(STORAGE.user);
+      S.user = raw ? JSON.parse(raw) : null;
+    } catch {}
+    if (S.user) S.uid = S.user.uid || null;
+  }
+
+  async function apiFetch(url, opts = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (S.session) headers['Authorization'] = `Bearer ${S.session}`;
+    try {
+      const res = await fetch(url, { ...opts, headers });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      return { ok: res.ok, status: res.status, data };
+    } catch (err) {
+      return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ROUTING
+  // ═══════════════════════════════════════════════════════════
+
+  function getHashTab() {
+    const h = location.hash.replace(/^#\/?/, '');
+    return TABS.some(t => t.id === h) ? h : null;
+  }
+
+  function setHashTab(id) {
+    const newHash = `#/${id}`;
+    if (location.hash !== newHash) history.replaceState(null, '', newHash);
+  }
+
+  function switchTab(id) {
+    if (!TABS.some(t => t.id === id)) return;
+    S.activeTab = id;
+    setHashTab(id);
+    try { localStorage.setItem(STORAGE.lastTab, id); } catch {}
+    renderTabs();
+    renderPanel();
+    if (id === 'notifications') loadNotifications();
+    if (id === 'activity') loadActivity();
+    if (id === 'projects') loadProjects();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BOOT
+  // ═══════════════════════════════════════════════════════════
+
+  async function boot() {
+    readSession();
+
+    if (!S.session) {
+      renderGuest();
+      return;
+    }
+
+    const me = await apiFetch(API_AUTH + '?action=me');
+    if (!me.ok || !me.data?.success) {
+      if (me.status === 401) {
+        try { localStorage.removeItem(STORAGE.session); } catch {}
+        renderGuest();
+        return;
+      }
+      renderError();
+      return;
+    }
+
+    S.user = me.data.user;
+    S.uid = S.user.uid;
+    S.profile = S.user.profile || {};
+    S.settings = S.user.settings || {};
+
+    // Persist to localStorage
+    try {
+      localStorage.setItem(STORAGE.user, JSON.stringify({
+        uid: S.uid,
+        username: S.profile.username,
+        profile: S.profile,
+        email: S.user.email,
+      }));
+    } catch {}
+
+    // Initial tab
+    const hashTab = getHashTab();
+    if (hashTab) S.activeTab = hashTab;
+    else {
+      try {
+        const last = localStorage.getItem(STORAGE.lastTab);
+        if (TABS.some(t => t.id === last)) S.activeTab = last;
+      } catch {}
+    }
+
+    $('bootLoader').classList.add('hidden');
+    $('content').classList.remove('hidden');
+    renderProfilePage();
+
+    // Load data in background
+    loadProjects();
+    loadNotifications();
+
+    window.addEventListener('hashchange', () => {
+      const t = getHashTab();
+      if (t && t !== S.activeTab) switchTab(t);
+    });
+  }
+
+  function renderGuest() {
+    $('bootLoader').classList.add('hidden');
+    $('content').classList.remove('hidden');
+    $('content').innerHTML = `
+      <div class="card" style="max-width:480px;margin:40px auto;">
+        <div class="card-body">
+          <div class="empty-state">
+            <div class="empty-state-icon">${svg('user', 22, 2)}</div>
+            <div class="empty-state-title">Sign in to view your profile</div>
+            <div class="empty-state-desc">You need an account to access this page.</div>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <a class="btn btn-primary" href="/register?next=${encodeURIComponent(location.pathname)}">Sign in</a>
+              <a class="btn btn-secondary" href="/">Back to editor</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderError() {
+    $('bootLoader').classList.add('hidden');
+    $('content').classList.remove('hidden');
+    $('content').innerHTML = `
+      <div class="card" style="max-width:480px;margin:40px auto;">
+        <div class="card-body">
+          <div class="empty-state">
+            <div class="empty-state-icon" style="color:var(--theme-danger);background:var(--theme-danger-soft);">${svg('alert', 22, 2)}</div>
+            <div class="empty-state-title">Couldn't load profile</div>
+            <div class="empty-state-desc">Check your connection and try again.</div>
+            <button class="btn btn-primary" style="margin-top:8px;" onclick="location.reload()">${svg('refresh', 14, 2.2)} Retry</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER PAGE
+  // ═══════════════════════════════════════════════════════════
+
+  function renderProfilePage() {
+    const content = $('content');
+    content.innerHTML = `
+      <div id="profileHeaderMount"></div>
+      <nav class="tabs-bar" id="tabsBar" role="tablist"></nav>
+      <div id="panelMount"></div>
+    `;
+    renderProfileHeader();
+    renderTabs();
+    renderPanel();
+  }
+
+  function renderProfileHeader() {
+    const p = S.profile || {};
+    const avatarUrl = p.avatarUrl;
+    const initials = getInitials(p.displayName || p.username || 'You');
+    const avatarBg = avatarUrl ? '' : `background:${getAvatarColor(p.username || 'you')};`;
+
+    const links = p.links || {};
+    const linkItems = [];
+    if (links.github) linkItems.push({ key: 'github', url: links.github });
+    if (links.twitter) linkItems.push({ key: 'twitter', url: links.twitter });
+    if (links.website) linkItems.push({ key: 'website', url: links.website });
+    Object.entries(links).forEach(([k, v]) => {
+      if (!['github', 'twitter', 'website'].includes(k)) {
+        linkItems.push({ key: k, url: v });
+      }
+    });
+
+    const linksHTML = linkItems.length > 0
+      ? `<div class="profile-links">
+          ${linkItems.map(l => `
+            <a class="profile-link" href="${escapeAttr(l.url)}" target="_blank" rel="noopener noreferrer">
+              ${svg(l.key === 'github' ? 'github' : l.key === 'twitter' ? 'twitter' : 'link', 11, 2.2)}
+              <span>${escapeHTML(l.key)}</span>
+            </a>
+          `).join('')}
+        </div>`
+      : '';
+
+    const mount = $('profileHeaderMount');
+    if (!mount) return;
+    mount.innerHTML = `
+      <div class="profile-header">
+        <div class="profile-header-inner">
+          <div class="profile-avatar" id="profileAvatarBtn" style="${avatarBg}" role="button" tabindex="0" aria-label="Change avatar">
+            ${avatarUrl ? `<img src="${escapeAttr(avatarUrl)}" alt="">` : `<span>${escapeHTML(initials)}</span>`}
+            <div class="profile-avatar-overlay">${svg('edit', 22, 2.2)}</div>
+          </div>
+          <div class="profile-info">
+            <div class="profile-name">${escapeHTML(p.displayName || p.username || 'You')}</div>
+            <div class="profile-handle">@${escapeHTML(p.username || 'you')}</div>
+            <div class="profile-bio ${!p.bio ? 'empty' : ''}">${escapeHTML(p.bio || 'No bio yet — add one to tell people about yourself.')}</div>
+            <div class="profile-meta">
+              <span>${svg('clock', 12, 2)}Joined ${formatDate(S.user.createdAt)}</span>
+              ${S.user.lastLoginAt ? `<span>${svg('eye', 12, 2)}Last active ${relativeTimeShort(S.user.lastLoginAt)}</span>` : ''}
+            </div>
+            ${linksHTML}
+            <div class="profile-actions">
+              <button class="btn btn-primary btn-sm" id="editProfileBtn">${svg('edit', 12, 2.2)} Edit profile</button>
+              <button class="btn btn-secondary btn-sm" id="copyProfileLinkBtn">${svg('copy', 12, 2.2)} Copy link</button>
+              <a class="btn btn-ghost btn-sm" href="/${encodeURIComponent(p.username || '')}" target="_blank" rel="noopener">${svg('external', 12, 2.2)} Preview</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    $('profileAvatarBtn').addEventListener('click', openAvatarStudio);
+    $('profileAvatarBtn').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAvatarStudio(); }
+    });
+    $('editProfileBtn').addEventListener('click', openEditProfileModal);
+    $('copyProfileLinkBtn').addEventListener('click', copyProfileLink);
+  }
+
+  function copyProfileLink() {
+    const url = `${location.origin}/${S.profile.username || ''}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast(`Copied: ${url}`, 'success', 1800);
+    }).catch(() => {
+      // Fallback
+      openModal(`
+        <div class="modal-title">Copy profile link</div>
+        <div class="modal-desc">Select and copy this URL manually.</div>
+        <input class="input" value="${escapeAttr(url)}" readonly onclick="this.select()" style="font-family:var(--font-mono);font-size:12px;">
+        <div class="modal-actions">
+          <button class="btn btn-secondary" data-modal-close>Done</button>
+        </div>
+      `);
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TABS
+  // ═══════════════════════════════════════════════════════════
+
+  function renderTabs() {
+    const el = $('tabsBar');
+    if (!el) return;
+    el.innerHTML = TABS.map(t => {
+      let count = '';
+      if (t.countKey === 'projects') count = `<span class="tab-count">${S.projects.length}</span>`;
+      if (t.countKey === 'notifications') {
+        const unread = S.notificationStats?.unread || 0;
+        count = unread > 0 ? `<span class="tab-count">${unread}</span>` : '';
+      }
+      return `
+        <button class="tab ${t.id === S.activeTab ? 'active' : ''}" data-tab="${escapeAttr(t.id)}" type="button">
+          <span>${escapeHTML(t.label)}</span>
+          ${count}
+        </button>
+      `;
+    }).join('');
+    el.querySelectorAll('[data-tab]').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+  }
+
+  function renderPanel() {
+    const mount = $('panelMount');
+    if (!mount) return;
+    mount.innerHTML = `<div class="panel active" id="panel-${S.activeTab}"></div>`;
+    const panel = $('panel-' + S.activeTab);
+    const renderers = {
+      profile: renderProfileTab,
+      projects: renderProjectsTab,
+      notifications: renderNotificationsTab,
+      activity: renderActivityTab,
+    };
+    if (renderers[S.activeTab]) renderers[S.activeTab](panel);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TAB: PROFILE
+  // ═══════════════════════════════════════════════════════════
+
+  function renderProfileTab(panel) {
+    const p = S.profile || {};
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('user', 15, 2.2)} About</div>
+          <button class="btn btn-sm btn-secondary" id="editBioBtn">${svg('edit', 12, 2.2)} Edit</button>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+          <div class="field">
+            <label class="field-label">Display name</label>
+            <div style="font-size:14px;color:var(--theme-text);">${escapeHTML(p.displayName || p.username || '—')}</div>
+          </div>
+          <div class="field">
+            <label class="field-label">Username</label>
+            <div class="mono" style="font-size:13px;color:var(--theme-primary);">@${escapeHTML(p.username || '—')}</div>
+            <div class="field-hint">Change from <a href="#" class="inline-link" id="changeUsernameLink">Settings</a></div>
+          </div>
+          <div class="field">
+            <label class="field-label">Bio</label>
+            <div style="font-size:13px;color:var(--theme-text-secondary);line-height:1.5;">${escapeHTML(p.bio || '—')}</div>
+          </div>
+          <div class="field">
+            <label class="field-label">Email</label>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:13px;">${escapeHTML(S.user.email || '—')}</span>
+              ${S.user.emailVerified ? `<span style="color:var(--theme-success);display:inline-flex;align-items:center;">${svg('check', 12, 2.6)}</span>` : `<span style="color:var(--theme-warning);font-size:11px;font-weight:700;">Unverified</span>`}
+            </div>
+            <div class="field-hint">Change from <a href="/settings" class="inline-link">Settings</a></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('link', 15, 2.2)} Links</div>
+        </div>
+        <div class="card-body">
+          ${(p.links && Object.keys(p.links).length > 0)
+            ? `<div style="display:flex;flex-direction:column;gap:6px;">
+                ${Object.entries(p.links).map(([k, v]) => `
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--theme-glass-bg);border-radius:8px;font-size:12px;">
+                    <span style="color:var(--theme-text-tertiary);font-weight:700;min-width:60px;">${escapeHTML(k)}</span>
+                    <a href="${escapeAttr(v)}" target="_blank" rel="noopener noreferrer" style="color:var(--theme-primary);font-family:var(--font-mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHTML(v)}</a>
+                  </div>
+                `).join('')}
+              </div>`
+            : `<div style="font-size:13px;color:var(--theme-text-tertiary);">No links added yet.</div>`
+          }
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('share', 15, 2.2)} Share</div>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+          <div>
+            <label class="field-label">Your public profile link</label>
+            <div style="display:flex;gap:6px;margin-top:6px;">
+              <input class="input mono" readonly value="${escapeAttr(location.origin + '/' + (p.username || ''))}" id="profileLinkInput" style="font-size:11px;">
+              <button class="btn btn-secondary btn-icon" id="copyLinkBtn2" aria-label="Copy">${svg('copy', 14, 2.2)}</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a class="btn btn-secondary btn-sm" href="/${encodeURIComponent(p.username || '')}" target="_blank" rel="noopener">
+              ${svg('external', 12, 2.2)} Preview
+            </a>
+            <button class="btn btn-secondary btn-sm" id="shareBtn">
+              ${svg('share', 12, 2.2)} Share
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="border-color:rgba(239,68,68,0.25);">
+        <div class="card-header" style="border-bottom-color:rgba(239,68,68,0.15);">
+          <div class="card-title" style="color:var(--theme-danger);">${svg('logout', 15, 2.2)} Sign out</div>
+        </div>
+        <div class="card-body">
+          <div style="font-size:12.5px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:12px;">
+            You'll need to sign in again to access your projects. Your local projects stay on this device.
+          </div>
+          <button class="btn btn-outline-danger btn-block" id="signOutBtn">Sign out</button>
+        </div>
+      </div>
+    `;
+
+    $('editBioBtn')?.addEventListener('click', openEditProfileModal);
+    $('copyLinkBtn2')?.addEventListener('click', copyProfileLink);
+    $('shareBtn')?.addEventListener('click', async () => {
+      const url = `${location.origin}/${S.profile.username || ''}`;
+      if (navigator.share) {
+        try { await navigator.share({ title: S.profile.displayName || S.profile.username, url }); } catch {}
+      } else {
+        copyProfileLink();
+      }
+    });
+    $('signOutBtn')?.addEventListener('click', confirmSignOut);
+    $('changeUsernameLink')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      toast('Change username in Settings', 'info', 1600);
+      setTimeout(() => location.href = '/settings', 800);
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // EDIT PROFILE MODAL
+  // ═══════════════════════════════════════════════════════════
+
+  function openEditProfileModal() {
+    const p = S.profile || {};
+    const links = p.links || {};
+
+    const linkKeys = ['github', 'twitter', 'website'];
+    const extraKeys = Object.keys(links).filter(k => !linkKeys.includes(k));
+    const allLinks = [
+      ...linkKeys.map(k => ({ key: k, url: links[k] || '' })),
+      ...extraKeys.map(k => ({ key: k, url: links[k] || '' })),
+    ];
+
+    openModal(`
+      <div class="modal-title">Edit profile</div>
+      <div class="modal-desc">Update your public profile information.</div>
+
+      <div class="field">
+        <label class="field-label">Display name</label>
+        <input class="input" id="editDisplayName" value="${escapeAttr(p.displayName || '')}" maxlength="60" placeholder="Your name">
+      </div>
+
+      <div class="field">
+        <label class="field-label">Bio</label>
+        <textarea class="textarea" id="editBio" maxlength="500" placeholder="Tell people about yourself…">${escapeHTML(p.bio || '')}</textarea>
+        <div class="field-hint" id="bioCounter">${(p.bio || '').length} / 500</div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Links</label>
+        <div id="linksContainer" style="display:flex;flex-direction:column;gap:6px;"></div>
+        <button class="btn btn-secondary btn-sm" id="addLinkBtn" style="margin-top:6px;">${svg('plus', 12, 2.4)} Add link</button>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn btn-primary" id="saveProfileBtn">${svg('check', 14, 2.4)} Save</button>
+      </div>
+    `);
+
+    // Render links
+    const linksContainer = $('linksContainer');
+    function renderLinkRow(key, url) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+      row.innerHTML = `
+        <input class="input" style="flex:0 0 90px;font-size:12px;" placeholder="label" value="${escapeAttr(key)}" maxlength="40" data-role="link-key">
+        <input class="input" style="flex:1;font-size:12px;" placeholder="https://…" value="${escapeAttr(url)}" maxlength="500" data-role="link-url">
+        <button class="btn btn-ghost btn-icon" data-role="remove-link" aria-label="Remove">${svg('trash', 12, 2.2)}</button>
+      `;
+      row.querySelector('[data-role="remove-link"]').addEventListener('click', () => row.remove());
+      linksContainer.appendChild(row);
+    }
+
+    // Seed 3 predefined links
+    linkKeys.forEach(k => renderLinkRow(k, links[k] || ''));
+    // Any extra keys
+    extraKeys.forEach(k => renderLinkRow(k, links[k] || ''));
+
+    $('addLinkBtn').addEventListener('click', () => renderLinkRow('', ''));
+
+    // Bio counter
+    $('editBio').addEventListener('input', (e) => {
+      $('bioCounter').textContent = `${e.target.value.length} / 500`;
+    });
+
+    $('saveProfileBtn').addEventListener('click', async () => {
+      const displayName = $('editDisplayName').value.trim();
+      const bio = $('editBio').value.trim();
+      if (displayName.length < 1 || displayName.length > 60) {
+        toast('Display name must be 1–60 chars', 'error'); return;
+      }
+      if (bio.length > 500) { toast('Bio must be ≤500 chars', 'error'); return; }
+
+      // Collect links
+      const newLinks = {};
+      const rows = linksContainer.querySelectorAll('div');
+      for (const row of rows) {
+        const keyEl = row.querySelector('[data-role="link-key"]');
+        const urlEl = row.querySelector('[data-role="link-url"]');
+        if (!keyEl || !urlEl) continue;
+        const k = keyEl.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        const v = urlEl.value.trim();
+        if (!k || !v) continue;
+        if (!v.startsWith('https://')) {
+          toast(`Link "${k}" must start with https://`, 'error'); return;
+        }
+        if (k.length > 40 || v.length > 500) {
+          toast(`Link "${k}" too long`, 'error'); return;
+        }
+        newLinks[k] = v;
+      }
+
+      const btn = $('saveProfileBtn');
+      btn.disabled = true;
+      try {
+        const res = await apiFetch(API_AUTH + '?action=profile/update', {
+          method: 'POST',
+          body: JSON.stringify({ displayName, bio, links: newLinks }),
+        });
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Update failed');
+        S.profile = { ...S.profile, displayName, bio, links: newLinks };
+        closeModal();
+        toast('Profile updated', 'success');
+        renderProfileHeader();
+        renderPanel();
+      } catch (err) {
+        toast(err.message || 'Update failed', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // AVATAR STUDIO
+  // ═══════════════════════════════════════════════════════════
+
+  function loadAvatarPrefs() {
+    try {
+      const raw = localStorage.getItem(STORAGE.avatarPrefs);
+      if (raw) {
+        const prefs = JSON.parse(raw);
+        if (prefs.template) S.studioTemplate = prefs.template;
+        if (prefs.size) S.studioSize = prefs.size;
+        if (prefs.style) S.studioStyle = { ...S.studioStyle, ...prefs.style };
+        if (prefs.contentType) S.studioContentType = prefs.contentType;
+      }
+    } catch {}
+  }
+
+  function saveAvatarPrefs() {
+    try {
+      localStorage.setItem(STORAGE.avatarPrefs, JSON.stringify({
+        template: S.studioTemplate,
+        size: S.studioSize,
+        style: S.studioStyle,
+        contentType: S.studioContentType,
+      }));
+    } catch {}
+  }
+
+  function openAvatarStudio() {
+    loadAvatarPrefs();
+    S.studioOpen = true;
+    S.studioTab = 'templates';
+    S.studioContentText = getInitials(S.profile.displayName || S.profile.username || '');
+    $('avatarStudio').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    renderStudio();
+    refreshStudioPreview();
+  }
+
+  function closeAvatarStudio() {
+    S.studioOpen = false;
+    $('avatarStudio').classList.remove('active');
+    document.body.style.overflow = '';
+  }
+
+  function renderStudio() {
+    const body = $('studioBody');
+    if (!body) return;
+
+    const tabs = [
+      { id: 'templates', label: 'Templates' },
+      { id: 'customize', label: 'Customize' },
+      { id: 'content', label: 'Content' },
+    ];
+
+    body.innerHTML = `
+      <div class="studio-preview">
+        ${S.studioPreviewUrl ? `<img src="${escapeAttr(S.studioPreviewUrl)}" alt="Preview">` : `<div style="color:var(--theme-text-tertiary);font-size:12px;">Rendering…</div>`}
+        <div class="studio-preview-loading ${S.studioLoading ? 'visible' : ''}">
+          <div class="loading-spinner"></div>
+        </div>
+      </div>
+
+      <div class="studio-tabs">
+        ${tabs.map(t => `<button class="studio-tab ${t.id === S.studioTab ? 'active' : ''}" data-studio-tab="${escapeAttr(t.id)}" type="button">${escapeHTML(t.label)}</button>`).join('')}
+      </div>
+
+      <div class="studio-panel ${S.studioTab === 'templates' ? 'active' : ''}" data-panel="templates">
+        <div class="templates-grid">
+          ${TEMPLATES.map(t => `
+            <button class="template-tile ${S.studioTemplate === t.id ? 'selected' : ''}" data-template="${escapeAttr(t.id)}" type="button">
+              <div class="template-tile-icon">${svg('image', 22, 1.8)}</div>
+              <div class="template-tile-label">${escapeHTML(t.label)}</div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="studio-panel ${S.studioTab === 'customize' ? 'active' : ''}" data-panel="customize">
+        <div class="studio-row">
+          <div class="studio-row-label">Variant</div>
+          <div class="studio-row-inputs">
+            <div class="pill-group">
+              ${['dark', 'light', 'auto'].map(v => `<button class="pill ${S.studioStyle.variant === v ? 'active' : ''}" data-variant="${v}" type="button">${v}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="studio-row">
+          <div class="studio-row-label">Pattern</div>
+          <div class="studio-row-inputs">
+            <div class="pill-group">
+              ${['none', 'dots', 'grid', 'diagonal', 'noise'].map(v => `<button class="pill ${S.studioStyle.pattern === v ? 'active' : ''}" data-pattern="${v}" type="button">${v}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="studio-row">
+          <div class="studio-row-label">Align</div>
+          <div class="studio-row-inputs">
+            <div class="pill-group">
+              ${['left', 'center', 'right'].map(v => `<button class="pill ${S.studioStyle.align === v ? 'active' : ''}" data-align="${v}" type="button">${v}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="studio-row">
+          <div class="studio-row-label">Case</div>
+          <div class="studio-row-inputs">
+            <div class="pill-group">
+              ${['auto', 'upper', 'title', 'sentence'].map(v => `<button class="pill ${S.studioStyle.headlineCase === v ? 'active' : ''}" data-case="${v}" type="button">${v}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="studio-row">
+          <div class="studio-row-label">Radius</div>
+          <div class="studio-row-inputs">
+            <input type="range" class="range-input" min="0" max="80" value="${S.studioStyle.radius}" data-style-range="radius">
+            <span class="mono" style="font-size:11px;color:var(--theme-text-tertiary);min-width:28px;" id="radiusVal">${S.studioStyle.radius}</span>
+          </div>
+        </div>
+        <div class="studio-row">
+          <div class="studio-row-label">Colors</div>
+          <div class="studio-row-inputs">
+            <input type="color" class="color-input" value="${escapeAttr(S.studioStyle.primaryColor)}" data-color="primaryColor" title="Primary">
+            <input type="color" class="color-input" value="${escapeAttr(S.studioStyle.accentColor)}" data-color="accentColor" title="Accent">
+          </div>
+        </div>
+        <div class="studio-row">
+          <div class="studio-row-label">Background</div>
+          <div class="studio-row-inputs">
+            <div class="pill-group">
+              ${['solid', 'gradient'].map(v => `<button class="pill ${S.studioStyle.bgType === v ? 'active' : ''}" data-bg-type="${v}" type="button">${v}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+        ${S.studioStyle.bgType === 'gradient' ? `
+          <div class="studio-row">
+            <div class="studio-row-label">Gradient</div>
+            <div class="studio-row-inputs">
+              <input type="color" class="color-input" value="${escapeAttr(S.studioStyle.bgFrom)}" data-bg="from" title="From">
+              <input type="color" class="color-input" value="${escapeAttr(S.studioStyle.bgTo)}" data-bg="to" title="To">
+              <input type="range" class="range-input" min="0" max="360" value="${S.studioStyle.bgAngle}" data-style-range="bgAngle" style="flex:1;">
+            </div>
+          </div>
+        ` : ''}
+        <div class="studio-row">
+          <div class="studio-row-label">Watermark</div>
+          <div class="studio-row-inputs">
+            <button class="pill ${S.studioStyle.watermark ? 'active' : ''}" data-toggle="watermark" type="button">${S.studioStyle.watermark ? 'On' : 'Off'}</button>
+          </div>
+        </div>
+        <div class="studio-row">
+          <div class="studio-row-label">Size</div>
+          <div class="studio-row-inputs">
+            <div class="pill-group">
+              ${['1080x1080', '1200x1200', '1600x900'].map(s => `<button class="pill ${S.studioSize === s ? 'active' : ''}" data-size="${s}" type="button">${s.split('x')[0]}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="studio-panel ${S.studioTab === 'content' ? 'active' : ''}" data-panel="content">
+        <div class="studio-row">
+          <div class="studio-row-label">Type</div>
+          <div class="studio-row-inputs">
+            <div class="pill-group">
+              ${['initials', 'text', 'image', 'emoji'].map(t => `<button class="pill ${S.studioContentType === t ? 'active' : ''}" data-content-type="${t}" type="button">${t}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+        ${S.studioContentType === 'initials' ? `
+          <div class="studio-row">
+            <div class="studio-row-label">Initials</div>
+            <div class="studio-row-inputs">
+              <input class="input" maxlength="4" value="${escapeAttr(S.studioContentText || getInitials(S.profile.displayName || S.profile.username || ''))}" data-content-text style="flex:1;font-size:14px;text-align:center;font-weight:800;">
+            </div>
+          </div>
+        ` : ''}
+        ${S.studioContentType === 'text' ? `
+          <div class="studio-row">
+            <div class="studio-row-label">Text</div>
+            <div class="studio-row-inputs">
+              <input class="input" maxlength="40" value="${escapeAttr(S.studioContentText || '')}" data-content-text placeholder="Your custom text" style="flex:1;">
+            </div>
+          </div>
+        ` : ''}
+        ${S.studioContentType === 'image' ? `
+          <div class="studio-row">
+            <div class="studio-row-label">Image URL</div>
+            <div class="studio-row-inputs">
+              <input class="input" type="url" placeholder="https://…" value="${escapeAttr(S.studioContentImageUrl)}" data-content-image style="flex:1;">
+            </div>
+          </div>
+        ` : ''}
+        ${S.studioContentType === 'emoji' ? `
+          <div class="studio-row">
+            <div class="studio-row-label">Emoji</div>
+            <div class="studio-row-inputs">
+              <input class="input" maxlength="4" value="${escapeAttr(S.studioContentEmoji)}" data-content-emoji style="flex:0 0 80px;text-align:center;font-size:20px;">
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+
+    // Wire tabs
+    body.querySelectorAll('[data-studio-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.studioTab = btn.dataset.studioTab;
+        renderStudio();
+      });
+    });
+
+    // Wire template selection
+    body.querySelectorAll('[data-template]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.studioTemplate = btn.dataset.template;
+        renderStudio();
+        refreshStudioPreview();
+      });
+    });
+
+    // Wire style toggles
+    const refresh = () => { saveAvatarPrefs(); refreshStudioPreview(); };
+
+    body.querySelectorAll('[data-variant]').forEach(btn => btn.addEventListener('click', () => { S.studioStyle.variant = btn.dataset.variant; renderStudio(); refresh(); }));
+    body.querySelectorAll('[data-pattern]').forEach(btn => btn.addEventListener('click', () => { S.studioStyle.pattern = btn.dataset.pattern; renderStudio(); refresh(); }));
+    body.querySelectorAll('[data-align]').forEach(btn => btn.addEventListener('click', () => { S.studioStyle.align = btn.dataset.align; renderStudio(); refresh(); }));
+    body.querySelectorAll('[data-case]').forEach(btn => btn.addEventListener('click', () => { S.studioStyle.headlineCase = btn.dataset.case; renderStudio(); refresh(); }));
+    body.querySelectorAll('[data-bg-type]').forEach(btn => btn.addEventListener('click', () => { S.studioStyle.bgType = btn.dataset.bgType; renderStudio(); refresh(); }));
+    body.querySelectorAll('[data-toggle="watermark"]').forEach(btn => btn.addEventListener('click', () => { S.studioStyle.watermark = !S.studioStyle.watermark; renderStudio(); refresh(); }));
+    body.querySelectorAll('[data-size]').forEach(btn => btn.addEventListener('click', () => { S.studioSize = btn.dataset.size; renderStudio(); refresh(); }));
+
+    body.querySelectorAll('[data-color]').forEach(inp => inp.addEventListener('input', () => {
+      S.studioStyle[inp.dataset.color] = inp.value;
+      refresh();
+    }));
+    body.querySelectorAll('[data-bg]').forEach(inp => inp.addEventListener('input', () => {
+      S.studioStyle[inp.dataset.bg === 'from' ? 'bgFrom' : 'bgTo'] = inp.value;
+      refresh();
+    }));
+    body.querySelectorAll('[data-style-range]').forEach(inp => inp.addEventListener('input', () => {
+      S.studioStyle[inp.dataset.styleRange] = parseInt(inp.value, 10);
+      if (inp.dataset.styleRange === 'radius') {
+        const el = $('radiusVal');
+        if (el) el.textContent = inp.value;
+      }
+      refresh();
+    }));
+
+    // Content type
+    body.querySelectorAll('[data-content-type]').forEach(btn => {
+      btn.addEventListener('click', () => { S.studioContentType = btn.dataset.contentType; renderStudio(); refresh(); });
+    });
+    body.querySelectorAll('[data-content-text]').forEach(inp => inp.addEventListener('input', debounce(() => {
+      S.studioContentText = inp.value; refresh();
+    }, 400)));
+    body.querySelectorAll('[data-content-image]').forEach(inp => inp.addEventListener('input', debounce(() => {
+      S.studioContentImageUrl = inp.value; refresh();
+    }, 500)));
+    body.querySelectorAll('[data-content-emoji]').forEach(inp => inp.addEventListener('input', debounce(() => {
+      S.studioContentEmoji = inp.value; refresh();
+    }, 400)));
+  }
+
+  function buildStudioBody() {
+    const name = S.profile.displayName || S.profile.username || 'You';
+    const initials = getInitials(name);
+
+    let content = { type: S.studioContentType, text: initials };
+
+    if (S.studioContentType === 'initials') content.text = S.studioContentText || initials;
+    else if (S.studioContentType === 'text') content.text = S.studioContentText || name;
+    else if (S.studioContentType === 'image') content.imageUrl = S.studioContentImageUrl || null;
+    else if (S.studioContentType === 'emoji') content.text = S.studioContentEmoji || '🚀';
+
+    const style = {
+      variant: S.studioStyle.variant,
+      pattern: S.studioStyle.pattern,
+      align: S.studioStyle.align,
+      headlineCase: S.studioStyle.headlineCase,
+      radius: S.studioStyle.radius,
+      colors: {
+        primary: S.studioStyle.primaryColor,
+        accent: S.studioStyle.accentColor,
+      },
+      background: {
+        type: S.studioStyle.bgType,
+        from: S.studioStyle.bgFrom,
+        to: S.studioStyle.bgTo,
+        angle: S.studioStyle.bgAngle,
+      },
+      watermark: S.studioStyle.watermark,
+    };
+
+    const data = {
+      text: {},
+      style,
+      images: {},
+    };
+
+    // Set text based on template expectations
+    const template = S.studioTemplate;
+    if (['stat-hero'].includes(template)) {
+      data.text.metric = content.text || initials;
+      data.text.metricLabel = name;
+    } else if (['quote-card'].includes(template)) {
+      data.text.headline = content.text || name;
+      data.text.subheadline = S.profile.username ? `@${S.profile.username}` : '';
+    } else {
+      data.text.headline = content.text || initials;
+      if (content.type === 'text') {
+        data.text.subheadline = S.profile.username ? `@${S.profile.username}` : '';
+      }
+    }
+
+    // Image
+    if (content.type === 'image' && content.imageUrl) {
+      data.images.primary = { url: content.imageUrl };
+    }
+
+    return {
+      template,
+      size: S.studioSize,
+      mode: 'preview',
+      data,
+    };
+  }
+
+  async function refreshStudioPreview() {
+    if (!S.studioOpen) return;
+    S.studioLoading = true;
+    const loadingEl = document.querySelector('.studio-preview-loading');
+    if (loadingEl) loadingEl.classList.add('visible');
+
+    try {
+      const res = await apiFetch(API_FLIER + '?action=avatar/custom', {
+        method: 'POST',
+        body: JSON.stringify(buildStudioBody()),
+      });
+      if (!res.ok || !res.data?.success) {
+        throw new Error(res.data?.error || 'Render failed');
+      }
+      S.studioPreviewUrl = res.data.preview;
+      const imgWrap = document.querySelector('.studio-preview');
+      if (imgWrap) {
+        const existingImg = imgWrap.querySelector('img');
+        if (existingImg) {
+          existingImg.src = S.studioPreviewUrl;
+        } else {
+          imgWrap.insertAdjacentHTML('afterbegin', `<img src="${escapeAttr(S.studioPreviewUrl)}" alt="Preview">`);
+        }
+      }
+    } catch (err) {
+      console.warn('[Studio preview]', err);
+      if (err.message && err.message.includes('Rate limit')) {
+        toast('Slow down — rate limit reached', 'warning', 2400);
+      }
+    } finally {
+      S.studioLoading = false;
+      if (loadingEl) loadingEl.classList.remove('visible');
+    }
+  }
+
+  async function studioDownload() {
+    const res = await apiFetch(API_FLIER + '?action=avatar/custom', {
+      method: 'POST',
+      body: JSON.stringify(buildStudioBody()),
+    });
+    if (!res.ok || !res.data?.preview) { toast('Download failed', 'error'); return; }
+
+    const base64 = res.data.preview.split(',')[1];
+    const byteChars = atob(base64);
+    const byteNumbers = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'image/png' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `avatar_${S.profile.username || 'you'}_${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Downloaded', 'success', 1400);
+  }
+
+  async function studioSave() {
+    showLoading('Saving avatar', 'Uploading and updating profile…');
+    try {
+      const res = await apiFetch(API_FLIER + '?action=avatar/custom', {
+        method: 'POST',
+        body: JSON.stringify({ ...buildStudioBody(), mode: 'upload', upload: { name: `avatar_${S.uid?.slice(0, 8)}_${Date.now()}` } }),
+      });
+      if (!res.ok || !res.data?.success || !res.data.url) {
+        throw new Error(res.data?.error || 'Upload failed');
+      }
+
+      const updateRes = await apiFetch(API_AUTH + '?action=profile/update', {
+        method: 'POST',
+        body: JSON.stringify({ avatarUrl: res.data.url }),
+      });
+      if (!updateRes.ok || !updateRes.data?.success) throw new Error('Profile update failed');
+
+      S.profile.avatarUrl = res.data.url;
+      try {
+        const u = JSON.parse(localStorage.getItem(STORAGE.user) || '{}');
+        u.profile = u.profile || {};
+        u.profile.avatarUrl = res.data.url;
+        localStorage.setItem(STORAGE.user, JSON.stringify(u));
+      } catch {}
+
+      hideLoading();
+      closeAvatarStudio();
+      renderProfileHeader();
+      renderPanel();
+      toast('Avatar updated', 'success');
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Save failed', 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PROJECTS TAB
+  // ═══════════════════════════════════════════════════════════
+
+  async function loadProjects() {
+    const res = await apiFetch(API_HOST + '?action=projects/list');
+    if (res.ok && res.data?.success) {
+      S.projects = res.data.projects || [];
+      renderTabs();
+      if (S.activeTab === 'projects') renderPanel();
+    }
+  }
+
+  function renderProjectsTab(panel) {
+    if (S.projects.length === 0) {
+      panel.innerHTML = `<div class="card"><div class="card-body">
+        <div class="empty-state">
+          <div class="empty-state-icon">${svg('folder', 22, 2)}</div>
+          <div class="empty-state-title">No projects yet</div>
+          <div class="empty-state-desc">Create your first project to get started.</div>
+          <a class="btn btn-primary" href="/projects" style="margin-top:8px;">${svg('plus', 14, 2.4)} Create project</a>
+        </div>
+      </div></div>`;
+      return;
+    }
+
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('folder', 15, 2.2)} Projects (${S.projects.length})</div>
+          <a class="btn btn-sm btn-ghost" href="/projects">${svg('external', 12, 2.2)} View all</a>
+        </div>
+        <div class="card-body tight" style="padding:0;">
+          <div class="projects-grid">
+            ${S.projects.slice(0, 9).map(p => {
+              const iconHTML = p.iconUrl
+                ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
+                : `<span>${escapeHTML(getInitials(p.name))}</span>`;
+              const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+              return `
+                <div class="project-card" data-pid="${escapeAttr(p.pid)}">
+                  <div class="project-card-icon" style="${iconBg}">${iconHTML}</div>
+                  <div class="project-card-info">
+                    <div class="project-card-name">${escapeHTML(p.name || 'Untitled')}</div>
+                    <div class="project-card-meta">
+                      <span>${escapeHTML(p.myRole || 'owner')}</span>
+                      ${p.deployment?.url ? '<span style="color:var(--theme-success);">● Live</span>' : ''}
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+
+    panel.querySelectorAll('.project-card').forEach(card => {
+      card.addEventListener('click', () => {
+        window.location.href = '/project?pid=' + encodeURIComponent(card.dataset.pid);
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // NOTIFICATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  async function loadNotifications() {
+    const [listRes, statsRes] = await Promise.all([
+      apiFetch(API_NOTIFY + '?action=list&limit=50&type=' + S.notificationFilter),
+      apiFetch(API_NOTIFY + '?action=stats'),
+    ]);
+
+    if (listRes.ok && listRes.data?.success) {
+      S.notifications = listRes.data.notifications || [];
+    }
+    if (statsRes.ok && statsRes.data?.success) {
+      S.notificationStats = statsRes.data.stats;
+    }
+    renderTabs();
+    if (S.activeTab === 'notifications') renderPanel();
+  }
+
+  function renderNotificationsTab(panel) {
+    const filters = [
+      { id: 'all', label: 'All' },
+      { id: 'system', label: 'System' },
+      { id: 'project', label: 'Project' },
+      { id: 'invite', label: 'Invite' },
+      { id: 'analytics', label: 'Analytics' },
+      { id: 'db', label: 'DB' },
+      { id: 'storage', label: 'Storage' },
+    ];
+
+    const unread = S.notificationStats?.unread || 0;
+
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('bell', 15, 2.2)} Notifications ${unread > 0 ? `<span style="color:var(--theme-primary);font-size:11px;">(${unread} unread)</span>` : ''}</div>
+          <div style="display:flex;gap:4px;">
+            <button class="btn btn-sm btn-ghost" id="markAllReadBtn">Mark all read</button>
+            <button class="btn btn-sm btn-ghost" id="dismissAllReadBtn">Dismiss read</button>
+          </div>
+        </div>
+        <div class="card-body tight" style="padding-bottom:8px;">
+          <div class="notif-filters">
+            ${filters.map(f => `<button class="notif-chip ${S.notificationFilter === f.id ? 'active' : ''}" data-notif-filter="${f.id}" type="button">${f.label}</button>`).join('')}
+          </div>
+        </div>
+        <div id="notifListBody">
+          ${S.notifications.length === 0
+            ? `<div class="empty-state">
+                <div class="empty-state-icon">${svg('bell', 22, 2)}</div>
+                <div class="empty-state-title">All caught up</div>
+                <div class="empty-state-desc">No notifications${S.notificationFilter !== 'all' ? ' in this filter' : ''}.</div>
+              </div>`
+            : S.notifications.map(n => renderNotificationRow(n)).join('')
+          }
+        </div>
+      </div>
+    `;
+
+    panel.querySelectorAll('[data-notif-filter]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        S.notificationFilter = btn.dataset.notifFilter;
+        await loadNotifications();
+      });
+    });
+
+    $('markAllReadBtn')?.addEventListener('click', markAllNotificationsRead);
+    $('dismissAllReadBtn')?.addEventListener('click', dismissAllReadNotifications);
+
+    panel.querySelectorAll('[data-notif-id]').forEach(el => {
+      const id = el.dataset.notifId;
+      el.querySelector('[data-mark-read]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        markNotificationRead(id);
+      });
+      el.querySelector('[data-dismiss]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dismissNotification(id);
+      });
+    });
+  }
+
+  function renderNotificationRow(n) {
+    const isUnread = !n.read;
+    const typeIconMap = {
+      system: 'info', project: 'folder', invite: 'user',
+      analytics: 'chart', db: 'database', storage: 'alert',
+    };
+    const icon = svg(typeIconMap[n.type] || 'info', 15, 2.2);
+
+    return `
+      <div class="notif-item ${isUnread ? 'unread' : ''}" data-notif-id="${escapeAttr(n.id)}">
+        <div class="notif-dot"></div>
+        <div class="notif-icon-wrap">${icon}</div>
+        <div class="notif-content">
+          <div class="notif-title">${escapeHTML(n.title || 'Notification')}</div>
+          ${n.body ? `<div class="notif-body">${escapeHTML(n.body)}</div>` : ''}
+          <div class="notif-time">${relativeTimeShort(n.createdAt)}</div>
+          ${n.link ? `<a class="notif-action" href="${escapeAttr(n.link)}">Open ${svg('chevronRight', 10, 2.4)}</a>` : ''}
+        </div>
+        <button class="notif-dismiss" data-dismiss aria-label="Dismiss">${svg('x', 12, 2.4)}</button>
+      </div>
+    `;
+  }
+
+  async function markNotificationRead(id) {
+    const res = await apiFetch(API_NOTIFY + '?action=mark_read', {
+      method: 'POST',
+      body: JSON.stringify({ notificationId: id }),
+    });
+    if (res.ok && res.data?.success) {
+      const n = S.notifications.find(x => x.id === id);
+      if (n) n.read = true;
+      if (S.notificationStats) S.notificationStats.unread = Math.max(0, (S.notificationStats.unread || 1) - 1);
+      renderTabs();
+      if (S.activeTab === 'notifications') renderPanel();
+    }
+  }
+
+  async function dismissNotification(id) {
+    const res = await apiFetch(API_NOTIFY + '?action=dismiss', {
+      method: 'POST',
+      body: JSON.stringify({ notificationId: id }),
+    });
+    if (res.ok && res.data?.success) {
+      S.notifications = S.notifications.filter(n => n.id !== id);
+      if (S.notificationStats) S.notificationStats.unread = Math.max(0, (S.notificationStats.unread || 1) - 1);
+      renderTabs();
+      if (S.activeTab === 'notifications') renderPanel();
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    const res = await apiFetch(API_NOTIFY + '?action=mark_all_read', { method: 'POST', body: '{}' });
+    if (res.ok && res.data?.success) {
+      S.notifications.forEach(n => n.read = true);
+      if (S.notificationStats) S.notificationStats.unread = 0;
+      renderTabs();
+      renderPanel();
+      toast(`${res.data.updated || 0} marked read`, 'success');
+    }
+  }
+
+  async function dismissAllReadNotifications() {
+    const res = await apiFetch(API_NOTIFY + '?action=dismiss_all_read', { method: 'POST', body: '{}' });
+    if (res.ok && res.data?.success) {
+      S.notifications = S.notifications.filter(n => !n.read);
+      renderTabs();
+      renderPanel();
+      toast(`${res.data.dismissed || 0} dismissed`, 'success');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ACTIVITY
+  // ═══════════════════════════════════════════════════════════
+
+  async function loadActivity() {
+    S.logsOffset = 0;
+    const res = await apiFetch(API_AUTH + '?action=logs&limit=50&offset=0&type=' + S.logsFilter);
+    if (res.ok && res.data?.success) {
+      S.logs = res.data.logs || [];
+      S.logsHasMore = res.data.hasMore || false;
+      if (S.activeTab === 'activity') renderPanel();
+    }
+  }
+
+  function renderActivityTab(panel) {
+    const filters = [
+      { id: 'all', label: 'All' },
+      { id: 'auth', label: 'Auth' },
+      { id: 'project', label: 'Project' },
+      { id: 'file', label: 'File' },
+      { id: 'version', label: 'Version' },
+      { id: 'deploy', label: 'Deploy' },
+      { id: 'settings', label: 'Settings' },
+      { id: 'invite', label: 'Invite' },
+    ];
+
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('clock', 15, 2.2)} Activity log</div>
+          <button class="btn btn-sm btn-ghost" id="refreshActivityBtn">${svg('refresh', 12, 2.2)}</button>
+        </div>
+        <div class="card-body tight" style="padding-bottom:8px;">
+          <div class="notif-filters">
+            ${filters.map(f => `<button class="notif-chip ${S.logsFilter === f.id ? 'active' : ''}" data-log-filter="${f.id}" type="button">${f.label}</button>`).join('')}
+          </div>
+        </div>
+        <div id="logListBody">
+          ${S.logs.length === 0
+            ? `<div class="empty-state">
+                <div class="empty-state-icon">${svg('clock', 22, 2)}</div>
+                <div class="empty-state-title">No activity yet</div>
+                <div class="empty-state-desc">Your account activity will appear here.</div>
+              </div>`
+            : S.logs.map(renderLogRow).join('')
+          }
+        </div>
+        ${S.logsHasMore ? `<div style="padding:12px;"><button class="btn btn-secondary btn-block" id="loadMoreLogsBtn">Load more</button></div>` : ''}
+      </div>
+    `;
+
+    panel.querySelectorAll('[data-log-filter]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        S.logsFilter = btn.dataset.logFilter;
+        await loadActivity();
+      });
+    });
+
+    $('refreshActivityBtn')?.addEventListener('click', loadActivity);
+    $('loadMoreLogsBtn')?.addEventListener('click', async () => {
+      S.logsOffset += 50;
+      const res = await apiFetch(API_AUTH + '?action=logs&limit=50&offset=' + S.logsOffset + '&type=' + S.logsFilter);
+      if (res.ok && res.data?.success) {
+        S.logs = [...S.logs, ...(res.data.logs || [])];
+        S.logsHasMore = res.data.hasMore || false;
+        renderPanel();
+      }
+    });
+
+    panel.querySelectorAll('[data-log-meta]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.logMeta, 10);
+        const metaEl = document.getElementById('logMeta-' + idx);
+        if (metaEl) metaEl.classList.toggle('hidden');
+      });
+    });
+  }
+
+  function renderLogRow(log, idx) {
+    const d = new Date(log.ts);
+    const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const hasMeta = log.meta && Object.keys(log.meta).length > 0;
+    const metaId = 'logMeta-' + (idx ?? Math.random().toString(36).slice(2, 8));
+    return `
+      <div class="log-item">
+        <div class="log-time">${time}</div>
+        <div class="log-body">
+          <span class="log-type">${escapeHTML(log.type || 'event')}</span>
+          <div class="log-action">${escapeHTML(log.action || '')}</div>
+          ${hasMeta ? `
+            <button class="log-meta-btn" data-log-meta="${escapeAttr(log._idx || '')}" onclick="(function(el){var m=el.nextElementSibling;if(m)m.classList.toggle('hidden');})(this)">Show details</button>
+            <div class="log-meta hidden">${escapeHTML(JSON.stringify(log.meta, null, 2))}</div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SIGN OUT
+  // ═══════════════════════════════════════════════════════════
+
+  function confirmSignOut() {
+    confirmModal(
+      'Sign out?',
+      'You will need to sign in again to access your projects.',
+      'Sign out',
+      true,
+      async () => {
+        showLoading('Signing out', '');
+        try {
+          await apiFetch(API_AUTH + '?action=logout', { method: 'POST', body: '{}' });
+        } catch {}
+        try {
+          localStorage.removeItem(STORAGE.session);
+          localStorage.removeItem(STORAGE.user);
+        } catch {}
+        hideLoading();
+        window.location.href = '/register';
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // GLOBAL WIRING
+  // ═══════════════════════════════════════════════════════════
+
+  function wireGlobal() {
+    $('modalOverlay').addEventListener('click', (e) => {
+      if (e.target === $('modalOverlay')) closeModal();
+    });
+    document.addEventListener('click', (e) => {
+      if (e.target.matches('[data-modal-close]')) closeModal();
+    });
+
+    $('avatarStudio').addEventListener('click', (e) => {
+      if (e.target === $('avatarStudio')) closeAvatarStudio();
+    });
+    $('studioClose').addEventListener('click', closeAvatarStudio);
+    $('studioSave').addEventListener('click', studioSave);
+    $('studioDownload').addEventListener('click', studioDownload);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if ($('avatarStudio').classList.contains('active')) return closeAvatarStudio();
+        if ($('modalOverlay').classList.contains('active')) return closeModal();
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // START
+  // ═══════════════════════════════════════════════════════════
+
+  function init() {
+    wireGlobal();
+    boot();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();
+</script>
+
+</body>
+</html>
