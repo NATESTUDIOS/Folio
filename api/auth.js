@@ -15,10 +15,19 @@ import {
 } from "../utils/users.js";
 
 // =========================================================================
-// RATE LIMITS
+// CONSTANTS
 // =========================================================================
 
 const API_NAME = "auth";
+
+const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
+
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+
+// =========================================================================
+// RATE LIMITS
+// =========================================================================
 
 const RATE_LIMITS = {
   register:       { max: 5,   window: 60 * 60 * 1000 },
@@ -95,11 +104,9 @@ function ipKey(req) {
 // HELPERS
 // =========================================================================
 
-const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
-const LOGIN_MAX_FAILURES = 5;
-const LOGIN_LOCK_MS = 15 * 60 * 1000;
-
-async function createUserRecord({ uid, email, emailLower, passwordHash, username, displayName }) {
+async function createUserRecord({
+  uid, email, emailLower, passwordHash, username, displayName, avatarUrl,
+}) {
   const now = Date.now();
   const record = {
     email,
@@ -109,7 +116,7 @@ async function createUserRecord({ uid, email, emailLower, passwordHash, username
       username,
       displayName: displayName || username,
       bio: "",
-      avatarUrl: null,
+      avatarUrl: avatarUrl || null,
       links: {},
       ogImageUrl: null,
     },
@@ -154,8 +161,18 @@ async function callNotifyBridge(action, uid, extra = {}) {
   }
 }
 
+function isValidHttpsUrl(url) {
+  if (typeof url !== "string" || url.length === 0 || url.length > 2000) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // =========================================================================
-// VAPID (Web Push)
+// VAPID
 // =========================================================================
 
 async function handleVapid(req, res, reqId) {
@@ -168,13 +185,13 @@ async function handleVapid(req, res, reqId) {
 }
 
 // =========================================================================
-// ENDPOINTS
+// REGISTER
 // =========================================================================
 
 async function handleRegister(req, res, reqId) {
   if (!(await enforceRate(req, res, "register", ipKey(req)))) return;
 
-  const { email, password, username, displayName } = req.body || {};
+  const { email, password, username, displayName, avatarUrl } = req.body || {};
 
   const emailLower = cleanEmail(email);
   if (!emailLower) {
@@ -189,6 +206,14 @@ async function handleRegister(req, res, reqId) {
   }
   if (isReservedUsername(cleanedUsername)) {
     return res.status(400).json({ success: false, error: "Username is reserved" });
+  }
+
+  let cleanAvatarUrl = null;
+  if (avatarUrl !== undefined && avatarUrl !== null && avatarUrl !== "") {
+    if (!isValidHttpsUrl(avatarUrl)) {
+      return res.status(400).json({ success: false, error: "avatarUrl must be an HTTPS URL" });
+    }
+    cleanAvatarUrl = avatarUrl;
   }
 
   const existing = await getUserByEmail(emailLower);
@@ -220,6 +245,7 @@ async function handleRegister(req, res, reqId) {
       passwordHash,
       username: assigned.username,
       displayName,
+      avatarUrl: cleanAvatarUrl,
     });
   } catch (err) {
     log("auth.register_failed", { reqId, message: err.message });
@@ -239,6 +265,7 @@ async function handleRegister(req, res, reqId) {
     username: assigned.username,
     requestedUsername: cleanedUsername,
     wasModified: assigned.isModified,
+    hasAvatar: !!cleanAvatarUrl,
   });
 
   const sessionToken = signSession(uid, assigned.username);
@@ -249,10 +276,16 @@ async function handleRegister(req, res, reqId) {
     username: assigned.username,
     requestedUsername: cleanedUsername,
     usernameModified: assigned.isModified,
+    hasAvatar: !!cleanAvatarUrl,
+    avatarUrl: cleanAvatarUrl,
     sessionToken,
     expiresIn: "30d",
   });
 }
+
+// =========================================================================
+// LOGIN / LOGOUT / REFRESH
+// =========================================================================
 
 async function handleLogin(req, res, reqId) {
   if (!(await enforceRate(req, res, "login", ipKey(req)))) return;
@@ -318,6 +351,7 @@ async function handleLogin(req, res, reqId) {
       username: found.profile?.username || null,
       displayName: found.profile?.displayName || null,
       email: found.email,
+      avatarUrl: found.profile?.avatarUrl || null,
     },
   });
 }
@@ -349,6 +383,10 @@ async function handleRefresh(req, res, reqId) {
   const newToken = signSession(user.uid, user.profile?.username || "");
   return res.status(200).json({ success: true, sessionToken: newToken, expiresIn: "30d" });
 }
+
+// =========================================================================
+// ACCOUNT
+// =========================================================================
 
 async function handleChangePassword(req, res, reqId) {
   const user = await requireAuth(req, res);
@@ -452,6 +490,10 @@ async function handleChangeUsername(req, res, reqId) {
   return res.status(200).json({ success: true, sessionToken, username: newName });
 }
 
+// =========================================================================
+// ME / PROFILE / PREFS
+// =========================================================================
+
 async function handleMe(req, res, reqId) {
   const user = await requireAuth(req, res);
   if (!user) return;
@@ -494,11 +536,7 @@ async function handleProfileUpdate(req, res, reqId) {
   }
   if (avatarUrl !== undefined) {
     if (avatarUrl !== null) {
-      try {
-        const u = new URL(avatarUrl);
-        if (u.protocol !== "https:") throw new Error("must be https");
-        if (avatarUrl.length > 2000) throw new Error("url too long");
-      } catch {
+      if (!isValidHttpsUrl(avatarUrl)) {
         return res.status(400).json({ success: false, error: "avatarUrl must be an HTTPS URL or null" });
       }
     }
@@ -513,13 +551,7 @@ async function handleProfileUpdate(req, res, reqId) {
       if (typeof k !== "string" || k.length > 40) {
         return res.status(400).json({ success: false, error: `Invalid link key: ${k}` });
       }
-      if (typeof v !== "string" || v.length > 500) {
-        return res.status(400).json({ success: false, error: `Invalid link value for ${k}` });
-      }
-      try {
-        const u = new URL(v);
-        if (u.protocol !== "https:") throw new Error("must be https");
-      } catch {
+      if (!isValidHttpsUrl(v) || v.length > 500) {
         return res.status(400).json({ success: false, error: `Link ${k} must be an HTTPS URL` });
       }
       cleanLinks[k] = v;
@@ -601,6 +633,10 @@ async function handleUpdateEditorPrefs(req, res, reqId) {
     editorPrefs: fresh.settings?.editorPrefs || {},
   });
 }
+
+// =========================================================================
+// LOGS
+// =========================================================================
 
 async function handleLogs(req, res, reqId) {
   const user = await requireAuth(req, res);
