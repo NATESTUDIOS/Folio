@@ -26,7 +26,26 @@ export function verifySession(token) {
 }
 
 // =========================================================================
-// Password hashing (scrypt)
+// FIREBASE KEY ENCODING
+// RTDB keys cannot contain: . # $ [ ] /
+// =========================================================================
+
+/**
+ * Encode an email address into a safe RTDB key segment.
+ * '.' is the most common offender (in every email domain), so we use ','.
+ * The other chars are unlikely in emails but handled for safety.
+ */
+function encodeEmailKey(emailLower) {
+  return String(emailLower || "")
+    .replace(/\./g, ",")
+    .replace(/#/g, "@")
+    .replace(/\$/g, "-")
+    .replace(/\[/g, "(")
+    .replace(/\]/g, ")");
+}
+
+// =========================================================================
+// PASSWORD HASHING (scrypt)
 // =========================================================================
 
 const SCRYPT_N = 16384;
@@ -76,7 +95,7 @@ export function dummyHash() {
 }
 
 // =========================================================================
-// Auth middleware
+// AUTH MIDDLEWARE
 // =========================================================================
 
 export async function requireAuth(req, res) {
@@ -118,7 +137,7 @@ export function requireAdmin(req, res) {
 }
 
 // =========================================================================
-// User lookup
+// USER LOOKUP
 // =========================================================================
 
 export async function getUser(uid) {
@@ -132,7 +151,8 @@ export async function getUserByEmail(emailLower) {
   if (!emailLower) return null;
   const cleaned = cleanEmail(emailLower);
   if (!cleaned) return null;
-  const snap = await db.ref(`emails/${cleaned}`).once("value");
+  const key = encodeEmailKey(cleaned);
+  const snap = await db.ref(`emails/${key}`).once("value");
   if (!snap.exists()) return null;
   return getUser(snap.val());
 }
@@ -151,7 +171,7 @@ export async function isBanned(uid) {
 }
 
 // =========================================================================
-// Username + email normalization
+// USERNAME + EMAIL NORMALIZATION
 // =========================================================================
 
 const RESERVED = new Set([
@@ -161,7 +181,7 @@ const RESERVED = new Set([
   "notify", "analytics", "host", "flier", "metatag",
   "register", "logout", "me", "refresh", "db", "logs",
   "www", "mail", "vercel", "folio",
-  "projects", "project", "tools", "index", "analytics",
+  "projects", "project", "tools", "index",
 ]);
 
 export function isReservedUsername(username) {
@@ -184,7 +204,7 @@ export function cleanEmail(email) {
 }
 
 // =========================================================================
-// Username auto-suffix + reservations
+// USERNAME AUTO-SUFFIX + RESERVATIONS
 // =========================================================================
 
 export async function assignUsername(baseUsername, uid) {
@@ -224,7 +244,8 @@ export async function assignUsername(baseUsername, uid) {
 export async function reserveEmail(emailLower, uid) {
   const cleaned = cleanEmail(emailLower);
   if (!cleaned) return false;
-  const result = await db.ref(`emails/${cleaned}`).transaction(cur => {
+  const key = encodeEmailKey(cleaned);
+  const result = await db.ref(`emails/${key}`).transaction(cur => {
     if (cur !== null) return;
     return uid;
   });
@@ -244,7 +265,8 @@ export async function reserveUsername(username, uid) {
 export async function releaseEmail(emailLower) {
   const cleaned = cleanEmail(emailLower);
   if (!cleaned) return;
-  await db.ref(`emails/${cleaned}`).remove();
+  const key = encodeEmailKey(cleaned);
+  await db.ref(`emails/${key}`).remove();
 }
 
 export async function releaseUsername(username) {
@@ -254,7 +276,7 @@ export async function releaseUsername(username) {
 }
 
 // =========================================================================
-// Project permissions
+// PROJECT PERMISSIONS
 // =========================================================================
 
 export async function canAccessProject(uid, pid) {
@@ -302,17 +324,12 @@ export async function canEditProject(uid, pid) {
 }
 
 // =========================================================================
-// Project CRUD helpers (NEW — used by host.js)
+// PROJECT CRUD HELPERS
 // =========================================================================
 
-/**
- * List all projects where uid is owner or has a role.
- * Returns sanitized project records (apiKeyHash stripped).
- */
 export async function listUserProjects(uid) {
   if (!uid) return [];
 
-  // Owned projects (via ownerId index)
   const owned = [];
   const ownedSnap = await db.ref("projects").orderByChild("ownerId").equalTo(uid).once("value");
   if (ownedSnap.exists()) {
@@ -321,7 +338,6 @@ export async function listUserProjects(uid) {
     });
   }
 
-  // Shared projects (from user.projectIds where ownerId !== uid)
   const user = await getUser(uid);
   const pids = user?.projectIds || {};
   const shared = [];
@@ -342,10 +358,6 @@ export async function listUserProjects(uid) {
   return [...owned.map(sanitize), ...shared.map(sanitize)];
 }
 
-/**
- * Create a project record and add to owner's projectIds.
- * Returns the created project (without apiKeyHash).
- */
 export async function createProjectRecord(ownerUid, { name, description, storageLimit }) {
   if (!ownerUid) throw new Error("Missing ownerUid");
   if (!name || typeof name !== "string") throw new Error("Missing name");
@@ -386,14 +398,9 @@ export async function createProjectRecord(ownerUid, { name, description, storage
   return { pid, ...project };
 }
 
-/**
- * Delete a project and all its scoped data.
- * Removes from all users' projectIds.
- */
 export async function deleteProjectRecord(pid, ownerUid) {
   if (!pid || !ownerUid) return;
 
-  // Remove from all users' projectIds
   const rolesSnap = await db.ref(`projects/${pid}/roles`).once("value");
   const roleUids = rolesSnap.exists() ? Object.keys(rolesSnap.val()) : [];
 
@@ -404,7 +411,6 @@ export async function deleteProjectRecord(pid, ownerUid) {
   }
   await db.ref().update(updates);
 
-  // Delete all project-scoped data
   await Promise.all([
     db.ref(`projects/${pid}`).remove(),
     db.ref(`projectData/${pid}`).remove(),
@@ -412,13 +418,14 @@ export async function deleteProjectRecord(pid, ownerUid) {
     db.ref(`logs/project/${pid}`).remove(),
     db.ref(`analytics/${pid}`).remove(),
     db.ref(`versions/${pid}`).remove(),
+    db.ref(`files/${pid}`).remove(),
   ]);
 
   await logUserEvent(ownerUid, "project", "project.deleted", { pid });
 }
 
 // =========================================================================
-// Project API keys
+// PROJECT API KEYS
 // =========================================================================
 
 export function generateApiKey() {
@@ -444,7 +451,7 @@ export async function verifyProjectKey(pid, candidate) {
 }
 
 // =========================================================================
-// Invite tokens
+// INVITE TOKENS
 // =========================================================================
 
 export function generateInviteToken() {
@@ -452,7 +459,7 @@ export function generateInviteToken() {
 }
 
 // =========================================================================
-// Request + path helpers
+// REQUEST + PATH HELPERS
 // =========================================================================
 
 export function getClientIp(req) {
@@ -484,7 +491,7 @@ export function sanitizeFirebasePath(input) {
 }
 
 // =========================================================================
-// Activity logs
+// ACTIVITY LOGS
 // =========================================================================
 
 const LOG_LIMIT = 500;
@@ -516,11 +523,6 @@ export async function logUserEvent(uid, type, action, meta = {}) {
   await trimLogs(`logs/user/${uid}`);
 }
 
-/**
- * Log a project event.
- * Writes to both /logs/project/{pid} (full audit trail) AND
- * /analytics/{pid}/activity (recent feed read by analytics: activity).
- */
 export async function logProjectEvent(pid, uid, type, action, meta = {}) {
   if (!pid) return;
   const logId = `log_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
@@ -532,10 +534,7 @@ export async function logProjectEvent(pid, uid, type, action, meta = {}) {
     meta,
   };
 
-  // Primary audit log
   await db.ref(`logs/project/${pid}/${logId}`).set(record);
-
-  // Activity feed for analytics
   await db.ref(`analytics/${pid}/activity/${logId}`).set(record).catch(() => {});
 
   await Promise.all([
@@ -544,10 +543,6 @@ export async function logProjectEvent(pid, uid, type, action, meta = {}) {
   ]);
 }
 
-/**
- * Increment per-project API call counter (used by host.js router finally).
- * Writes to /analytics/{pid}/api/{date} → { calls, errors }
- */
 export async function logProjectApiCall(pid, success = true) {
   if (!pid) return;
   const today = new Date().toISOString().slice(0, 10);
