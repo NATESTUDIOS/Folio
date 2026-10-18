@@ -1,0 +1,2159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Folio — Get Started</title>
+<meta name="description" content="Create your Folio account and start coding from your pocket.">
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+<meta name="application-name" content="Folio">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<script>
+(function() {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   THEME VARIABLES — Dark (default)
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --theme-primary: #F59E0B;
+  --theme-primary-hover: #fbbf24;
+  --theme-primary-glow: rgba(245, 158, 11, 0.40);
+  --theme-primary-soft: rgba(245, 158, 11, 0.14);
+
+  --theme-bg: #0a0c10;
+  --theme-surface: #111318;
+  --theme-surface-card: rgba(21, 25, 34, 0.72);
+  --theme-surface-elevated: #1a1f2a;
+  --theme-text: #e8ecf1;
+  --theme-text-secondary: rgba(232, 236, 241, 0.72);
+  --theme-text-tertiary: rgba(232, 236, 241, 0.44);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.05);
+  --theme-glass-border: rgba(255, 255, 255, 0.09);
+  --theme-overlay: rgba(10, 12, 16, 0.85);
+  --theme-card-border: rgba(255, 255, 255, 0.08);
+  --theme-divider: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(26, 31, 42, 0.88);
+
+  --theme-success: #10B981;
+  --theme-success-soft: rgba(16, 185, 129, 0.14);
+  --theme-danger: #EF4444;
+  --theme-danger-soft: rgba(239, 68, 68, 0.12);
+  --theme-warning: #D97706;
+  --theme-warning-soft: rgba(217, 119, 6, 0.14);
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.20) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.12) 0%, transparent 55%);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-border-radius: clamp(20px, 4vw, 28px);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="light"] {
+  --theme-primary: #D97706;
+  --theme-primary-hover: #B45309;
+  --theme-primary-glow: rgba(217, 119, 6, 0.28);
+  --theme-primary-soft: rgba(217, 119, 6, 0.10);
+
+  --theme-bg: #f7f8fa;
+  --theme-surface: #ffffff;
+  --theme-surface-card: rgba(255, 255, 255, 0.85);
+  --theme-surface-elevated: #ffffff;
+  --theme-text: #121316;
+  --theme-text-secondary: rgba(18, 19, 22, 0.72);
+  --theme-text-tertiary: rgba(18, 19, 22, 0.48);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.75);
+  --theme-glass-border: rgba(0, 0, 0, 0.08);
+  --theme-overlay: rgba(18, 19, 22, 0.48);
+  --theme-card-border: rgba(0, 0, 0, 0.07);
+  --theme-divider: rgba(0, 0, 0, 0.06);
+  --input-bg: #ffffff;
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(217, 119, 6, 0.10) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BASE & RESPONSIVE LAYOUT
+   ═══════════════════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  min-height: 100%;
+  width: 100%;
+  background: var(--theme-bg);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  color: var(--theme-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
+  background-attachment: fixed;
+  overflow-x: hidden;
+}
+
+button { font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border: none; background: none; color: inherit; padding: 0; }
+a { color: var(--theme-primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+svg { display: block; }
+
+.hidden { display: none !important; }
+
+.app-screen {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding: clamp(14px, 3vh, 24px) clamp(16px, 4vw, 24px) calc(var(--safe-bottom) + 24px);
+  margin: 0 auto;
+}
+
+@media (min-width: 641px) {
+  body { justify-content: center; padding: clamp(24px, 4vh, 48px) 16px; }
+  .app-screen {
+    max-width: 520px;
+    min-height: auto;
+    border-radius: var(--app-border-radius);
+    background: var(--theme-surface-card);
+    backdrop-filter: blur(28px) saturate(140%);
+    -webkit-backdrop-filter: blur(28px) saturate(140%);
+    border: 1px solid var(--theme-glass-border);
+    padding: clamp(28px, 4vh, 36px) clamp(28px, 5vw, 40px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-screen { max-width: 560px; padding: 38px 44px; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOP BAR
+   ═══════════════════════════════════════════════════════════ */
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 20px;
+}
+
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.brand-icon {
+  width: clamp(36px, 5vw, 42px) !important;
+  height: clamp(36px, 5vw, 42px) !important;
+  max-width: clamp(36px, 5vw, 42px);
+  max-height: clamp(36px, 5vw, 42px);
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 12px;
+  border: 1px solid var(--theme-glass-border);
+  object-fit: cover;
+  display: block;
+  background: var(--theme-surface-elevated);
+  flex-shrink: 0;
+}
+.brand-icon img { width: 100%; height: 100%; border-radius: 12px; object-fit: cover; display: block; }
+.brand-icon .brand-fallback { width: 22px; height: 22px; display: none; stroke-width: 2; }
+.brand-icon.fallback img { display: none; }
+.brand-icon.fallback .brand-fallback { display: block; }
+
+.brand-title {
+  font-size: clamp(19px, 3vw, 22px);
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  color: var(--theme-text);
+}
+
+.brand-title span { color: var(--theme-primary); }
+
+/* ═══════════════════════════════════════════════════════════
+   VIEW PANELS
+   ═══════════════════════════════════════════════════════════ */
+.view-panel {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  animation: panelFadeIn 0.35s var(--ease) forwards;
+}
+
+.view-panel.active { display: flex; }
+
+@keyframes panelFadeIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SEGMENT TABS
+   ═══════════════════════════════════════════════════════════ */
+.auth-segment {
+  display: flex;
+  background: var(--theme-divider);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 14px;
+  padding: 4px;
+  margin: 4px 0 22px;
+}
+
+.segment-tab {
+  flex: 1;
+  padding: 10px 0;
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--theme-text-tertiary);
+  border-radius: 10px;
+  transition: all 0.25s var(--ease);
+}
+
+.segment-tab.active {
+  color: #0a0c10;
+  background: var(--theme-primary);
+}
+
+[data-theme="light"] .segment-tab.active { color: #ffffff; }
+
+/* ═══════════════════════════════════════════════════════════
+   INPUTS
+   ═══════════════════════════════════════════════════════════ */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 16px;
+  width: 18px;
+  height: 18px;
+  stroke: var(--theme-text-tertiary);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  transition: stroke 0.2s;
+}
+
+.app-input {
+  width: 100%;
+  height: 52px;
+  padding: 0 48px 0 46px;
+  border-radius: 14px;
+  background: var(--input-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.app-input::placeholder { color: var(--theme-text-tertiary); }
+
+.app-input:focus {
+  border-color: var(--theme-primary);
+  background: var(--input-bg);
+}
+
+.app-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.app-input.invalid { border-color: var(--theme-danger); }
+
+.input-wrapper:focus-within .input-icon { stroke: var(--theme-primary); }
+.input-wrapper.invalid .input-icon { stroke: var(--theme-danger); }
+
+.toggle-password {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: var(--theme-text-tertiary);
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.toggle-password:hover { color: var(--theme-text); background: var(--theme-glass-bg); }
+.toggle-password svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ═══════════════════════════════════════════════════════════
+   FIELD FEEDBACK
+   ═══════════════════════════════════════════════════════════ */
+.field-hint {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--theme-text-tertiary);
+  padding-left: 2px;
+  margin-top: -4px;
+}
+
+.field-error {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--theme-danger);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding-left: 2px;
+  margin-top: -4px;
+  animation: shake 0.3s var(--ease);
+}
+
+.field-error svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  stroke-width: 2.4;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.form-error {
+  padding: 11px 14px;
+  background: var(--theme-danger-soft);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 12px;
+  color: var(--theme-danger);
+  font-size: 12.5px;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  animation: slideDown 0.2s var(--ease);
+}
+
+.form-error svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 2px; stroke-width: 2.2; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PASSWORD STRENGTH
+   ═══════════════════════════════════════════════════════════ */
+.strength {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.strength-bar {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--theme-divider);
+  transition: background 0.2s;
+}
+
+.strength-bar.filled-weak { background: var(--theme-danger); }
+.strength-bar.filled-medium { background: var(--theme-warning); }
+.strength-bar.filled-strong { background: var(--theme-success); }
+
+.strength-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-align: right;
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  min-height: 12px;
+}
+
+.strength-label.weak { color: var(--theme-danger); }
+.strength-label.medium { color: var(--theme-warning); }
+.strength-label.strong { color: var(--theme-success); }
+
+/* ═══════════════════════════════════════════════════════════
+   TERMS CHECKBOX
+   ═══════════════════════════════════════════════════════════ */
+.terms-group {
+  margin: 6px 0 18px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.terms-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12.5px;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.45;
+}
+
+.terms-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--theme-primary);
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.terms-link {
+  color: var(--theme-primary);
+  font-weight: 600;
+  transition: color 0.2s;
+}
+
+.terms-link:hover { color: var(--theme-primary-hover); }
+
+/* ═══════════════════════════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════════════════════════ */
+.btn-primary-action {
+  width: 100%;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  border: none;
+  font-size: 14.5px;
+  font-weight: 700;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  transition: background 0.2s var(--ease), transform 0.15s var(--ease);
+  user-select: none;
+}
+
+[data-theme="light"] .btn-primary-action { color: #ffffff; }
+
+.btn-primary-action svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+.btn-primary-action:hover:not(:disabled) { background: var(--theme-primary-hover); }
+.btn-primary-action:active:not(:disabled) { transform: scale(0.985); }
+.btn-primary-action:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-secondary-action {
+  width: 100%;
+  height: 50px;
+  border-radius: 14px;
+  background: var(--theme-divider);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.2s var(--ease), transform 0.15s var(--ease);
+}
+
+.btn-secondary-action svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.btn-secondary-action:hover { background: var(--theme-glass-bg); }
+.btn-secondary-action:active { transform: scale(0.985); }
+.btn-secondary-action:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-ghost {
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--theme-text-tertiary);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: color 0.2s, background 0.2s;
+}
+
+.btn-ghost:hover { color: var(--theme-text); background: var(--theme-glass-bg); }
+
+.btn-outline-danger {
+  width: 100%;
+  height: 48px;
+  border-radius: 14px;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: var(--theme-danger);
+  font-size: 13.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s var(--ease);
+  margin-top: 4px;
+}
+
+.btn-outline-danger svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.btn-outline-danger:active { transform: scale(0.985); background: var(--theme-danger-soft); }
+
+/* ═══════════════════════════════════════════════════════════
+   DIVIDER
+   ═══════════════════════════════════════════════════════════ */
+.divider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.divider-line { flex: 1; height: 1px; background: var(--theme-divider); }
+.divider-text { font-size: 11px; font-weight: 700; color: var(--theme-text-tertiary); text-transform: uppercase; letter-spacing: 0.8px; }
+
+/* ═══════════════════════════════════════════════════════════
+   AVATAR SECTION
+   ═══════════════════════════════════════════════════════════ */
+.avatar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.avatar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.avatar-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+}
+
+.avatar-hint {
+  font-size: 11px;
+  color: var(--theme-text-tertiary);
+}
+
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  min-height: 60px;
+}
+
+.avatar-option {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: var(--input-bg);
+  border: 2px solid transparent;
+  overflow: hidden;
+  transition: border-color 0.2s var(--ease), transform 0.15s var(--ease);
+  padding: 0;
+  cursor: pointer;
+}
+
+.avatar-option:hover { transform: scale(1.04); }
+
+.avatar-option.selected {
+  border-color: var(--theme-primary);
+  transform: scale(1.05);
+}
+
+.avatar-option img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.avatar-option:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.avatar-skeleton {
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--input-bg) 0%, var(--theme-glass-bg) 50%, var(--input-bg) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.avatar-placeholder {
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: var(--input-bg);
+  border: 1px dashed var(--theme-card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  font-size: 10px;
+  text-align: center;
+  padding: 4px;
+  line-height: 1.2;
+}
+
+.avatar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.avatar-actions .btn-secondary-action {
+  flex: 1;
+  height: 40px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.avatar-actions .btn-secondary-action svg { width: 13px; height: 13px; }
+
+/* ═══════════════════════════════════════════════════════════
+   SESSION VIEW
+   ═══════════════════════════════════════════════════════════ */
+.session-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 12px 0 8px;
+}
+
+.session-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 26px;
+  background: linear-gradient(135deg, var(--theme-primary), #f97316);
+  color: #0a0c10;
+  font-size: 30px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.session-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+[data-theme="light"] .session-avatar { color: #ffffff; }
+
+.session-user-name {
+  font-size: clamp(20px, 3vw, 24px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 4px;
+}
+
+.session-user-email {
+  font-size: 13px;
+  color: var(--theme-text-secondary);
+  margin-bottom: 14px;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.session-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  color: var(--theme-primary);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: capitalize;
+  margin-bottom: 22px;
+}
+
+.session-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SUCCESS / VERIFY / CELEBRATION OVERLAYS
+   ═══════════════════════════════════════════════════════════ */
+.view-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: calc(24px + var(--safe-top)) 24px calc(24px + var(--safe-bottom));
+  background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
+  background-attachment: fixed;
+  overflow-y: auto;
+  animation: overlayIn 0.35s var(--ease);
+}
+
+.view-overlay.active { display: flex; }
+
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.overlay-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: var(--app-border-radius);
+  padding: 40px 28px 32px;
+  text-align: center;
+  margin: auto;
+}
+
+.overlay-icon {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 20px;
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s;
+}
+
+.overlay-icon.loading { background: var(--theme-primary-soft); }
+.overlay-icon.success { background: var(--theme-success-soft); }
+.overlay-icon.error { background: var(--theme-danger-soft); }
+
+.overlay-spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--theme-primary-soft);
+  border-top-color: var(--theme-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.overlay-icon svg {
+  width: 40px;
+  height: 40px;
+  stroke-width: 2.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.overlay-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--theme-text);
+  margin-bottom: 8px;
+}
+
+.overlay-desc {
+  font-size: 14px;
+  color: var(--theme-text-secondary);
+  line-height: 1.55;
+  margin-bottom: 24px;
+  word-break: break-word;
+}
+
+.overlay-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CELEBRATION VIEW (post-signup)
+   ═══════════════════════════════════════════════════════════ */
+.celebration-confetti {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3999;
+  overflow: hidden;
+}
+
+.celebration-confetti span {
+  position: absolute;
+  top: -20px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confettiFall 4.5s linear infinite;
+}
+
+.celebration-confetti span:nth-child(1)  { left: 8%;  background: #F59E0B; animation-delay: 0s; }
+.celebration-confetti span:nth-child(2)  { left: 18%; background: #f97316; animation-delay: 0.4s; }
+.celebration-confetti span:nth-child(3)  { left: 27%; background: #10B981; animation-delay: 0.8s; }
+.celebration-confetti span:nth-child(4)  { left: 36%; background: #fbbf24; animation-delay: 1.2s; }
+.celebration-confetti span:nth-child(5)  { left: 45%; background: #EF4444; animation-delay: 0.2s; }
+.celebration-confetti span:nth-child(6)  { left: 54%; background: #06b6d4; animation-delay: 0.6s; }
+.celebration-confetti span:nth-child(7)  { left: 63%; background: #F59E0B; animation-delay: 1.0s; }
+.celebration-confetti span:nth-child(8)  { left: 72%; background: #f97316; animation-delay: 0.3s; }
+.celebration-confetti span:nth-child(9)  { left: 81%; background: #10B981; animation-delay: 0.7s; }
+.celebration-confetti span:nth-child(10) { left: 90%; background: #fbbf24; animation-delay: 1.1s; }
+
+@keyframes confettiFall {
+  0%   { opacity: 0; transform: translateY(-20px) rotate(0deg); }
+  8%   { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(110vh) rotate(720deg); }
+}
+
+.celebration-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 26px;
+  margin: 0 auto 18px;
+  background: linear-gradient(135deg, var(--theme-primary), #f97316);
+  color: #0a0c10;
+  font-size: 34px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  animation: avatarPop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+[data-theme="light"] .celebration-avatar { color: #ffffff; }
+
+.celebration-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+@keyframes avatarPop {
+  0%   { opacity: 0; transform: scale(0.4) rotate(-12deg); }
+  60%  { opacity: 1; transform: scale(1.12) rotate(4deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+.celebration-handle {
+  font-family: 'SF Mono', Consolas, Monaco, monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--theme-primary);
+  letter-spacing: 0.3px;
+  margin-top: 4px;
+}
+
+.celebration-email {
+  font-size: 12.5px;
+  color: var(--theme-text-secondary);
+  margin-top: 3px;
+  word-break: break-all;
+}
+
+.celebration-checks {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin: 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.celebration-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--theme-text-secondary);
+  font-weight: 500;
+}
+
+.celebration-check svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke: var(--theme-success);
+  stroke-width: 2.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LOADING OVERLAY
+   ═══════════════════════════════════════════════════════════ */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+}
+
+.loading-overlay.active { display: flex; opacity: 1; }
+
+.loading-ring {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--theme-primary-soft);
+  border-top-color: var(--theme-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.loading-overlay h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+
+.loading-overlay p {
+  font-size: 13px;
+  color: var(--theme-text-secondary);
+  max-width: 280px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: calc(20px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6000;
+  width: 90%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--theme-surface-elevated);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 14px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transform: translateY(20px) scale(0.95);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s var(--ease);
+  pointer-events: all;
+}
+
+.toast.show { transform: translateY(0) scale(1); opacity: 1; }
+
+.toast-icon {
+  width: 20px;
+  height: 20px;
+  stroke: var(--theme-primary);
+  fill: none;
+  stroke-width: 2.2;
+  flex-shrink: 0;
+}
+
+.toast.success .toast-icon { stroke: var(--theme-success); }
+.toast.error .toast-icon { stroke: var(--theme-danger); }
+.toast.warning .toast-icon { stroke: var(--theme-warning); }
+
+.toast-text {
+  color: var(--theme-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  flex: 1;
+  overflow-wrap: break-word;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════════════════════ */
+.form-footer {
+  text-align: center;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--theme-text-tertiary);
+  margin-top: 16px;
+}
+
+.form-footer a {
+  color: var(--theme-text-secondary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.form-footer a:hover { color: var(--theme-text); }
+
+/* ═══════════════════════════════════════════════════════════
+   REDUCED MOTION
+   ═══════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .app-screen {
+    padding-top: max(16px, var(--safe-top));
+  }
+  .avatar-grid { grid-template-columns: repeat(3, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SESSION VIEW — Already logged in
+     ═══════════════════════════════════════════════════════════ -->
+<div class="app-screen">
+  <section class="view-panel" id="view-session">
+    <div class="session-card">
+      <div class="session-avatar" id="sessionAvatar">F</div>
+      <h2 class="session-user-name" id="sessionUserName">Welcome back</h2>
+      <div class="session-user-email" id="sessionUserEmail">you@example.com</div>
+      <div class="session-badge">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Active account</span>
+      </div>
+
+      <div class="session-actions">
+        <button type="button" class="btn-primary-action" id="btnContinueApp">
+          <span>Continue to Editor</span>
+          <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+        <button type="button" class="btn-outline-danger" id="btnSessionSignOut">
+          <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span>Sign out</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       AUTH VIEW — Register / Login
+       ═══════════════════════════════════════════════════════════ -->
+  <section class="view-panel" id="view-auth">
+    <header class="top-bar">
+      <div class="brand-group">
+<div class="brand-icon" id="brandIcon">
+  <img src="https://foliostudios.vercel.app/icons/icon.jpg" alt="Folio"
+       onerror="document.getElementById('brandIcon').classList.add('fallback')">
+  <svg class="brand-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <polyline points="10 13 8 15 10 17"/>
+    <polyline points="14 13 16 15 14 17"/>
+  </svg>
+</div>
+        <div class="brand-title">Folio</div>
+      </div>
+    </header>
+
+    <div class="auth-segment">
+      <button type="button" class="segment-tab active" data-auth-mode="register">Create account</button>
+      <button type="button" class="segment-tab" data-auth-mode="login">Sign in</button>
+    </div>
+
+    <!-- ═══════════ REGISTER ═══════════ -->
+    <form id="formRegister" novalidate>
+      <div class="form-group">
+        <div class="input-wrapper">
+          <svg class="input-icon" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          <input type="email" class="app-input" id="regEmail" placeholder="Email" required autocomplete="email">
+        </div>
+        <div class="field-error hidden" id="regEmailError"></div>
+      </div>
+
+      <div class="form-group">
+        <div class="input-wrapper">
+          <svg class="input-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <input type="password" class="app-input" id="regPassword" placeholder="Password" required autocomplete="new-password">
+          <button type="button" class="toggle-password" id="toggleRegPassword" aria-label="Show password" tabindex="-1">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="strength">
+          <div class="strength-bar" data-bar="1"></div>
+          <div class="strength-bar" data-bar="2"></div>
+          <div class="strength-bar" data-bar="3"></div>
+        </div>
+        <div class="strength-label" id="strengthLabel"></div>
+        <div class="field-error hidden" id="regPasswordError"></div>
+      </div>
+
+      <div class="form-group">
+        <div class="input-wrapper">
+          <svg class="input-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <input type="text" class="app-input" id="regUsername" placeholder="Username" required maxlength="30" spellcheck="false" autocapitalize="off" autocomplete="username">
+        </div>
+        <div class="field-hint">3–30 chars, lowercase letters, numbers, _ or -. If taken, we'll add a number.</div>
+        <div class="field-error hidden" id="regUsernameError"></div>
+      </div>
+
+      <div class="form-group">
+        <div class="input-wrapper">
+          <svg class="input-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="16" y1="11" x2="22" y2="11"/><line x1="19" y1="8" x2="19" y2="14"/></svg>
+          <input type="text" class="app-input" id="regDisplayName" placeholder="Display name (optional)" maxlength="60" autocomplete="name">
+        </div>
+      </div>
+
+      <!-- Avatar picker -->
+      <div class="avatar-section">
+        <div class="avatar-header">
+          <span class="avatar-label">Choose your avatar</span>
+          <span class="avatar-hint" id="avatarStatus">Optional</span>
+        </div>
+        <div class="avatar-grid" id="avatarGrid" aria-live="polite">
+          <div class="avatar-placeholder">Type display name</div>
+          <div class="avatar-placeholder"></div>
+          <div class="avatar-placeholder"></div>
+        </div>
+        <div class="avatar-actions">
+          <button type="button" class="btn-secondary-action" id="btnGenerateAvatar" disabled>
+            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            <span>Generate avatars</span>
+          </button>
+          <button type="button" class="btn-ghost" id="btnSkipAvatar" disabled>Skip</button>
+        </div>
+      </div>
+
+      <div class="terms-group">
+        <label class="terms-label">
+          <input type="checkbox" id="regTerms" checked>
+          <span>I agree to the <a href="#" class="terms-link" target="_blank" rel="noopener">Terms</a> and <a href="#" class="terms-link" target="_blank" rel="noopener">Privacy Policy</a></span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn-primary-action" id="btnRegister">
+        <span>Create account</span>
+        <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+
+      <div class="form-footer">
+        Already have an account? <a href="#" id="gotoLogin">Sign in</a>
+      </div>
+    </form>
+
+    <!-- ═══════════ LOGIN ═══════════ -->
+    <form id="formLogin" style="display:none;" novalidate>
+      <div class="form-group">
+        <div class="input-wrapper">
+          <svg class="input-icon" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          <input type="text" class="app-input" id="loginIdentifier" placeholder="Email or username" required autocomplete="username" spellcheck="false" autocapitalize="off">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="input-wrapper">
+          <svg class="input-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <input type="password" class="app-input" id="loginPassword" placeholder="Password" required autocomplete="current-password">
+          <button type="button" class="toggle-password" id="toggleLoginPassword" aria-label="Show password" tabindex="-1">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary-action" id="btnLogin">
+        <span>Sign in</span>
+        <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+
+      <div class="form-footer">
+        Don't have an account? <a href="#" id="gotoRegister">Create one</a>
+      </div>
+    </form>
+  </section>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SUCCESS OVERLAY
+     ═══════════════════════════════════════════════════════════ -->
+<div class="view-overlay" id="view-success">
+  <div class="overlay-card">
+    <div class="overlay-icon success">
+      <svg viewBox="0 0 24 24" stroke="var(--theme-success)"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h2 class="overlay-title" id="successTitle">Welcome to Folio</h2>
+    <p class="overlay-desc" id="successDesc">Taking you to your editor…</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     CELEBRATION VIEW
+     ═══════════════════════════════════════════════════════════ -->
+<div class="view-overlay" id="view-celebration">
+  <div class="celebration-confetti" aria-hidden="true">
+    <span></span><span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
+  <div class="overlay-card">
+    <div class="celebration-avatar" id="celeAvatar">F</div>
+    <h2 class="overlay-title" id="celeTitle">Welcome to Folio!</h2>
+    <p class="overlay-desc" id="celeSubtitle">Your account is ready.</p>
+    <div class="celebration-handle" id="celeHandle">@you</div>
+    <div class="celebration-email" id="celeEmail">you@example.com</div>
+
+    <div class="celebration-checks">
+      <div class="celebration-check">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Full offline editing in your browser</span>
+      </div>
+      <div class="celebration-check">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Version snapshots and diffs</span>
+      </div>
+      <div class="celebration-check">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Deploy to a live URL anytime</span>
+      </div>
+    </div>
+
+    <div class="overlay-actions">
+      <button type="button" class="btn-primary-action" id="btnCeleStart">
+        <span>Start coding</span>
+        <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     LOADING OVERLAY
+     ═══════════════════════════════════════════════════════════ -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-ring"></div>
+  <h3 id="loadingTitle">Processing</h3>
+  <p id="loadingMessage">Please wait…</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TOAST CONTAINER
+     ═══════════════════════════════════════════════════════════ -->
+<div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════════════════════
+
+  const API_BASE = 'https://foliostudios.vercel.app/api';
+  const API_AUTH = API_BASE + '/auth';
+  const API_FLIER = API_BASE + '/flier';
+
+  const STORAGE = {
+    session: 'folio.session',
+    user: 'folio.user',
+    theme: 'folio.theme',
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════════
+
+  const state = {
+    mode: 'register',
+    submitting: false,
+    avatarVariants: [],
+    selectedAvatar: null,
+    avatarLoading: false,
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // DOM
+  // ═══════════════════════════════════════════════════════════
+
+  const $ = (id) => document.getElementById(id);
+
+  const dom = {
+    // Views
+    viewSession: $('view-session'),
+    viewAuth: $('view-auth'),
+    viewSuccess: $('view-success'),
+    viewCelebration: $('view-celebration'),
+
+    // Session
+    sessionAvatar: $('sessionAvatar'),
+    sessionUserName: $('sessionUserName'),
+    sessionUserEmail: $('sessionUserEmail'),
+    btnContinueApp: $('btnContinueApp'),
+    btnSessionSignOut: $('btnSessionSignOut'),
+
+    // Tabs
+    segmentTabs: document.querySelectorAll('.segment-tab'),
+
+    // Register
+    formRegister: $('formRegister'),
+    regEmail: $('regEmail'),
+    regPassword: $('regPassword'),
+    regUsername: $('regUsername'),
+    regDisplayName: $('regDisplayName'),
+    regTerms: $('regTerms'),
+    regEmailError: $('regEmailError'),
+    regPasswordError: $('regPasswordError'),
+    regUsernameError: $('regUsernameError'),
+    toggleRegPassword: $('toggleRegPassword'),
+    strengthBars: document.querySelectorAll('.strength-bar'),
+    strengthLabel: $('strengthLabel'),
+    btnRegister: $('btnRegister'),
+    gotoLogin: $('gotoLogin'),
+
+    // Login
+    formLogin: $('formLogin'),
+    loginIdentifier: $('loginIdentifier'),
+    loginPassword: $('loginPassword'),
+    toggleLoginPassword: $('toggleLoginPassword'),
+    btnLogin: $('btnLogin'),
+    gotoRegister: $('gotoRegister'),
+
+    // Avatar
+    avatarGrid: $('avatarGrid'),
+    avatarStatus: $('avatarStatus'),
+    btnGenerateAvatar: $('btnGenerateAvatar'),
+    btnSkipAvatar: $('btnSkipAvatar'),
+
+    // Success
+    successTitle: $('successTitle'),
+    successDesc: $('successDesc'),
+
+    // Celebration
+    celeAvatar: $('celeAvatar'),
+    celeTitle: $('celeTitle'),
+    celeSubtitle: $('celeSubtitle'),
+    celeHandle: $('celeHandle'),
+    celeEmail: $('celeEmail'),
+    btnCeleStart: $('btnCeleStart'),
+
+    // Loading
+    loadingOverlay: $('loadingOverlay'),
+    loadingTitle: $('loadingTitle'),
+    loadingMessage: $('loadingMessage'),
+
+    // Toast
+    toastContainer: $('toastContainer'),
+
+    // Theme
+    themeColorMeta: $('themeColorMeta'),
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // TOAST
+  // ═══════════════════════════════════════════════════════════
+
+  const SVG_TOAST = {
+    success: '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>',
+    error: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+    warning: '<svg viewBox="0 0 24 24"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+  };
+
+  function toast(message, type) {
+    type = type || 'info';
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.innerHTML = '<div class="toast-icon">' + (SVG_TOAST[type] || SVG_TOAST.info) + '</div><div class="toast-text"></div>';
+    el.querySelector('.toast-text').textContent = message;
+    dom.toastContainer.appendChild(el);
+
+    requestAnimationFrame(() => el.classList.add('show'));
+
+    const duration = (type === 'error' || type === 'warning') ? 5000 : 3000;
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 350);
+    }, duration);
+
+    if (navigator.vibrate) {
+      try { navigator.vibrate(type === 'error' ? [40, 60, 40] : 25); } catch {}
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOADING OVERLAY
+  // ═══════════════════════════════════════════════════════════
+
+  function showLoading(title, message) {
+    dom.loadingTitle.textContent = title || 'Processing';
+    dom.loadingMessage.textContent = message || 'Please wait…';
+    dom.loadingOverlay.classList.add('active');
+  }
+
+  function hideLoading() {
+    dom.loadingOverlay.classList.remove('active');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // API
+  // ═══════════════════════════════════════════════════════════
+
+  async function apiPost(url, body) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, data };
+  }
+
+  async function apiGet(url) {
+    const res = await fetch(url);
+    let data = {};
+    try { data = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, data };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SESSION STORAGE
+  // ═══════════════════════════════════════════════════════════
+
+  function saveSession(token, user) {
+    try {
+      localStorage.setItem(STORAGE.session, token);
+      if (user) localStorage.setItem(STORAGE.user, JSON.stringify(user));
+    } catch {}
+  }
+
+  function getSession() {
+    try { return localStorage.getItem(STORAGE.session); } catch { return null; }
+  }
+
+  function getUser() {
+    try {
+      const raw = localStorage.getItem(STORAGE.user);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+
+  function clearSession() {
+    try {
+      localStorage.removeItem(STORAGE.session);
+      localStorage.removeItem(STORAGE.user);
+    } catch {}
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // VALIDATION
+  // ═══════════════════════════════════════════════════════════
+
+  function validateEmail(v) {
+    if (!v) return 'Email is required';
+    if (v.length > 254) return 'Email is too long';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'Enter a valid email';
+    return null;
+  }
+
+  function validatePassword(v) {
+    if (!v) return 'Password is required';
+    if (v.length < 8) return 'At least 8 characters';
+    if (v.length > 128) return 'Maximum 128 characters';
+    if (!/\p{L}/u.test(v)) return 'Must contain a letter';
+    if (!/\p{N}/u.test(v)) return 'Must contain a number';
+    return null;
+  }
+
+  function validateUsername(v) {
+    if (!v) return 'Username is required';
+    if (!/^[a-z0-9_-]{3,30}$/.test(v)) {
+      return '3–30 chars, lowercase letters, numbers, _ or -';
+    }
+    return null;
+  }
+
+  function passwordStrength(v) {
+    if (!v) return 0;
+    let score = 0;
+    if (v.length >= 8) score++;
+    if (v.length >= 12) score++;
+    if (/[A-Z]/.test(v) && /[a-z]/.test(v)) score++;
+    if (/\d/.test(v)) score++;
+    if (/[^A-Za-z0-9]/.test(v)) score++;
+    if (score <= 2) return 1;
+    if (score <= 3) return 2;
+    return 3;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // FIELD FEEDBACK
+  // ═══════════════════════════════════════════════════════════
+
+  function showFieldError(input, errorEl, message) {
+    input.classList.add('invalid');
+    const wrap = input.closest('.input-wrapper');
+    if (wrap) wrap.classList.add('invalid');
+
+    errorEl.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+      '<span></span>';
+    errorEl.querySelector('span').textContent = message;
+    errorEl.classList.remove('hidden');
+  }
+
+  function clearFieldError(input, errorEl) {
+    input.classList.remove('invalid');
+    const wrap = input.closest('.input-wrapper');
+    if (wrap) wrap.classList.remove('invalid');
+    errorEl.classList.add('hidden');
+    errorEl.textContent = '';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PASSWORD TOGGLE
+  // ═══════════════════════════════════════════════════════════
+
+  function wirePasswordToggle(btn, input) {
+    btn.addEventListener('click', () => {
+      const isPw = input.type === 'password';
+      input.type = isPw ? 'text' : 'password';
+      btn.setAttribute('aria-label', isPw ? 'Hide password' : 'Show password');
+      input.focus();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PASSWORD STRENGTH UI
+  // ═══════════════════════════════════════════════════════════
+
+  function updateStrengthUI(password) {
+    const level = passwordStrength(password);
+    const labels = ['', 'Weak', 'Medium', 'Strong'];
+    const classes = ['', 'weak', 'medium', 'strong'];
+
+    dom.strengthBars.forEach((bar, idx) => {
+      bar.classList.remove('filled-weak', 'filled-medium', 'filled-strong');
+      if (level > 0 && idx < level) {
+        bar.classList.add('filled-' + classes[level]);
+      }
+    });
+
+    dom.strengthLabel.className = 'strength-label' + (level ? ' ' + classes[level] : '');
+    dom.strengthLabel.textContent = level ? labels[level] : '';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // AVATAR
+  // ═══════════════════════════════════════════════════════════
+
+  function renderAvatarPlaceholder(text) {
+    dom.avatarGrid.innerHTML = '';
+    const ph = document.createElement('div');
+    ph.className = 'avatar-placeholder';
+    ph.textContent = text || 'Type display name';
+    dom.avatarGrid.appendChild(ph);
+    for (let i = 1; i < 5; i++) {
+      const ph2 = document.createElement('div');
+      ph2.className = 'avatar-placeholder';
+      dom.avatarGrid.appendChild(ph2);
+    }
+  }
+
+  function renderAvatarSkeletons(count) {
+    dom.avatarGrid.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const sk = document.createElement('div');
+      sk.className = 'avatar-skeleton';
+      dom.avatarGrid.appendChild(sk);
+    }
+  }
+
+  function renderAvatarOptions(variants) {
+    dom.avatarGrid.innerHTML = '';
+    variants.forEach((v, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'avatar-option';
+      btn.dataset.avatarId = v.id;
+      btn.setAttribute('aria-label', v.label || ('Avatar ' + (idx + 1)));
+      btn.style.animation = 'panelFadeIn 0.2s ' + (idx * 60) + 'ms var(--ease) both';
+
+      const img = document.createElement('img');
+      img.src = v.dataUrl;
+      img.alt = v.label || '';
+      img.loading = 'lazy';
+      btn.appendChild(img);
+
+      btn.addEventListener('click', () => selectAvatar(v));
+      dom.avatarGrid.appendChild(btn);
+    });
+  }
+
+  function selectAvatar(v) {
+    state.selectedAvatar = v;
+    dom.avatarGrid.querySelectorAll('.avatar-option').forEach(el => {
+      el.classList.toggle('selected', el.dataset.avatarId === v.id);
+    });
+    dom.avatarStatus.textContent = 'Selected: ' + (v.label || v.id);
+  }
+
+  async function generateAvatars() {
+    if (state.avatarLoading) return;
+
+    const username = dom.regUsername.value.trim().toLowerCase();
+    const displayName = dom.regDisplayName.value.trim();
+
+    if (!displayName && !username) {
+      toast('Add a display name or username first', 'info');
+      return;
+    }
+
+    if (username && validateUsername(username)) {
+      toast('Fix username first', 'info');
+      return;
+    }
+
+    state.avatarLoading = true;
+    state.avatarVariants = [];
+    state.selectedAvatar = null;
+
+    dom.btnGenerateAvatar.disabled = true;
+    dom.btnSkipAvatar.disabled = true;
+    dom.avatarStatus.textContent = 'Generating…';
+    renderAvatarSkeletons(5);
+
+    try {
+      const res = await apiPost(API_FLIER + '?action=avatar/preview', {
+        username: username || 'user',
+        displayName: displayName || username || 'user',
+      });
+
+      if (!res.ok || !res.data.success || !Array.isArray(res.data.variants) || res.data.variants.length === 0) {
+        throw new Error(res.data.error || 'Avatar generation failed');
+      }
+
+      state.avatarVariants = res.data.variants;
+      renderAvatarOptions(res.data.variants);
+      dom.avatarStatus.textContent = 'Tap to select';
+      selectAvatar(res.data.variants[0]);
+    } catch (err) {
+      console.warn('[Avatars]', err);
+      renderAvatarPlaceholder('Generation failed');
+      dom.avatarStatus.textContent = 'You can skip or try again';
+      toast('Avatar generation failed. You can skip or try again.', 'warning');
+    } finally {
+      state.avatarLoading = false;
+      dom.btnGenerateAvatar.disabled = false;
+      dom.btnSkipAvatar.disabled = false;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // REGISTER
+  // ═══════════════════════════════════════════════════════════
+
+  async function handleRegister(e) {
+    e.preventDefault();
+    if (state.submitting) return;
+
+    clearFieldError(dom.regEmail, dom.regEmailError);
+    clearFieldError(dom.regPassword, dom.regPasswordError);
+    clearFieldError(dom.regUsername, dom.regUsernameError);
+
+    const email = dom.regEmail.value.trim();
+    const password = dom.regPassword.value;
+    const username = dom.regUsername.value.trim().toLowerCase();
+    const displayName = dom.regDisplayName.value.trim();
+
+    if (!dom.regTerms.checked) {
+      toast('You must agree to the Terms', 'warning');
+      return;
+    }
+
+    let firstInvalid = null;
+
+    const emailErr = validateEmail(email);
+    if (emailErr) {
+      showFieldError(dom.regEmail, dom.regEmailError, emailErr);
+      firstInvalid = firstInvalid || dom.regEmail;
+    }
+    const pwErr = validatePassword(password);
+    if (pwErr) {
+      showFieldError(dom.regPassword, dom.regPasswordError, pwErr);
+      firstInvalid = firstInvalid || dom.regPassword;
+    }
+    const unErr = validateUsername(username);
+    if (unErr) {
+      showFieldError(dom.regUsername, dom.regUsernameError, unErr);
+      firstInvalid = firstInvalid || dom.regUsername;
+    }
+
+    if (firstInvalid) {
+      firstInvalid.focus();
+      return;
+    }
+
+    state.submitting = true;
+    dom.btnRegister.disabled = true;
+    dom.btnRegister.innerHTML = '<span>Creating account…</span>';
+
+    showLoading('Creating account', 'Setting up your Folio profile…');
+
+    try {
+      // Upload chosen avatar first (if any)
+      let avatarUrl = null;
+      if (state.selectedAvatar && state.selectedAvatar.dataUrl) {
+        dom.loadingMessage.textContent = 'Uploading avatar…';
+        try {
+          const up = await apiPost(API_FLIER + '?action=avatar/upload', {
+            dataUrl: state.selectedAvatar.dataUrl,
+            username: username,
+          });
+          if (up.ok && up.data.success && up.data.url) {
+            avatarUrl = up.data.url;
+          }
+        } catch (err) {
+          console.warn('[Avatar upload]', err);
+        }
+      }
+
+      dom.loadingMessage.textContent = 'Creating your account…';
+
+      const body = {
+        email,
+        password,
+        username,
+        displayName: displayName || undefined,
+        avatarUrl: avatarUrl || undefined,
+      };
+
+      const res = await apiPost(API_AUTH + '?action=register', body);
+
+      if (!res.ok || !res.data.success) {
+        hideLoading();
+        handleRegisterError(res);
+        return;
+      }
+
+      const data = res.data;
+      saveSession(data.sessionToken, {
+        uid: data.uid,
+        username: data.username,
+        profile: {
+          username: data.username,
+          avatarUrl: data.avatarUrl || null,
+        },
+      });
+
+      hideLoading();
+
+      if (data.usernameModified) {
+        toast('Signed up as ' + data.username + ' (requested "' + data.requestedUsername + '")', 'info');
+      }
+
+      // Show celebration
+      showCelebration(data);
+    } catch (err) {
+      hideLoading();
+      console.error('[Register]', err);
+      toast('Could not reach server. Check your connection.', 'error');
+    } finally {
+      state.submitting = false;
+      dom.btnRegister.disabled = false;
+      dom.btnRegister.innerHTML = '<span>Create account</span><svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+    }
+  }
+
+  function handleRegisterError(res) {
+    const msg = (res.data && res.data.error) || 'Registration failed';
+    const status = res.status;
+
+    if (status === 409) {
+      if (/email/i.test(msg)) {
+        showFieldError(dom.regEmail, dom.regEmailError, 'This email is already registered');
+        dom.regEmail.focus();
+      } else {
+        toast(msg, 'error');
+      }
+    } else if (status === 429) {
+      const retry = res.data.retryAfter || 60;
+      toast('Too many attempts. Try again in ' + retry + 's.', 'error');
+    } else {
+      toast(msg, 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOGIN
+  // ═══════════════════════════════════════════════════════════
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    if (state.submitting) return;
+
+    const identifier = dom.loginIdentifier.value.trim();
+    const password = dom.loginPassword.value;
+
+    if (!identifier || !password) {
+      toast('Enter your email/username and password', 'warning');
+      return;
+    }
+
+    state.submitting = true;
+    dom.btnLogin.disabled = true;
+    dom.btnLogin.innerHTML = '<span>Signing in…</span>';
+
+    showLoading('Signing in', 'Verifying your credentials…');
+
+    try {
+      const res = await apiPost(API_AUTH + '?action=login', { identifier, password });
+
+      if (!res.ok || !res.data.success) {
+        hideLoading();
+        const msg = (res.data && res.data.error) || 'Login failed';
+        if (res.status === 401) toast('Invalid credentials', 'error');
+        else if (res.status === 403) toast('Account suspended', 'error');
+        else if (res.status === 429) {
+          const retry = res.data.retryAfter || 60;
+          toast('Too many attempts. Try again in ' + retry + 's.', 'error');
+        }
+        else toast(msg, 'error');
+        return;
+      }
+
+      const data = res.data;
+      saveSession(data.sessionToken, {
+        uid: data.uid,
+        username: data.user && data.user.username,
+        email: data.user && data.user.email,
+        profile: {
+          username: data.user && data.user.username,
+          displayName: data.user && data.user.displayName,
+          avatarUrl: data.user && data.user.avatarUrl,
+        },
+      });
+
+      hideLoading();
+      showSuccess('Welcome back', 'Taking you to your editor…');
+      setTimeout(() => { window.location.href = '/'; }, 1400);
+    } catch (err) {
+      hideLoading();
+      console.error('[Login]', err);
+      toast('Could not reach server. Check your connection.', 'error');
+    } finally {
+      state.submitting = false;
+      dom.btnLogin.disabled = false;
+      dom.btnLogin.innerHTML = '<span>Sign in</span><svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SUCCESS / CELEBRATION
+  // ═══════════════════════════════════════════════════════════
+
+  function showSuccess(title, desc) {
+    dom.successTitle.textContent = title;
+    dom.successDesc.textContent = desc;
+    dom.viewSuccess.classList.add('active');
+  }
+
+  function showCelebration(data) {
+    const username = data.username || '';
+    const avatarUrl = data.avatarUrl || null;
+
+    dom.celeAvatar.innerHTML = avatarUrl
+  ? '<img src="' + avatarUrl + '" alt="">'
+  : '<img src="https://foliostudios.vercel.app/icons/icon.jpg" alt="">';
+
+    dom.celeTitle.textContent = 'Welcome to Folio!';
+    dom.celeSubtitle.textContent = 'Your account is ready.';
+    dom.celeHandle.textContent = username ? '@' + username : '';
+    dom.celeEmail.textContent = dom.regEmail.value.trim() || '';
+
+    dom.viewCelebration.classList.add('active');
+  }
+
+  dom.btnCeleStart.addEventListener('click', () => {
+    dom.viewCelebration.classList.remove('active');
+    window.location.href = '/';
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // SESSION VIEW
+  // ═══════════════════════════════════════════════════════════
+
+  function renderSessionView(user) {
+    const name = (user.profile && user.profile.displayName)
+      || user.username
+      || (user.email ? user.email.split('@')[0] : 'You');
+
+    const email = user.email || '';
+    const avatar = user.profile && user.profile.avatarUrl;
+
+    dom.sessionAvatar.innerHTML = avatar
+  ? '<img src="' + avatar + '" alt="">'
+  : '<img src="https://foliostudios.vercel.app/icons/icon.jpg" alt="">';
+    dom.sessionUserName.textContent = name;
+    dom.sessionUserEmail.textContent = email;
+  }
+
+  dom.btnContinueApp.addEventListener('click', () => {
+    window.location.href = '/';
+  });
+
+  dom.btnSessionSignOut.addEventListener('click', async () => {
+    const token = getSession();
+    if (token) {
+      try {
+        await apiPost(API_AUTH + '?action=logout', {});
+      } catch {}
+    }
+    clearSession();
+    toast('Signed out', 'success');
+    switchView('view-auth');
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // VIEW SWITCHER
+  // ═══════════════════════════════════════════════════════════
+
+  function switchView(viewId) {
+    document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+    const target = document.getElementById(viewId);
+    if (target) target.classList.add('active');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TAB SWITCH
+  // ═══════════════════════════════════════════════════════════
+
+  function setMode(mode) {
+    if (state.mode === mode) return;
+    state.mode = mode;
+
+    dom.segmentTabs.forEach(t => {
+      t.classList.toggle('active', t.dataset.authMode === mode);
+    });
+
+    if (mode === 'register') {
+      dom.formRegister.style.display = 'block';
+      dom.formLogin.style.display = 'none';
+      setTimeout(() => dom.regEmail.focus(), 50);
+    } else {
+      dom.formRegister.style.display = 'none';
+      dom.formLogin.style.display = 'block';
+      setTimeout(() => dom.loginIdentifier.focus(), 50);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // THEME
+  // ═══════════════════════════════════════════════════════════
+
+  function applyTheme() {
+    let pref = 'dark';
+    try { pref = localStorage.getItem(STORAGE.theme) || 'dark'; } catch {}
+
+    let resolved = pref;
+    if (pref === 'auto' || pref === 'system') {
+      resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+
+    if (resolved === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+
+    if (dom.themeColorMeta) {
+      dom.themeColorMeta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // FIELD EVENTS
+  // ═══════════════════════════════════════════════════════════
+
+  function wireFieldEvents() {
+    dom.regEmail.addEventListener('input', () => clearFieldError(dom.regEmail, dom.regEmailError));
+    dom.regEmail.addEventListener('blur', () => {
+      if (!dom.regEmail.value) return;
+      const err = validateEmail(dom.regEmail.value.trim());
+      if (err) showFieldError(dom.regEmail, dom.regEmailError, err);
+    });
+
+    dom.regPassword.addEventListener('input', () => {
+      clearFieldError(dom.regPassword, dom.regPasswordError);
+      updateStrengthUI(dom.regPassword.value);
+    });
+    dom.regPassword.addEventListener('blur', () => {
+      if (!dom.regPassword.value) return;
+      const err = validatePassword(dom.regPassword.value);
+      if (err) showFieldError(dom.regPassword, dom.regPasswordError, err);
+    });
+
+    dom.regUsername.addEventListener('input', () => {
+      const cur = dom.regUsername.value;
+      const lower = cur.toLowerCase().replace(/\s+/g, '');
+      if (cur !== lower) dom.regUsername.value = lower;
+      clearFieldError(dom.regUsername, dom.regUsernameError);
+      dom.btnGenerateAvatar.disabled = !lower && !dom.regDisplayName.value.trim();
+    });
+    dom.regUsername.addEventListener('blur', () => {
+      if (!dom.regUsername.value) return;
+      const err = validateUsername(dom.regUsername.value.trim());
+      if (err) showFieldError(dom.regUsername, dom.regUsernameError, err);
+    });
+
+    dom.regDisplayName.addEventListener('input', () => {
+      dom.btnGenerateAvatar.disabled = !dom.regDisplayName.value.trim() && !dom.regUsername.value.trim();
+    });
+
+    wirePasswordToggle(dom.toggleRegPassword, dom.regPassword);
+    wirePasswordToggle(dom.toggleLoginPassword, dom.loginPassword);
+
+    dom.btnGenerateAvatar.addEventListener('click', generateAvatars);
+    dom.btnSkipAvatar.addEventListener('click', () => {
+      state.selectedAvatar = null;
+      state.avatarVariants = [];
+      renderAvatarPlaceholder('Skipped');
+      dom.avatarStatus.textContent = 'Skipped — default avatar will be used';
+    });
+
+    dom.formRegister.addEventListener('submit', handleRegister);
+    dom.formLogin.addEventListener('submit', handleLogin);
+
+    dom.segmentTabs.forEach(t => {
+      t.addEventListener('click', () => setMode(t.dataset.authMode));
+    });
+
+    dom.gotoLogin.addEventListener('click', (e) => { e.preventDefault(); setMode('login'); });
+    dom.gotoRegister.addEventListener('click', (e) => { e.preventDefault(); setMode('register'); });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BOOT
+  // ═══════════════════════════════════════════════════════════
+
+  async function boot() {
+    applyTheme();
+    wireFieldEvents();
+
+    // Already logged in? Verify and show session view
+    const session = getSession();
+    if (session) {
+      try {
+        const res = await fetch(API_AUTH + '?action=me', {
+          headers: { 'Authorization': 'Bearer ' + session },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.user) {
+            const stored = getUser() || {};
+            renderSessionView({
+              ...stored,
+              ...data.user,
+              email: data.user.email || stored.email,
+              profile: data.user.profile || stored.profile,
+            });
+            switchView('view-session');
+            return;
+          }
+        }
+        // Invalid session
+        clearSession();
+      } catch {
+        // Network error — treat as not logged in
+      }
+    }
+
+    // Show auth form
+    switchView('view-auth');
+    setTimeout(() => dom.regEmail.focus(), 150);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+})();
+</script>
+
+</body>
+</html>
