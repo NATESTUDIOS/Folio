@@ -1,6 +1,6 @@
 // api/flier.js
 // ═══════════════════════════════════════════════════════════════════
-//  FLIER — universal image generator  (v2.1.0-folio)
+//  FLIER — universal image generator  (v2.1.1-folio)
 //  ────────────────────────────────────────────────────────────────
 //
 //  Folio changes:
@@ -8,9 +8,9 @@
 //    • log/newReqId imported from ../utils/log.js
 //    • IMAGE_UPLOAD_API env-overridable
 //    • buildSvg / renderPng / uploadPng exported
-//    • NEW: action=avatar/preview — 5 base64 variants, NO upload
-//    • avatar/preview is public (IP rate-limited, no admin key)
-//    • Version string → "2.1.0-folio"
+//    • avatar/preview — 5 base64 variants, NO upload (public)
+//    • avatar/upload  — uploads ONE chosen avatar, returns URL (public)
+//    • Version string → "2.1.1-folio"
 // ═══════════════════════════════════════════════════════════════════
 
 import { Resvg } from "@resvg/resvg-js";
@@ -108,9 +108,10 @@ const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT_IP = 40;
 const RATE_LIMIT_KEY = 200;
 
-// Avatar preview rate limit: 20 per hour per IP
+// Avatar preview + upload: 20 per hour per IP
 const AVATAR_RATE_WINDOW_MS = 60 * 60 * 1000;
 const AVATAR_RATE_LIMIT_IP = 20;
+const MAX_AVATAR_DATA_URL_BYTES = 500 * 1024;
 
 const PREVIEW_CACHE_MAX = 200;
 const PREVIEW_CACHE_TTL = 5 * 60 * 1000;
@@ -1830,7 +1831,7 @@ function watermark(dims, theme) {
   const { w: W, h: H } = dims;
   const pad = Math.round(Math.min(W, H) * 0.035);
   const size = Math.round(Math.min(W, H) * 0.018);
-  const text = theme.watermarkText || "KOFA X";
+  const text = theme.watermarkText || "FOLIO";
   const y = H - pad;
   const labelW = Math.max(size * 4.5, measureText(text, size, "black", size * 0.12) + size * 1.2);
   const labelH = Math.round(size * 1.7);
@@ -2012,7 +2013,7 @@ function resolveText(data) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  TEMPLATES
+//  TEMPLATES (16, unchanged)
 // ═══════════════════════════════════════════════════════════════════
 
 function tpl_default(data, theme, dims) {
@@ -3274,7 +3275,7 @@ export default async function handler(req, res) {
 
   const action = String(req.query?.action || req.body?.action || "").trim();
 
-  // ══════════════════ AVATAR (PUBLIC — NO ADMIN KEY) ══════════════════
+  // ══════════════════ AVATAR PREVIEW (PUBLIC) ══════════════════
   if (action === "avatar/preview") {
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method not allowed" });
@@ -3333,6 +3334,83 @@ export default async function handler(req, res) {
     }
   }
 
+  // ══════════════════ AVATAR UPLOAD (PUBLIC) ══════════════════
+  if (action === "avatar/upload") {
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+
+    const rl = avatarRateLimit(`avatar:${ipHash(req)}`);
+    setRateHeaders(res, rl);
+    if (!rl.ok) {
+      log("avatar.rate_limit", { reqId, scope: "upload" });
+      return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip" });
+    }
+
+    const { dataUrl, username } = req.body || {};
+    if (!dataUrl || typeof dataUrl !== "string") {
+      return res.status(400).json({ success: false, error: "Missing dataUrl" });
+    }
+    if (!dataUrl.startsWith("data:image/")) {
+      return res.status(400).json({ success: false, error: "dataUrl must be a base64 image" });
+    }
+    if (dataUrl.length > MAX_AVATAR_DATA_URL_BYTES * 1.4) {
+      return res.status(413).json({ success: false, error: "Avatar too large (max 500 KB)" });
+    }
+
+    const commaIdx = dataUrl.indexOf(",");
+    if (commaIdx < 0) {
+      return res.status(400).json({ success: false, error: "Malformed data URL" });
+    }
+    const base64 = dataUrl.slice(commaIdx + 1);
+    if (!base64 || base64.length < 100) {
+      return res.status(400).json({ success: false, error: "dataUrl too small" });
+    }
+
+    const safeUsername = String(username || "user")
+      .slice(0, 40)
+      .replace(/[^a-zA-Z0-9_-]/g, "") || "user";
+    const uploadName = `avatar_${safeUsername}_${Date.now()}`;
+
+    try {
+      const pngBuffer = Buffer.from(base64, "base64");
+      if (pngBuffer.length > MAX_AVATAR_DATA_URL_BYTES) {
+        return res.status(413).json({ success: false, error: "Avatar too large" });
+      }
+
+      const uploaded = await uploadPng(pngBuffer, uploadName, reqId);
+      const url = uploaded.url || uploaded.display_url;
+
+      if (!url || !String(url).startsWith("https://")) {
+        log("avatar.upload.no_url", { reqId, keys: Object.keys(uploaded) });
+        return res.status(502).json({ success: false, error: "Upload returned no URL" });
+      }
+
+      log("avatar.upload.done", {
+        reqId,
+        url: String(url).slice(0, 100),
+        ms: Date.now() - t0,
+        bytes: pngBuffer.length,
+      });
+
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({
+        success: true,
+        url,
+        width: uploaded.width || null,
+        height: uploaded.height || null,
+        bytes: pngBuffer.length,
+      });
+    } catch (err) {
+      log("avatar.upload.error", { reqId, message: err.message, stack: err.stack });
+      const status = err.status || 500;
+      return res.status(status).json({
+        success: false,
+        error: err.message || "Upload failed",
+      });
+    }
+  }
+
   // ══════════════════ GET ══════════════════
   if (req.method === "GET") {
     if (!isAdmin(req)) {
@@ -3346,13 +3424,14 @@ export default async function handler(req, res) {
       initFont();
       return res.status(200).json({
         success: true,
-        version: "2.1.0-folio",
+        version: "2.1.1-folio",
         sizes: Object.keys(SIZES),
         types: ["template", "svg", "html"],
         modes: ["preview", "upload", "both"],
         templates: TEMPLATE_META,
         actions: {
-          "avatar/preview": "POST — generate 5 avatar variants (public, IP rate-limited)",
+          "avatar/preview": "POST — 5 avatar variants (public, IP rate-limited)",
+          "avatar/upload":  "POST { dataUrl } → uploads one, returns { url } (public, IP rate-limited)",
         },
         text: {
           mode: fontFamily ? "bundled-font" : "stroke-fallback",
@@ -3380,6 +3459,7 @@ export default async function handler(req, res) {
           maxImageBytes: MAX_IMAGE_BYTES,
           maxSvgChars: MAX_SVG_CHARS,
           maxHtmlChars: MAX_HTML_CHARS,
+          maxAvatarDataUrlBytes: MAX_AVATAR_DATA_URL_BYTES,
         },
       });
     }
