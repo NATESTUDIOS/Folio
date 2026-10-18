@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Folio — Analytics</title>
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --theme-primary: #F59E0B;
+  --theme-primary-hover: #fbbf24;
+  --theme-primary-glow: rgba(245, 158, 11, 0.40);
+  --theme-primary-soft: rgba(245, 158, 11, 0.14);
+
+  --theme-bg: #0a0c10;
+  --theme-surface: #0f1218;
+  --theme-surface-card: rgba(21, 25, 34, 0.72);
+  --theme-surface-card-solid: #151922;
+  --theme-surface-elevated: #1a1f2a;
+  --theme-text: #e8ecf1;
+  --theme-text-secondary: rgba(232, 236, 241, 0.72);
+  --theme-text-tertiary: rgba(232, 236, 241, 0.44);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.05);
+  --theme-glass-border: rgba(255, 255, 255, 0.09);
+  --theme-overlay: rgba(10, 12, 16, 0.85);
+  --theme-card-border: rgba(255, 255, 255, 0.08);
+  --theme-divider: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(26, 31, 42, 0.88);
+
+  --theme-success: #10B981;
+  --theme-success-soft: rgba(16, 185, 129, 0.14);
+  --theme-danger: #EF4444;
+  --theme-danger-soft: rgba(239, 68, 68, 0.12);
+  --theme-warning: #D97706;
+  --theme-warning-soft: rgba(217, 119, 6, 0.14);
+  --theme-info: #3B82F6;
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.10) 0%, transparent 55%);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --rail-w: 60px;
+  --content-max: 1100px;
+
+  --r-xs: 6px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', Consolas, Monaco, monospace;
+}
+
+[data-theme="light"] {
+  --theme-primary: #D97706;
+  --theme-primary-hover: #B45309;
+  --theme-primary-glow: rgba(217, 119, 6, 0.28);
+  --theme-primary-soft: rgba(217, 119, 6, 0.10);
+  --theme-bg: #f7f8fa;
+  --theme-surface: #ffffff;
+  --theme-surface-card: rgba(255, 255, 255, 0.85);
+  --theme-surface-card-solid: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-text: #121316;
+  --theme-text-secondary: rgba(18, 19, 22, 0.72);
+  --theme-text-tertiary: rgba(18, 19, 22, 0.48);
+  --theme-glass-bg: rgba(255, 255, 255, 0.75);
+  --theme-glass-border: rgba(0, 0, 0, 0.08);
+  --theme-overlay: rgba(18, 19, 22, 0.55);
+  --theme-card-border: rgba(0, 0, 0, 0.07);
+  --theme-divider: rgba(0, 0, 0, 0.06);
+  --input-bg: #ffffff;
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(217, 119, 6, 0.08) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: var(--theme-bg);
+  font-family: var(--font);
+  color: var(--theme-text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
+  background-attachment: fixed;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border: none; background: none; padding: 0; }
+a { color: var(--theme-primary); text-decoration: none; }
+svg { display: block; }
+.hidden { display: none !important; }
+.mono { font-family: var(--font-mono); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SHELL
+   ═══════════════════════════════════════════════════════════ */
+.app { display: flex; width: 100%; min-height: 100vh; min-height: 100dvh; }
+
+.rail {
+  display: none;
+  width: var(--rail-w);
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-glass-border);
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(16px + var(--safe-top)) 0 calc(16px + var(--safe-bottom));
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  flex-shrink: 0;
+  z-index: 90;
+}
+@media (min-width: 1024px) { .rail { display: flex; } }
+
+.rail-top, .rail-bottom { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+.rail-logo {
+  width: 40px; height: 40px; border-radius: 11px; overflow: hidden;
+  margin-bottom: 16px; background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--theme-primary);
+}
+.rail-logo img { width: 100%; height: 100%; object-fit: cover; }
+.rail-logo svg { width: 20px; height: 20px; stroke-width: 2; }
+
+.rail-btn {
+  width: 40px; height: 40px; border-radius: 11px;
+  color: var(--theme-text-tertiary);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s var(--ease); position: relative;
+}
+.rail-btn svg { width: 20px; height: 20px; stroke-width: 2; stroke: currentColor; fill: none; }
+.rail-btn:hover { color: var(--theme-text-secondary); background: var(--theme-glass-bg); }
+.rail-btn.active { color: var(--theme-primary); background: var(--theme-primary-soft); }
+.rail-btn.active::before {
+  content: ''; position: absolute; left: -12px; top: 50%;
+  transform: translateY(-50%); width: 3px; height: 22px;
+  border-radius: 0 3px 3px 0; background: var(--theme-primary);
+}
+.rail-divider { width: 24px; height: 1px; background: var(--theme-divider); margin: 6px 0; }
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN
+   ═══════════════════════════════════════════════════════════ */
+.main {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  padding-bottom: calc(80px + var(--safe-bottom));
+}
+@media (min-width: 1024px) { .main { padding-bottom: calc(24px + var(--safe-bottom)); } }
+
+.main-inner {
+  width: 100%; max-width: var(--content-max);
+  margin: 0 auto;
+  padding: calc(16px + var(--safe-top)) 16px 0;
+  flex: 1; display: flex; flex-direction: column; gap: 16px;
+}
+@media (min-width: 1024px) { .main-inner { padding: 24px 24px 0; } }
+
+/* ═══════════════════════════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════════════════════════ */
+.page-header {
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  font-size: clamp(20px, 3vw, 24px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--theme-text);
+  flex: 1;
+}
+
+.header-actions {
+  display: flex; gap: 6px; align-items: center;
+}
+
+.icon-btn {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s var(--ease);
+  flex-shrink: 0;
+}
+.icon-btn:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.icon-btn:active { transform: scale(0.94); }
+.icon-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.icon-btn.spinning svg { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.offline-banner {
+  display: none;
+  align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: var(--theme-warning-soft);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: 10px;
+  color: var(--theme-warning);
+  font-size: 11.5px; font-weight: 700;
+}
+.offline-banner.visible { display: flex; }
+.offline-banner svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════════
+   TABS
+   ═══════════════════════════════════════════════════════════ */
+.tabs-bar {
+  display: flex; gap: 2px;
+  overflow-x: auto; scrollbar-width: none;
+  border-bottom: 1px solid var(--theme-divider);
+  margin-bottom: -4px;
+}
+.tabs-bar::-webkit-scrollbar { display: none; }
+
+.tab {
+  padding: 10px 14px 12px;
+  font-size: 13px; font-weight: 700;
+  color: var(--theme-text-tertiary);
+  white-space: nowrap; flex-shrink: 0;
+  position: relative;
+  transition: color 0.2s var(--ease);
+}
+.tab:hover { color: var(--theme-text); }
+.tab.active { color: var(--theme-primary); }
+.tab.active::after {
+  content: ''; position: absolute; bottom: -1px; left: 10px; right: 10px;
+  height: 2px; background: var(--theme-primary); border-radius: 2px 2px 0 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PANEL
+   ═══════════════════════════════════════════════════════════ */
+.panel { display: none; flex-direction: column; gap: 16px; animation: panelIn 0.28s var(--ease); }
+.panel.active { display: flex; }
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   STATS GRID
+   ═══════════════════════════════════════════════════════════ */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 640px) { .stats-grid { grid-template-columns: repeat(4, 1fr); } }
+
+.stat-tile {
+  padding: 14px;
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.stat-label {
+  font-size: 10.5px; font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.stat-value {
+  font-size: 22px; font-weight: 800;
+  color: var(--theme-text); letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+.stat-value.warn { color: var(--theme-warning); }
+.stat-value.danger { color: var(--theme-danger); }
+.stat-hint {
+  font-size: 10.5px; color: var(--theme-text-tertiary);
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARDS
+   ═══════════════════════════════════════════════════════════ */
+.card {
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+}
+.card-title {
+  font-size: 13px; font-weight: 800; color: var(--theme-text);
+  display: flex; align-items: center; gap: 8px;
+}
+.card-title svg { width: 15px; height: 15px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; }
+.card-desc { font-size: 11px; color: var(--theme-text-tertiary); font-weight: 600; margin-top: 2px; }
+.card-body { padding: 16px; }
+.card-body.tight { padding: 12px 16px; }
+
+/* ═══════════════════════════════════════════════════════════
+   BAR CHART
+   ═══════════════════════════════════════════════════════════ */
+.bar-chart {
+  display: flex; align-items: flex-end;
+  gap: 4px; height: 100px;
+  padding: 0 2px;
+}
+
+.bar-chart-item {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.bar-chart-bar {
+  width: 100%;
+  background: var(--theme-primary);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+  transition: opacity 0.2s var(--ease);
+  opacity: 0.8;
+}
+.bar-chart-item:hover .bar-chart-bar { opacity: 1; }
+
+.bar-chart-label {
+  font-size: 9px; font-weight: 700;
+  color: var(--theme-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.bar-chart-value {
+  font-size: 9px; font-weight: 700;
+  color: var(--theme-text-tertiary);
+  font-family: var(--font-mono);
+}
+
+/* Horizontal bars for top projects */
+.hbar-chart {
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+.hbar-item {
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s var(--ease);
+}
+.hbar-item:hover { opacity: 0.85; }
+
+.hbar-icon {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; flex-shrink: 0;
+  color: var(--theme-primary);
+  font-size: 9px; font-weight: 800;
+}
+.hbar-icon img { width: 100%; height: 100%; object-fit: cover; }
+
+.hbar-info {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 3px;
+}
+
+.hbar-name {
+  font-size: 12px; font-weight: 700;
+  color: var(--theme-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.hbar-track {
+  height: 6px;
+  background: var(--theme-divider);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.hbar-fill {
+  height: 100%;
+  background: var(--theme-primary);
+  border-radius: 3px;
+  transition: width 0.4s var(--ease);
+}
+
+.hbar-count {
+  font-size: 11px; font-weight: 700;
+  color: var(--theme-text-secondary);
+  font-family: var(--font-mono);
+  min-width: 40px; text-align: right;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TABLES / ROWS
+   ═══════════════════════════════════════════════════════════ */
+.row-list { display: flex; flex-direction: column; }
+
+.row-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+  transition: background 0.15s var(--ease);
+  cursor: pointer;
+}
+.row-item:hover { background: var(--theme-glass-bg); }
+.row-item:last-child { border-bottom: none; }
+
+.row-icon {
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  background: var(--theme-glass-bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  color: var(--theme-primary);
+  font-size: 11px; font-weight: 800;
+}
+.row-icon img { width: 100%; height: 100%; object-fit: cover; }
+.row-icon svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+
+.row-content { flex: 1; min-width: 0; }
+.row-title {
+  font-size: 13px; font-weight: 700;
+  color: var(--theme-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+.row-sub {
+  font-size: 11px; color: var(--theme-text-tertiary);
+  font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.row-value {
+  font-size: 12px; font-weight: 700;
+  color: var(--theme-text-secondary);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.row-badge {
+  padding: 2px 7px; border-radius: 6px;
+  font-size: 9.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.row-badge.live { background: var(--theme-success-soft); color: var(--theme-success); }
+.row-badge.offline { background: var(--theme-divider); color: var(--theme-text-tertiary); }
+
+/* Projects table (desktop) */
+.projects-table { width: 100%; }
+.projects-table .row-item {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.projects-table .row-header {
+  cursor: default;
+  background: var(--theme-glass-bg);
+  font-size: 10.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--theme-text-tertiary);
+  padding: 10px 16px;
+}
+.projects-table .row-header:hover { background: var(--theme-glass-bg); }
+
+.project-cell {
+  display: flex; align-items: center; gap: 8px;
+  min-width: 0;
+}
+.project-cell .row-title { font-size: 12.5px; }
+.project-cell .row-sub { font-size: 10px; }
+
+/* Mobile project card */
+.project-card-mobile {
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 8px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+.project-card-mobile:hover { border-color: var(--theme-primary-glow); }
+.project-card-mobile .pc-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+.project-card-mobile .pc-stats {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+  font-size: 10.5px;
+}
+.project-card-mobile .pc-stat {
+  display: flex; flex-direction: column; gap: 1px;
+}
+.project-card-mobile .pc-stat-label {
+  font-weight: 700; color: var(--theme-text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.project-card-mobile .pc-stat-value {
+  font-weight: 700; color: var(--theme-text);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FILTER PILLS
+   ═══════════════════════════════════════════════════════════ */
+.pills-row {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  padding: 4px 0;
+}
+.pill {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 11.5px; font-weight: 700;
+  transition: all 0.2s var(--ease);
+  white-space: nowrap;
+}
+.pill:hover { border-color: var(--theme-primary-glow); color: var(--theme-text); }
+.pill.active { background: var(--theme-primary); color: #0a0c10; border-color: var(--theme-primary); }
+[data-theme="light"] .pill.active { color: #ffffff; }
+
+.search-input-wrap {
+  position: relative;
+  display: flex; align-items: center;
+  width: 100%;
+}
+.search-input-wrap svg {
+  position: absolute; left: 12px;
+  width: 14px; height: 14px;
+  stroke: var(--theme-text-tertiary);
+  fill: none; stroke-width: 2.2;
+  pointer-events: none;
+}
+.search-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px 0 34px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  color: var(--theme-text);
+  font-size: 13px; font-weight: 500;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s var(--ease);
+}
+.search-input:focus { border-color: var(--theme-primary); }
+.search-input::placeholder { color: var(--theme-text-tertiary); }
+
+/* ═══════════════════════════════════════════════════════════
+   ACTIVITY FEED
+   ═══════════════════════════════════════════════════════════ */
+.activity-row {
+  display: flex; gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+  align-items: flex-start;
+}
+.activity-row:last-child { border-bottom: none; }
+
+.activity-icon {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  background: var(--theme-glass-bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  color: var(--theme-primary);
+  font-size: 9px; font-weight: 800;
+  margin-top: 1px;
+}
+.activity-icon img { width: 100%; height: 100%; object-fit: cover; }
+
+.activity-body { flex: 1; min-width: 0; }
+.activity-text {
+  font-size: 12.5px; color: var(--theme-text);
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+.activity-text strong { font-weight: 700; }
+.activity-text .muted { color: var(--theme-text-tertiary); font-weight: 500; }
+.activity-time {
+  font-size: 10.5px; color: var(--theme-text-tertiary);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LOGS
+   ═══════════════════════════════════════════════════════════ */
+.log-row {
+  display: flex; gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+  align-items: flex-start;
+}
+.log-row:last-child { border-bottom: none; }
+
+.log-time {
+  font-size: 10.5px; color: var(--theme-text-tertiary);
+  font-family: var(--font-mono); font-weight: 600;
+  min-width: 56px; flex-shrink: 0; padding-top: 2px;
+}
+
+.log-body { flex: 1; min-width: 0; }
+.log-type {
+  display: inline-block;
+  padding: 1px 6px; border-radius: 4px;
+  background: var(--theme-glass-bg);
+  font-size: 9px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--theme-text-tertiary);
+  margin-bottom: 3px;
+}
+.log-action {
+  font-size: 12.5px; color: var(--theme-text);
+  font-weight: 600; line-height: 1.4;
+  overflow-wrap: break-word;
+}
+.log-meta-btn {
+  font-size: 10.5px; font-weight: 700;
+  color: var(--theme-primary); background: none;
+  margin-top: 3px; cursor: pointer;
+}
+.log-meta {
+  margin-top: 6px; padding: 8px;
+  background: var(--theme-surface-elevated);
+  border-radius: 6px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--theme-text-secondary);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════════════════════════ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px; padding: 10px 16px; border-radius: 10px;
+  font-size: 13px; font-weight: 700;
+  border: 1px solid transparent;
+  transition: all 0.2s var(--ease);
+  white-space: nowrap; min-height: 38px; font-family: inherit;
+}
+.btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary { background: var(--theme-primary); color: #0a0c10; }
+[data-theme="light"] .btn-primary { color: #ffffff; }
+.btn-primary:hover:not(:disabled) { background: var(--theme-primary-hover); }
+
+.btn-secondary { background: var(--theme-glass-bg); color: var(--theme-text); border-color: var(--theme-card-border); }
+.btn-secondary:hover:not(:disabled) { background: var(--theme-surface-elevated); border-color: var(--theme-primary-glow); }
+
+.btn-ghost { background: transparent; color: var(--theme-text-secondary); border-color: transparent; }
+.btn-ghost:hover:not(:disabled) { color: var(--theme-text); background: var(--theme-glass-bg); }
+
+.btn-sm { padding: 6px 12px; font-size: 12px; min-height: 30px; border-radius: 8px; }
+.btn-sm svg { width: 12px; height: 12px; }
+.btn-block { width: 100%; }
+
+/* ═══════════════════════════════════════════════════════════
+   SKELETON
+   ═══════════════════════════════════════════════════════════ */
+.skeleton {
+  background: linear-gradient(90deg, var(--theme-divider) 0%, var(--theme-glass-border) 50%, var(--theme-divider) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 8px;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EMPTY STATE
+   ═══════════════════════════════════════════════════════════ */
+.empty-state {
+  padding: 48px 20px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.empty-icon {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  background: var(--theme-glass-bg);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--theme-text-tertiary);
+  margin-bottom: 4px;
+}
+.empty-icon svg { width: 24px; height: 24px; stroke-width: 2; }
+.empty-title { font-size: 14px; font-weight: 700; color: var(--theme-text); }
+.empty-desc { font-size: 12px; color: var(--theme-text-tertiary); line-height: 1.45; max-width: 320px; margin-bottom: 4px; }
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: calc(16px + var(--safe-bottom));
+  left: 50%; transform: translateX(-50%);
+  z-index: 1000; width: 92%; max-width: 380px;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+@media (min-width: 1024px) {
+  .toast-container { left: auto; right: 20px; transform: none; bottom: 20px; }
+}
+
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+  font-size: 13px; font-weight: 500;
+  color: var(--theme-text);
+  transform: translateY(20px); opacity: 0;
+  transition: all 0.3s var(--ease-spring);
+  pointer-events: all;
+  overflow-wrap: break-word;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast svg { width: 15px; height: 15px; flex-shrink: 0; }
+.toast.success svg { stroke: var(--theme-success); }
+.toast.error svg { stroke: var(--theme-danger); }
+.toast.info svg { stroke: var(--theme-primary); }
+.toast.warning svg { stroke: var(--theme-warning); }
+
+/* ═══════════════════════════════════════════════════════════
+   LOADING
+   ═══════════════════════════════════════════════════════════ */
+.loading-overlay {
+  position: fixed; inset: 0; z-index: 900;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center;
+  flex-direction: column; gap: 14px; padding: 24px;
+}
+.loading-overlay.active { display: flex; }
+.loading-spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--theme-primary-soft);
+  border-top-color: var(--theme-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.loading-title { font-size: 15px; font-weight: 700; color: var(--theme-text); }
+.loading-desc { font-size: 12.5px; color: var(--theme-text-secondary); text-align: center; max-width: 320px; line-height: 1.5; }
+
+/* ═══════════════════════════════════════════════════════════
+   BOTTOM NAV
+   ═══════════════════════════════════════════════════════════ */
+.bottom-nav {
+  position: fixed;
+  bottom: calc(8px + var(--safe-bottom));
+  left: 50%; transform: translateX(-50%);
+  width: calc(100% - 24px); max-width: 400px;
+  background: var(--theme-surface-card-solid);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 18px; padding: 6px;
+  display: flex; justify-content: space-around; align-items: center;
+  z-index: 100;
+}
+@media (min-width: 1024px) { .bottom-nav { display: none; } }
+
+.nav-btn {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  color: var(--theme-text-tertiary);
+  text-decoration: none;
+  transition: all 0.2s var(--ease);
+  font-size: 10px; font-weight: 700;
+}
+.nav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2.1; }
+.nav-btn.active { color: var(--theme-primary); background: var(--theme-primary-soft); }
+.nav-btn:active { transform: scale(0.94); }
+
+/* ═══════════════════════════════════════════════════════════
+   MISC
+   ═══════════════════════════════════════════════════════════ */
+.info-banner {
+  padding: 10px 12px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  font-size: 11.5px; line-height: 1.5;
+  color: var(--theme-text-tertiary);
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.info-banner svg { width: 14px; height: 14px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; flex-shrink: 0; margin-top: 1px; }
+
+.last-updated {
+  font-size: 10.5px; color: var(--theme-text-tertiary);
+  font-weight: 600;
+}
+
+@media (max-width: 639px) {
+  .projects-table .row-item { display: none; }
+  .projects-table .row-header { display: none; }
+  .project-card-mobile { display: block; }
+}
+@media (min-width: 640px) {
+  .project-card-mobile { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ═══════════ RAIL ═══════════ -->
+  <aside class="rail" aria-label="Main navigation">
+    <div class="rail-top">
+      <a class="rail-logo" href="/" aria-label="Folio">
+        <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
+      </a>
+      <a class="rail-btn" href="/" data-rail="editor" aria-label="Editor">
+        <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </a>
+      <a class="rail-btn" href="/projects" data-rail="projects" aria-label="Projects">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </a>
+      <a class="rail-btn active" href="/analytics" data-rail="analytics" aria-label="Analytics">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+      </a>
+      <a class="rail-btn" href="/settings" data-rail="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </a>
+    </div>
+    <div class="rail-bottom">
+      <div class="rail-divider"></div>
+      <a class="rail-btn" href="/profile" data-rail="profile" aria-label="Profile">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </a>
+    </div>
+  </aside>
+
+  <!-- ═══════════ MAIN ═══════════ -->
+  <main class="main">
+    <div class="main-inner">
+      <header class="page-header">
+        <h1 class="page-title">Analytics</h1>
+        <div class="header-actions">
+          <button class="icon-btn" id="refreshBtn" aria-label="Refresh">
+            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="offline-banner" id="offlineBanner">
+        <svg viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/></svg>
+        <span>Offline — showing cached analytics</span>
+      </div>
+
+      <nav class="tabs-bar" id="tabsBar"></nav>
+
+      <div id="panelMount"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════ BOTTOM NAV ═══════════ -->
+<nav class="bottom-nav" aria-label="Main navigation">
+  <a class="nav-btn" href="/">
+    <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    <span>Editor</span>
+  </a>
+  <a class="nav-btn" href="/projects">
+    <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    <span>Projects</span>
+  </a>
+  <a class="nav-btn" href="/profile">
+    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    <span>Profile</span>
+  </a>
+  <a class="nav-btn" href="/settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <span>Settings</span>
+  </a>
+</nav>
+
+<!-- ═══════════ LOADING ═══════════ -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-title" id="loadingTitle">Loading…</div>
+  <div class="loading-desc" id="loadingDesc"></div>
+</div>
+
+<!-- ═══════════ TOAST ═══════════ -->
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════════════════════
+
+  const API_BASE = 'https://foliostudios.vercel.app/api';
+  const API_AUTH = API_BASE + '/auth';
+  const API_HOST = API_BASE + '/host';
+  const API_ANALYTICS = API_BASE + '/analytics';
+
+  const STORAGE = {
+    session: 'folio.session',
+    user: 'folio.user',
+    theme: 'folio.theme',
+    lastTab: 'folio.analytics.lastTab',
+  };
+
+  const TABS = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'projects', label: 'Projects' },
+    { id: 'profile', label: 'Profile' },
+    { id: 'activity', label: 'Activity' },
+    { id: 'logs', label: 'Logs' },
+  ];
+
+  const ACTIVITY_FILTERS = [
+    { id: 'all', label: 'All' },
+    { id: 'file', label: 'Files' },
+    { id: 'version', label: 'Versions' },
+    { id: 'deploy', label: 'Deploys' },
+    { id: 'db', label: 'DB' },
+    { id: 'invite', label: 'Invites' },
+    { id: 'project', label: 'Projects' },
+  ];
+
+  const LOG_FILTERS = [
+    { id: 'all', label: 'All' },
+    { id: 'auth', label: 'Auth' },
+    { id: 'project', label: 'Projects' },
+    { id: 'file', label: 'Files' },
+    { id: 'version', label: 'Versions' },
+    { id: 'deploy', label: 'Deploys' },
+    { id: 'settings', label: 'Settings' },
+    { id: 'invite', label: 'Invites' },
+  ];
+
+  const PROJECT_RANGES = [
+    { id: 'today', label: 'Today', days: 1 },
+    { id: '7d', label: '7 days', days: 7 },
+    { id: '30d', label: '30 days', days: 30 },
+    { id: 'all', label: 'All time', days: 365 },
+  ];
+
+  const PROJECT_SORTS = [
+    { id: 'views', label: 'Views' },
+    { id: 'files', label: 'Files' },
+    { id: 'storage', label: 'Storage' },
+    { id: 'modified', label: 'Modified' },
+  ];
+
+  // ═══════════════════════════════════════════════════════════
+  // SVG
+  // ═══════════════════════════════════════════════════════════
+
+  const SVG = {
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+    search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+    eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    chart: '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    rocket: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>',
+    user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+    chevronRight: '<polyline points="9 18 15 12 9 6"/>',
+    wifiOff: '<line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>',
+  };
+
+  const svg = (name, size = 16, sw = 2.2) =>
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${SVG[name] || ''}</svg>`;
+
+  // ═══════════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════════
+
+  const S = {
+    session: null,
+    user: null,
+    uid: null,
+    projects: [],
+    activeTab: 'overview',
+    projectAnalytics: new Map(), // pid -> { data, fetchedAt }
+    projectActivity: new Map(), // pid -> { items, fetchedAt }
+    profileAnalytics: null,
+    profileFetchedAt: 0,
+    logs: [],
+    logsOffset: 0,
+    logsHasMore: false,
+    logsFilter: 'all',
+    activityAggregated: null,
+    activityFetchedAt: 0,
+    activityFilter: 'all',
+    projectsRange: '7d',
+    projectsSort: 'views',
+    projectsSearch: '',
+    loading: false,
+  };
+
+  const $ = id => document.getElementById(id);
+  const escapeHTML = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escapeAttr = s => String(s ?? '').replace(/"/g, '&quot;');
+
+  // ═══════════════════════════════════════════════════════════
+  // UTILS
+  // ═══════════════════════════════════════════════════════════
+
+  function timeAgo(ts) {
+    if (!ts) return '—';
+    const diff = Date.now() - ts;
+    if (diff < 60000) return 'just now';
+    const m = Math.floor(diff / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `${d}d ago`;
+    return new Date(ts).toLocaleDateString();
+  }
+
+  function formatNumber(n) {
+    if (!Number.isFinite(n)) return '0';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return String(Math.round(n));
+  }
+
+  function formatBytes(n) {
+    if (!n || n < 0) return '0 B';
+    const u = ['B', 'KB', 'MB', 'GB'];
+    let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+  }
+
+  function getInitials(name) {
+    const s = String(name || '').trim();
+    if (!s) return '?';
+    const parts = s.split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  function getAvatarColor(seed) {
+    const colors = [
+      'linear-gradient(135deg, #F59E0B, #f97316)',
+      'linear-gradient(135deg, #0284c7, #0369a1)',
+      'linear-gradient(135deg, #a855f7, #6d28d9)',
+      'linear-gradient(135deg, #10B981, #059669)',
+      'linear-gradient(135deg, #ec4899, #be185d)',
+      'linear-gradient(135deg, #06b6d4, #0891b2)',
+    ];
+    let hash = 0;
+    const s = String(seed || '');
+    for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+  }
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TOAST
+  // ═══════════════════════════════════════════════════════════
+
+  function toast(msg, type = 'info', duration = 2800) {
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    const icon = type === 'success' ? 'check' : type === 'error' ? 'alert' : type === 'warning' ? 'alert' : 'info';
+    el.innerHTML = svg(icon, 15, 2.4) + '<span></span>';
+    el.querySelector('span').textContent = msg;
+    $('toastContainer').appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOADING / SESSION
+  // ═══════════════════════════════════════════════════════════
+
+  function showLoading(title, desc) {
+    $('loadingTitle').textContent = title || 'Loading…';
+    $('loadingDesc').textContent = desc || '';
+    $('loadingOverlay').classList.add('active');
+  }
+
+  function hideLoading() { $('loadingOverlay').classList.remove('active'); }
+
+  function readSession() {
+    try { S.session = localStorage.getItem(STORAGE.session); } catch {}
+    try {
+      const raw = localStorage.getItem(STORAGE.user);
+      S.user = raw ? JSON.parse(raw) : null;
+    } catch {}
+    if (S.user) S.uid = S.user.uid || null;
+  }
+
+  async function apiFetch(url, opts = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (S.session) headers['Authorization'] = `Bearer ${S.session}`;
+    try {
+      const res = await fetch(url, { ...opts, headers });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      return { ok: res.ok, status: res.status, data };
+    } catch (err) {
+      return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ROUTING
+  // ═══════════════════════════════════════════════════════════
+
+  function getHashTab() {
+    const h = location.hash.replace(/^#\/?/, '');
+    return TABS.some(t => t.id === h) ? h : null;
+  }
+
+  function setHashTab(id) {
+    const newHash = `#/${id}`;
+    if (location.hash !== newHash) history.replaceState(null, '', newHash);
+  }
+
+  function switchTab(id) {
+    if (!TABS.some(t => t.id === id)) return;
+    S.activeTab = id;
+    setHashTab(id);
+    try { localStorage.setItem(STORAGE.lastTab, id); } catch {}
+    renderTabs();
+    renderPanel();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BOOT
+  // ═══════════════════════════════════════════════════════════
+
+  async function boot() {
+    readSession();
+
+    if (!S.session) {
+      window.location.href = '/register?next=' + encodeURIComponent(location.pathname);
+      return;
+    }
+
+    const me = await apiFetch(API_AUTH + '?action=me');
+    if (!me.ok || !me.data?.success) {
+      if (me.status === 401) {
+        window.location.href = '/register?next=' + encodeURIComponent(location.pathname);
+        return;
+      }
+      renderError();
+      return;
+    }
+
+    S.user = me.data.user;
+    S.uid = S.user.uid;
+
+    // Load projects
+    const projRes = await apiFetch(API_HOST + '?action=projects/list');
+    if (projRes.ok && projRes.data?.success) {
+      S.projects = projRes.data.projects || [];
+    }
+
+    // Initial tab
+    const hashTab = getHashTab();
+    if (hashTab) S.activeTab = hashTab;
+    else {
+      try {
+        const last = localStorage.getItem(STORAGE.lastTab);
+        if (TABS.some(t => t.id === last)) S.activeTab = last;
+      } catch {}
+    }
+
+    renderTabs();
+    renderPanel();
+
+    // Online/offline
+    const updateOnline = () => $('offlineBanner').classList.toggle('visible', !navigator.onLine);
+    window.addEventListener('online', () => { updateOnline(); });
+    window.addEventListener('offline', updateOnline);
+    updateOnline();
+
+    // Refresh button
+    $('refreshBtn').addEventListener('click', () => {
+      const btn = $('refreshBtn');
+      btn.classList.add('spinning');
+      S.projectAnalytics.clear();
+      S.projectActivity.clear();
+      S.activityAggregated = null;
+      S.profileAnalytics = null;
+      S.logs = [];
+      S.logsOffset = 0;
+      setTimeout(() => {
+        renderPanel();
+        btn.classList.remove('spinning');
+      }, 300);
+    });
+
+    // Hash change
+    window.addEventListener('hashchange', () => {
+      const t = getHashTab();
+      if (t && t !== S.activeTab) {
+        S.activeTab = t;
+        renderTabs();
+        renderPanel();
+      }
+    });
+  }
+
+  function renderError() {
+    $('panelMount').innerHTML = `
+      <div class="card"><div class="card-body">
+        <div class="empty-state">
+          <div class="empty-icon" style="background:var(--theme-danger-soft);color:var(--theme-danger);">${svg('alert', 24, 2)}</div>
+          <div class="empty-title">Couldn't load analytics</div>
+          <div class="empty-desc">Check your connection and try again.</div>
+          <button class="btn btn-primary" onclick="location.reload()">${svg('refresh', 14, 2.2)} Retry</button>
+        </div>
+      </div></div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TABS
+  // ═══════════════════════════════════════════════════════════
+
+  function renderTabs() {
+    const el = $('tabsBar');
+    if (!el) return;
+    el.innerHTML = TABS.map(t => `
+      <button class="tab ${t.id === S.activeTab ? 'active' : ''}" data-tab="${escapeAttr(t.id)}" type="button">
+        ${escapeHTML(t.label)}
+      </button>
+    `).join('');
+    el.querySelectorAll('[data-tab]').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL ROUTER
+  // ═══════════════════════════════════════════════════════════
+
+  function renderPanel() {
+    const mount = $('panelMount');
+    if (!mount) return;
+    mount.innerHTML = `<div class="panel active" id="panel-${S.activeTab}"></div>`;
+    const panel = $('panel-' + S.activeTab);
+    const renderers = {
+      overview: renderOverview,
+      projects: renderProjectsPanel,
+      profile: renderProfilePanel,
+      activity: renderActivityPanel,
+      logs: renderLogsPanel,
+    };
+    if (renderers[S.activeTab]) renderers[S.activeTab](panel);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ANALYTICS FETCHERS
+  // ═══════════════════════════════════════════════════════════
+
+  const CACHE_TTL = 5 * 60 * 1000; // 5 min
+
+  async function loadProjectAnalytics(pid) {
+    const cached = S.projectAnalytics.get(pid);
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data;
+    const res = await apiFetch(API_ANALYTICS + '?action=project&pid=' + encodeURIComponent(pid));
+    if (res.ok && res.data?.success) {
+      S.projectAnalytics.set(pid, { data: res.data, fetchedAt: Date.now() });
+      return res.data;
+    }
+    return cached?.data || null;
+  }
+
+  async function loadProjectActivity(pid, limit = 10) {
+    const cached = S.projectActivity.get(pid);
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.items;
+    const res = await apiFetch(API_ANALYTICS + '?action=activity&pid=' + encodeURIComponent(pid) + '&limit=' + limit);
+    if (res.ok && res.data?.success) {
+      const items = (res.data.activity || []).map(a => ({ ...a, pid }));
+      S.projectActivity.set(pid, { items, fetchedAt: Date.now() });
+      return items;
+    }
+    return cached?.items || [];
+  }
+
+  async function loadProfileAnalytics() {
+    if (!S.uid) return null;
+    const res = await apiFetch(API_ANALYTICS + '?action=profile&uid=' + encodeURIComponent(S.uid));
+    if (res.ok && res.data?.success) {
+      S.profileAnalytics = res.data;
+      S.profileFetchedAt = Date.now();
+      return res.data;
+    }
+    return S.profileAnalytics;
+  }
+
+  async function loadAllProjectAnalytics() {
+    const results = await Promise.all(
+      S.projects.slice(0, 20).map(p => loadProjectAnalytics(p.pid))
+    );
+    return results.filter(Boolean);
+  }
+
+  async function loadAllProjectActivity() {
+    const results = await Promise.all(
+      S.projects.slice(0, 15).map(p => loadProjectActivity(p.pid, 5))
+    );
+    return results.flat();
+  }
+
+  async function loadUserLogs(offset = 0, type = 'all') {
+    const params = new URLSearchParams({ limit: '50', offset: String(offset) });
+    if (type !== 'all') params.set('type', type);
+    const res = await apiFetch(API_AUTH + '?action=logs&' + params.toString());
+    if (res.ok && res.data?.success) {
+      return {
+        logs: res.data.logs || [],
+        hasMore: res.data.hasMore || false,
+        total: res.data.total || 0,
+      };
+    }
+    return { logs: [], hasMore: false, total: 0 };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TAB: OVERVIEW
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderOverview(panel) {
+    if (S.projects.length === 0) {
+      panel.innerHTML = `
+        <div class="card"><div class="card-body">
+          <div class="empty-state">
+            <div class="empty-icon">${svg('chart', 24, 2)}</div>
+            <div class="empty-title">No data yet</div>
+            <div class="empty-desc">Create a project to start tracking analytics.</div>
+            <a href="/projects" class="btn btn-primary" style="margin-top:8px;">${svg('folder', 14, 2.2)} Go to projects</a>
+          </div>
+        </div></div>
+      `;
+      return;
+    }
+
+    panel.innerHTML = `
+      <div class="stats-grid" id="overviewStats">
+        ${[1,2,3,4].map(() => `<div class="stat-tile"><div class="skeleton" style="height:10px;width:40%;margin-bottom:8px;"></div><div class="skeleton" style="height:22px;width:60%;"></div></div>`).join('')}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">${svg('chart', 15, 2.2)} Top projects</div><span class="last-updated" id="topUpdated">—</span></div>
+        <div class="card-body"><div id="topProjectsBody"><div class="skeleton" style="height:60px;"></div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">${svg('clock', 15, 2.2)} Recent activity</div></div>
+        <div class="card-body tight" id="recentActivityBody"><div class="skeleton" style="height:60px;"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">${svg('database', 15, 2.2)} Storage</div></div>
+        <div class="card-body" id="storageSummaryBody"><div class="skeleton" style="height:40px;"></div></div>
+      </div>
+    `;
+
+    const analytics = await loadAllProjectAnalytics();
+    const activity = await loadAllProjectActivity();
+
+    // Stats
+    let totalViews = 0;
+    let total7d = 0;
+    let totalDb = 0;
+    let totalApi = 0;
+
+    for (const data of analytics) {
+      totalViews += data.total || 0;
+      total7d += (data.trend7 || []).reduce((s, t) => s + t.count, 0);
+      totalDb += (data.db?.reads || 0) + (data.db?.writes || 0);
+      totalApi += (data.api?.calls || 0);
+    }
+
+    $('overviewStats').innerHTML = `
+      <div class="stat-tile">
+        <div class="stat-label">Total views</div>
+        <div class="stat-value">${formatNumber(totalViews)}</div>
+        <div class="stat-hint">Across ${S.projects.length} project${S.projects.length === 1 ? '' : 's'}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">7-day views</div>
+        <div class="stat-value">${formatNumber(total7d)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">DB operations</div>
+        <div class="stat-value">${formatNumber(totalDb)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">API calls</div>
+        <div class="stat-value">${formatNumber(totalApi)}</div>
+      </div>
+    `;
+
+    // Top projects
+    const projectList = S.projects.map((p, i) => ({
+      project: p,
+      views: analytics[i]?.trend7?.reduce((s, t) => s + t.count, 0) || 0,
+    })).sort((a, b) => b.views - a.views).slice(0, 5);
+
+    const maxViews = Math.max(1, ...projectList.map(p => p.views));
+
+    if (projectList.length === 0 || projectList.every(p => p.views === 0)) {
+      $('topProjectsBody').innerHTML = `<div class="empty-state" style="padding:20px;">
+        <div class="empty-desc">No page views yet — deploy a project to start tracking.</div>
+      </div>`;
+    } else {
+      $('topProjectsBody').innerHTML = `
+        <div class="hbar-chart">
+          ${projectList.map(item => {
+            const p = item.project;
+            const pct = maxViews > 0 ? (item.views / maxViews) * 100 : 0;
+            const iconHTML = p.iconUrl
+              ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
+              : `<span>${escapeHTML(getInitials(p.name))}</span>`;
+            const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+            return `
+              <div class="hbar-item" data-pid="${escapeAttr(p.pid)}">
+                <div class="hbar-icon" style="${iconBg}">${iconHTML}</div>
+                <div class="hbar-info">
+                  <div class="hbar-name">${escapeHTML(p.name || 'Untitled')}</div>
+                  <div class="hbar-track">
+                    <div class="hbar-fill" style="width:${pct}%"></div>
+                  </div>
+                </div>
+                <div class="hbar-count">${formatNumber(item.views)}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+      $('topProjectsBody').querySelectorAll('[data-pid]').forEach(el => {
+        el.addEventListener('click', () => {
+          window.location.href = '/project?pid=' + encodeURIComponent(el.dataset.pid) + '#analytics';
+        });
+      });
+    }
+    $('topUpdated').textContent = analytics.length > 0 ? 'updated ' + timeAgo(Date.now()) : '—';
+
+    // Recent activity
+    if (activity.length === 0) {
+      $('recentActivityBody').innerHTML = `<div class="empty-state" style="padding:20px;">
+        <div class="empty-desc">No recent activity across your projects.</div>
+      </div>`;
+    } else {
+      const sorted = activity.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 10);
+      $('recentActivityBody').innerHTML = `
+        <div class="row-list">
+          ${sorted.map(a => renderActivityRow(a)).join('')}
+        </div>
+      `;
+      wireActivityRows($('recentActivityBody'));
+    }
+
+    // Storage summary
+    const totalStorage = S.projects.reduce((s, p) => s + (p.storageUsed || 0), 0);
+    const limit = S.user.settings?.globalLimit || 10 * 1024 * 1024;
+    const pct = limit > 0 ? Math.min(100, (totalStorage / limit) * 100) : 0;
+    const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
+
+    $('storageSummaryBody').innerHTML = `
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;">
+        <span style="color:var(--theme-text-secondary);font-weight:600;">${formatBytes(totalStorage)} of ${formatBytes(limit)}</span>
+        <span style="color:var(--theme-text-tertiary);font-weight:700;">${pct.toFixed(0)}%</span>
+      </div>
+      <div class="progress-bar" style="height:8px;background:var(--theme-divider);border-radius:4px;overflow:hidden;">
+        <div class="progress-fill ${barClass}" style="height:100%;width:${pct}%;background:var(--theme-${pct > 90 ? 'danger' : pct > 70 ? 'warning' : 'success'});transition:width 0.3s;"></div>
+      </div>
+      ${pct > 70 ? `<div class="info-banner" style="margin-top:10px;">
+        ${svg('alert', 14, 2.2)}
+        <span>Storage is ${pct > 90 ? 'nearly full' : 'getting full'}. <a href="/settings#storage" style="color:var(--theme-primary);font-weight:700;">Manage storage →</a></span>
+      </div>` : ''}
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TAB: PROJECTS
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderProjectsPanel(panel) {
+    if (S.projects.length === 0) {
+      panel.innerHTML = `
+        <div class="card"><div class="card-body">
+          <div class="empty-state">
+            <div class="empty-icon">${svg('folder', 24, 2)}</div>
+            <div class="empty-title">No projects yet</div>
+            <div class="empty-desc">Create a project to see per-project analytics.</div>
+            <a href="/projects" class="btn btn-primary" style="margin-top:8px;">${svg('folder', 14, 2.2)} Go to projects</a>
+          </div>
+        </div></div>
+      `;
+      return;
+    }
+
+    panel.innerHTML = `
+      <div class="search-input-wrap">
+        ${svg('search', 14, 2.2)}
+        <input class="search-input" id="projectsSearchInput" placeholder="Filter projects…" value="${escapeAttr(S.projectsSearch)}">
+      </div>
+      <div class="pills-row" id="rangePills">
+        ${PROJECT_RANGES.map(r => `<button class="pill ${S.projectsRange === r.id ? 'active' : ''}" data-range="${r.id}" type="button">${r.label}</button>`).join('')}
+      </div>
+      <div class="pills-row" id="sortPills">
+        ${PROJECT_SORTS.map(s => `<button class="pill ${S.projectsSort === s.id ? 'active' : ''}" data-sort="${s.id}" type="button">${s.label}</button>`).join('')}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">${svg('folder', 15, 2.2)} Projects</div></div>
+        <div class="projects-table" id="projectsTableBody">
+          <div class="row-item row-header">
+            <div>Project</div><div>Views</div><div>DB ops</div><div>API</div><div>Storage</div><div>Status</div>
+          </div>
+          <div class="skeleton" style="height:60px;margin:12px;"></div>
+        </div>
+      </div>
+    `;
+
+    $('projectsSearchInput').addEventListener('input', debounce((e) => {
+      S.projectsSearch = e.target.value.trim().toLowerCase();
+      renderProjectsTable();
+    }, 200));
+
+    document.querySelectorAll('[data-range]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.projectsRange = btn.dataset.range;
+        document.querySelectorAll('[data-range]').forEach(b => b.classList.toggle('active', b === btn));
+        renderProjectsTable();
+      });
+    });
+
+    document.querySelectorAll('[data-sort]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.projectsSort = btn.dataset.sort;
+        document.querySelectorAll('[data-sort]').forEach(b => b.classList.toggle('active', b === btn));
+        renderProjectsTable();
+      });
+    });
+
+    await loadAllProjectAnalytics();
+    renderProjectsTable();
+  }
+
+  function renderProjectsTable() {
+    const container = $('projectsTableBody');
+    if (!container) return;
+
+    const rangeDays = PROJECT_RANGES.find(r => r.id === S.projectsRange)?.days || 7;
+
+    let rows = S.projects.map(p => {
+      const analytics = S.projectAnalytics.get(p.pid)?.data;
+      let views = 0;
+      if (analytics?.trend7) {
+        if (rangeDays >= 7) views = analytics.trend7.reduce((s, t) => s + t.count, 0);
+        else if (rangeDays === 1) views = analytics.today || 0;
+      }
+      return {
+        project: p,
+        views,
+        dbOps: (analytics?.db?.reads || 0) + (analytics?.db?.writes || 0),
+        apiCalls: analytics?.api?.calls || 0,
+        storage: p.storageUsed || 0,
+      };
+    });
+
+    if (S.projectsSearch) {
+      rows = rows.filter(r => r.project.name?.toLowerCase().includes(S.projectsSearch));
+    }
+
+    if (S.projectsSort === 'views') rows.sort((a, b) => b.views - a.views);
+    else if (S.projectsSort === 'files') rows.sort((a, b) => (b.project.fileCount || 0) - (a.project.fileCount || 0));
+    else if (S.projectsSort === 'storage') rows.sort((a, b) => b.storage - a.storage);
+    else if (S.projectsSort === 'modified') rows.sort((a, b) => (b.project.updatedAt || 0) - (a.project.updatedAt || 0));
+
+    if (rows.length === 0) {
+      container.innerHTML = `<div class="empty-state" style="padding:24px;">
+        <div class="empty-desc">No projects match your filter.</div>
+      </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="row-item row-header">
+        <div>Project</div><div>Views</div><div>DB ops</div><div>API</div><div>Storage</div><div>Status</div>
+      </div>
+      ${rows.map(r => {
+        const p = r.project;
+        const iconHTML = p.iconUrl
+          ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
+          : `<span>${escapeHTML(getInitials(p.name))}</span>`;
+        const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+        const live = !!p.deployment?.url;
+        return `
+          <div class="row-item" data-pid="${escapeAttr(p.pid)}">
+            <div class="project-cell">
+              <div class="row-icon" style="${iconBg}">${iconHTML}</div>
+              <div style="min-width:0;">
+                <div class="row-title">${escapeHTML(p.name || 'Untitled')}</div>
+                <div class="row-sub">@${escapeHTML(p.slug || '')}</div>
+              </div>
+            </div>
+            <div class="row-value">${formatNumber(r.views)}</div>
+            <div class="row-value">${formatNumber(r.dbOps)}</div>
+            <div class="row-value">${formatNumber(r.apiCalls)}</div>
+            <div class="row-value">${formatBytes(r.storage)}</div>
+            <div class="row-badge ${live ? 'live' : 'offline'}">${live ? 'Live' : 'Offline'}</div>
+          </div>
+        `;
+      }).join('')}
+      ${rows.map(r => {
+        const p = r.project;
+        const iconHTML = p.iconUrl
+          ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
+          : `<span>${escapeHTML(getInitials(p.name))}</span>`;
+        const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+        const live = !!p.deployment?.url;
+        return `
+          <div class="project-card-mobile" data-pid="${escapeAttr(p.pid)}">
+            <div class="pc-header">
+              <div class="row-icon" style="${iconBg}">${iconHTML}</div>
+              <div style="flex:1;min-width:0;">
+                <div class="row-title">${escapeHTML(p.name || 'Untitled')}</div>
+                <div class="row-sub">@${escapeHTML(p.slug || '')} · <span style="color:var(--theme-${live ? 'success' : 'text-tertiary'});">${live ? 'Live' : 'Offline'}</span></div>
+              </div>
+            </div>
+            <div class="pc-stats">
+              <div class="pc-stat"><div class="pc-stat-label">Views</div><div class="pc-stat-value">${formatNumber(r.views)}</div></div>
+              <div class="pc-stat"><div class="pc-stat-label">DB ops</div><div class="pc-stat-value">${formatNumber(r.dbOps)}</div></div>
+              <div class="pc-stat"><div class="pc-stat-label">API calls</div><div class="pc-stat-value">${formatNumber(r.apiCalls)}</div></div>
+              <div class="pc-stat"><div class="pc-stat-label">Storage</div><div class="pc-stat-value">${formatBytes(r.storage)}</div></div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    `;
+
+    container.querySelectorAll('[data-pid]').forEach(el => {
+      el.addEventListener('click', () => {
+        window.location.href = '/project?pid=' + encodeURIComponent(el.dataset.pid) + '#analytics';
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TAB: PROFILE
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderProfilePanel(panel) {
+    panel.innerHTML = `
+      <div class="stats-grid" id="profileStats">
+        ${[1,2,3].map(() => `<div class="stat-tile"><div class="skeleton" style="height:10px;width:40%;margin-bottom:8px;"></div><div class="skeleton" style="height:22px;width:60%;"></div></div>`).join('')}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">${svg('chart', 15, 2.2)} Last 7 days</div></div>
+        <div class="card-body" id="chart7Body"><div class="skeleton" style="height:100px;"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">${svg('chart', 15, 2.2)} Last 30 days</div></div>
+        <div class="card-body" id="chart30Body"><div class="skeleton" style="height:100px;"></div></div>
+      </div>
+      <div class="info-banner">
+        ${svg('info', 14, 2.2)}
+        <span>Counts are unique visitors per day (deduplicated by IP + user agent).</span>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <a href="/${encodeURIComponent(S.user.profile?.username || '')}" target="_blank" rel="noopener" class="btn btn-secondary btn-block">
+            ${svg('external', 14, 2.2)} Preview your public profile
+          </a>
+        </div>
+      </div>
+    `;
+
+    const data = await loadProfileAnalytics();
+
+    if (!data) {
+      $('profileStats').innerHTML = `<div class="stat-tile" style="grid-column:1/-1;">
+        <div class="stat-label">Profile views</div>
+        <div class="stat-value">—</div>
+        <div class="stat-hint">No data available</div>
+      </div>`;
+      $('chart7Body').innerHTML = '';
+      $('chart30Body').innerHTML = '';
+      return;
+    }
+
+    const total = data.total || 0;
+    const last7 = data.last7 || 0;
+    const last30 = data.last30 || 0;
+
+    $('profileStats').innerHTML = `
+      <div class="stat-tile">
+        <div class="stat-label">Total views</div>
+        <div class="stat-value">${formatNumber(total)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Last 7 days</div>
+        <div class="stat-value">${formatNumber(last7)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Last 30 days</div>
+        <div class="stat-value">${formatNumber(last30)}</div>
+      </div>
+    `;
+
+    const trend30 = data.trend30 || [];
+    const last7Data = trend30.slice(-7);
+
+    // 7-day chart
+    const max7 = Math.max(1, ...last7Data.map(t => t.count));
+    if (last7Data.length > 0) {
+      $('chart7Body').innerHTML = `
+        <div class="bar-chart">
+          ${last7Data.map(t => {
+            const pct = (t.count / max7) * 100;
+            return `
+              <div class="bar-chart-item" title="${escapeAttr(t.date)} · ${t.count} views">
+                <div class="bar-chart-value">${t.count}</div>
+                <div class="bar-chart-bar" style="height:${Math.max(4, pct)}%;"></div>
+                <div class="bar-chart-label">${escapeHTML(t.date.slice(-5))}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    } else {
+      $('chart7Body').innerHTML = `<div class="empty-state" style="padding:20px;">
+        <div class="empty-desc">No views in the last 7 days.</div>
+      </div>`;
+    }
+
+    // 30-day chart
+    const max30 = Math.max(1, ...trend30.map(t => t.count));
+    if (trend30.length > 0) {
+      $('chart30Body').innerHTML = `
+        <div class="bar-chart" style="height:80px;">
+          ${trend30.map(t => {
+            const pct = (t.count / max30) * 100;
+            return `
+              <div class="bar-chart-item" title="${escapeAttr(t.date)} · ${t.count} views">
+                <div class="bar-chart-bar" style="height:${Math.max(2, pct)}%;opacity:0.7;"></div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    } else {
+      $('chart30Body').innerHTML = `<div class="empty-state" style="padding:20px;">
+        <div class="empty-desc">No views in the last 30 days.</div>
+      </div>`;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TAB: ACTIVITY
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderActivityPanel(panel) {
+    if (S.projects.length === 0) {
+      panel.innerHTML = `
+        <div class="card"><div class="card-body">
+          <div class="empty-state">
+            <div class="empty-icon">${svg('clock', 24, 2)}</div>
+            <div class="empty-title">No activity yet</div>
+            <div class="empty-desc">Activity from your projects will appear here.</div>
+          </div>
+        </div></div>
+      `;
+      return;
+    }
+
+    panel.innerHTML = `
+      <div class="pills-row" id="activityFilters">
+        ${ACTIVITY_FILTERS.map(f => `<button class="pill ${S.activityFilter === f.id ? 'active' : ''}" data-activity-filter="${f.id}" type="button">${f.label}</button>`).join('')}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">${svg('clock', 15, 2.2)} Recent activity</div></div>
+        <div class="card-body tight" id="activityBody"><div class="skeleton" style="height:60px;"></div></div>
+      </div>
+    `;
+
+    panel.querySelectorAll('[data-activity-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.activityFilter = btn.dataset.activityFilter;
+        panel.querySelectorAll('[data-activity-filter]').forEach(b => b.classList.toggle('active', b === btn));
+        renderActivityList();
+      });
+    });
+
+    if (!S.activityAggregated || Date.now() - S.activityFetchedAt > CACHE_TTL) {
+      S.activityAggregated = await loadAllProjectActivity();
+      S.activityFetchedAt = Date.now();
+    }
+
+    renderActivityList();
+  }
+
+  function renderActivityList() {
+    const container = $('activityBody');
+    if (!container) return;
+
+    let items = S.activityAggregated || [];
+    if (S.activityFilter !== 'all') {
+      items = items.filter(a => a.type === S.activityFilter);
+    }
+    items = items.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 50);
+
+    if (items.length === 0) {
+      container.innerHTML = `<div class="empty-state" style="padding:24px;">
+        <div class="empty-desc">No activity in this filter.</div>
+      </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="row-list">
+        ${items.map(a => renderActivityRow(a)).join('')}
+      </div>
+    `;
+    wireActivityRows(container);
+  }
+
+  function renderActivityRow(a) {
+    const project = S.projects.find(p => p.pid === a.pid);
+    const projectName = project?.name || 'Project';
+    const iconHTML = project?.iconUrl
+      ? `<img src="${escapeAttr(project.iconUrl)}" alt="">`
+      : `<span>${escapeHTML(getInitials(projectName))}</span>`;
+    const iconBg = project?.iconUrl ? '' : `background:${getAvatarColor(projectName)};color:#0a0c10;`;
+
+    return `
+      <div class="activity-row" data-pid="${escapeAttr(a.pid || '')}">
+        <div class="activity-icon" style="${iconBg}">${iconHTML}</div>
+        <div class="activity-body">
+          <div class="activity-text"><strong>${escapeHTML(a.action || 'Activity')}</strong> <span class="muted">in ${escapeHTML(projectName)}</span></div>
+          <div class="activity-time">${timeAgo(a.ts)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function wireActivityRows(container) {
+    container.querySelectorAll('[data-pid]').forEach(el => {
+      el.addEventListener('click', () => {
+        const pid = el.dataset.pid;
+        if (pid) window.location.href = '/project?pid=' + encodeURIComponent(pid) + '#analytics';
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TAB: LOGS
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderLogsPanel(panel) {
+    panel.innerHTML = `
+      <div class="pills-row" id="logFilters">
+        ${LOG_FILTERS.map(f => `<button class="pill ${S.logsFilter === f.id ? 'active' : ''}" data-log-filter="${f.id}" type="button">${f.label}</button>`).join('')}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">${svg('list', 15, 2.2)} Activity log</div></div>
+        <div class="card-body tight" id="logsBody"><div class="skeleton" style="height:100px;"></div></div>
+      </div>
+    `;
+
+    panel.querySelectorAll('[data-log-filter]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        S.logsFilter = btn.dataset.logFilter;
+        S.logsOffset = 0;
+        S.logs = [];
+        panel.querySelectorAll('[data-log-filter]').forEach(b => b.classList.toggle('active', b === btn));
+        await loadAndRenderLogs();
+      });
+    });
+
+    S.logs = [];
+    S.logsOffset = 0;
+    await loadAndRenderLogs();
+  }
+
+  async function loadAndRenderLogs() {
+    const container = $('logsBody');
+    if (!container) return;
+
+    const result = await loadUserLogs(S.logsOffset, S.logsFilter);
+    S.logs = result.logs;
+    S.logsHasMore = result.hasMore;
+    S.logsOffset = 0;
+    renderLogsList();
+  }
+
+  function renderLogsList() {
+    const container = $('logsBody');
+    if (!container) return;
+
+    if (S.logs.length === 0) {
+      container.innerHTML = `<div class="empty-state" style="padding:24px;">
+        <div class="empty-icon">${svg('list', 24, 2)}</div>
+        <div class="empty-title">No activity yet</div>
+        <div class="empty-desc">Your account activity will appear here.</div>
+      </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      ${S.logs.map(log => renderLogRow(log)).join('')}
+      ${S.logsHasMore ? `<div style="padding:12px;text-align:center;"><button class="btn btn-secondary btn-sm" id="loadMoreLogsBtn">Load more</button></div>` : ''}
+    `;
+
+    container.querySelectorAll('[data-log-meta]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const metaEl = document.getElementById(btn.dataset.logMeta);
+        if (metaEl) metaEl.classList.toggle('hidden');
+      });
+    });
+
+    $('loadMoreLogsBtn')?.addEventListener('click', async () => {
+      const btn = $('loadMoreLogsBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+      S.logsOffset += 50;
+      const result = await loadUserLogs(S.logsOffset, S.logsFilter);
+      S.logs = [...S.logs, ...result.logs];
+      S.logsHasMore = result.hasMore;
+      renderLogsList();
+    });
+  }
+
+  function renderLogRow(log, idx) {
+    const d = new Date(log.ts);
+    const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const hasMeta = log.meta && Object.keys(log.meta).length > 0;
+    const metaId = 'logMeta-' + (idx ?? Math.random().toString(36).slice(2, 8));
+
+    return `
+      <div class="log-row">
+        <div class="log-time">${time}</div>
+        <div class="log-body">
+          <span class="log-type">${escapeHTML(log.type || 'event')}</span>
+          <div class="log-action">${escapeHTML(log.action || '')}</div>
+          ${hasMeta ? `
+            <button class="log-meta-btn" data-log-meta="${escapeAttr(metaId)}">Show details</button>
+            <div class="log-meta hidden" id="${escapeAttr(metaId)}">${escapeHTML(JSON.stringify(log.meta, null, 2))}</div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // START
+  // ═══════════════════════════════════════════════════════════
+
+  function init() {
+    boot().catch(err => {
+      console.error('[Analytics]', err);
+      renderError();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();
+</script>
+
+</body>
+</html>
