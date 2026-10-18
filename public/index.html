@@ -2306,47 +2306,65 @@ const cm = {
   },
 
   async loadModules() {
-    if (this.modules) return this.modules;
-    if (this._loading) return this._loading;
+  if (this.modules) return this.modules;
+  if (this._loading) return this._loading;
 
-    const STATE = 'https://esm.sh/@codemirror/state@6.3.1';
-    const VIEW = 'https://esm.sh/@codemirror/view@6.22.0';
-    const pin = (url) => `${url}${url.includes('?') ? '&' : '?'}deps=${STATE}${url.includes('@codemirror/view') ? '' : '&deps=' + VIEW}`;
+  // Shared peer versions — pinned via ?external so every package shares ONE instance.
+  // esm.sh's ?external is more reliable than ?deps for forcing shared singletons.
+  const SHARED = 'external=@codemirror/state,@codemirror/view,@codemirror/language,@codemirror/commands,@codemirror/search,@codemirror/lint,@lezer/common,@lezer/highlight,@lezer/lr';
 
-    this._loading = (async () => {
-      // basicSetup moved into the "codemirror" package at v6
-      const [codemirrorPkg, oneDark, searchMod, commandsMod, viewMod, stateMod, lintMod, mergeMod] = await Promise.all([
-        import(pin('https://esm.sh/codemirror@6.0.2')),
-        import(pin('https://esm.sh/@codemirror/theme-one-dark@6.1.2')),
-        import(pin('https://esm.sh/@codemirror/search@6.5.0')),
-        import(pin('https://esm.sh/@codemirror/commands@6.3.0')),
-        import(VIEW),
-        import(STATE),
-        import(pin('https://esm.sh/@codemirror/lint@6.5.0')),
-        import(pin('https://esm.sh/@codemirror/merge@6.4.0')),
-      ]);
+  const withExt = (url) => `${url}${url.includes('?') ? '&' : '?'}${SHARED}`;
 
-      this.modules = {
-        basicSetup: codemirrorPkg.basicSetup,
-        EditorView: viewMod.EditorView,
-        EditorState: stateMod.EditorState,
-        keymap: viewMod.keymap,
-        oneDark: oneDark.oneDark,
-      };
-      this.commands = {
-        undo: commandsMod.undo,
-        redo: commandsMod.redo,
-        openSearchPanel: searchMod.openSearchPanel,
-      };
-      this.lintMod = lintMod;
-      this.mergeMod = mergeMod;
-      return this.modules;
-    })();
+  this._loading = (async () => {
+    // Load the base modules FIRST, unpinned, to guarantee correct shape.
+    const stateMod = await import('https://esm.sh/@codemirror/state@6.3.1');
+    const viewMod  = await import('https://esm.sh/@codemirror/view@6.22.0');
+    const langMod  = await import('https://esm.sh/@codemirror/language@6.10.1');
 
-    try { return await this._loading; }
-    catch (e) { this._loading = null; throw e; }
-  },
+    // Then everything else that depends on them.
+    const [codemirrorPkg, oneDark, searchMod, commandsMod, lintMod, mergeMod] = await Promise.all([
+      import(withExt('https://esm.sh/codemirror@6.0.2')),
+      import(withExt('https://esm.sh/@codemirror/theme-one-dark@6.1.2')),
+      import(withExt('https://esm.sh/@codemirror/search@6.5.0')),
+      import(withExt('https://esm.sh/@codemirror/commands@6.3.0')),
+      import(withExt('https://esm.sh/@codemirror/lint@6.5.0')),
+      import(withExt('https://esm.sh/@codemirror/merge@6.4.0')),
+    ]);
 
+    this.modules = {
+      basicSetup: codemirrorPkg.basicSetup,
+      EditorView: viewMod.EditorView,
+      EditorState: stateMod.EditorState,
+      keymap: viewMod.keymap,
+      oneDark: oneDark.oneDark,
+    };
+    this.commands = {
+      undo: commandsMod.undo,
+      redo: commandsMod.redo,
+      openSearchPanel: searchMod.openSearchPanel,
+    };
+    this.lintMod = lintMod;
+    this.mergeMod = mergeMod;
+
+    // Verify the critical facades exist before anyone calls .of on them.
+    const missing = [];
+    if (!this.modules.EditorView) missing.push('EditorView');
+    if (!this.modules.EditorState) missing.push('EditorState');
+    if (!this.modules.basicSetup) missing.push('basicSetup');
+    if (!this.modules.EditorView?.contentAttributes) missing.push('EditorView.contentAttributes');
+    if (!this.modules.EditorView?.lineWrapping) missing.push('EditorView.lineWrapping');
+    if (missing.length) {
+      this._loading = null;
+      this.modules = null;
+      throw new Error('CodeMirror modules missing: ' + missing.join(', '));
+    }
+
+    return this.modules;
+  })();
+
+  try { return await this._loading; }
+  catch (e) { this._loading = null; throw e; }
+},
   async getLanguageExtension(path) {
     const ext = (path.split('.').pop() || '').toLowerCase();
     if (!ext) return null;
@@ -2413,15 +2431,14 @@ const cm = {
 
     if (S.prefs.wordWrap) extensions.push(m.EditorView.lineWrapping);
     if (!S.prefs.lineNumbers) extensions.push(m.EditorView.theme({ '.cm-lineNumbers': { display: 'none' } }));
-
-    if (this.detectLanguage(path) === 'json' && this.lintMod) {
-      try {
-        const jsonMod = await import('https://esm.sh/@codemirror/lang-json@6.0.1?deps=https://esm.sh/@codemirror/state@6.3.1');
-        if (jsonMod.jsonParseLinter && token === this._initToken) {
-          extensions.push(this.lintMod.linter(jsonMod.jsonParseLinter()));
-        }
-      } catch {}
+if (this.detectLanguage(path) === 'json' && this.lintMod) {
+  try {
+    const jsonMod = await import('https://esm.sh/@codemirror/lang-json@6.0.1?external=@codemirror/state,@codemirror/view,@codemirror/language');
+    if (jsonMod.jsonParseLinter && token === this._initToken) {
+      extensions.push(this.lintMod.linter(jsonMod.jsonParseLinter()));
     }
+  } catch {}
+}
 
     extensions.push(m.EditorView.updateListener.of((update) => {
       if (update.docChanged) {
@@ -2796,9 +2813,30 @@ function showEditorError() {
   const container = $('editorContainer');
   if (!container) return;
   container.innerHTML = '';
+
   const box = el('div', { class: 'editor-empty', style: 'display:flex' });
-  box.innerHTML = iconHTML('alert', 24);
+
+  const iconWrap = el('div', { class: 'editor-empty-icon' });
+  iconWrap.innerHTML = iconHTML('alert', 24);
+
+  const title = el('h2', { class: 'editor-empty-title' }, 'Editor failed to load');
+  const desc = el('p', { class: 'editor-empty-desc' }, 'CodeMirror needs internet the first time. Check your connection and try again.');
+  const actions = el('div', { class: 'editor-empty-actions' });
+  const retryBtn = el('button', { class: 'btn btn-primary', type: 'button' }, 'Try again');
+  retryBtn.addEventListener('click', () => {
+    if (S.activeFile) {
+      container.innerHTML = '';
+      workspace.openFile(S.activeFile);
+    }
+  });
+  actions.appendChild(retryBtn);
+
+  box.appendChild(iconWrap);
+  box.appendChild(title);
+  box.appendChild(desc);
+  box.appendChild(actions);
   container.appendChild(box);
+
   $('editorEmpty')?.classList.add('hidden');
 }
 
