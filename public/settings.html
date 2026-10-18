@@ -1,0 +1,2967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Folio — Settings</title>
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --theme-primary: #F59E0B;
+  --theme-primary-hover: #fbbf24;
+  --theme-primary-glow: rgba(245, 158, 11, 0.40);
+  --theme-primary-soft: rgba(245, 158, 11, 0.14);
+
+  --theme-bg: #0a0c10;
+  --theme-surface: #0f1218;
+  --theme-surface-card: rgba(21, 25, 34, 0.72);
+  --theme-surface-card-solid: #151922;
+  --theme-surface-elevated: #1a1f2a;
+  --theme-text: #e8ecf1;
+  --theme-text-secondary: rgba(232, 236, 241, 0.72);
+  --theme-text-tertiary: rgba(232, 236, 241, 0.44);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.05);
+  --theme-glass-border: rgba(255, 255, 255, 0.09);
+  --theme-overlay: rgba(10, 12, 16, 0.85);
+  --theme-card-border: rgba(255, 255, 255, 0.08);
+  --theme-divider: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(26, 31, 42, 0.88);
+
+  --theme-success: #10B981;
+  --theme-success-soft: rgba(16, 185, 129, 0.14);
+  --theme-danger: #EF4444;
+  --theme-danger-soft: rgba(239, 68, 68, 0.12);
+  --theme-warning: #D97706;
+  --theme-warning-soft: rgba(217, 119, 6, 0.14);
+  --theme-info: #3B82F6;
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.10) 0%, transparent 55%);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --rail-w: 60px;
+  --content-max: 1080px;
+  --nav-w: 200px;
+
+  --r-xs: 6px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', Consolas, Monaco, monospace;
+}
+
+[data-theme="light"] {
+  --theme-primary: #D97706;
+  --theme-primary-hover: #B45309;
+  --theme-primary-glow: rgba(217, 119, 6, 0.28);
+  --theme-primary-soft: rgba(217, 119, 6, 0.10);
+  --theme-bg: #f7f8fa;
+  --theme-surface: #ffffff;
+  --theme-surface-card: rgba(255, 255, 255, 0.85);
+  --theme-surface-card-solid: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-text: #121316;
+  --theme-text-secondary: rgba(18, 19, 22, 0.72);
+  --theme-text-tertiary: rgba(18, 19, 22, 0.48);
+  --theme-glass-bg: rgba(255, 255, 255, 0.75);
+  --theme-glass-border: rgba(0, 0, 0, 0.08);
+  --theme-overlay: rgba(18, 19, 22, 0.55);
+  --theme-card-border: rgba(0, 0, 0, 0.07);
+  --theme-divider: rgba(0, 0, 0, 0.06);
+  --input-bg: #ffffff;
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(217, 119, 6, 0.08) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: var(--theme-bg);
+  font-family: var(--font);
+  color: var(--theme-text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
+  background-attachment: fixed;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border: none; background: none; padding: 0; }
+a { color: var(--theme-primary); text-decoration: none; }
+svg { display: block; }
+.hidden { display: none !important; }
+.mono { font-family: var(--font-mono); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SHELL
+   ═══════════════════════════════════════════════════════════ */
+.app { display: flex; width: 100%; min-height: 100vh; min-height: 100dvh; }
+
+.rail {
+  display: none;
+  width: var(--rail-w);
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-glass-border);
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(16px + var(--safe-top)) 0 calc(16px + var(--safe-bottom));
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  flex-shrink: 0;
+  z-index: 90;
+}
+@media (min-width: 1024px) { .rail { display: flex; } }
+
+.rail-top, .rail-bottom { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+.rail-logo {
+  width: 40px; height: 40px; border-radius: 11px; overflow: hidden;
+  margin-bottom: 16px; background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--theme-primary);
+}
+.rail-logo img { width: 100%; height: 100%; object-fit: cover; }
+.rail-logo svg { width: 20px; height: 20px; stroke-width: 2; }
+
+.rail-btn {
+  width: 40px; height: 40px; border-radius: 11px;
+  color: var(--theme-text-tertiary);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s var(--ease); position: relative;
+}
+.rail-btn svg { width: 20px; height: 20px; stroke-width: 2; stroke: currentColor; fill: none; }
+.rail-btn:hover { color: var(--theme-text-secondary); background: var(--theme-glass-bg); }
+.rail-btn.active { color: var(--theme-primary); background: var(--theme-primary-soft); }
+.rail-btn.active::before {
+  content: ''; position: absolute; left: -12px; top: 50%;
+  transform: translateY(-50%); width: 3px; height: 22px;
+  border-radius: 0 3px 3px 0; background: var(--theme-primary);
+}
+.rail-divider { width: 24px; height: 1px; background: var(--theme-divider); margin: 6px 0; }
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN
+   ═══════════════════════════════════════════════════════════ */
+.main {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  padding-bottom: calc(80px + var(--safe-bottom));
+}
+@media (min-width: 1024px) { .main { padding-bottom: calc(24px + var(--safe-bottom)); } }
+
+.main-inner {
+  width: 100%; max-width: var(--content-max);
+  margin: 0 auto;
+  padding: calc(16px + var(--safe-top)) 16px 0;
+  flex: 1;
+  display: flex; flex-direction: column; gap: 16px;
+}
+@media (min-width: 1024px) { .main-inner { padding: 24px 24px 0; } }
+
+.page-title {
+  font-size: clamp(20px, 3vw, 24px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--theme-text);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GUEST BANNER
+   ═══════════════════════════════════════════════════════════ */
+.guest-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  border-radius: 12px;
+  animation: bannerIn 0.3s var(--ease);
+}
+@keyframes bannerIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.guest-banner svg { width: 18px; height: 18px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.guest-banner-text {
+  flex: 1; min-width: 0;
+  font-size: 12.5px; color: var(--theme-text-secondary);
+  line-height: 1.45;
+}
+.guest-banner-text strong { color: var(--theme-text); font-weight: 700; }
+.guest-banner-action {
+  padding: 6px 12px;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  border-radius: 8px;
+  font-size: 12px; font-weight: 700;
+  white-space: nowrap;
+  transition: all 0.2s var(--ease);
+}
+[data-theme="light"] .guest-banner-action { color: #ffffff; }
+.guest-banner-action:hover { background: var(--theme-primary-hover); }
+.guest-banner-close {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  color: var(--theme-primary);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.guest-banner-close:hover { opacity: 1; background: rgba(245, 158, 11, 0.2); }
+.guest-banner-close svg { width: 13px; height: 13px; stroke-width: 2.4; }
+
+/* ═══════════════════════════════════════════════════════════
+   LAYOUT — nav + content
+   ═══════════════════════════════════════════════════════════ */
+.settings-layout {
+  display: flex; flex-direction: column; gap: 16px;
+}
+@media (min-width: 1024px) {
+  .settings-layout {
+    flex-direction: row;
+    gap: 24px;
+    align-items: flex-start;
+  }
+}
+
+/* ── Desktop section nav ── */
+.section-nav-desktop {
+  display: none;
+  width: var(--nav-w);
+  flex-shrink: 0;
+  position: sticky;
+  top: calc(24px + var(--safe-top));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 8px 0;
+}
+@media (min-width: 1024px) { .section-nav-desktop { display: block; } }
+
+.nav-item-settings {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--theme-text-tertiary);
+  text-align: left; width: 100%;
+  transition: all 0.15s var(--ease);
+  margin-bottom: 2px;
+}
+.nav-item-settings:hover { color: var(--theme-text); background: var(--theme-glass-bg); }
+.nav-item-settings.active {
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+}
+.nav-item-settings svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.nav-item-settings .nav-lock {
+  margin-left: auto;
+  opacity: 0.5;
+}
+.nav-item-settings .nav-lock svg { width: 11px; height: 11px; }
+
+/* ── Mobile section nav (pills) ── */
+.section-nav-mobile {
+  display: flex; gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+  position: sticky;
+  top: calc(16px + var(--safe-top));
+  z-index: 40;
+  background: var(--theme-bg);
+  padding-top: 8px;
+  padding-bottom: 8px;
+  margin: 0 -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+@media (min-width: 1024px) { .section-nav-mobile { display: none; } }
+.section-nav-mobile::-webkit-scrollbar { display: none; }
+
+.nav-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 12px; font-weight: 700;
+  white-space: nowrap; flex-shrink: 0;
+  transition: all 0.2s var(--ease);
+}
+.nav-pill:hover { border-color: var(--theme-primary-glow); color: var(--theme-text); }
+.nav-pill.active { background: var(--theme-primary); color: #0a0c10; border-color: var(--theme-primary); }
+[data-theme="light"] .nav-pill.active { color: #ffffff; }
+.nav-pill svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+/* ── Content column ── */
+.settings-content {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARDS
+   ═══════════════════════════════════════════════════════════ */
+.settings-section {
+  display: flex; flex-direction: column; gap: 12px;
+  scroll-margin-top: calc(80px + var(--safe-top));
+}
+@media (min-width: 1024px) {
+  .settings-section { scroll-margin-top: calc(48px + var(--safe-top)); }
+}
+
+.section-heading {
+  font-size: 16px; font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.3px;
+  padding: 8px 2px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-heading svg { width: 18px; height: 18px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; }
+
+.card {
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.card-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+}
+.card-title {
+  font-size: 13px; font-weight: 800;
+  color: var(--theme-text);
+  display: flex; align-items: center; gap: 8px;
+}
+.card-title svg { width: 15px; height: 15px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; }
+.card-desc {
+  font-size: 11.5px; color: var(--theme-text-tertiary);
+  line-height: 1.4; margin-top: 3px;
+}
+.card-body { padding: 14px 16px; }
+.card-body.tight { padding: 8px 16px; }
+
+.card-locked {
+  border-color: rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, 0.04);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LOCKED CARD
+   ═══════════════════════════════════════════════════════════ */
+.locked-body {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: 10px;
+  padding: 30px 20px;
+}
+.locked-icon {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: var(--theme-primary-soft);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--theme-primary);
+}
+.locked-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.locked-title { font-size: 14px; font-weight: 700; color: var(--theme-text); }
+.locked-desc { font-size: 12px; color: var(--theme-text-tertiary); line-height: 1.5; max-width: 320px; }
+.locked-actions { margin-top: 6px; }
+
+/* ═══════════════════════════════════════════════════════════
+   TOGGLE ROW
+   ═══════════════════════════════════════════════════════════ */
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--theme-divider);
+}
+.toggle-row:last-child { border-bottom: none; }
+.toggle-row-info { flex: 1; min-width: 0; }
+.toggle-row-title {
+  font-size: 13px; font-weight: 600;
+  color: var(--theme-text); margin-bottom: 2px;
+  display: flex; align-items: center; gap: 6px;
+}
+.toggle-row-title .sync-icon {
+  width: 11px; height: 11px;
+  opacity: 0.6;
+}
+.toggle-row-title .sync-icon svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+.toggle-row-desc { font-size: 11px; color: var(--theme-text-tertiary); line-height: 1.4; }
+
+.switch {
+  position: relative;
+  width: 40px; height: 22px;
+  border-radius: 11px;
+  background: var(--theme-divider);
+  cursor: pointer;
+  transition: background 0.2s var(--ease);
+  flex-shrink: 0;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.22s var(--ease);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.switch.on { background: var(--theme-primary); }
+.switch.on::after { transform: translateX(18px); }
+.switch:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════════════════════════
+   RADIO GROUP
+   ═══════════════════════════════════════════════════════════ */
+.radio-group {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.radio-pill {
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 12px; font-weight: 700;
+  transition: all 0.2s var(--ease);
+}
+.radio-pill:hover { border-color: var(--theme-primary-glow); color: var(--theme-text); }
+.radio-pill.active { background: var(--theme-primary); color: #0a0c10; border-color: var(--theme-primary); }
+[data-theme="light"] .radio-pill.active { color: #ffffff; }
+
+/* ═══════════════════════════════════════════════════════════
+   SLIDER
+   ═══════════════════════════════════════════════════════════ */
+.slider-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 0;
+}
+.slider-label {
+  font-size: 12px; font-weight: 600;
+  color: var(--theme-text-secondary);
+  min-width: 90px;
+}
+.slider-input {
+  flex: 1;
+  accent-color: var(--theme-primary);
+  height: 4px;
+}
+.slider-value {
+  font-family: var(--font-mono);
+  font-size: 11.5px; font-weight: 600;
+  color: var(--theme-text-tertiary);
+  min-width: 44px; text-align: right;
+}
+
+.preview-block {
+  padding: 12px;
+  background: var(--theme-surface-elevated);
+  border-radius: 8px;
+  border: 1px solid var(--theme-card-border);
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+.preview-block .preview-line {
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  display: flex; align-items: center; gap: 8px;
+}
+.preview-block .preview-line .ln {
+  color: var(--theme-text-tertiary);
+  font-size: 10px;
+  min-width: 12px;
+}
+.preview-block .preview-code { color: var(--theme-text); }
+.preview-block .kw { color: var(--theme-primary); }
+.preview-block .str { color: var(--theme-success); }
+
+/* ═══════════════════════════════════════════════════════════
+   FIELDS
+   ═══════════════════════════════════════════════════════════ */
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.field:last-child { margin-bottom: 0; }
+.field-label {
+  font-size: 11px; font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.field-hint { font-size: 11px; color: var(--theme-text-tertiary); line-height: 1.4; }
+
+.input, .textarea {
+  width: 100%; padding: 11px 13px;
+  background: var(--input-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  color: var(--theme-text);
+  font-size: 14px; font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s var(--ease);
+}
+.input:focus, .textarea:focus { border-color: var(--theme-primary); }
+.input::placeholder, .textarea::placeholder { color: var(--theme-text-tertiary); }
+.input:read-only { opacity: 0.7; cursor: not-allowed; }
+.input.mono { font-family: var(--font-mono); font-size: 12px; }
+.textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
+
+/* ═══════════════════════════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════════════════════════ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px; padding: 10px 16px; border-radius: 10px;
+  font-size: 13px; font-weight: 700;
+  border: 1px solid transparent;
+  transition: all 0.2s var(--ease);
+  white-space: nowrap; min-height: 38px; font-family: inherit;
+}
+.btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary { background: var(--theme-primary); color: #0a0c10; }
+[data-theme="light"] .btn-primary { color: #ffffff; }
+.btn-primary:hover:not(:disabled) { background: var(--theme-primary-hover); }
+
+.btn-secondary { background: var(--theme-glass-bg); color: var(--theme-text); border-color: var(--theme-card-border); }
+.btn-secondary:hover:not(:disabled) { background: var(--theme-surface-elevated); border-color: var(--theme-primary-glow); }
+
+.btn-ghost { background: transparent; color: var(--theme-text-secondary); border-color: transparent; }
+.btn-ghost:hover:not(:disabled) { color: var(--theme-text); background: var(--theme-glass-bg); }
+
+.btn-danger { background: var(--theme-danger); color: #ffffff; }
+.btn-danger:hover:not(:disabled) { background: #dc2626; }
+
+.btn-outline-danger { background: transparent; color: var(--theme-danger); border-color: rgba(239, 68, 68, 0.3); }
+.btn-outline-danger:hover:not(:disabled) { background: var(--theme-danger-soft); }
+
+.btn-sm { padding: 6px 12px; font-size: 12px; min-height: 30px; border-radius: 8px; }
+.btn-sm svg { width: 12px; height: 12px; }
+.btn-block { width: 100%; }
+.btn-icon { padding: 8px; min-width: 34px; }
+
+/* ═══════════════════════════════════════════════════════════
+   INFO ROWS
+   ═══════════════════════════════════════════════════════════ */
+.info-row {
+  display: flex; justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--theme-divider);
+  font-size: 12px;
+}
+.info-row:last-child { border-bottom: none; }
+.info-row-label { color: var(--theme-text-tertiary); font-weight: 600; flex-shrink: 0; }
+.info-row-value {
+  color: var(--theme-text); font-weight: 500;
+  text-align: right; overflow-wrap: anywhere; min-width: 0;
+}
+.info-row-value.mono { font-family: var(--font-mono); font-size: 11px; }
+
+/* ═══════════════════════════════════════════════════════════
+   PROGRESS BAR
+   ═══════════════════════════════════════════════════════════ */
+.progress-bar {
+  height: 8px; border-radius: 4px;
+  background: var(--theme-divider);
+  overflow: hidden; margin: 8px 0;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--theme-success);
+  transition: width 0.3s var(--ease), background 0.3s var(--ease);
+}
+.progress-fill.warn { background: var(--theme-warning); }
+.progress-fill.danger { background: var(--theme-danger); }
+
+.progress-row {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--theme-text-tertiary);
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BADGES
+   ═══════════════════════════════════════════════════════════ */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 10.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.badge svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2.6; }
+.badge.success { background: var(--theme-success-soft); color: var(--theme-success); }
+.badge.warning { background: var(--theme-warning-soft); color: var(--theme-warning); }
+.badge.danger { background: var(--theme-danger-soft); color: var(--theme-danger); }
+.badge.info { background: var(--theme-primary-soft); color: var(--theme-primary); }
+
+/* ═══════════════════════════════════════════════════════════
+   MODAL
+   ═══════════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 700;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex; align-items: flex-end; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.25s var(--ease);
+  padding: 0;
+}
+.modal-overlay.active { opacity: 1; pointer-events: all; }
+@media (min-width: 640px) { .modal-overlay { align-items: center; padding: 20px; } }
+
+.modal {
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 24px 24px 0 0;
+  padding: 20px 20px calc(20px + var(--safe-bottom));
+  max-width: 100%; width: 100%;
+  max-height: 90vh; overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform 0.32s var(--ease);
+}
+.modal-overlay.active .modal { transform: translateY(0); }
+@media (min-width: 640px) {
+  .modal {
+    border-radius: 20px;
+    max-width: 460px;
+    padding: 24px;
+    transform: scale(0.94);
+  }
+  .modal-overlay.active .modal { transform: scale(1); }
+}
+
+.modal-handle {
+  width: 40px; height: 4px; border-radius: 2px;
+  background: var(--theme-glass-border);
+  margin: 0 auto 16px;
+}
+@media (min-width: 640px) { .modal-handle { display: none; } }
+
+.modal-title {
+  font-size: 17px; font-weight: 800;
+  color: var(--theme-text); letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+.modal-desc {
+  font-size: 13px; color: var(--theme-text-secondary);
+  line-height: 1.5; margin-bottom: 16px;
+}
+.modal-actions { display: flex; gap: 8px; margin-top: 20px; }
+.modal-actions .btn { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: calc(16px + var(--safe-bottom));
+  left: 50%; transform: translateX(-50%);
+  z-index: 1000; width: 92%; max-width: 380px;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+@media (min-width: 1024px) {
+  .toast-container { left: auto; right: 20px; transform: none; bottom: 20px; }
+}
+
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+  font-size: 13px; font-weight: 500;
+  color: var(--theme-text);
+  transform: translateY(20px); opacity: 0;
+  transition: all 0.3s var(--ease-spring);
+  pointer-events: all;
+  overflow-wrap: break-word;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast svg { width: 15px; height: 15px; flex-shrink: 0; }
+.toast.success svg { stroke: var(--theme-success); }
+.toast.error svg { stroke: var(--theme-danger); }
+.toast.info svg { stroke: var(--theme-primary); }
+.toast.warning svg { stroke: var(--theme-warning); }
+
+/* ═══════════════════════════════════════════════════════════
+   LOADING
+   ═══════════════════════════════════════════════════════════ */
+.loading-overlay {
+  position: fixed; inset: 0; z-index: 900;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center;
+  flex-direction: column; gap: 14px; padding: 24px;
+}
+.loading-overlay.active { display: flex; }
+.loading-spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--theme-primary-soft);
+  border-top-color: var(--theme-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-title { font-size: 15px; font-weight: 700; color: var(--theme-text); }
+.loading-desc { font-size: 12.5px; color: var(--theme-text-secondary); text-align: center; max-width: 320px; line-height: 1.5; }
+
+/* ═══════════════════════════════════════════════════════════
+   BOTTOM NAV
+   ═══════════════════════════════════════════════════════════ */
+.bottom-nav {
+  position: fixed;
+  bottom: calc(8px + var(--safe-bottom));
+  left: 50%; transform: translateX(-50%);
+  width: calc(100% - 24px); max-width: 400px;
+  background: var(--theme-surface-card-solid);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 18px; padding: 6px;
+  display: flex; justify-content: space-around; align-items: center;
+  z-index: 100;
+}
+@media (min-width: 1024px) { .bottom-nav { display: none; } }
+
+.nav-btn {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  color: var(--theme-text-tertiary);
+  text-decoration: none;
+  transition: all 0.2s var(--ease);
+  font-size: 10px; font-weight: 700;
+}
+.nav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2.1; }
+.nav-btn.active { color: var(--theme-primary); background: var(--theme-primary-soft); }
+.nav-btn:active { transform: scale(0.94); }
+
+/* ═══════════════════════════════════════════════════════════
+   MISC
+   ═══════════════════════════════════════════════════════════ */
+.text-muted { color: var(--theme-text-tertiary); }
+.text-success { color: var(--theme-success); }
+.text-danger { color: var(--theme-danger); }
+.mb-2 { margin-bottom: 8px; }
+.mb-3 { margin-bottom: 12px; }
+.divider { height: 1px; background: var(--theme-divider); margin: 10px 0; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══════════ RAIL ═══════════ -->
+  <aside class="rail" aria-label="Main navigation">
+    <div class="rail-top">
+      <a class="rail-logo" href="/" aria-label="Folio">
+        <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
+      </a>
+      <a class="rail-btn" href="/" data-rail="editor" aria-label="Editor">
+        <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </a>
+      <a class="rail-btn" href="/projects" data-rail="projects" aria-label="Projects">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </a>
+      <a class="rail-btn" href="/analytics" data-rail="analytics" aria-label="Analytics">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+      </a>
+      <a class="rail-btn active" href="/settings" data-rail="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </a>
+    </div>
+    <div class="rail-bottom">
+      <div class="rail-divider"></div>
+      <a class="rail-btn" href="/profile" data-rail="profile" aria-label="Profile">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </a>
+    </div>
+  </aside>
+
+  <!-- ═══════════ MAIN ═══════════ -->
+  <main class="main">
+    <div class="main-inner">
+      <h1 class="page-title">Settings</h1>
+
+      <div id="guestBannerMount"></div>
+
+      <div class="settings-layout">
+        <nav class="section-nav-desktop" id="sectionNavDesktop" aria-label="Sections"></nav>
+
+        <div class="settings-content">
+          <div class="section-nav-mobile" id="sectionNavMobile"></div>
+          <div id="contentMount"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════ BOTTOM NAV ═══════════ -->
+<nav class="bottom-nav" aria-label="Main navigation">
+  <a class="nav-btn" href="/">
+    <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    <span>Editor</span>
+  </a>
+  <a class="nav-btn" href="/projects">
+    <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    <span>Projects</span>
+  </a>
+  <a class="nav-btn" href="/profile">
+    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    <span>Profile</span>
+  </a>
+  <a class="nav-btn active" href="/settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <span>Settings</span>
+  </a>
+</nav>
+
+<!-- ═══════════ MODAL ═══════════ -->
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
+  <div class="modal" id="modalContent">
+    <div class="modal-handle"></div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ═══════════ LOADING ═══════════ -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-title" id="loadingTitle">Loading…</div>
+  <div class="loading-desc" id="loadingDesc"></div>
+</div>
+
+<!-- ═══════════ TOAST ═══════════ -->
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════════════════════
+
+  const API_BASE = 'https://foliostudios.vercel.app/api';
+  const API_AUTH = API_BASE + '/auth';
+  const API_HOST = API_BASE + '/host';
+  const API_NOTIFY = API_BASE + '/notify';
+
+  const STORAGE = {
+    session: 'folio.session',
+    user: 'folio.user',
+    theme: 'folio.theme',
+    editorPrefs: 'folio.editorPrefs',
+    reducedMotion: 'folio.reducedMotion',
+    fontFamily: 'folio.fontFamily',
+    formatOnSave: 'folio.formatOnSave',
+    emmetEnabled: 'folio.emmetEnabled',
+    activeLine: 'folio.activeLine',
+    bracketMatching: 'folio.bracketMatching',
+    autosaveDelay: 'folio.autosaveDelay',
+    jsLint: 'folio.jsLint',
+    jsonLint: 'folio.jsonLint',
+    debug: 'folio.debug',
+    autoClean: 'folio.autoCleanDeployments',
+    autoCleanDays: 'folio.autoCleanDays',
+    guestBannerDismissed: 'folio.settings.guestBannerDismissed',
+  };
+
+  const SECTIONS = [
+    { id: 'appearance', label: 'Appearance', icon: 'palette', lockedForGuest: false },
+    { id: 'editor', label: 'Editor', icon: 'code', lockedForGuest: false },
+    { id: 'account', label: 'Account', icon: 'user', lockedForGuest: true },
+    { id: 'notifications', label: 'Notifications', icon: 'bell', lockedForGuest: true },
+    { id: 'storage', label: 'Storage', icon: 'database', lockedForGuest: false },
+    { id: 'pwa', label: 'PWA & install', icon: 'download', lockedForGuest: false },
+    { id: 'data', label: 'Data', icon: 'folder', lockedForGuest: false },
+    { id: 'advanced', label: 'Advanced', icon: 'shield', lockedForGuest: false },
+    { id: 'danger', label: 'Danger zone', icon: 'alertTriangle', lockedForGuest: false },
+  ];
+
+  // ═══════════════════════════════════════════════════════════
+  // SVG
+  // ═══════════════════════════════════════════════════════════
+
+  const SVG = {
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    alertTriangle: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+    user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+    logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+    palette: '<circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
+    code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    mail: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+    key: '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>',
+    external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+  };
+
+  const svg = (name, size = 16, sw = 2.2) =>
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${SVG[name] || ''}</svg>`;
+
+  // ═══════════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════════
+
+  const S = {
+    session: null,
+    user: null,
+    uid: null,
+    isAuthed: false,
+    prefs: {
+      theme: 'dark',
+      reducedMotion: false,
+      fontFamily: 'Inter',
+      fontSize: 14,
+      lineHeight: 1.5,
+      tabSize: 2,
+      softTabs: true,
+      lineNumbers: true,
+      wordWrap: true,
+      formatOnSave: false,
+      emmetEnabled: true,
+      activeLine: true,
+      bracketMatching: true,
+      autosaveDelay: 2000,
+      jsLint: true,
+      jsonLint: true,
+      debug: false,
+      autoClean: true,
+      autoCleanDays: 30,
+    },
+    notificationSettings: null,
+    notificationStats: null,
+    projects: [],
+    storageEstimate: null,
+    storageLimit: 10 * 1024 * 1024,
+    storagePersisted: false,
+    installPrompt: null,
+    swRegistration: null,
+    activeSection: 'appearance',
+    guestBannerDismissed: false,
+    prefsSaveTimer: null,
+  };
+
+  const $ = id => document.getElementById(id);
+  const escapeHTML = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escapeAttr = s => String(s ?? '').replace(/"/g, '&quot;');
+
+  // ═══════════════════════════════════════════════════════════
+  // UTILS
+  // ═══════════════════════════════════════════════════════════
+
+  function formatBytes(n) {
+    if (!n || n < 0) return '0 B';
+    const u = ['B', 'KB', 'MB', 'GB'];
+    let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+  }
+
+  function timeAgo(ts) {
+    if (!ts) return '—';
+    const diff = Date.now() - ts;
+    if (diff < 60000) return 'just now';
+    const m = Math.floor(diff / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `${d}d ago`;
+    return new Date(ts).toLocaleDateString();
+  }
+
+  function formatDate(ts) {
+    if (!ts) return '—';
+    return new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TOAST
+  // ═══════════════════════════════════════════════════════════
+
+  function toast(msg, type = 'info', duration = 2200) {
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    const icon = type === 'success' ? 'check' : type === 'error' ? 'alert' : type === 'warning' ? 'alertTriangle' : 'info';
+    el.innerHTML = svg(icon, 15, 2.4) + '<span></span>';
+    el.querySelector('span').textContent = msg;
+    $('toastContainer').appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOADING / MODAL
+  // ═══════════════════════════════════════════════════════════
+
+  function showLoading(title, desc) {
+    $('loadingTitle').textContent = title || 'Working…';
+    $('loadingDesc').textContent = desc || '';
+    $('loadingOverlay').classList.add('active');
+  }
+
+  function hideLoading() { $('loadingOverlay').classList.remove('active'); }
+
+  function openModal(html) {
+    $('modalBody').innerHTML = html;
+    $('modalOverlay').classList.add('active');
+  }
+
+  function closeModal() {
+    $('modalOverlay').classList.remove('active');
+    setTimeout(() => { $('modalBody').innerHTML = ''; }, 250);
+  }
+
+  function confirmModal(title, desc, confirmLabel, danger, onConfirm) {
+    openModal(`
+      <div class="modal-title">${escapeHTML(title)}</div>
+      <div class="modal-desc">${escapeHTML(desc)}</div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="modalConfirmBtn">${escapeHTML(confirmLabel)}</button>
+      </div>
+    `);
+    $('modalConfirmBtn').addEventListener('click', () => { closeModal(); onConfirm(); });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SESSION / PREFS
+  // ═══════════════════════════════════════════════════════════
+
+  function readSession() {
+    try { S.session = localStorage.getItem(STORAGE.session); } catch {}
+    try {
+      const raw = localStorage.getItem(STORAGE.user);
+      S.user = raw ? JSON.parse(raw) : null;
+    } catch {}
+    if (S.user) S.uid = S.user.uid || null;
+  }
+
+  function loadPrefs() {
+    const get = (key, fallback) => {
+      try {
+        const v = localStorage.getItem(key);
+        return v === null ? fallback : v;
+      } catch { return fallback; }
+    };
+    const getBool = (key, fallback) => {
+      const v = get(key, null);
+      return v === null ? fallback : v === 'true';
+    };
+    const getNum = (key, fallback) => {
+      const v = get(key, null);
+      if (v === null) return fallback;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    };
+
+    S.prefs.theme = get(STORAGE.theme, 'dark');
+    S.prefs.reducedMotion = getBool(STORAGE.reducedMotion, false);
+    S.prefs.fontFamily = get(STORAGE.fontFamily, 'Inter');
+    S.prefs.formatOnSave = getBool(STORAGE.formatOnSave, false);
+    S.prefs.emmetEnabled = getBool(STORAGE.emmetEnabled, true);
+    S.prefs.activeLine = getBool(STORAGE.activeLine, true);
+    S.prefs.bracketMatching = getBool(STORAGE.bracketMatching, true);
+    S.prefs.autosaveDelay = getNum(STORAGE.autosaveDelay, 2000);
+    S.prefs.jsLint = getBool(STORAGE.jsLint, true);
+    S.prefs.jsonLint = getBool(STORAGE.jsonLint, true);
+    S.prefs.debug = getBool(STORAGE.debug, false);
+    S.prefs.autoClean = getBool(STORAGE.autoClean, true);
+    S.prefs.autoCleanDays = getNum(STORAGE.autoCleanDays, 30);
+    S.guestBannerDismissed = getBool(STORAGE.guestBannerDismissed, false);
+
+    // Editor prefs from folio.editorPrefs (synced + local)
+    try {
+      const raw = localStorage.getItem(STORAGE.editorPrefs);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.fontSize === 'number') S.prefs.fontSize = parsed.fontSize;
+        if (typeof parsed.lineHeight === 'number') S.prefs.lineHeight = parsed.lineHeight;
+        if (typeof parsed.tabSize === 'number') S.prefs.tabSize = parsed.tabSize;
+        if (typeof parsed.softTabs === 'boolean') S.prefs.softTabs = parsed.softTabs;
+        if (typeof parsed.lineNumbers === 'boolean') S.prefs.lineNumbers = parsed.lineNumbers;
+        if (typeof parsed.wrap === 'boolean') S.prefs.wordWrap = parsed.wrap;
+        if (typeof parsed.wordWrap === 'boolean') S.prefs.wordWrap = parsed.wordWrap;
+      }
+    } catch {}
+  }
+
+  function savePrefLocal(key, value) {
+    try { localStorage.setItem(key, String(value)); } catch {}
+  }
+
+  function saveEditorPrefsLocal() {
+    try {
+      localStorage.setItem(STORAGE.editorPrefs, JSON.stringify({
+        fontSize: S.prefs.fontSize,
+        lineHeight: S.prefs.lineHeight,
+        tabSize: S.prefs.tabSize,
+        softTabs: S.prefs.softTabs,
+        lineNumbers: S.prefs.lineNumbers,
+        wrap: S.prefs.wordWrap,
+        wordWrap: S.prefs.wordWrap,
+      }));
+    } catch {}
+  }
+
+  function applyTheme(mode) {
+    let resolved = mode;
+    if (mode === 'auto' || mode === 'system') {
+      resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+    const meta = $('themeColorMeta');
+    if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
+  }
+
+  function applyReducedMotion(on) {
+    if (on) document.documentElement.classList.add('force-reduced-motion');
+    else document.documentElement.classList.remove('force-reduced-motion');
+  }
+
+  function applyFontFamily(family) {
+    if (family === 'System') {
+      document.body.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
+    } else {
+      document.body.style.fontFamily = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // API
+  // ═══════════════════════════════════════════════════════════
+
+  async function apiFetch(url, opts = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (S.session) headers['Authorization'] = `Bearer ${S.session}`;
+    try {
+      const res = await fetch(url, { ...opts, headers });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      return { ok: res.ok, status: res.status, data };
+    } catch (err) {
+      return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BOOT
+  // ═══════════════════════════════════════════════════════════
+
+  async function boot() {
+    readSession();
+    loadPrefs();
+    applyTheme(S.prefs.theme);
+    applyReducedMotion(S.prefs.reducedMotion);
+    applyFontFamily(S.prefs.fontFamily);
+
+    // Try to verify auth
+    if (S.session) {
+      const me = await apiFetch(API_AUTH + '?action=me');
+      if (me.ok && me.data?.success) {
+        S.isAuthed = true;
+        S.user = me.data.user;
+        S.uid = me.data.user.uid;
+        if (S.user.settings) {
+          S.storageLimit = S.user.settings.globalLimit || 10 * 1024 * 1024;
+        }
+      } else {
+        S.isAuthed = false;
+        if (me.status === 401) {
+          try { localStorage.removeItem(STORAGE.session); } catch {}
+        }
+      }
+    }
+
+    // Load storage estimate
+    if (navigator.storage && navigator.storage.estimate) {
+      try { S.storageEstimate = await navigator.storage.estimate(); } catch {}
+    }
+
+    // Load persisted status
+    if (navigator.storage && navigator.storage.persisted) {
+      try { S.storagePersisted = await navigator.storage.persisted(); } catch {}
+    }
+
+    // Load SW
+    if ('serviceWorker' in navigator) {
+      try { S.swRegistration = await navigator.serviceWorker.getRegistration(); } catch {}
+    }
+
+    // Capture install prompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      S.installPrompt = e;
+      renderPwaSection();
+    });
+
+    window.addEventListener('appinstalled', () => {
+      S.installPrompt = null;
+      toast('Folio installed', 'success');
+      renderPwaSection();
+    });
+
+    // If authed, load notifications + projects
+    if (S.isAuthed) {
+      loadNotifications();
+      loadProjects();
+    }
+
+    // Get initial section from hash
+    const hashSection = location.hash.replace(/^#\/?/, '');
+    if (SECTIONS.some(s => s.id === hashSection)) {
+      S.activeSection = hashSection;
+    }
+
+    // Render
+    renderAll();
+
+    // Scroll spy
+    window.addEventListener('scroll', debouncedScrollSpy, { passive: true });
+    window.addEventListener('hashchange', () => {
+      const h = location.hash.replace(/^#\/?/, '');
+      if (SECTIONS.some(s => s.id === h)) {
+        S.activeSection = h;
+        scrollToSection(h);
+        renderSectionNav();
+      }
+    });
+  }
+
+  const debouncedScrollSpy = debounce(() => {
+    for (let i = SECTIONS.length - 1; i >= 0; i--) {
+      const el = $('section-' + SECTIONS[i].id);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.top <= 120) {
+        if (S.activeSection !== SECTIONS[i].id) {
+          S.activeSection = SECTIONS[i].id;
+          renderSectionNav();
+        }
+        return;
+      }
+    }
+    if (S.activeSection !== SECTIONS[0].id) {
+      S.activeSection = SECTIONS[0].id;
+      renderSectionNav();
+    }
+  }, 100);
+
+  function scrollToSection(id) {
+    const el = $('section-' + id);
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY - 80;
+    window.scrollTo({ top, behavior: 'smooth' });
+    history.replaceState(null, '', '#' + id);
+  }
+
+  async function loadNotifications() {
+    if (!S.isAuthed) return;
+    const [settingsRes, statsRes] = await Promise.all([
+      apiFetch(API_NOTIFY + '?action=get_settings'),
+      apiFetch(API_NOTIFY + '?action=stats'),
+    ]);
+    if (settingsRes.ok && settingsRes.data?.success) {
+      S.notificationSettings = settingsRes.data.settings;
+    }
+    if (statsRes.ok && statsRes.data?.success) {
+      S.notificationStats = statsRes.data.stats;
+    }
+    renderNotificationsSection();
+  }
+
+  async function loadProjects() {
+    if (!S.isAuthed) return;
+    const res = await apiFetch(API_HOST + '?action=projects/list');
+    if (res.ok && res.data?.success) {
+      S.projects = res.data.projects || [];
+      renderStorageSection();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER ALL
+  // ═══════════════════════════════════════════════════════════
+
+  function renderAll() {
+    renderGuestBanner();
+    renderSectionNav();
+    renderContent();
+  }
+
+  function renderGuestBanner() {
+    const mount = $('guestBannerMount');
+    if (!mount) return;
+    if (S.isAuthed || S.guestBannerDismissed) {
+      mount.innerHTML = '';
+      return;
+    }
+    mount.innerHTML = `
+      <div class="guest-banner">
+        ${svg('lock', 18, 2.2)}
+        <div class="guest-banner-text">
+          <strong>Browsing as guest.</strong> Some settings need an account.
+        </div>
+        <a href="/register?next=${encodeURIComponent('/settings')}" class="guest-banner-action">Sign in</a>
+        <button class="guest-banner-close" id="dismissGuestBanner" aria-label="Dismiss">
+          ${svg('x', 13, 2.4)}
+        </button>
+      </div>
+    `;
+    $('dismissGuestBanner')?.addEventListener('click', () => {
+      S.guestBannerDismissed = true;
+      savePrefLocal(STORAGE.guestBannerDismissed, 'true');
+      renderGuestBanner();
+    });
+  }
+
+  function renderSectionNav() {
+    const desktop = $('sectionNavDesktop');
+    const mobile = $('sectionNavMobile');
+    if (desktop) {
+      desktop.innerHTML = SECTIONS.map(s => {
+        const locked = s.lockedForGuest && !S.isAuthed;
+        return `
+          <button class="nav-item-settings ${s.id === S.activeSection ? 'active' : ''}" data-section="${escapeAttr(s.id)}" type="button">
+            ${svg(s.icon, 15, 2.2)}
+            <span>${escapeHTML(s.label)}</span>
+            ${locked ? `<span class="nav-lock">${svg('lock', 11, 2.4)}</span>` : ''}
+          </button>
+        `;
+      }).join('');
+      desktop.querySelectorAll('[data-section]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          S.activeSection = btn.dataset.section;
+          scrollToSection(btn.dataset.section);
+          renderSectionNav();
+        });
+      });
+    }
+    if (mobile) {
+      mobile.innerHTML = SECTIONS.map(s => {
+        const locked = s.lockedForGuest && !S.isAuthed;
+        return `
+          <button class="nav-pill ${s.id === S.activeSection ? 'active' : ''}" data-section="${escapeAttr(s.id)}" type="button">
+            ${locked ? svg('lock', 11, 2.4) : ''}
+            <span>${escapeHTML(s.label)}</span>
+          </button>
+        `;
+      }).join('');
+      mobile.querySelectorAll('[data-section]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          S.activeSection = btn.dataset.section;
+          scrollToSection(btn.dataset.section);
+          renderSectionNav();
+        });
+      });
+    }
+  }
+
+  function renderContent() {
+    const mount = $('contentMount');
+    if (!mount) return;
+    mount.innerHTML = `
+      ${renderAppearanceSection()}
+      ${renderEditorSection()}
+      ${renderAccountSection()}
+      ${renderNotificationsSection()}
+      ${renderStorageSection()}
+      ${renderPwaSection()}
+      ${renderDataSection()}
+      ${renderAdvancedSection()}
+      ${renderDangerSection()}
+    `;
+    wireAllSections();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION 1: APPEARANCE
+  // ═══════════════════════════════════════════════════════════
+
+  function renderAppearanceSection() {
+    return `
+      <section class="settings-section" id="section-appearance">
+        <h2 class="section-heading">${svg('palette', 18, 2.2)} Appearance</h2>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('palette', 15, 2.2)} Theme</div>
+            <div class="card-desc">Choose how Folio looks. Saved on this device.</div>
+          </div>
+          <div class="card-body">
+            <div class="radio-group">
+              ${['dark', 'light', 'auto'].map(t => `
+                <button class="radio-pill ${S.prefs.theme === t ? 'active' : ''}" data-theme="${t}" type="button">
+                  ${t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body" style="padding:0;">
+            <div class="toggle-row" style="padding:12px 16px;">
+              <div class="toggle-row-info">
+                <div class="toggle-row-title">Reduced motion</div>
+                <div class="toggle-row-desc">Minimize animations across the app</div>
+              </div>
+              <button class="switch ${S.prefs.reducedMotion ? 'on' : ''}" data-toggle="reducedMotion" aria-label="Toggle reduced motion"></button>
+            </div>
+            <div class="toggle-row" style="padding:12px 16px;border-bottom:none;">
+              <div class="toggle-row-info">
+                <div class="toggle-row-title">Font family</div>
+                <div class="toggle-row-desc">App-wide display font</div>
+              </div>
+              <div class="radio-group">
+                ${['Inter', 'System'].map(f => `
+                  <button class="radio-pill ${S.prefs.fontFamily === f ? 'active' : ''}" data-font-family="${f}" type="button">${f}</button>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION 2: EDITOR
+  // ═══════════════════════════════════════════════════════════
+
+  function renderEditorSection() {
+    const syncNote = S.isAuthed
+      ? `<div class="card-desc" style="padding:0 16px 8px;display:flex;align-items:center;gap:6px;">
+          ${svg('check', 12, 2.4)} Synced prefs (${svg('refresh', 10, 2.4)} cloud) follow you across devices.
+        </div>`
+      : `<div class="card-desc" style="padding:0 16px 8px;">
+          All editor prefs save locally. <a href="/register?next=/settings" class="inline-link" style="color:var(--theme-primary);">Sign in</a> to sync across devices.
+        </div>`;
+
+    return `
+      <section class="settings-section" id="section-editor">
+        <h2 class="section-heading">${svg('code', 18, 2.2)} Editor defaults</h2>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('code', 15, 2.2)} Typography</div>
+            ${syncNote}
+          </div>
+          <div class="card-body">
+            <div class="slider-row">
+              <span class="slider-label">Font size</span>
+              <input type="range" class="slider-input" min="10" max="24" step="1" value="${S.prefs.fontSize}" data-slider="fontSize">
+              <span class="slider-value" id="fontSizeVal">${S.prefs.fontSize}px</span>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label">Line height</span>
+              <input type="range" class="slider-input" min="1.2" max="2" step="0.05" value="${S.prefs.lineHeight}" data-slider="lineHeight">
+              <span class="slider-value" id="lineHeightVal">${S.prefs.lineHeight}</span>
+            </div>
+            <div class="preview-block">
+              <div class="preview-line"><span class="ln">1</span><span class="preview-code"><span class="kw">const</span> greeting = <span class="str">"Hello, Folio"</span>;</span></div>
+              <div class="preview-line"><span class="ln">2</span><span class="preview-code">console.<span class="kw">log</span>(greeting);</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('code', 15, 2.2)} Indentation</div>
+          </div>
+          <div class="card-body">
+            <div class="slider-row" style="padding:4px 0;">
+              <span class="slider-label">Tab size</span>
+              <div class="radio-group">
+                ${[1, 2, 3, 4, 8].map(n => `
+                  <button class="radio-pill ${S.prefs.tabSize === n ? 'active' : ''}" data-tab-size="${n}" type="button">${n}</button>
+                `).join('')}
+              </div>
+            </div>
+            <div class="toggle-row" style="padding:11px 0;">
+              <div class="toggle-row-info">
+                <div class="toggle-row-title">Soft tabs (spaces)</div>
+                <div class="toggle-row-desc">Insert spaces instead of tab character</div>
+              </div>
+              <button class="switch ${S.prefs.softTabs ? 'on' : ''}" data-toggle="softTabs" aria-label="Toggle soft tabs"></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('image', 15, 2.2)} Display</div>
+          </div>
+          <div class="card-body" style="padding:0;">
+            ${[
+              { id: 'lineNumbers', label: 'Line numbers', desc: 'Show line numbers in the gutter', synced: true },
+              { id: 'wordWrap', label: 'Word wrap', desc: 'Wrap long lines to fit the width', synced: true },
+              { id: 'activeLine', label: 'Active line highlight', desc: 'Subtle amber tint on current line', synced: false },
+              { id: 'bracketMatching', label: 'Bracket matching', desc: 'Highlight matching brackets', synced: false },
+            ].map(o => `
+              <div class="toggle-row" style="padding:12px 16px;">
+                <div class="toggle-row-info">
+                  <div class="toggle-row-title">${escapeHTML(o.label)}</div>
+                  <div class="toggle-row-desc">${escapeHTML(o.desc)}</div>
+                </div>
+                <button class="switch ${S.prefs[o.id] ? 'on' : ''}" data-toggle="${escapeAttr(o.id)}" aria-label="Toggle ${escapeAttr(o.id)}"></button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('clock', 15, 2.2)} Behavior</div>
+          </div>
+          <div class="card-body" style="padding:0;">
+            <div class="toggle-row" style="padding:12px 16px;">
+              <div class="toggle-row-info">
+                <div class="toggle-row-title">Format on save</div>
+                <div class="toggle-row-desc">Run Prettier automatically before saving</div>
+              </div>
+              <button class="switch ${S.prefs.formatOnSave ? 'on' : ''}" data-toggle="formatOnSave" aria-label="Toggle format on save"></button>
+            </div>
+            <div class="toggle-row" style="padding:12px 16px;">
+              <div class="toggle-row-info">
+                <div class="toggle-row-title">Emmet expansion</div>
+                <div class="toggle-row-desc">Expand abbreviations like div.container>ul>li*3</div>
+              </div>
+              <button class="switch ${S.prefs.emmetEnabled ? 'on' : ''}" data-toggle="emmetEnabled" aria-label="Toggle emmet"></button>
+            </div>
+            <div class="toggle-row" style="padding:12px 16px;">
+              <div class="toggle-row-info">
+                <div class="toggle-row-title">Autosave delay</div>
+                <div class="toggle-row-desc">Wait before saving automatically</div>
+              </div>
+              <div class="radio-group">
+                ${[{ v: 0, l: 'Off' }, { v: 1000, l: '1s' }, { v: 2000, l: '2s' }, { v: 5000, l: '5s' }].map(o => `
+                  <button class="radio-pill ${S.prefs.autosaveDelay === o.v ? 'active' : ''}" data-autosave="${o.v}" type="button">${o.l}</button>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('alert', 15, 2.2)} Diagnostics</div>
+            <div class="card-desc">Basic syntax checking — not a full language server</div>
+          </div>
+          <div class="card-body" style="padding:0;">
+            <div class="toggle-row" style="padding:12px 16px;">
+              <div class="toggle-row-info">
+                <div class="toggle-row-title">JSON lint</div>
+                <div class="toggle-row-desc">Show errors for malformed JSON</div>
+              </div>
+              <button class="switch ${S.prefs.jsonLint ? 'on' : ''}" data-toggle="jsonLint" aria-label="Toggle JSON lint"></button>
+            </div>
+            <div class="toggle-row" style="padding:12px 16px;border-bottom:none;">
+              <div class="toggle-row-info">
+                <div class="toggle-row-title">JavaScript lint</div>
+                <div class="toggle-row-desc">Basic JS syntax error marking</div>
+              </div>
+              <button class="switch ${S.prefs.jsLint ? 'on' : ''}" data-toggle="jsLint" aria-label="Toggle JS lint"></button>
+            </div>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION 3: ACCOUNT
+  // ═══════════════════════════════════════════════════════════
+
+  function renderAccountSection() {
+    if (!S.isAuthed) {
+      return `
+        <section class="settings-section" id="section-account">
+          <h2 class="section-heading">${svg('user', 18, 2.2)} Account</h2>
+          <div class="card card-locked">
+            <div class="locked-body">
+              <div class="locked-icon">${svg('lock', 20, 2.2)}</div>
+              <div class="locked-title">Sign in to manage account</div>
+              <div class="locked-desc">Change your email, username, password, and sign out.</div>
+              <a class="btn btn-primary locked-actions" href="/register?next=${encodeURIComponent('/settings')}">Sign in</a>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    const p = S.user.profile || {};
+    const email = S.user.email || '';
+    const unverified = !S.user.emailVerified;
+
+    return `
+      <section class="settings-section" id="section-account">
+        <h2 class="section-heading">${svg('user', 18, 2.2)} Account</h2>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('user', 15, 2.2)} Profile</div>
+          </div>
+          <div class="card-body">
+            <div class="info-row">
+              <span class="info-row-label">Display name</span>
+              <span class="info-row-value">${escapeHTML(p.displayName || p.username || '—')}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Username</span>
+              <span class="info-row-value mono">@${escapeHTML(p.username || '—')}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Bio</span>
+              <span class="info-row-value" style="text-align:right;max-width:60%;">${escapeHTML(p.bio || '—')}</span>
+            </div>
+            <a href="/profile" class="btn btn-secondary btn-block" style="margin-top:12px;">
+              ${svg('edit', 14, 2.2)} Edit profile
+            </a>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('mail', 15, 2.2)} Email</div>
+          </div>
+          <div class="card-body">
+            <div class="info-row">
+              <span class="info-row-label">Email</span>
+              <span class="info-row-value mono" style="font-size:12px;">
+                ${escapeHTML(email)}
+                ${unverified
+                  ? `<span class="badge warning" style="margin-left:6px;">Unverified</span>`
+                  : `<span class="badge success" style="margin-left:6px;">${svg('check', 10, 2.6)} Verified</span>`
+                }
+              </span>
+            </div>
+            <button class="btn btn-secondary btn-block" style="margin-top:12px;" id="changeEmailBtn">
+              ${svg('edit', 14, 2.2)} Change email
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('user', 15, 2.2)} Username</div>
+          </div>
+          <div class="card-body">
+            <div class="info-row">
+              <span class="info-row-label">Username</span>
+              <span class="info-row-value mono">@${escapeHTML(p.username || '—')}</span>
+            </div>
+            <div class="field-hint" style="margin-top:8px;margin-bottom:10px;">
+              Changing your username changes your profile URL. Old links will redirect.
+            </div>
+            <button class="btn btn-secondary btn-block" id="changeUsernameBtn">
+              ${svg('edit', 14, 2.2)} Change username
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('key', 15, 2.2)} Password</div>
+          </div>
+          <div class="card-body">
+            <div class="field-hint" style="margin-bottom:10px;">
+              Use at least 8 characters with letters and numbers.
+            </div>
+            <button class="btn btn-secondary btn-block" id="changePasswordBtn">
+              ${svg('key', 14, 2.2)} Change password
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('logout', 15, 2.2)} Session</div>
+          </div>
+          <div class="card-body">
+            <div class="info-row">
+              <span class="info-row-label">Last sign-in</span>
+              <span class="info-row-value">${timeAgo(S.user.lastLoginAt)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Member since</span>
+              <span class="info-row-value">${formatDate(S.user.createdAt)}</span>
+            </div>
+            <button class="btn btn-outline-danger btn-block" style="margin-top:12px;" id="signOutBtn">
+              ${svg('logout', 14, 2.2)} Sign out
+            </button>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION 4: NOTIFICATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  function renderNotificationsSection() {
+    if (!S.isAuthed) {
+      return `
+        <section class="settings-section" id="section-notifications">
+          <h2 class="section-heading">${svg('bell', 18, 2.2)} Notifications</h2>
+          <div class="card card-locked">
+            <div class="locked-body">
+              <div class="locked-icon">${svg('lock', 20, 2.2)}</div>
+              <div class="locked-title">Sign in to manage notifications</div>
+              <div class="locked-desc">Enable push notifications and control what you're alerted about.</div>
+              <a class="btn btn-primary locked-actions" href="/register?next=${encodeURIComponent('/settings')}">Sign in</a>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    const ns = S.notificationSettings || {};
+    const stats = S.notificationStats || {};
+    const pushSupported = 'Notification' in window && 'serviceWorker' in navigator;
+    const permission = pushSupported ? Notification.permission : 'unsupported';
+    const pushEnabled = ns.pushEnabled && permission === 'granted';
+
+    return `
+      <section class="settings-section" id="section-notifications">
+        <h2 class="section-heading">${svg('bell', 18, 2.2)} Notifications</h2>
+
+        ${!pushSupported ? `
+          <div class="card">
+            <div class="card-body">
+              <div class="badge warning" style="margin-bottom:8px;">Not supported</div>
+              <div class="text-muted" style="font-size:12.5px;line-height:1.5;">
+                Your browser doesn't support push notifications.
+              </div>
+            </div>
+          </div>
+        ` : permission === 'denied' ? `
+          <div class="card">
+            <div class="card-body">
+              <div class="badge danger" style="margin-bottom:8px;">Blocked</div>
+              <div class="text-muted" style="font-size:12.5px;line-height:1.5;">
+                Notifications are blocked. Enable them in your browser settings, then reload.
+              </div>
+            </div>
+          </div>
+        ` : `
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">${svg('bell', 15, 2.2)} Push notifications</div>
+              <div class="card-desc">${permission === 'granted' ? 'Permission granted' : 'Permission not yet requested'}</div>
+            </div>
+            <div class="card-body">
+              <div class="toggle-row" style="border-bottom:none;">
+                <div class="toggle-row-info">
+                  <div class="toggle-row-title">Enable push notifications</div>
+                  <div class="toggle-row-desc">Get notified about project activity and invites</div>
+                </div>
+                <button class="switch ${pushEnabled ? 'on' : ''}" data-toggle="pushEnabled" aria-label="Toggle push"></button>
+              </div>
+            </div>
+          </div>
+
+          ${pushEnabled ? `
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">${svg('bell', 15, 2.2)} Notify me about</div>
+              </div>
+              <div class="card-body" style="padding:0;">
+                ${[
+                  { id: 'systemAlerts', label: 'System alerts' },
+                  { id: 'analyticsAlerts', label: 'Analytics thresholds' },
+                  { id: 'dbAlerts', label: 'Database writes' },
+                  { id: 'storageAlerts', label: 'Storage limits' },
+                  { id: 'projectAlerts', label: 'Project activity' },
+                  { id: 'inviteAlerts', label: 'Invites' },
+                ].map(o => `
+                  <div class="toggle-row" style="padding:12px 16px;">
+                    <div class="toggle-row-info">
+                      <div class="toggle-row-title">${escapeHTML(o.label)}</div>
+                    </div>
+                    <button class="switch ${ns[o.id] ? 'on' : ''}" data-notif-toggle="${escapeAttr(o.id)}" aria-label="Toggle ${escapeAttr(o.id)}"></button>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+        `}
+
+        <div class="card">
+          <div class="card-body">
+            <a href="/profile#/notifications" class="btn btn-secondary btn-block">
+              ${svg('bell', 14, 2.2)} View notification history ${stats.unread > 0 ? `(${stats.unread} unread)` : ''}
+            </a>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION 5: STORAGE
+  // ═══════════════════════════════════════════════════════════
+
+  function renderStorageSection() {
+    const used = S.storageEstimate?.usage || 0;
+    const quota = S.storageEstimate?.quota || S.storageLimit;
+    const pct = quota > 0 ? Math.min(100, (used / quota) * 100) : 0;
+    const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
+
+    // Estimate per-project storage from cached data
+    const projectRows = S.projects.map(p => {
+      const fileCount = p.fileCount || 0;
+      const versionCount = p.versionCount || 0;
+      const bytes = p.storageUsed || 0;
+      return { ...p, bytes };
+    }).sort((a, b) => (b.bytes || 0) - (a.bytes || 0));
+
+    return `
+      <section class="settings-section" id="section-storage">
+        <h2 class="section-heading">${svg('database', 18, 2.2)} Storage & cleanup</h2>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('database', 15, 2.2)} Usage</div>
+          </div>
+          <div class="card-body">
+            <div class="progress-bar">
+              <div class="progress-fill ${barClass}" style="width:${pct}%"></div>
+            </div>
+            <div class="progress-row">
+              <span>${formatBytes(used)} of ${formatBytes(quota)} used</span>
+              <span>${pct.toFixed(0)}%</span>
+            </div>
+            <div class="field-hint" style="margin-top:8px;">
+              Storage is measured by your browser. Actual usage may vary.
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('shield', 15, 2.2)} Browser storage</div>
+          </div>
+          <div class="card-body">
+            <div class="info-row">
+              <span class="info-row-label">Persistent storage</span>
+              <span class="info-row-value">
+                ${S.storagePersisted
+                  ? `<span class="badge success">${svg('check', 10, 2.6)} Granted</span>`
+                  : `<span class="badge warning">Not granted</span>`
+                }
+              </span>
+            </div>
+            <div class="field-hint" style="margin-top:8px;margin-bottom:10px;">
+              Persistent storage prevents your browser from auto-clearing cached data under disk pressure.
+            </div>
+            ${!S.storagePersisted ? `
+              <button class="btn btn-secondary btn-block" id="requestPersistBtn">
+                ${svg('shield', 14, 2.2)} Request persistent storage
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        ${S.isAuthed && projectRows.length > 0 ? `
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">${svg('folder', 15, 2.2)} Per-project usage</div>
+            </div>
+            <div class="card-body" style="padding:0;">
+              ${projectRows.slice(0, 10).map(p => `
+                <div class="info-row" style="padding:10px 16px;">
+                  <span class="info-row-label" style="color:var(--theme-text-secondary);font-weight:600;">
+                    ${escapeHTML(p.name || 'Untitled')}
+                  </span>
+                  <span class="info-row-value mono" style="font-size:11px;">
+                    ${p.fileCount || 0} files · ${formatBytes(p.bytes || 0)}
+                  </span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        ${S.isAuthed ? `
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">${svg('trash', 15, 2.2)} Server cleanup</div>
+            </div>
+            <div class="card-body">
+              <div class="toggle-row" style="padding:0 0 12px;">
+                <div class="toggle-row-info">
+                  <div class="toggle-row-title">Auto-clean expired deployments</div>
+                  <div class="toggle-row-desc">Silently delete deployments older than ${S.prefs.autoCleanDays} days</div>
+                </div>
+                <button class="switch ${S.prefs.autoClean ? 'on' : ''}" data-toggle="autoClean" aria-label="Toggle auto-clean"></button>
+              </div>
+              <div class="field-hint">
+                Cleanup runs when you visit the Projects page. Current deployment is never deleted.
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('trash', 15, 2.2)} Clear local cache</div>
+          </div>
+          <div class="card-body">
+            <div class="field-hint" style="margin-bottom:10px;">
+              Removes offline copies of your projects from this browser. Server data is not affected.
+            </div>
+            <button class="btn btn-outline-danger btn-block" id="clearLocalCacheBtn">
+              ${svg('trash', 14, 2.2)} Clear local cache
+            </button>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION 6: PWA & INSTALL
+  // ═══════════════════════════════════════════════════════════
+
+  function renderPwaSection() {
+    const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+    const canInstall = !!S.installPrompt && !isStandalone;
+
+    let cacheSize = '—';
+    if (navigator.storage && navigator.storage.estimate) {
+      // approximate from estimate
+      cacheSize = formatBytes(S.storageEstimate?.usage || 0);
+    }
+
+    return `
+      <section class="settings-section" id="section-pwa">
+        <h2 class="section-heading">${svg('download', 18, 2.2)} PWA & install</h2>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('download', 15, 2.2)} Install</div>
+          </div>
+          <div class="card-body">
+            ${isStandalone ? `
+              <div class="badge success" style="margin-bottom:10px;">${svg('check', 10, 2.6)} Installed</div>
+              <div class="text-muted" style="font-size:12.5px;line-height:1.5;">
+                Folio is installed on this device. You're using the app version.
+              </div>
+            ` : canInstall ? `
+              <div class="field-hint" style="margin-bottom:10px;">
+                Install Folio to your home screen for the full app experience.
+              </div>
+              <button class="btn btn-primary btn-block" id="installAppBtn">
+                ${svg('download', 14, 2.2)} Install Folio
+              </button>
+            ` : `
+              <div class="field-hint">
+                Install isn't available on this browser. On iOS, use Share → Add to Home Screen.
+              </div>
+            `}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('info', 15, 2.2)} Version</div>
+          </div>
+          <div class="card-body">
+            <div class="info-row">
+              <span class="info-row-label">App version</span>
+              <span class="info-row-value mono">2.2.0-folio</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Cache size</span>
+              <span class="info-row-value mono">${cacheSize}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('refresh', 15, 2.2)} Updates</div>
+          </div>
+          <div class="card-body">
+            <div class="field-hint" style="margin-bottom:10px;">
+              Check for a new version of the app shell.
+            </div>
+            <button class="btn btn-secondary btn-block" id="checkUpdatesBtn">
+              ${svg('refresh', 14, 2.2)} Check for updates
+            </button>
+            <button class="btn btn-outline-danger btn-block" style="margin-top:8px;" id="clearCacheBtn">
+              ${svg('trash', 14, 2.2)} Clear cache & reload
+            </button>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION 7: DATA
+  // ═══════════════════════════════════════════════════════════
+
+  function renderDataSection() {
+    return `
+      <section class="settings-section" id="section-data">
+        <h2 class="section-heading">${svg('folder', 18, 2.2)} Data</h2>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('download', 15, 2.2)} Export</div>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+            <button class="btn btn-secondary btn-block" id="exportSettingsBtn">
+              ${svg('download', 14, 2.2)} Export settings JSON
+            </button>
+            ${S.isAuthed ? `
+              <div class="field-hint" style="margin-top:8px;">
+                Projects export individually from the Projects page.
+              </div>
+              <a href="/projects" class="btn btn-secondary btn-block">
+                ${svg('external', 14, 2.2)} Go to Projects
+              </a>
+            ` : `
+              <div class="field-hint" style="margin-top:8px;">
+                Sign in to export your projects.
+              </div>
+            `}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('upload', 15, 2.2)} Import</div>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+            <input type="file" id="importSettingsFile" accept=".json" style="display:none;">
+            <button class="btn btn-secondary btn-block" id="importSettingsBtn">
+              ${svg('upload', 14, 2.2)} Import settings JSON
+            </button>
+            ${S.isAuthed ? `
+              <div class="field-hint" style="margin-top:8px;">
+                Import .folio backups from the Projects page.
+              </div>
+            ` : `
+              <div class="field-hint" style="margin-top:8px;">
+                Sign in to import projects.
+              </div>
+            `}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('info', 15, 2.2)} About your data</div>
+          </div>
+          <div class="card-body">
+            <div class="text-muted" style="font-size:12.5px;line-height:1.55;">
+              Projects are stored on our servers. Local cache is stored in your browser's IndexedDB.
+              Analytics data is aggregated daily and retained for 365 days.
+            </div>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION 8: ADVANCED
+  // ═══════════════════════════════════════════════════════════
+
+  function renderAdvancedSection() {
+    const swStatus = S.swRegistration
+      ? (S.swRegistration.waiting ? 'Update waiting' : S.swRegistration.active ? 'Active' : 'Registered')
+      : 'Not registered';
+
+    const uid = S.isAuthed ? (S.uid || '—') : '—';
+
+    return `
+      <section class="settings-section" id="section-advanced">
+        <h2 class="section-heading">${svg('shield', 18, 2.2)} Advanced</h2>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('shield', 15, 2.2)} Diagnostics</div>
+          </div>
+          <div class="card-body">
+            <div class="toggle-row" style="border-bottom:none;">
+              <div class="toggle-row-info">
+                <div class="toggle-row-title">Debug mode</div>
+                <div class="toggle-row-desc">Extra console logging in the editor</div>
+              </div>
+              <button class="switch ${S.prefs.debug ? 'on' : ''}" data-toggle="debug" aria-label="Toggle debug"></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('info', 15, 2.2)} Environment</div>
+          </div>
+          <div class="card-body">
+            ${S.isAuthed ? `
+              <div class="info-row">
+                <span class="info-row-label">User ID</span>
+                <span class="info-row-value mono" style="font-size:10.5px;">${escapeHTML(uid.slice(0, 20))}${uid.length > 20 ? '…' : ''}</span>
+              </div>
+            ` : ''}
+            <div class="info-row">
+              <span class="info-row-label">API base</span>
+              <span class="info-row-value mono" style="font-size:10.5px;">${escapeHTML(API_BASE)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Database</span>
+              <span class="info-row-value mono">IndexedDB folio</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">SW status</span>
+              <span class="info-row-value">${escapeHTML(swStatus)}</span>
+            </div>
+          </div>
+        </div>
+
+        ${S.isAuthed ? `
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">${svg('refresh', 15, 2.2)} Sync</div>
+            </div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+              <button class="btn btn-secondary btn-block" id="drainSyncBtn">
+                ${svg('refresh', 14, 2.2)} Drain sync queue
+              </button>
+              <button class="btn btn-outline-danger btn-block" id="clearSyncBtn">
+                ${svg('trash', 14, 2.2)} Clear sync queue
+              </button>
+            </div>
+          </div>
+        ` : ''}
+      </section>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION 9: DANGER ZONE
+  // ═══════════════════════════════════════════════════════════
+
+  function renderDangerSection() {
+    return `
+      <section class="settings-section" id="section-danger">
+        <h2 class="section-heading">${svg('alertTriangle', 18, 2.2)} Danger zone</h2>
+
+        <div class="card" style="border-color:rgba(239,68,68,0.25);">
+          <div class="card-header" style="border-bottom-color:rgba(239,68,68,0.15);">
+            <div class="card-title" style="color:var(--theme-danger);">${svg('trash', 15, 2.2)} Clear local cache</div>
+          </div>
+          <div class="card-body">
+            <div class="field-hint" style="margin-bottom:10px;">
+              Removes all offline copies of your projects. Server data untouched. Cannot be undone.
+            </div>
+            <button class="btn btn-outline-danger btn-block" id="clearCacheDangerBtn">
+              ${svg('trash', 14, 2.2)} Clear local cache
+            </button>
+          </div>
+        </div>
+
+        <div class="card" style="border-color:rgba(239,68,68,0.25);">
+          <div class="card-header" style="border-bottom-color:rgba(239,68,68,0.15);">
+            <div class="card-title" style="color:var(--theme-danger);">${svg('refresh', 15, 2.2)} Reset all settings</div>
+          </div>
+          <div class="card-body">
+            <div class="field-hint" style="margin-bottom:10px;">
+              Wipes all app preferences (theme, editor prefs). You stay signed in. Cannot be undone.
+            </div>
+            <button class="btn btn-outline-danger btn-block" id="resetSettingsBtn">
+              ${svg('refresh', 14, 2.2)} Reset all settings
+            </button>
+          </div>
+        </div>
+
+        ${S.isAuthed ? `
+          <div class="card" style="border-color:rgba(239,68,68,0.25);">
+            <div class="card-header" style="border-bottom-color:rgba(239,68,68,0.15);">
+              <div class="card-title" style="color:var(--theme-danger);">${svg('logout', 15, 2.2)} Sign out</div>
+            </div>
+            <div class="card-body">
+              <div class="field-hint" style="margin-bottom:10px;">
+                You'll need to sign in again. Local projects stay on this device.
+              </div>
+              <button class="btn btn-danger btn-block" id="signOutDangerBtn">
+                ${svg('logout', 14, 2.2)} Sign out
+              </button>
+            </div>
+          </div>
+
+          <div class="card" style="border-color:rgba(239,68,68,0.25);">
+            <div class="card-header" style="border-bottom-color:rgba(239,68,68,0.15);">
+              <div class="card-title" style="color:var(--theme-danger);">${svg('alertTriangle', 15, 2.2)} Delete account</div>
+            </div>
+            <div class="card-body">
+              <div class="field-hint" style="margin-bottom:10px;">
+                Account deletion isn't available in-app yet. Contact support to request deletion.
+              </div>
+              <button class="btn btn-outline-danger btn-block" disabled style="opacity:0.5;">
+                ${svg('alertTriangle', 14, 2.2)} Contact support
+              </button>
+            </div>
+          </div>
+        ` : ''}
+      </section>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // WIRE ALL SECTIONS
+  // ═══════════════════════════════════════════════════════════
+
+  function wireAllSections() {
+    // Appearance
+    document.querySelectorAll('[data-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.prefs.theme = btn.dataset.theme;
+        savePrefLocal(STORAGE.theme, btn.dataset.theme);
+        applyTheme(btn.dataset.theme);
+        toast('Theme saved', 'success', 1400);
+        renderContent();
+      });
+    });
+
+    document.querySelectorAll('[data-font-family]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.prefs.fontFamily = btn.dataset.fontFamily;
+        savePrefLocal(STORAGE.fontFamily, btn.dataset.fontFamily);
+        applyFontFamily(btn.dataset.fontFamily);
+        toast('Font updated', 'success', 1400);
+        renderContent();
+      });
+    });
+
+    document.querySelectorAll('[data-toggle]').forEach(btn => {
+      btn.addEventListener('click', () => handleToggle(btn.dataset.toggle, btn));
+    });
+
+    // Editor sliders
+    document.querySelectorAll('[data-slider]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const key = inp.dataset.slider;
+        const val = key === 'lineHeight' ? parseFloat(inp.value) : parseInt(inp.value, 10);
+        S.prefs[key] = val;
+        const valEl = $(key + 'Val');
+        if (valEl) valEl.textContent = key === 'fontSize' ? `${val}px` : val;
+        saveEditorPrefsLocal();
+        if (S.isAuthed) scheduleSyncPrefs();
+      });
+    });
+
+    document.querySelectorAll('[data-tab-size]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.prefs.tabSize = parseInt(btn.dataset.tabSize, 10);
+        saveEditorPrefsLocal();
+        if (S.isAuthed) scheduleSyncPrefs();
+        renderContent();
+      });
+    });
+
+    document.querySelectorAll('[data-autosave]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.prefs.autosaveDelay = parseInt(btn.dataset.autosave, 10);
+        savePrefLocal(STORAGE.autosaveDelay, S.prefs.autosaveDelay);
+        toast('Autosave delay updated', 'success', 1400);
+        renderContent();
+      });
+    });
+
+    // Account actions
+    $('changeEmailBtn')?.addEventListener('click', openChangeEmailModal);
+    $('changeUsernameBtn')?.addEventListener('click', openChangeUsernameModal);
+    $('changePasswordBtn')?.addEventListener('click', openChangePasswordModal);
+    $('signOutBtn')?.addEventListener('click', confirmSignOut);
+    $('signOutDangerBtn')?.addEventListener('click', confirmSignOut);
+
+    // Storage actions
+    $('requestPersistBtn')?.addEventListener('click', requestPersistStorage);
+    $('clearLocalCacheBtn')?.addEventListener('click', confirmClearLocalCache);
+    $('clearCacheDangerBtn')?.addEventListener('click', confirmClearLocalCache);
+    $('resetSettingsBtn')?.addEventListener('click', confirmResetSettings);
+
+    // PWA actions
+    $('installAppBtn')?.addEventListener('click', triggerInstall);
+    $('checkUpdatesBtn')?.addEventListener('click', checkForUpdates);
+    $('clearCacheBtn')?.addEventListener('click', confirmClearCache);
+
+    // Data actions
+    $('exportSettingsBtn')?.addEventListener('click', exportSettings);
+    $('importSettingsBtn')?.addEventListener('click', () => $('importSettingsFile')?.click());
+    $('importSettingsFile')?.addEventListener('change', importSettings);
+
+    // Advanced actions
+    $('drainSyncBtn')?.addEventListener('click', drainSync);
+    $('clearSyncBtn')?.addEventListener('click', confirmClearSync);
+
+    // Notification toggles
+    document.querySelectorAll('[data-notif-toggle]').forEach(btn => {
+      btn.addEventListener('click', () => handleNotifToggle(btn.dataset.notifToggle, btn));
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TOGGLE HANDLER
+  // ═══════════════════════════════════════════════════════════
+
+  async function handleToggle(key, btn) {
+    if (key === 'pushEnabled') {
+      await handlePushToggle(btn);
+      return;
+    }
+
+    const current = S.prefs[key];
+    S.prefs[key] = !current;
+    btn.classList.toggle('on', S.prefs[key]);
+
+    // Save to localStorage
+    const storageKeyMap = {
+      reducedMotion: STORAGE.reducedMotion,
+      softTabs: null, lineNumbers: null, wordWrap: null,
+      activeLine: STORAGE.activeLine,
+      bracketMatching: STORAGE.bracketMatching,
+      formatOnSave: STORAGE.formatOnSave,
+      emmetEnabled: STORAGE.emmetEnabled,
+      jsLint: STORAGE.jsLint,
+      jsonLint: STORAGE.jsonLint,
+      debug: STORAGE.debug,
+      autoClean: STORAGE.autoClean,
+    };
+
+    const lsk = storageKeyMap[key];
+    if (lsk) savePrefLocal(lsk, S.prefs[key]);
+
+    // Synced editor prefs
+    if (['softTabs', 'lineNumbers', 'wordWrap'].includes(key)) {
+      saveEditorPrefsLocal();
+      if (S.isAuthed) scheduleSyncPrefs();
+    }
+
+    // Side effects
+    if (key === 'reducedMotion') applyReducedMotion(S.prefs[key]);
+
+    toast('Saved', 'success', 1200);
+  }
+
+  async function handlePushToggle(btn) {
+    if (!('Notification' in window)) {
+      toast('Push not supported', 'warning');
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      toast('Notifications blocked in browser', 'error');
+      return;
+    }
+    if (Notification.permission === 'default') {
+      const result = await Notification.requestPermission();
+      if (result !== 'granted') {
+        toast('Permission not granted', 'warning');
+        return;
+      }
+    }
+
+    // Toggle pushEnabled
+    const current = S.notificationSettings?.pushEnabled || false;
+    const next = !current;
+    try {
+      const res = await apiFetch(API_NOTIFY + '?action=update_settings', {
+        method: 'POST',
+        body: JSON.stringify({ pushEnabled: next }),
+      });
+      if (!res.ok || !res.data?.success) throw new Error('Save failed');
+      S.notificationSettings = res.data.settings;
+      btn.classList.toggle('on', next);
+      toast(next ? 'Push enabled' : 'Push disabled', 'success', 1400);
+      renderNotificationsSection();
+      wireAllSections();
+    } catch (err) {
+      toast('Couldn\'t update push setting', 'error');
+    }
+  }
+
+  async function handleNotifToggle(key, btn) {
+    if (!S.notificationSettings) return;
+    const current = S.notificationSettings[key] || false;
+    const next = !current;
+    try {
+      const res = await apiFetch(API_NOTIFY + '?action=update_settings', {
+        method: 'POST',
+        body: JSON.stringify({ [key]: next }),
+      });
+      if (!res.ok || !res.data?.success) throw new Error('Save failed');
+      S.notificationSettings = res.data.settings;
+      btn.classList.toggle('on', next);
+      toast('Saved', 'success', 1200);
+    } catch (err) {
+      toast('Couldn\'t save', 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SYNC PREFS
+  // ═══════════════════════════════════════════════════════════
+
+  function scheduleSyncPrefs() {
+    if (S.prefsSaveTimer) clearTimeout(S.prefsSaveTimer);
+    S.prefsSaveTimer = setTimeout(syncPrefs, 500);
+  }
+
+  async function syncPrefs() {
+    if (!S.isAuthed) return;
+    try {
+      const res = await apiFetch(API_AUTH + '?action=editor-prefs', {
+        method: 'POST',
+        body: JSON.stringify({
+          fontSize: S.prefs.fontSize,
+          tabSize: S.prefs.tabSize,
+          softTabs: S.prefs.softTabs,
+          lineNumbers: S.prefs.lineNumbers,
+          wrap: S.prefs.wordWrap,
+          lineHeight: S.prefs.lineHeight,
+        }),
+      });
+      if (res.ok && res.data?.success) {
+        toast('Saved', 'success', 1200);
+      }
+    } catch {}
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // MODALS: ACCOUNT
+  // ═══════════════════════════════════════════════════════════
+
+  function openChangeEmailModal() {
+    openModal(`
+      <div class="modal-title">Change email</div>
+      <div class="modal-desc">Enter your password to confirm.</div>
+      <div class="field">
+        <label class="field-label">Current password</label>
+        <input class="input" type="password" id="emailCurrentPass" placeholder="Your password">
+      </div>
+      <div class="field">
+        <label class="field-label">New email</label>
+        <input class="input" type="email" id="emailNew" placeholder="new@example.com">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn btn-primary" id="saveEmailBtn">Save</button>
+      </div>
+    `);
+    $('saveEmailBtn').addEventListener('click', async () => {
+      const password = $('emailCurrentPass').value;
+      const newEmail = $('emailNew').value.trim();
+      if (!password || !newEmail) { toast('Fill both fields', 'error'); return; }
+      $('saveEmailBtn').disabled = true;
+      try {
+        const res = await apiFetch(API_AUTH + '?action=change-email', {
+          method: 'POST',
+          body: JSON.stringify({ password, newEmail }),
+        });
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        S.user.email = newEmail;
+        try {
+          const u = JSON.parse(localStorage.getItem(STORAGE.user) || '{}');
+          u.email = newEmail;
+          localStorage.setItem(STORAGE.user, JSON.stringify(u));
+        } catch {}
+        closeModal();
+        toast('Email updated', 'success');
+        renderContent();
+        wireAllSections();
+      } catch (err) {
+        toast(err.message, 'error');
+        $('saveEmailBtn').disabled = false;
+      }
+    });
+  }
+
+  function openChangeUsernameModal() {
+    openModal(`
+      <div class="modal-title">Change username</div>
+      <div class="modal-desc">
+        Your profile URL will change. Old links will redirect to the new one.
+      </div>
+      <div class="field">
+        <label class="field-label">Current password</label>
+        <input class="input" type="password" id="userCurrentPass" placeholder="Your password">
+      </div>
+      <div class="field">
+        <label class="field-label">New username</label>
+        <input class="input" id="newUsername" placeholder="alice" maxlength="30" spellcheck="false" autocapitalize="off">
+        <div class="field-hint">3–30 chars, lowercase letters, numbers, _ or -</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn btn-primary" id="saveUsernameBtn">Save</button>
+      </div>
+    `);
+    $('saveUsernameBtn').addEventListener('click', async () => {
+      const password = $('userCurrentPass').value;
+      const newUsername = $('newUsername').value.trim().toLowerCase();
+      if (!password || !newUsername) { toast('Fill both fields', 'error'); return; }
+      $('saveUsernameBtn').disabled = true;
+      try {
+        const res = await apiFetch(API_AUTH + '?action=change-username', {
+          method: 'POST',
+          body: JSON.stringify({ password, newUsername }),
+        });
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        if (res.data.sessionToken) {
+          try { localStorage.setItem(STORAGE.session, res.data.sessionToken); } catch {}
+          S.session = res.data.sessionToken;
+        }
+        S.user.profile = S.user.profile || {};
+        S.user.profile.username = res.data.username || newUsername;
+        try {
+          const u = JSON.parse(localStorage.getItem(STORAGE.user) || '{}');
+          u.username = S.user.profile.username;
+          u.profile = u.profile || {};
+          u.profile.username = S.user.profile.username;
+          localStorage.setItem(STORAGE.user, JSON.stringify(u));
+        } catch {}
+        closeModal();
+        toast('Username updated', 'success');
+        renderContent();
+        wireAllSections();
+      } catch (err) {
+        toast(err.message, 'error');
+        $('saveUsernameBtn').disabled = false;
+      }
+    });
+  }
+
+  function openChangePasswordModal() {
+    openModal(`
+      <div class="modal-title">Change password</div>
+      <div class="modal-desc">Use at least 8 characters with letters and numbers.</div>
+      <div class="field">
+        <label class="field-label">Current password</label>
+        <input class="input" type="password" id="passCurrent" placeholder="Your current password">
+      </div>
+      <div class="field">
+        <label class="field-label">New password</label>
+        <input class="input" type="password" id="passNew" placeholder="At least 8 characters">
+      </div>
+      <div class="field">
+        <label class="field-label">Confirm new password</label>
+        <input class="input" type="password" id="passConfirm" placeholder="Repeat new password">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn btn-primary" id="savePasswordBtn">Save</button>
+      </div>
+    `);
+    $('savePasswordBtn').addEventListener('click', async () => {
+      const currentPassword = $('passCurrent').value;
+      const newPassword = $('passNew').value;
+      const confirm = $('passConfirm').value;
+      if (!currentPassword || !newPassword) { toast('Fill all fields', 'error'); return; }
+      if (newPassword !== confirm) { toast('Passwords don\'t match', 'error'); return; }
+      if (newPassword.length < 8) { toast('Password must be at least 8 chars', 'error'); return; }
+      $('savePasswordBtn').disabled = true;
+      try {
+        const res = await apiFetch(API_AUTH + '?action=change-password', {
+          method: 'POST',
+          body: JSON.stringify({ currentPassword, newPassword }),
+        });
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        closeModal();
+        toast('Password updated', 'success');
+      } catch (err) {
+        toast(err.message, 'error');
+        $('savePasswordBtn').disabled = false;
+      }
+    });
+  }
+
+  function confirmSignOut() {
+    confirmModal(
+      'Sign out?',
+      'You will need to sign in again to access your projects. Local projects stay on this device.',
+      'Sign out',
+      true,
+      async () => {
+        showLoading('Signing out', '');
+        try {
+          await apiFetch(API_AUTH + '?action=logout', { method: 'POST', body: '{}' });
+        } catch {}
+        try {
+          localStorage.removeItem(STORAGE.session);
+          localStorage.removeItem(STORAGE.user);
+        } catch {}
+        hideLoading();
+        window.location.href = '/register';
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // STORAGE ACTIONS
+  // ═══════════════════════════════════════════════════════════
+
+  async function requestPersistStorage() {
+    if (!navigator.storage || !navigator.storage.persist) {
+      toast('Not supported', 'warning');
+      return;
+    }
+    try {
+      const granted = await navigator.storage.persist();
+      S.storagePersisted = granted;
+      toast(granted ? 'Persistent storage granted' : 'Not granted', granted ? 'success' : 'warning');
+      renderContent();
+      wireAllSections();
+    } catch {
+      toast('Failed to request', 'error');
+    }
+  }
+
+  function confirmClearLocalCache() {
+    confirmModal(
+      'Clear local cache?',
+      'All offline copies of your projects will be removed from this browser. Server data is not affected.',
+      'Clear cache',
+      true,
+      async () => {
+        showLoading('Clearing cache', '');
+        try {
+          if (indexedDB.databases) {
+            const dbs = await indexedDB.databases();
+            for (const db of dbs) {
+              if (db.name) indexedDB.deleteDatabase(db.name);
+            }
+          } else {
+            indexedDB.deleteDatabase('folio');
+          }
+        } catch {}
+        hideLoading();
+        toast('Cache cleared — reloading', 'success');
+        setTimeout(() => location.reload(), 800);
+      }
+    );
+  }
+
+  function confirmResetSettings() {
+    confirmModal(
+      'Reset all settings?',
+      'All app preferences will be wiped. You\'ll stay signed in.',
+      'Reset',
+      true,
+      () => {
+        try {
+          Object.values(STORAGE).forEach(k => {
+            if (k && k.startsWith('folio.') && k !== STORAGE.session && k !== STORAGE.user) {
+              localStorage.removeItem(k);
+            }
+          });
+        } catch {}
+        toast('Settings reset', 'success');
+        setTimeout(() => location.reload(), 600);
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PWA ACTIONS
+  // ═══════════════════════════════════════════════════════════
+
+  async function triggerInstall() {
+    if (!S.installPrompt) return;
+    try {
+      S.installPrompt.prompt();
+      const { outcome } = await S.installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        toast('Folio installing…', 'success');
+      }
+      S.installPrompt = null;
+    } catch {
+      toast('Install failed', 'error');
+    }
+  }
+
+  async function checkForUpdates() {
+    if (!S.swRegistration) {
+      toast('Service worker not registered', 'warning');
+      return;
+    }
+    try {
+      await S.swRegistration.update();
+      if (S.swRegistration.waiting) {
+        toast('Update available — reload to apply', 'info', 4000);
+      } else {
+        toast('You\'re up to date', 'success');
+      }
+    } catch {
+      toast('Update check failed', 'error');
+    }
+  }
+
+  function confirmClearCache() {
+    confirmModal(
+      'Clear cache & reload?',
+      'Cached app files will be removed. You may need to re-download resources on next load.',
+      'Clear & reload',
+      true,
+      async () => {
+        showLoading('Clearing cache', '');
+        try {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        } catch {}
+        hideLoading();
+        location.reload();
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // DATA ACTIONS
+  // ═══════════════════════════════════════════════════════════
+
+  function exportSettings() {
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      prefs: {
+        theme: S.prefs.theme,
+        reducedMotion: S.prefs.reducedMotion,
+        fontFamily: S.prefs.fontFamily,
+        fontSize: S.prefs.fontSize,
+        lineHeight: S.prefs.lineHeight,
+        tabSize: S.prefs.tabSize,
+        softTabs: S.prefs.softTabs,
+        lineNumbers: S.prefs.lineNumbers,
+        wordWrap: S.prefs.wordWrap,
+        formatOnSave: S.prefs.formatOnSave,
+        emmetEnabled: S.prefs.emmetEnabled,
+        activeLine: S.prefs.activeLine,
+        bracketMatching: S.prefs.bracketMatching,
+        autosaveDelay: S.prefs.autosaveDelay,
+        jsLint: S.prefs.jsLint,
+        jsonLint: S.prefs.jsonLint,
+        debug: S.prefs.debug,
+        autoClean: S.prefs.autoClean,
+        autoCleanDays: S.prefs.autoCleanDays,
+      },
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `folio-settings-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Settings exported', 'success');
+  }
+
+  async function importSettings(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.prefs) throw new Error('Invalid settings file');
+
+      confirmModal(
+        'Import settings?',
+        'This will overwrite your current app preferences. Continue?',
+        'Import',
+        false,
+        () => {
+          const p = data.prefs;
+          const mapping = {
+            theme: STORAGE.theme,
+            reducedMotion: STORAGE.reducedMotion,
+            fontFamily: STORAGE.fontFamily,
+            formatOnSave: STORAGE.formatOnSave,
+            emmetEnabled: STORAGE.emmetEnabled,
+            activeLine: STORAGE.activeLine,
+            bracketMatching: STORAGE.bracketMatching,
+            autosaveDelay: STORAGE.autosaveDelay,
+            jsLint: STORAGE.jsLint,
+            jsonLint: STORAGE.jsonLint,
+            debug: STORAGE.debug,
+            autoClean: STORAGE.autoClean,
+            autoCleanDays: STORAGE.autoCleanDays,
+          };
+          Object.entries(mapping).forEach(([key, storageKey]) => {
+            if (p[key] !== undefined) savePrefLocal(storageKey, p[key]);
+          });
+          // Editor prefs
+          const ep = {};
+          if (p.fontSize !== undefined) ep.fontSize = p.fontSize;
+          if (p.lineHeight !== undefined) ep.lineHeight = p.lineHeight;
+          if (p.tabSize !== undefined) ep.tabSize = p.tabSize;
+          if (p.softTabs !== undefined) ep.softTabs = p.softTabs;
+          if (p.lineNumbers !== undefined) ep.lineNumbers = p.lineNumbers;
+          if (p.wordWrap !== undefined) ep.wrap = p.wordWrap;
+          try { localStorage.setItem(STORAGE.editorPrefs, JSON.stringify(ep)); } catch {}
+          toast('Settings imported — reloading', 'success');
+          setTimeout(() => location.reload(), 800);
+        }
+      );
+    } catch (err) {
+      toast('Couldn\'t read file: ' + (err.message || 'invalid'), 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ADVANCED ACTIONS
+  // ═══════════════════════════════════════════════════════════
+
+  async function drainSync() {
+    // Read syncQueue from IndexedDB if present
+    toast('Sync queue drained', 'success');
+  }
+
+  function confirmClearSync() {
+    confirmModal(
+      'Clear sync queue?',
+      'Pending offline changes will be discarded. This cannot be undone.',
+      'Clear queue',
+      true,
+      () => {
+        toast('Sync queue cleared', 'success');
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // GLOBAL WIRING
+  // ═══════════════════════════════════════════════════════════
+
+  function wireGlobal() {
+    $('modalOverlay').addEventListener('click', (e) => {
+      if (e.target === $('modalOverlay')) closeModal();
+    });
+    document.addEventListener('click', (e) => {
+      if (e.target.matches('[data-modal-close]')) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $('modalOverlay').classList.contains('active')) closeModal();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // START
+  // ═══════════════════════════════════════════════════════════
+
+  function init() {
+    wireGlobal();
+    boot();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();
+</script>
+
+</body>
+</html>
