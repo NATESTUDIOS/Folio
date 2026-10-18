@@ -57,6 +57,7 @@ const RATE_LIMITS = {
   projectCopy:        { max: 20,   window: 60 * 60 * 1000 },
   fileGet:            { max: 120,  window: 60 * 60 * 1000 },
   fileList:           { max: 120,  window: 60 * 60 * 1000 },
+  serve:              { max: 1200, window: 60 * 1000 },
 };
 
 async function checkRateLimit(identifier, action) {
@@ -120,8 +121,6 @@ function ipKey(req) {
 // =========================================================================
 
 const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
-const VERCEL_TOKEN = process.env.VERCEL_TOKEN || "";
-const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID || "";
 
 const INVITE_TTL_DAYS = 7;
 const INVITE_TTL_MS = INVITE_TTL_DAYS * 24 * 60 * 60 * 1000;
@@ -369,81 +368,280 @@ function escapeHtml(s) {
   }[c]));
 }
 
-function buildVercelPayload(name, files, metaTags) {
-  const vercelFiles = [];
-  for (const [filePath, content] of Object.entries(files)) {
-    let data = content;
-    if (typeof data !== "string") {
-      log("host.deploy.non_string_file", { filePath });
-      continue;
-    }
-    if (/\.html?$/i.test(filePath)) {
-      data = injectHead(data, metaTags, name);
-      data = injectTracker(data, name);
-    }
-    vercelFiles.push({ file: filePath, data });
-  }
-  return {
-    name,
-    files: vercelFiles,
-    target: "production",
-    projectSettings: { framework: null },
-  };
+// =========================================================================
+// SERVE FROM DB — MIME + URL REWRITERS
+// =========================================================================
+
+const MIME_TYPES = {
+  html:  "text/html; charset=utf-8",
+  htm:   "text/html; charset=utf-8",
+  css:   "text/css; charset=utf-8",
+  js:    "application/javascript; charset=utf-8",
+  mjs:   "application/javascript; charset=utf-8",
+  cjs:   "application/javascript; charset=utf-8",
+  json:  "application/json; charset=utf-8",
+  md:    "text/markdown; charset=utf-8",
+  txt:   "text/plain; charset=utf-8",
+  svg:   "image/svg+xml",
+  xml:   "application/xml; charset=utf-8",
+  yml:   "text/yaml; charset=utf-8",
+  yaml:  "text/yaml; charset=utf-8",
+  png:   "image/png",
+  jpg:   "image/jpeg",
+  jpeg:  "image/jpeg",
+  gif:   "image/gif",
+  webp:  "image/webp",
+  ico:   "image/x-icon",
+  woff:  "font/woff",
+  woff2: "font/woff2",
+  ttf:   "font/ttf",
+  otf:   "font/otf",
+};
+
+function mimeFor(p) {
+  const ext = (p.split(".").pop() || "").toLowerCase();
+  return MIME_TYPES[ext] || "application/octet-stream";
 }
 
-async function callVercelDeploy(payload) {
-  const url = VERCEL_TEAM_ID
-    ? `https://api.vercel.com/v13/deployments?teamId=${encodeURIComponent(VERCEL_TEAM_ID)}`
-    : "https://api.vercel.com/v13/deployments";
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${VERCEL_TOKEN}`,
-      "content-type": "application/json",
+function rewriteRelativeUrls(html, pid, currentPath) {
+  const baseDir = currentPath.includes("/")
+    ? currentPath.slice(0, currentPath.lastIndexOf("/") + 1)
+    : "";
+  const serveUrl = (target) =>
+    `/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=${encodeURIComponent(target)}`;
+  return html.replace(
+    /\b(href|src|action)\s*=\s*(["'])((?!https?:|\/\/|data:|mailto:|#|javascript:)[^"']+)\2/gi,
+    (m, attr, q, ref) => {
+      const target = ref.startsWith("/") ? ref.slice(1) : baseDir + ref;
+      return `${attr}=${q}${serveUrl(target)}${q}`;
     },
-    body: JSON.stringify(payload),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(body?.error?.message || `Vercel deploy failed: ${res.status}`);
-    err.status = res.status;
-    err.body = body;
-    throw err;
-  }
-  return body;
+  );
 }
 
-async function callVercelDeleteDeployment(deploymentId) {
-  if (!deploymentId) return { ok: false, reason: "no_id" };
-  const url = VERCEL_TEAM_ID
-    ? `https://api.vercel.com/v13/deployments/${deploymentId}?teamId=${encodeURIComponent(VERCEL_TEAM_ID)}`
-    : `https://api.vercel.com/v13/deployments/${deploymentId}`;
-  try {
-    const res = await fetch(url, {
-      method: "DELETE",
-      headers: { authorization: `Bearer ${VERCEL_TOKEN}` },
-    });
-    return { ok: res.ok, status: res.status };
-  } catch (err) {
-    log("host.vercel_delete_failed", { deploymentId, message: err.message });
-    return { ok: false, reason: err.message };
-  }
+function rewriteCssUrls(css, pid, currentPath) {
+  const baseDir = currentPath.includes("/")
+    ? currentPath.slice(0, currentPath.lastIndexOf("/") + 1)
+    : "";
+  return css.replace(
+    /url\(\s*(["']?)((?!https?:|\/\/|data:)[^"')]+)\1\s*\)/gi,
+    (m, q, ref) => {
+      const target = ref.startsWith("/") ? ref.slice(1) : baseDir + ref;
+      return `url("/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=${encodeURIComponent(target)}")`;
+    },
+  );
 }
 
-async function callNotify(type, uid, payload) {
+// =========================================================================
+// OG IMAGE GENERATION — lazy, cached, signature-invalidated
+// =========================================================================
+
+const FLIER_INTERNAL_URL = process.env.FLIER_INTERNAL_URL || `${BASE_URL}/api/flier`;
+
+function ogSignature(...parts) {
+  const raw = parts.map(p => String(p ?? "")).join("|");
+  return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16);
+}
+
+async function callFlier(payload) {
   try {
-    const res = await fetch(`${BASE_URL}/api/notify?action=create`, {
+    const res = await fetch(FLIER_INTERNAL_URL, {
       method: "POST",
       headers: {
-        "content-type": "application/json",
-        "x-api-key": process.env.ADMIN_API_KEY || "",
+        "Content-Type": "application/json",
+        "X-API-Key": process.env.ADMIN_API_KEY || "",
       },
-      body: JSON.stringify({ type, uid, ...payload }),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(25_000),
     });
-    if (!res.ok) log("host.notify_failed", { type, uid, status: res.status });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      log("og_image.flier_http", { status: res.status, body: text.slice(0, 200) });
+      return null;
+    }
+    const json = await res.json();
+    if (!json.success || !json.url) {
+      log("og_image.flier_no_url", { response: json });
+      return null;
+    }
+    return json.url;
   } catch (err) {
-    log("host.notify_error", { type, uid, message: err.message });
+    log("og_image.flier_error", { message: err.message });
+    return null;
   }
+}
+
+function deriveProjectDescription(project, files) {
+  if (project.description?.trim()) return project.description.trim().slice(0, 160);
+
+  if (files) {
+    const htmlFile = files["index.html"] || files["index.htm"] ||
+                     Object.entries(files).find(([p]) => /\.html?$/i.test(p))?.[1];
+    if (htmlFile) {
+      const h1 = String(htmlFile).match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+      const p  = String(htmlFile).match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+      const raw = (h1?.[1] || p?.[1] || "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (raw.length > 15) return raw.slice(0, 160);
+    }
+  }
+
+  const langs = Object.keys(project.languages?.breakdown || {});
+  if (langs.length > 0) return `${langs.slice(0, 3).join(", ")} project on Folio`;
+  return `${project.name || "A Folio project"} — built with Folio.`;
+}
+
+function pickProjectTemplate(project, derivedDesc, langs) {
+  const nameLen   = (project.name || "").length;
+  const descLen   = (derivedDesc || "").length;
+  const hasIcon   = !!project.iconUrl;
+  const langCount = langs.length;
+
+  if (nameLen > 32 && descLen < 40) return "hero-short";
+  if (hasIcon && descLen > 60) return "image-shadow-bottom";
+  if (langCount >= 3 && descLen > 40) return "product-grid-2";
+  if (descLen > 100) return "poster-centered";
+  if (nameLen <= 20 && descLen > 0) return "quote-card";
+  return "event-poster";
+}
+
+function pickProfileTemplate(user, derivedBio) {
+  const displayName = (user.profile?.displayName || "").trim();
+  const nameLen     = displayName.length;
+  const bioLen      = (derivedBio || "").length;
+  const hasAvatar   = !!user.profile?.avatarUrl;
+
+  if (nameLen <= 16) return "hero-short";
+  if (hasAvatar && nameLen > 16) return "image-shadow-bottom";
+  if (bioLen > 100) return "poster-centered";
+  return "quote-card";
+}
+
+async function ensureProjectOgImage({ pid, project, files }) {
+  const derivedDesc = deriveProjectDescription(project, files);
+  const langs = Object.entries(project.languages?.breakdown || {})
+    .sort(([, a], [, b]) => b - a)
+    .map(([lang]) => lang);
+
+  const sig = ogSignature(
+    project.name,
+    derivedDesc,
+    project.iconUrl,
+    langs.slice(0, 4).join(","),
+  );
+
+  const cached = project.ogImage;
+  if (cached?.url && cached.signature === sig) return cached.url;
+
+  const template = pickProjectTemplate(project, derivedDesc, langs);
+  const payload = {
+    mode: "upload",
+    type: "template",
+    template,
+    size: "1200x630",
+    data: {
+      text: {
+        kicker:      langs.length ? langs.slice(0, 2).join(" · ") : "FOLIO",
+        headline:    project.name || "Untitled project",
+        subheadline: derivedDesc,
+      },
+      style: {
+        variant: "dark",
+        align: template === "product-grid-2" ? "left" : "center",
+        colors: { primary: "#F59E0B", accent: "#fbbf24" },
+        headlineCase: "auto",
+        watermark: true,
+      },
+      images: project.iconUrl ? { primary: { url: project.iconUrl } } : {},
+    },
+    upload: { name: `og_${pid}_${sig}` },
+  };
+
+  const url = await callFlier(payload);
+  if (!url) return null;
+
+  await db.ref(`projects/${pid}/ogImage`).set({
+    url,
+    signature: sig,
+    template,
+    generatedAt: Date.now(),
+  }).catch(() => {});
+
+  return url;
+}
+
+async function ensureProfileOgImage({ user, username }) {
+  const displayName = user.profile?.displayName || username;
+  const derivedBio  = (user.profile?.bio || "").trim().slice(0, 160);
+
+  const sig = ogSignature(displayName, derivedBio, user.profile?.avatarUrl);
+  const cached = user.profile?.ogImage;
+  if (cached?.url && cached.signature === sig) return cached.url;
+
+  const template = pickProfileTemplate(user, derivedBio);
+  const payload = {
+    mode: "upload",
+    type: "template",
+    template,
+    size: "1200x630",
+    data: {
+      text: {
+        kicker:      `@${username}`,
+        headline:    displayName,
+        subheadline: derivedBio,
+      },
+      style: {
+        variant: "dark",
+        align: template === "hero-short" ? "center" : "left",
+        colors: { primary: "#F59E0B", accent: "#fbbf24" },
+      },
+      images: user.profile?.avatarUrl ? { primary: { url: user.profile.avatarUrl } } : {},
+    },
+    upload: { name: `og_profile_${username}_${sig}` },
+  };
+
+  const url = await callFlier(payload);
+  if (!url) return null;
+
+  await db.ref(`users/${user.uid}/profile/ogImage`).set({
+    url,
+    signature: sig,
+    template,
+    generatedAt: Date.now(),
+  }).catch(() => {});
+
+  return url;
+}
+
+async function invalidateProjectOgImage(pid) {
+  await db.ref(`projects/${pid}/ogImage`).remove().catch(() => {});
+}
+
+async function resolveProjectMeta(pid, project) {
+  const meta = { ...(project.metaTags || {}) };
+
+  if (!meta.ogImage) {
+    let files = null;
+    if (!project.description?.trim()) {
+      const snap = await db.ref(`files/${pid}`).once("value").catch(() => null);
+      files = {};
+      if (snap?.exists()) {
+        snap.forEach(c => {
+          const v = c.val();
+          if (v?.path) files[v.path] = v.content || "";
+        });
+      }
+    }
+    const gen = await ensureProjectOgImage({ pid, project, files });
+    if (gen) meta.ogImage = gen;
+  }
+
+  if (!meta.description) {
+    meta.description = deriveProjectDescription(project, null);
+  }
+
+  return meta;
 }
 
 // =========================================================================
@@ -482,7 +680,6 @@ function buildZip(entries) {
   const localHeaders = [];
   const centralDir = [];
   let offset = 0;
-
   const { time, date } = dosDateTime();
 
   for (const entry of entries) {
@@ -610,7 +807,7 @@ async function handleProjectsCreate(req, res, reqId) {
 }
 
 async function handleProjectsUpdate(req, res, reqId) {
-  const { pid, name, description } = req.body || {};
+  const { pid, name, description, iconUrl } = req.body || {};
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "projectsUpdate", `pid_${pid}`))) return;
 
@@ -630,6 +827,12 @@ async function handleProjectsUpdate(req, res, reqId) {
     }
     patch.description = description.trim();
   }
+  if (iconUrl !== undefined) {
+    if (iconUrl !== null && (typeof iconUrl !== "string" || iconUrl.length > 500)) {
+      return res.status(400).json({ success: false, error: "iconUrl must be a string ≤500 chars or null" });
+    }
+    patch.iconUrl = iconUrl;
+  }
   if (Object.keys(patch).length === 0) {
     return res.status(400).json({ success: false, error: "No fields to update" });
   }
@@ -639,6 +842,10 @@ async function handleProjectsUpdate(req, res, reqId) {
   await logProjectEvent(pid, access.uid, "project", "project.updated", {
     fields: Object.keys(patch).filter(k => k !== "updatedAt"),
   });
+
+  if (patch.name !== undefined || patch.description !== undefined || patch.iconUrl !== undefined) {
+    await invalidateProjectOgImage(pid);
+  }
 
   const snap = await db.ref(`projects/${pid}`).once("value");
   const p = snap.exists() ? snap.val() : {};
@@ -664,7 +871,7 @@ async function handleProjectsDelete(req, res, reqId) {
 }
 
 // =========================================================================
-// DEPLOY
+// DEPLOY (DB-only — no external host)
 // =========================================================================
 
 async function handleDeploy(req, res, reqId) {
@@ -682,72 +889,97 @@ async function handleDeploy(req, res, reqId) {
     return res.status(404).json({ success: false, error: "Project not found" });
   }
   const project = projSnap.val();
-  const name = `${project.slug}-${shortId(pid)}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
-  const payload = buildVercelPayload(name, files, project.metaTags || {});
+  const MAX_FILE_BYTES = 2 * 1024 * 1024;
+  const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
+  let totalBytes = 0;
+  let filesWritten = 0;
+  const skipped = [];
 
-  let deployment;
-  try {
-    deployment = await callVercelDeploy(payload);
-  } catch (err) {
-    log("host.deploy.vercel_error", { reqId, pid, status: err.status, message: err.message });
-    return res.status(502).json({ success: false, error: "Deployment failed upstream" });
+  for (const [filePath, content] of Object.entries(files)) {
+    if (typeof content !== "string") { skipped.push(filePath); continue; }
+    if (content.length > MAX_FILE_BYTES) { skipped.push(filePath); continue; }
+    totalBytes += content.length;
+    if (totalBytes > MAX_TOTAL_BYTES) {
+      return res.status(413).json({
+        success: false,
+        error: "Project too large to deploy",
+        limit: MAX_TOTAL_BYTES,
+        hint: "Split into smaller projects or remove large assets.",
+      });
+    }
+    try {
+      await db.ref(`files/${pid}/${sanitizeFirebasePath(filePath.replace(/\//g, "__"))}`).set({
+        path: filePath,
+        content,
+        updatedAt: Date.now(),
+      });
+      filesWritten++;
+    } catch (err) {
+      log("host.deploy.file_failed", { reqId, pid, filePath, message: err.message });
+      skipped.push(filePath);
+    }
   }
 
-  const url = deployment.url ? `https://${deployment.url}` : null;
-  const stateUrl = deployment.inspectorUrl || null;
+  if (filesWritten === 0) {
+    return res.status(400).json({ success: false, error: "No valid files to deploy" });
+  }
+
+  const publicUrl =
+    `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=index.html`;
 
   const deploymentRecord = {
-    url,
+    url: publicUrl,
     versionId: versionId || null,
     deployedAt: Date.now(),
-    deploymentId: deployment.id || null,
-    state: deployment.readyState || "QUEUED",
-    stateUrl,
+    deploymentId: `db_${pid}_${Date.now()}`,
+    state: "READY",
+    stateUrl: null,
     deployedBy: access.uid,
   };
 
   await db.ref(`projects/${pid}/deployment`).set(deploymentRecord);
+  await db.ref(`projects/${pid}/deployments/${deploymentRecord.deploymentId}`).set(deploymentRecord);
 
-  if (deployment.id) {
-    await db.ref(`projects/${pid}/deployments/${deployment.id}`).set(deploymentRecord);
-    try {
-      const histSnap = await db.ref(`projects/${pid}/deployments`).once("value");
-      if (histSnap.exists()) {
-        const entries = [];
-        histSnap.forEach(child => {
-          entries.push({ id: child.key, at: child.val()?.deployedAt || 0 });
-        });
-        if (entries.length > 30) {
-          entries.sort((a, b) => a.at - b.at);
-          const toDelete = entries.slice(0, entries.length - 30);
-          const updates = {};
-          toDelete.forEach(e => { updates[e.id] = null; });
-          await db.ref(`projects/${pid}/deployments`).update(updates);
-        }
+  try {
+    const histSnap = await db.ref(`projects/${pid}/deployments`).once("value");
+    if (histSnap.exists()) {
+      const entries = [];
+      histSnap.forEach(child => {
+        entries.push({ id: child.key, at: child.val()?.deployedAt || 0 });
+      });
+      if (entries.length > 30) {
+        entries.sort((a, b) => a.at - b.at);
+        const updates = {};
+        entries.slice(0, entries.length - 30).forEach(e => { updates[e.id] = null; });
+        await db.ref(`projects/${pid}/deployments`).update(updates);
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
   await db.ref(`projects/${pid}/updatedAt`).set(Date.now());
 
   await logProjectEvent(pid, access.uid, "deploy", "project.deployed", {
-    url,
+    url: publicUrl,
     versionId: versionId || null,
+    filesWritten,
+    filesSkipped: skipped.length,
   });
 
   callNotify("project", project.ownerId, {
-    title: "Deployment started",
-    body: `Project "${project.name}" is deploying.`,
+    title: "Deployment complete",
+    body: `Project "${project.name}" is live.`,
     link: `${BASE_URL}/project.html?pid=${pid}`,
     extra: { pid },
   }).catch(() => {});
 
   return res.status(202).json({
     success: true,
-    deploymentId: deployment.id || null,
-    stateUrl,
-    url,
+    deploymentId: deploymentRecord.deploymentId,
+    stateUrl: null,
+    url: publicUrl,
+    filesWritten,
+    filesSkipped: skipped.length,
   });
 }
 
@@ -860,23 +1092,94 @@ async function handleDeploymentDelete(req, res, reqId) {
   const currentSnap = await db.ref(`projects/${pid}/deployment/deploymentId`).once("value");
   const isCurrent = currentSnap.exists() && currentSnap.val() === deploymentId;
 
-  const vercelResult = await callVercelDeleteDeployment(deploymentId);
-
   await db.ref(`projects/${pid}/deployments/${deploymentId}`).remove();
+  if (isCurrent) await db.ref(`projects/${pid}/deployment`).remove();
 
-  if (isCurrent) {
-    await db.ref(`projects/${pid}/deployment`).remove();
+  await logProjectEvent(pid, access.uid, "deploy", "deployment.deleted", { deploymentId });
+
+  return res.status(200).json({ success: true, vercelDeleted: false });
+}
+
+// =========================================================================
+// SERVE (static files out of DB)
+// =========================================================================
+
+async function handleServe(req, res, reqId) {
+  let pid = String(req.query?.pid || "").trim();
+  if (!pid && req.query.username && req.query.project) {
+    const found = await findProjectBySlug(
+      String(req.query.username).toLowerCase(),
+      String(req.query.project),
+    );
+    if (!found) return res.status(404).type("text").send("Not found");
+    pid = found.pid;
+  }
+  if (!pid) return res.status(400).type("text").send("Missing pid");
+
+  if (!(await enforceRate(req, res, "serve", ipKey(req)))) return;
+
+  const projSnap = await db.ref(`projects/${pid}`).once("value");
+  if (!projSnap.exists()) return res.status(404).type("text").send("Not found");
+  const project = projSnap.val();
+
+  if (project.deployment?.state === "OFFLINE") {
+    return res.status(410).type("text").send("This project is offline");
   }
 
-  await logProjectEvent(pid, access.uid, "deploy", "deployment.deleted", {
-    deploymentId,
-    vercelOk: vercelResult.ok,
-  });
+  const isPublic =
+    project.visibility?.profile === "public" ||
+    project.visibility?.liveSite === "public";
 
-  return res.status(200).json({
-    success: true,
-    vercelDeleted: vercelResult.ok,
-  });
+  if (!isPublic) {
+    const access = await canAccessProjectFromReq(req);
+    if (!access) return res.status(403).type("text").send("Project is not public");
+  }
+
+  let wantPath = String(req.query?.path || "").replace(/^\/+/, "");
+  if (!wantPath) {
+    if (project.primaryFile) wantPath = project.primaryFile;
+    else {
+      const filesSnap = await db.ref(`files/${pid}`).once("value");
+      if (filesSnap.exists()) {
+        filesSnap.forEach(child => {
+          const p = child.val()?.path || "";
+          if (!wantPath && /\.html?$/i.test(p)) wantPath = p;
+        });
+      }
+    }
+    if (!wantPath) return res.status(404).type("text").send("No HTML file");
+  }
+
+  const safeKey = sanitizeFirebasePath(wantPath.replace(/\//g, "__"));
+  const fileSnap = await db.ref(`files/${pid}/${safeKey}`).once("value");
+  if (!fileSnap.exists()) {
+    return res.status(404).type("text").send(`Not found: ${wantPath}`);
+  }
+  const file = fileSnap.val() || {};
+  const content = String(file.content ?? "");
+
+  const MAX_BYTES = 4 * 1024 * 1024;
+  if (content.length > MAX_BYTES) {
+    return res.status(413).type("text").send("File too large to serve");
+  }
+
+  res.setHeader("Content-Type", mimeFor(wantPath));
+  res.setHeader("Cache-Control", "public, max-age=30, s-maxage=30");
+
+  if (/\.html?$/i.test(wantPath)) {
+    let html = content;
+    const meta = await resolveProjectMeta(pid, project);
+    html = injectHead(html, meta, pid);
+    html = injectTracker(html, pid);
+    html = rewriteRelativeUrls(html, pid, wantPath);
+    return res.status(200).send(html);
+  }
+
+  if (/\.css$/i.test(wantPath)) {
+    return res.status(200).send(rewriteCssUrls(content, pid, wantPath));
+  }
+
+  return res.status(200).send(content);
 }
 
 // =========================================================================
@@ -990,9 +1293,7 @@ async function handleProjectExport(req, res, reqId) {
   if (format === "folio" && !publicOnly) {
     const vSnap = await db.ref(`versions/${pid}`).once("value");
     if (vSnap.exists()) {
-      vSnap.forEach(child => {
-        versionsObj[child.key] = child.val();
-      });
+      vSnap.forEach(child => { versionsObj[child.key] = child.val(); });
     }
   }
 
@@ -1040,9 +1341,6 @@ async function handleProjectExport(req, res, reqId) {
         data: Buffer.from(JSON.stringify(v, null, 2), "utf8"),
       });
     }
-  }
-
-  if (format === "folio" && !publicOnly) {
     if (jsonDb) {
       entries.push({
         name: "db.json",
@@ -1102,10 +1400,7 @@ async function handleProjectSyncBack(req, res, reqId) {
 
   if (files && typeof files === "object") {
     for (const [filePath, content] of Object.entries(files)) {
-      if (typeof content !== "string") {
-        result.filesSkipped++;
-        continue;
-      }
+      if (typeof content !== "string") { result.filesSkipped++; continue; }
       try {
         await db.ref(`files/${pid}/${sanitizeFirebasePath(filePath.replace(/\//g, "__"))}`).set({
           path: filePath,
@@ -1151,6 +1446,10 @@ async function handleProjectSyncBack(req, res, reqId) {
     ...result,
     manifestAt: manifest?.exportedAt || null,
   });
+
+  if (result.filesWritten > 0 && !projSnap.val().description?.trim()) {
+    await invalidateProjectOgImage(pid);
+  }
 
   return res.status(200).json({ success: true, ...result });
 }
@@ -1270,7 +1569,6 @@ async function handleFileGet(req, res, reqId) {
     updatedAt: file.updatedAt || null,
   });
 }
-
 // =========================================================================
 // PROJECT COPY (fork)
 // =========================================================================
@@ -1905,6 +2203,9 @@ async function handleShare(req, res, reqId) {
   const liveUrl = liveSitePublic && project.deployment?.url ? project.deployment.url : null;
   const canCopy = isProfilePublic && isSignedIn && !viewerIsOwner;
 
+  const resolvedMeta = await resolveProjectMeta(pid, project);
+  const ogImageUrl = resolvedMeta.ogImage || null;
+
   const langBadges = languagesPublic && project.languages?.breakdown
     ? Object.entries(project.languages.breakdown)
         .sort(([, a], [, b]) => b - a)
@@ -1961,11 +2262,11 @@ async function handleShare(req, res, reqId) {
   };
   const projectScript = `<script>window.__PROJECT__ = ${JSON.stringify(payload).replace(/</g, "\\u003c")};</script>`;
 
-  const ogImageMeta = project.metaTags?.ogImage
-    ? `<meta property="og:image" content="${escapeHtml(project.metaTags.ogImage)}">`
+  const ogImageMeta = ogImageUrl
+    ? `<meta property="og:image" content="${escapeHtml(ogImageUrl)}">`
     : "";
-  const twitterImageMeta = project.metaTags?.ogImage
-    ? `<meta name="twitter:image" content="${escapeHtml(project.metaTags.ogImage)}">`
+  const twitterImageMeta = ogImageUrl
+    ? `<meta name="twitter:image" content="${escapeHtml(ogImageUrl)}">`
     : "";
 
   const tmpl = readTemplate("project-template.html");
@@ -1994,7 +2295,7 @@ async function handleShare(req, res, reqId) {
     CODE_BUTTON_HTML: { raw: codeButtonHtml },
     LIVE_BADGE_HTML: { raw: liveBadge },
     OG_TITLE: project.metaTags?.title || project.name || project.slug || "",
-    OG_DESCRIPTION: project.metaTags?.description || project.description || "",
+    OG_DESCRIPTION: resolvedMeta.description || "",
     OG_IMAGE_META: { raw: ogImageMeta },
     TWITTER_IMAGE_META: { raw: twitterImageMeta },
     CANONICAL_URL: `${BASE_URL}/${owner.profile?.username || username}/${project.slug || ""}`,
@@ -2131,11 +2432,15 @@ async function handleProfilePublic(req, res, reqId) {
        </div>`
     : "";
 
-  const ogImageMeta = user.profile?.ogImageUrl
-    ? `<meta property="og:image" content="${escapeHtml(user.profile.ogImageUrl)}">`
+  let profileOgImage = user.profile?.ogImageUrl || null;
+  if (!profileOgImage) {
+    profileOgImage = await ensureProfileOgImage({ user, username });
+  }
+  const ogImageMeta = profileOgImage
+    ? `<meta property="og:image" content="${escapeHtml(profileOgImage)}">`
     : "";
-  const twitterImageMeta = user.profile?.ogImageUrl
-    ? `<meta name="twitter:image" content="${escapeHtml(user.profile.ogImageUrl)}">`
+  const twitterImageMeta = profileOgImage
+    ? `<meta name="twitter:image" content="${escapeHtml(profileOgImage)}">`
     : "";
 
   const profileJson = {
@@ -2312,6 +2617,9 @@ export default async function handler(req, res) {
     // File list / file get (public code viewer)
     if (method === "GET"  && action === "file/list")            return await handleFileList(req, res, reqId);
     if (method === "GET"  && action === "file/get")             return await handleFileGet(req, res, reqId);
+
+    // Serve from DB (replaces Vercel deployment)
+    if (method === "GET"  && action === "serve")                return await handleServe(req, res, reqId);
 
     // JSON DB
     if (method === "POST" && action === "db/set")               return await handleDbSet(req, res, reqId);
