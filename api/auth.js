@@ -31,6 +31,7 @@ const RATE_LIMITS = {
   changeUsername: { max: 3,   window: 60 * 60 * 1000 },
   me:             { max: 300, window: 60 * 60 * 1000 },
   profileUpdate:  { max: 10,  window: 60 * 60 * 1000 },
+  editorPrefs:    { max: 60,  window: 60 * 60 * 1000 },
   logs:           { max: 60,  window: 60 * 60 * 1000 },
 };
 
@@ -476,7 +477,7 @@ async function handleProfileUpdate(req, res, reqId) {
   if (!user) return;
   if (!(await enforceRate(req, res, "profileUpdate", `uid_${user.uid}`))) return;
 
-  const { displayName, bio, avatarUrl, links, avatarDataUrl } = req.body || {};
+  const { displayName, bio, avatarUrl, links } = req.body || {};
   const patch = {};
 
   if (displayName !== undefined) {
@@ -496,47 +497,13 @@ async function handleProfileUpdate(req, res, reqId) {
       try {
         const u = new URL(avatarUrl);
         if (u.protocol !== "https:") throw new Error("must be https");
+        if (avatarUrl.length > 2000) throw new Error("url too long");
       } catch {
         return res.status(400).json({ success: false, error: "avatarUrl must be an HTTPS URL or null" });
       }
     }
     patch["profile/avatarUrl"] = avatarUrl;
   }
-
-  if (avatarDataUrl && typeof avatarDataUrl === "string") {
-    if (avatarDataUrl.length > 3 * 1024 * 1024) {
-      return res.status(413).json({ success: false, error: "Avatar too large (max 2 MB)" });
-    }
-    if (!avatarDataUrl.startsWith("data:image/")) {
-      return res.status(400).json({ success: false, error: "Invalid image data" });
-    }
-    try {
-      const uploadApi = process.env.IMAGE_UPLOAD_API || "https://kx-services.vercel.app/api/tools/imageupload";
-      const upRes = await fetch(uploadApi, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${process.env.ADMIN_API_KEY || ""}`,
-          "x-api-key": process.env.ADMIN_API_KEY || "",
-        },
-        body: JSON.stringify({
-          image: avatarDataUrl.split(",")[1],
-          name: `avatar_${user.uid}_${Date.now()}`,
-        }),
-        signal: AbortSignal.timeout(20000),
-      });
-      const upBody = await upRes.json().catch(() => ({}));
-      const uploadedUrl = upBody.data?.url || upBody.data?.display_url;
-      if (!upRes.ok || !uploadedUrl) {
-        throw new Error(upBody?.error?.message || "upload failed");
-      }
-      patch["profile/avatarUrl"] = uploadedUrl;
-    } catch (err) {
-      log("auth.avatar_upload_failed", { reqId, uid: user.uid, message: err.message });
-      return res.status(502).json({ success: false, error: "Avatar upload failed" });
-    }
-  }
-
   if (links !== undefined) {
     if (typeof links !== "object" || links === null || Array.isArray(links)) {
       return res.status(400).json({ success: false, error: "links must be an object" });
@@ -571,6 +538,68 @@ async function handleProfileUpdate(req, res, reqId) {
 
   const fresh = await getUser(user.uid);
   return res.status(200).json({ success: true, profile: fresh.profile });
+}
+
+async function handleUpdateEditorPrefs(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "editorPrefs", `uid_${user.uid}`))) return;
+
+  const { fontSize, tabSize, softTabs, lineNumbers, wrap, lineHeight } = req.body || {};
+  const patch = {};
+
+  if (fontSize !== undefined) {
+    if (typeof fontSize !== "number" || fontSize < 8 || fontSize > 32) {
+      return res.status(400).json({ success: false, error: "fontSize must be 8–32" });
+    }
+    patch["settings/editorPrefs/fontSize"] = fontSize;
+  }
+  if (tabSize !== undefined) {
+    if (typeof tabSize !== "number" || tabSize < 1 || tabSize > 8) {
+      return res.status(400).json({ success: false, error: "tabSize must be 1–8" });
+    }
+    patch["settings/editorPrefs/tabSize"] = tabSize;
+  }
+  if (softTabs !== undefined) {
+    if (typeof softTabs !== "boolean") {
+      return res.status(400).json({ success: false, error: "softTabs must be boolean" });
+    }
+    patch["settings/editorPrefs/softTabs"] = softTabs;
+  }
+  if (lineNumbers !== undefined) {
+    if (typeof lineNumbers !== "boolean") {
+      return res.status(400).json({ success: false, error: "lineNumbers must be boolean" });
+    }
+    patch["settings/editorPrefs/lineNumbers"] = lineNumbers;
+  }
+  if (wrap !== undefined) {
+    if (typeof wrap !== "boolean") {
+      return res.status(400).json({ success: false, error: "wrap must be boolean" });
+    }
+    patch["settings/editorPrefs/wrap"] = wrap;
+  }
+  if (lineHeight !== undefined) {
+    if (typeof lineHeight !== "number" || lineHeight < 1 || lineHeight > 3) {
+      return res.status(400).json({ success: false, error: "lineHeight must be 1–3" });
+    }
+    patch["settings/editorPrefs/lineHeight"] = lineHeight;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ success: false, error: "No prefs to update" });
+  }
+
+  patch.updatedAt = Date.now();
+  await db.ref(`users/${user.uid}`).update(patch);
+  await logUserEvent(user.uid, "settings", "editor_prefs.updated", {
+    fields: Object.keys(patch).filter(k => k.startsWith("settings/editorPrefs/")),
+  });
+
+  const fresh = await getUser(user.uid);
+  return res.status(200).json({
+    success: true,
+    editorPrefs: fresh.settings?.editorPrefs || {},
+  });
 }
 
 async function handleLogs(req, res, reqId) {
@@ -632,6 +661,7 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "change-username") return await handleChangeUsername(req, res, reqId);
     if (method === "GET"  && action === "me")              return await handleMe(req, res, reqId);
     if (method === "POST" && action === "profile/update")  return await handleProfileUpdate(req, res, reqId);
+    if (method === "POST" && action === "editor-prefs")    return await handleUpdateEditorPrefs(req, res, reqId);
     if (method === "GET"  && action === "logs")            return await handleLogs(req, res, reqId);
 
     return res.status(404).json({ success: false, error: `Unknown action: ${action || "(none)"}` });
