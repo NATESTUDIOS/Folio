@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <title>Folio — Tools</title>
 <meta name="theme-color" content="#0a0c10" id="themeColorMeta">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Folio">
 <meta name="robots" content="noindex">
@@ -65,6 +65,7 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --rail-w: 60px;
+  --header-h: 48px;
   --content-max: 1100px;
 
   --r-xs: 6px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
@@ -97,6 +98,18 @@
   --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
 }
 
+@media (max-width: 639px) {
+  :root {
+    --rail-w: 0px;
+    --header-h: 44px;
+  }
+  html, body { font-size: 12px; }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  :root { --rail-w: 52px; --header-h: 46px; }
+}
+
 /* ═══════════════════════════════════════════════════════════
    BASE
    ═══════════════════════════════════════════════════════════ */
@@ -104,6 +117,7 @@
 
 html, body {
   height: 100%;
+  width: 100%;
   background: var(--theme-bg);
   font-family: var(--font);
   color: var(--theme-text);
@@ -114,6 +128,7 @@ html, body {
 body {
   background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
   background-attachment: fixed;
+  overflow: hidden;
 }
 
 button, input, textarea, select { font: inherit; color: inherit; }
@@ -138,226 +153,496 @@ svg { display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SHELL
+   APP SHELL
    ═══════════════════════════════════════════════════════════ */
-.app { display: flex; width: 100%; min-height: 100vh; min-height: 100dvh; }
+.app {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  grid-template-rows: var(--header-h) auto 1fr;
+  grid-template-areas:
+    "rail header"
+    "rail tabs"
+    "rail body";
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+@media (max-width: 1023px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "tabs"
+      "body";
+  }
+}
 
+/* ═══════════════════════════════════════════════════════════
+   RAIL
+   ═══════════════════════════════════════════════════════════ */
 .rail {
-  display: none;
-  width: var(--rail-w);
+  grid-area: rail;
   background: var(--theme-surface);
   border-right: 1px solid var(--theme-glass-border);
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: calc(16px + var(--safe-top)) 0 calc(16px + var(--safe-bottom));
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100dvh;
-  flex-shrink: 0;
-  z-index: 90;
+  padding: calc(12px + var(--safe-top)) 0 calc(12px + var(--safe-bottom));
+  z-index: 30;
 }
-@media (min-width: 1024px) { .rail { display: flex; } }
+@media (max-width: 1023px) { .rail { display: none; } }
 
 .rail-top, .rail-bottom { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 
 .rail-logo {
-  width: 40px; height: 40px; border-radius: 11px; overflow: hidden;
-  margin-bottom: 16px; background: var(--theme-surface-elevated);
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  background: var(--theme-surface-elevated);
   border: 1px solid var(--theme-glass-border);
   display: flex; align-items: center; justify-content: center;
   color: var(--theme-primary);
 }
 .rail-logo img { width: 100%; height: 100%; object-fit: cover; }
-.rail-logo svg { width: 20px; height: 20px; stroke-width: 2; }
+.rail-logo svg { width: 18px; height: 18px; stroke-width: 2; }
 
 .rail-btn {
-  width: 40px; height: 40px; border-radius: 11px;
+  width: 38px; height: 38px;
+  border-radius: 10px;
   color: var(--theme-text-tertiary);
   display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s var(--ease); position: relative;
+  transition: all 0.2s var(--ease);
+  position: relative;
+  text-decoration: none;
 }
-.rail-btn svg { width: 20px; height: 20px; stroke-width: 2; stroke: currentColor; fill: none; }
+.rail-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; }
 .rail-btn:hover { color: var(--theme-text-secondary); background: var(--theme-glass-bg); }
 .rail-btn.active { color: var(--theme-primary); background: var(--theme-primary-soft); }
 .rail-btn.active::before {
-  content: ''; position: absolute; left: -12px; top: 50%;
-  transform: translateY(-50%); width: 3px; height: 22px;
-  border-radius: 0 3px 3px 0; background: var(--theme-primary);
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px; height: 20px;
+  border-radius: 0 3px 3px 0;
+  background: var(--theme-primary);
 }
-.rail-divider { width: 24px; height: 1px; background: var(--theme-divider); margin: 6px 0; }
+.rail-divider { width: 22px; height: 1px; background: var(--theme-divider); margin: 6px 0; }
 
 /* ═══════════════════════════════════════════════════════════
-   MAIN
+   HEADER
    ═══════════════════════════════════════════════════════════ */
-.main {
-  flex: 1; min-width: 0;
-  display: flex; flex-direction: column;
-  padding-bottom: calc(80px + var(--safe-bottom));
+.header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  padding-left: calc(12px + env(safe-area-inset-left, 0px));
+  padding-right: calc(12px + env(safe-area-inset-right, 0px));
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-glass-border);
+  z-index: 20;
 }
-@media (min-width: 1024px) { .main { padding-bottom: calc(24px + var(--safe-bottom)); } }
+@media (max-width: 639px) { .header { padding: 0 8px; gap: 6px; } }
 
-.main-inner {
-  width: 100%; max-width: var(--content-max);
-  margin: 0 auto;
-  padding: calc(16px + var(--safe-top)) 16px 0;
-  flex: 1; display: flex; flex-direction: column; gap: 16px;
+.header-back {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  color: var(--theme-text-secondary);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s var(--ease);
 }
-@media (min-width: 1024px) { .main-inner { padding: 24px 24px 0; } }
+.header-back:hover { background: var(--theme-glass-bg); color: var(--theme-text); }
+.header-back svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.4; }
 
-.page-title {
-  font-size: clamp(20px, 3vw, 24px);
-  font-weight: 800; letter-spacing: -0.5px;
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+.header-brand-icon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.header-brand-icon img { width: 100%; height: 100%; object-fit: cover; }
+.header-brand-icon svg { width: 14px; height: 14px; stroke: var(--theme-primary); fill: none; stroke-width: 2; }
+
+.header-brand-text { min-width: 0; }
+.header-brand-title {
+  font-size: 14px; font-weight: 800;
+  letter-spacing: -0.3px;
+  line-height: 1.1;
   color: var(--theme-text);
 }
-.page-subtitle {
-  font-size: 13px; color: var(--theme-text-tertiary);
-  margin-top: 2px;
+.header-brand-title .sub {
+  display: block;
+  font-size: 9px;
+  color: var(--theme-primary);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+
+.header-search {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-tertiary);
+  font-size: 12px;
+  transition: all 0.2s var(--ease);
+  min-width: 200px;
+  max-width: 280px;
+  flex-shrink: 0;
+  cursor: text;
+}
+.header-search:hover { border-color: var(--theme-primary-glow); }
+.header-search svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.header-search kbd {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--theme-divider);
+  color: var(--theme-text-tertiary);
+  border: 1px solid var(--theme-card-border);
+}
+@media (min-width: 1024px) { .header-search { display: flex; } }
+
+.header-icon-btn {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  color: var(--theme-text-secondary);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s var(--ease);
+}
+.header-icon-btn:hover { background: var(--theme-glass-bg); color: var(--theme-text); }
+.header-icon-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+
+/* ═══════════════════════════════════════════════════════════
+   TOP TABS (screen switcher)
+   ═══════════════════════════════════════════════════════════ */
+.tabs-shell {
+  grid-area: tabs;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-glass-border);
+  z-index: 18;
+  flex-shrink: 0;
+}
+
+.tabs-categories {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs-categories::-webkit-scrollbar { display: none; }
+@media (min-width: 640px) { .tabs-categories { padding: 10px 20px 0; } }
+
+.category-pill {
+  padding: 5px 11px;
+  border-radius: 14px;
+  background: transparent;
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s var(--ease);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.category-pill:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.category-pill.active {
+  background: var(--theme-primary-soft);
+  border-color: var(--theme-primary);
+  color: var(--theme-primary);
+}
+
+.top-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 12px;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.top-tabs-bar::-webkit-scrollbar { display: none; }
+@media (min-width: 640px) { .top-tabs-bar { padding: 0 20px; gap: 24px; } }
+
+.top-tab-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 12px 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+  font-family: inherit;
+  transition: color 0.2s var(--ease);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.top-tab-btn:hover { color: var(--theme-text); }
+.top-tab-btn:active { transform: scale(0.96); }
+.top-tab-btn.active { color: var(--theme-primary); font-weight: 800; }
+.top-tab-btn::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2.5px;
+  background: var(--theme-primary);
+  border-radius: 4px 4px 0 0;
+  box-shadow: 0 -1px 8px var(--theme-primary-glow);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.25s var(--ease);
+}
+.top-tab-btn.active::after { transform: scaleX(1); }
+
+.top-tab-btn svg {
+  width: 14px; height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+  flex-shrink: 0;
+}
+@media (max-width: 639px) {
+  .top-tab-btn { font-size: 12px; padding: 11px 3px; }
+  .top-tab-btn svg { width: 13px; height: 13px; }
+}
+
+.tab-empty {
+  padding: 12px 20px;
+  font-size: 12px;
+  color: var(--theme-text-tertiary);
+  font-weight: 500;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   TOOLS GRID
+   BODY
    ═══════════════════════════════════════════════════════════ */
-.tools-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-  padding-bottom: 24px;
+.body {
+  grid-area: body;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
-@media (min-width: 640px) { .tools-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; } }
-@media (min-width: 1024px) { .tools-grid { grid-template-columns: repeat(3, 1fr); gap: 16px; } }
 
-.tool-tile {
+.body-inner {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 16px 12px calc(24px + var(--safe-bottom));
+  flex: 1;
+}
+@media (min-width: 640px) { .body-inner { padding: 20px 20px calc(28px + var(--safe-bottom)); } }
+@media (min-width: 1024px) { .body-inner { padding: 24px 24px calc(32px + var(--safe-bottom)); } }
+
+/* ═══════════════════════════════════════════════════════════
+   TOOL LANDING (when no tool selected)
+   ═══════════════════════════════════════════════════════════ */
+.landing {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.landing-hero {
+  padding: 24px 20px;
   background: var(--theme-surface-card);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--theme-card-border);
   border-radius: var(--r-lg);
-  padding: 18px;
+  text-align: center;
+}
+.landing-hero h1 {
+  font-size: clamp(22px, 3vw, 28px);
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  color: var(--theme-text);
+  margin-bottom: 6px;
+}
+.landing-hero p {
+  font-size: 13.5px;
+  color: var(--theme-text-secondary);
+  line-height: 1.55;
+  max-width: 480px;
+  margin: 0 auto 16px;
+}
+
+.landing-recent-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 2px;
+  margin-bottom: 8px;
+}
+
+.landing-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 640px) { .landing-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .landing-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.tool-card {
+  background: var(--theme-surface-card);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-md);
+  padding: 14px;
   cursor: pointer;
   transition: all 0.2s var(--ease);
-  display: flex; flex-direction: column; gap: 10px;
-  position: relative;
-  min-height: 160px;
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
 }
-.tool-tile:hover {
+.tool-card:hover {
   border-color: var(--theme-primary-glow);
   transform: translateY(-2px);
+  background: var(--theme-surface-elevated);
 }
-.tool-tile:active { transform: scale(0.99); }
+.tool-card:active { transform: scale(0.99); }
 
-.tool-tile-badge {
+.tool-card-icon {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.tool-card-icon svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+
+.tool-card-badge {
   position: absolute;
-  top: 12px; right: 12px;
+  top: 10px; right: 10px;
   padding: 2px 7px;
   border-radius: 5px;
   background: var(--theme-primary);
   color: #0a0c10;
-  font-size: 9px; font-weight: 800;
-  text-transform: uppercase; letter-spacing: 0.4px;
+  font-size: 8.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
-[data-theme="light"] .tool-tile-badge { color: #ffffff; }
-
-.tool-tile-badge.locked {
+.tool-card-badge.locked {
   background: var(--theme-glass-bg);
   color: var(--theme-text-tertiary);
   border: 1px solid var(--theme-card-border);
-  display: inline-flex; align-items: center; gap: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
-.tool-tile-badge.locked svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+.tool-card-badge.locked svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.4; }
 
-.tool-tile-icon {
-  width: 42px; height: 42px;
-  border-radius: 12px;
-  background: var(--theme-primary-soft);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--theme-primary);
-}
-.tool-tile-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
-
-.tool-tile-title {
-  font-size: 14px; font-weight: 800;
+.tool-card-title {
+  font-size: 14px;
+  font-weight: 800;
   color: var(--theme-text);
   letter-spacing: -0.2px;
+  line-height: 1.2;
 }
-.tool-tile-subtitle {
-  font-size: 11px; color: var(--theme-primary);
-  font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
-  margin-top: -6px;
+.tool-card-sub {
+  font-size: 10.5px;
+  color: var(--theme-primary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
-.tool-tile-desc {
-  font-size: 11.5px; color: var(--theme-text-tertiary);
+.tool-card-desc {
+  font-size: 11.5px;
+  color: var(--theme-text-tertiary);
   line-height: 1.45;
-  margin-top: auto;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   TOOL FULLSCREEN PANEL
+   TOOL VIEW
    ═══════════════════════════════════════════════════════════ */
-.tool-panel {
-  position: fixed; inset: 0; z-index: 700;
-  background: var(--theme-bg);
-  display: flex; flex-direction: column;
-  transform: translateX(100%);
-  opacity: 0;
-  pointer-events: none;
-  transition: transform 0.32s var(--ease), opacity 0.25s var(--ease);
-  overflow: hidden;
-}
-.tool-panel.active { transform: translateX(0); opacity: 1; pointer-events: all; }
-@media (max-width: 639px) {
-  .tool-panel { transform: translateY(100%); }
-  .tool-panel.active { transform: translateY(0); }
+.tool-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.tool-panel-header {
-  display: flex; align-items: center; gap: 10px;
-  padding: calc(12px + var(--safe-top)) 16px 12px;
-  border-bottom: 1px solid var(--theme-divider);
-  flex-shrink: 0; background: var(--theme-surface);
+.tool-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
-@media (min-width: 1024px) {
-  .tool-panel-header { padding: 16px 24px; }
-}
-
-.tool-back-btn {
-  width: 36px; height: 36px;
-  border-radius: 10px;
-  background: var(--theme-glass-bg);
-  border: 1px solid var(--theme-card-border);
-  color: var(--theme-text-secondary);
+.tool-header-icon {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  transition: all 0.2s var(--ease);
 }
-.tool-back-btn:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
-.tool-back-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+.tool-header-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
 
-.tool-panel-title {
-  flex: 1; min-width: 0;
-  font-size: 16px; font-weight: 800;
+.tool-header-text { flex: 1; min-width: 0; }
+.tool-header-title {
+  font-size: 18px; font-weight: 800;
   color: var(--theme-text);
   letter-spacing: -0.3px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tool-panel-subtitle {
-  font-size: 11px; color: var(--theme-text-tertiary);
-  font-weight: 600; margin-top: 1px;
+.tool-header-subtitle {
+  font-size: 11px;
+  color: var(--theme-primary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 2px;
 }
-
-.tool-panel-body {
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding: 16px;
-  display: flex; flex-direction: column; gap: 16px;
+.tool-header-desc {
+  font-size: 12px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.5;
+  margin-top: 4px;
 }
-@media (min-width: 1024px) { .tool-panel-body { padding: 20px 24px; } }
 
 /* ═══════════════════════════════════════════════════════════
-   SHARED PANEL LAYOUTS
+   SPLIT LAYOUT (controls / preview)
    ═══════════════════════════════════════════════════════════ */
 .tool-split {
   display: flex; flex-direction: column; gap: 16px;
@@ -372,10 +657,11 @@ svg { display: block; }
   .tool-split-preview { flex: 1; min-width: 0; position: sticky; top: 20px; }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   CARDS
+   ═══════════════════════════════════════════════════════════ */
 .card {
   background: var(--theme-surface-card);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--theme-card-border);
   border-radius: var(--r-lg);
   overflow: hidden;
@@ -394,29 +680,37 @@ svg { display: block; }
 .card-body.tight { padding: 10px 14px; }
 
 /* ═══════════════════════════════════════════════════════════
-   TABS (in-tool)
+   IN-TOOL TABS
    ═══════════════════════════════════════════════════════════ */
 .tool-tabs {
   display: flex; gap: 2px;
   overflow-x: auto; scrollbar-width: none;
   border-bottom: 1px solid var(--theme-divider);
   margin-bottom: 12px;
-  padding: 0;
 }
 .tool-tabs::-webkit-scrollbar { display: none; }
 .tool-tab {
   padding: 9px 12px;
   font-size: 12.5px; font-weight: 700;
   color: var(--theme-text-tertiary);
-  white-space: nowrap; flex-shrink: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
   position: relative;
   transition: color 0.2s var(--ease);
+  font-family: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
 }
 .tool-tab:hover { color: var(--theme-text); }
 .tool-tab.active { color: var(--theme-primary); }
 .tool-tab.active::after {
-  content: ''; position: absolute; bottom: -1px; left: 8px; right: 8px;
-  height: 2px; background: var(--theme-primary); border-radius: 2px 2px 0 0;
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 8px; right: 8px;
+  height: 2px;
+  background: var(--theme-primary);
+  border-radius: 2px 2px 0 0;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -427,17 +721,20 @@ svg { display: block; }
 .field-label {
   font-size: 10.5px; font-weight: 700;
   color: var(--theme-text-tertiary);
-  text-transform: uppercase; letter-spacing: 0.4px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 .field-hint { font-size: 10.5px; color: var(--theme-text-tertiary); line-height: 1.4; }
 
 .input, .textarea, .select {
-  width: 100%; padding: 9px 11px;
+  width: 100%;
+  padding: 9px 11px;
   background: var(--input-bg);
   border: 1px solid var(--theme-card-border);
   border-radius: 8px;
   color: var(--theme-text);
-  font-size: 13px; font-family: inherit;
+  font-size: 13px;
+  font-family: inherit;
   outline: none;
   transition: border-color 0.2s var(--ease);
 }
@@ -451,12 +748,19 @@ svg { display: block; }
    BUTTONS
    ═══════════════════════════════════════════════════════════ */
 .btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  gap: 6px; padding: 9px 14px; border-radius: 9px;
-  font-size: 12.5px; font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
   border: 1px solid transparent;
   transition: all 0.2s var(--ease);
-  white-space: nowrap; min-height: 36px; font-family: inherit;
+  white-space: nowrap;
+  min-height: 36px;
+  font-family: inherit;
 }
 .btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
 .btn:active { transform: scale(0.97); }
@@ -477,7 +781,7 @@ svg { display: block; }
 .btn-block { width: 100%; }
 
 /* ═══════════════════════════════════════════════════════════
-   PILLS / SEGMENTED
+   PILLS
    ═══════════════════════════════════════════════════════════ */
 .pill-group {
   display: flex; gap: 4px; flex-wrap: wrap;
@@ -488,16 +792,19 @@ svg { display: block; }
   background: var(--theme-glass-bg);
   border: 1px solid var(--theme-card-border);
   color: var(--theme-text-secondary);
-  font-size: 11.5px; font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 700;
   transition: all 0.2s var(--ease);
   white-space: nowrap;
+  font-family: inherit;
+  cursor: pointer;
 }
 .pill:hover { border-color: var(--theme-primary-glow); color: var(--theme-text); }
 .pill.active { background: var(--theme-primary); color: #0a0c10; border-color: var(--theme-primary); }
 [data-theme="light"] .pill.active { color: #ffffff; }
 
 /* ═══════════════════════════════════════════════════════════
-   TOGGLE
+   TOGGLE / SLIDER / COLOR
    ═══════════════════════════════════════════════════════════ */
 .switch {
   position: relative;
@@ -522,19 +829,22 @@ svg { display: block; }
 .switch.on::after { transform: translateX(16px); }
 
 .toggle-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; padding: 8px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SLIDER
-   ═══════════════════════════════════════════════════════════ */
 .slider-row {
-  display: flex; align-items: center; gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 4px 0;
 }
 .slider-label {
-  font-size: 11.5px; font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--theme-text-secondary);
   min-width: 80px;
 }
@@ -545,14 +855,13 @@ svg { display: block; }
 }
 .slider-value {
   font-family: var(--font-mono);
-  font-size: 11px; font-weight: 600;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--theme-text-tertiary);
-  min-width: 40px; text-align: right;
+  min-width: 40px;
+  text-align: right;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   COLOR INPUT
-   ═══════════════════════════════════════════════════════════ */
 .color-input {
   width: 32px; height: 32px;
   border-radius: 7px;
@@ -565,7 +874,7 @@ svg { display: block; }
 .color-input::-webkit-color-swatch { border: none; border-radius: 5px; }
 
 /* ═══════════════════════════════════════════════════════════
-   PREVIEW AREA
+   PREVIEW
    ═══════════════════════════════════════════════════════════ */
 .preview-frame {
   background: var(--theme-surface-elevated);
@@ -573,18 +882,23 @@ svg { display: block; }
   border-radius: 12px;
   overflow: hidden;
   aspect-ratio: 1;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
 }
 .preview-frame.wide { aspect-ratio: 16 / 9; }
-.preview-frame.portrait { aspect-ratio: 4 / 5; }
 .preview-frame img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 
 .preview-loading {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: rgba(10, 12, 16, 0.6);
-  opacity: 0; transition: opacity 0.2s;
+  opacity: 0;
+  transition: opacity 0.2s;
   pointer-events: none;
 }
 .preview-loading.visible { opacity: 1; }
@@ -599,18 +913,23 @@ svg { display: block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .preview-actions {
-  display: flex; gap: 6px; flex-wrap: wrap;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
   margin-top: 10px;
 }
 .preview-actions .btn { flex: 1; }
 
 .rate-limit-badge {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 4px 9px;
   border-radius: 6px;
   background: var(--theme-glass-bg);
   border: 1px solid var(--theme-card-border);
-  font-size: 10.5px; font-weight: 700;
+  font-size: 10.5px;
+  font-weight: 700;
   color: var(--theme-text-tertiary);
 }
 .rate-limit-badge.warn {
@@ -625,7 +944,7 @@ svg { display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   TEMPLATE GRID
+   TEMPLATES
    ═══════════════════════════════════════════════════════════ */
 .templates-grid {
   display: grid;
@@ -662,25 +981,34 @@ svg { display: block; }
   to { background-position: -200% 0; }
 }
 .template-tile-label {
-  position: absolute; bottom: 0; left: 0; right: 0;
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
   padding: 3px 4px;
   background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
-  font-size: 9px; font-weight: 700;
+  font-size: 9px;
+  font-weight: 700;
   color: #ffffff;
   text-align: center;
   text-transform: capitalize;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   PRESETS ROW
+   PRESETS
    ═══════════════════════════════════════════════════════════ */
 .presets-row {
-  display: flex; gap: 6px; flex-wrap: wrap;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
 }
 .preset-btn {
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
   padding: 4px;
   border-radius: 8px;
   background: transparent;
@@ -696,13 +1024,14 @@ svg { display: block; }
   border: 1px solid var(--theme-glass-border);
 }
 .preset-label {
-  font-size: 9px; font-weight: 700;
+  font-size: 9px;
+  font-weight: 700;
   color: var(--theme-text-tertiary);
   text-align: center;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   ADVANCED (details)
+   ADVANCED
    ═══════════════════════════════════════════════════════════ */
 .advanced-details {
   border-top: 1px solid var(--theme-divider);
@@ -710,19 +1039,22 @@ svg { display: block; }
   margin-top: 12px;
 }
 .advanced-details summary {
-  font-size: 11.5px; font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 700;
   color: var(--theme-text-tertiary);
   cursor: pointer;
   padding: 4px 0;
   user-select: none;
-  display: flex; align-items: center; gap: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 .advanced-details summary:hover { color: var(--theme-text); }
 .advanced-details[open] summary { color: var(--theme-primary); }
 .advanced-details > div { margin-top: 12px; }
 
 /* ═══════════════════════════════════════════════════════════
-   JSON OUTPUT / PREVIEWS
+   CODE / MD PREVIEW
    ═══════════════════════════════════════════════════════════ */
 .code-preview {
   background: var(--theme-surface-elevated);
@@ -730,7 +1062,8 @@ svg { display: block; }
   border-radius: 8px;
   padding: 10px 12px;
   font-family: var(--font-mono);
-  font-size: 11px; line-height: 1.55;
+  font-size: 11px;
+  line-height: 1.55;
   color: var(--theme-text-secondary);
   overflow-x: auto;
   max-height: 400px;
@@ -742,7 +1075,8 @@ svg { display: block; }
   border: 1px solid var(--theme-card-border);
   border-radius: 8px;
   padding: 12px 14px;
-  font-size: 13px; line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.6;
   color: var(--theme-text);
   overflow-y: auto;
   max-height: 500px;
@@ -780,8 +1114,10 @@ svg { display: block; }
 }
 .swatch:hover { transform: scale(1.08); z-index: 1; }
 .swatch-hex {
-  position: absolute; bottom: 2px; left: 2px; right: 2px;
-  font-size: 8px; font-weight: 800;
+  position: absolute;
+  bottom: 2px; left: 2px; right: 2px;
+  font-size: 8px;
+  font-weight: 800;
   text-align: center;
   color: #ffffff;
   text-shadow: 0 1px 2px rgba(0,0,0,0.9);
@@ -789,47 +1125,60 @@ svg { display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   EMPTY / INFO
+   INFO / EMPTY
    ═══════════════════════════════════════════════════════════ */
+.info-banner {
+  padding: 9px 12px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--theme-text-tertiary);
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.info-banner svg { width: 13px; height: 13px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; flex-shrink: 0; margin-top: 1px; }
+
 .empty-state {
-  padding: 30px 16px; text-align: center;
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 40px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
 .empty-icon {
   width: 48px; height: 48px;
   border-radius: 14px;
   background: var(--theme-primary-soft);
   color: var(--theme-primary);
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 4px;
 }
 .empty-icon svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; }
-.empty-title { font-size: 13px; font-weight: 700; color: var(--theme-text); }
-.empty-desc { font-size: 11.5px; color: var(--theme-text-tertiary); line-height: 1.45; max-width: 300px; }
-
-.info-banner {
-  padding: 9px 12px;
-  background: var(--theme-glass-bg);
-  border: 1px solid var(--theme-card-border);
-  border-radius: 8px;
-  font-size: 11.5px; line-height: 1.5;
-  color: var(--theme-text-tertiary);
-  display: flex; align-items: flex-start; gap: 7px;
-}
-.info-banner svg { width: 13px; height: 13px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; flex-shrink: 0; margin-top: 1px; }
+.empty-title { font-size: 14px; font-weight: 700; color: var(--theme-text); }
+.empty-desc { font-size: 12px; color: var(--theme-text-tertiary); line-height: 1.45; max-width: 320px; }
 
 /* ═══════════════════════════════════════════════════════════
    MODAL
    ═══════════════════════════════════════════════════════════ */
 .modal-overlay {
-  position: fixed; inset: 0; z-index: 900;
+  position: fixed;
+  inset: 0;
+  z-index: 900;
   background: var(--theme-overlay);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  display: flex; align-items: flex-end; justify-content: center;
-  opacity: 0; pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
   transition: opacity 0.25s var(--ease);
-  padding: 0;
 }
 .modal-overlay.active { opacity: 1; pointer-events: all; }
 @media (min-width: 640px) { .modal-overlay { align-items: center; padding: 20px; } }
@@ -839,8 +1188,10 @@ svg { display: block; }
   border: 1px solid var(--theme-glass-border);
   border-radius: 24px 24px 0 0;
   padding: 20px 20px calc(20px + var(--safe-bottom));
-  max-width: 100%; width: 100%;
-  max-height: 90vh; overflow-y: auto;
+  max-width: 100%;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
   transform: translateY(100%);
   transition: transform 0.32s var(--ease);
 }
@@ -851,26 +1202,47 @@ svg { display: block; }
 }
 
 .modal-handle {
-  width: 40px; height: 4px; border-radius: 2px;
+  width: 40px; height: 4px;
+  border-radius: 2px;
   background: var(--theme-glass-border);
   margin: 0 auto 16px;
 }
 @media (min-width: 640px) { .modal-handle { display: none; } }
 
-.modal-title { font-size: 17px; font-weight: 800; color: var(--theme-text); letter-spacing: -0.3px; margin-bottom: 4px; }
-.modal-desc { font-size: 13px; color: var(--theme-text-secondary); line-height: 1.5; margin-bottom: 16px; }
-.modal-actions { display: flex; gap: 8px; margin-top: 20px; }
+.modal-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+.modal-desc {
+  font-size: 13px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
 .modal-actions .btn { flex: 1; }
 
 /* ═══════════════════════════════════════════════════════════
-   TOAST
+   TOASTS
    ═══════════════════════════════════════════════════════════ */
 .toast-container {
   position: fixed;
   bottom: calc(16px + var(--safe-bottom));
-  left: 50%; transform: translateX(-50%);
-  z-index: 1000; width: 92%; max-width: 380px;
-  display: flex; flex-direction: column; gap: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: 92%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   pointer-events: none;
 }
 @media (min-width: 1024px) {
@@ -878,14 +1250,18 @@ svg { display: block; }
 }
 
 .toast {
-  display: flex; align-items: center; gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 12px 14px;
   background: var(--theme-surface-card-solid);
   border: 1px solid var(--theme-card-border);
   border-radius: 12px;
-  font-size: 13px; font-weight: 500;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--theme-text);
-  transform: translateY(20px); opacity: 0;
+  transform: translateY(20px);
+  opacity: 0;
   transition: all 0.3s var(--ease-spring);
   pointer-events: all;
   overflow-wrap: break-word;
@@ -901,152 +1277,369 @@ svg { display: block; }
    LOADING OVERLAY
    ═══════════════════════════════════════════════════════════ */
 .loading-overlay {
-  position: fixed; inset: 0; z-index: 950;
+  position: fixed;
+  inset: 0;
+  z-index: 950;
   background: var(--theme-overlay);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  display: none; align-items: center; justify-content: center;
-  flex-direction: column; gap: 14px; padding: 24px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
 }
 .loading-overlay.active { display: flex; }
 .loading-title { font-size: 15px; font-weight: 700; color: var(--theme-text); }
 .loading-desc { font-size: 12.5px; color: var(--theme-text-secondary); text-align: center; max-width: 320px; line-height: 1.5; }
 
 /* ═══════════════════════════════════════════════════════════
-   BOTTOM NAV
+   SEARCH OVERLAY
    ═══════════════════════════════════════════════════════════ */
-.bottom-nav {
+.search-overlay {
   position: fixed;
-  bottom: calc(8px + var(--safe-bottom));
-  left: 50%; transform: translateX(-50%);
-  width: calc(100% - 24px); max-width: 400px;
-  background: var(--theme-surface-card-solid);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--theme-glass-border);
-  border-radius: 18px; padding: 6px;
-  display: flex; justify-content: space-around; align-items: center;
-  z-index: 100;
+  inset: 0;
+  z-index: 880;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: max(60px, calc(var(--safe-top) + 40px)) 16px 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease);
 }
-@media (min-width: 1024px) { .bottom-nav { display: none; } }
-.bottom-nav.hidden { display: none; }
+.search-overlay.active { opacity: 1; pointer-events: all; }
 
-.nav-btn {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 8px 4px;
-  border-radius: 12px;
-  color: var(--theme-text-tertiary);
-  text-decoration: none;
-  transition: all 0.2s var(--ease);
-  font-size: 10px; font-weight: 700;
+.search-panel {
+  width: 100%;
+  max-width: 560px;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
 }
-.nav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2.1; }
-.nav-btn.active { color: var(--theme-primary); background: var(--theme-primary-soft); }
-.nav-btn:active { transform: scale(0.94); }
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+}
+.search-input-wrap svg {
+  width: 16px; height: 16px;
+  stroke: var(--theme-text-tertiary);
+  fill: none;
+  stroke-width: 2.2;
+  flex-shrink: 0;
+}
+.search-input-wrap input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--theme-text);
+  font-size: 15px;
+  font-weight: 500;
+}
+.search-input-wrap kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--theme-divider);
+  color: var(--theme-text-tertiary);
+  border: 1px solid var(--theme-card-border);
+}
+.search-results {
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 6px;
+}
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.search-result:hover,
+.search-result.selected {
+  background: var(--theme-primary-soft);
+}
+.search-result-icon {
+  width: 30px; height: 30px;
+  border-radius: 7px;
+  background: var(--theme-glass-bg);
+  color: var(--theme-primary);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.search-result-icon svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.search-result-text { flex: 1; min-width: 0; }
+.search-result-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--theme-text);
+  line-height: 1.2;
+}
+.search-result-sub {
+  font-size: 10.5px;
+  color: var(--theme-text-tertiary);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-result-arrow {
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+}
+.search-result-arrow svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+.search-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--theme-text-tertiary);
+  font-size: 12px;
+}
 
 /* ═══════════════════════════════════════════════════════════
    MISC
    ═══════════════════════════════════════════════════════════ */
-.text-muted { color: var(--theme-text-tertiary); }
-.divider { height: 1px; background: var(--theme-divider); margin: 10px 0; }
 .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.divider { height: 1px; background: var(--theme-divider); margin: 10px 0; }
+.text-muted { color: var(--theme-text-tertiary); }
+  /* ═══════════════════════════════════════════════════════════
+   MOBILE OVERSTRETCH FIXES
+   ═══════════════════════════════════════════════════════════ */
+
+/* 1 — Correct shell sizing (100vw leaks past the scrollbar) */
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.app {
+  width: 100%;
+  max-width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+@media (max-width: 1023px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 2 — Grid/flex ancestors must allow children to shrink */
+.header,
+.tabs-shell,
+.top-tabs-bar,
+.body,
+.body-inner,
+.tool-view,
+.tool-split,
+.tool-split-controls,
+.tool-split-preview,
+.card,
+.card-body {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* 3 — Prevent scroll areas from expanding their parent */
+.tabs-shell { overflow: hidden; }
+.top-tabs-bar { overflow-x: auto; overflow-y: hidden; }
+.body { overflow-x: hidden; overflow-y: auto; }
+.body-inner { overflow-x: hidden; }
+
+/* 4 — Contain previews and long-content blocks */
+.preview-frame {
+  max-width: 100%;
+  min-width: 0;
+}
+.preview-frame img {
+  max-width: 100%;
+  height: auto;
+}
+.code-preview,
+.md-preview,
+.json-status,
+#apiResponse {
+  max-width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+/* 5 — Tabs: allow them to scroll but never widen the shell */
+.top-tabs-bar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.top-tabs-bar::-webkit-scrollbar { display: none; }
+
+.tabs-categories {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs-categories::-webkit-scrollbar { display: none; }
+
+/* 6 — Cards + tiles responsive floors */
+.templates-grid {
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+}
+@media (max-width: 380px) {
+  .templates-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.swatch-grid {
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+}
+
+.presets-row {
+  flex-wrap: wrap;
+  overflow-x: auto;
+}
+
+/* 7 — Color input widths (they were inside .row-2 at 100%; already fine,
+       but confirm the intrinsic min-width doesn't grow the row) */
+.row-2, .row-3 { min-width: 0; }
+.row-2 > *, .row-3 > * { min-width: 0; }
+
+/* 8 — Flier split: preview must not force layout wider than viewport */
+.tool-split-preview .preview-frame {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+}
+
+/* 9 — Toast container width already correct, but pin against vw drift */
+.toast-container {
+  width: calc(100% - 24px);
+  max-width: 380px;
+  box-sizing: border-box;
+}
+
+/* 10 — Modals: never wider than viewport */
+.modal, .modal-overlay {
+  box-sizing: border-box;
+}
+.modal {
+  max-width: 100%;
+  width: 100%;
+}
 </style>
 </head>
 <body>
 
 <div class="app">
 
-  <!-- ═══════════ RAIL ═══════════ -->
+  <!-- RAIL (desktop) -->
   <aside class="rail" aria-label="Main navigation">
     <div class="rail-top">
-      <a class="rail-logo" href="/" aria-label="Folio">
+      <a class="rail-logo" href="/index.html" aria-label="Folio">
         <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
       </a>
-      <a class="rail-btn" href="/" aria-label="Editor">
+      <a class="rail-btn" href="/index.html" aria-label="Editor">
         <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
       </a>
-      <a class="rail-btn" href="/projects" aria-label="Projects">
+      <a class="rail-btn" href="/projects.html" aria-label="Projects">
         <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       </a>
-      <a class="rail-btn" href="/analytics" aria-label="Analytics">
+      <a class="rail-btn active" href="/tools.html" aria-label="Tools">
+        <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      </a>
+      <a class="rail-btn" href="/analytics.html" aria-label="Analytics">
         <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
       </a>
-      <a class="rail-btn" href="/settings" aria-label="Settings">
+      <a class="rail-btn" href="/settings.html" aria-label="Settings">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </a>
     </div>
     <div class="rail-bottom">
       <div class="rail-divider"></div>
-      <a class="rail-btn" href="/profile" aria-label="Profile">
+      <a class="rail-btn" href="/profile.html" aria-label="Profile">
         <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       </a>
     </div>
   </aside>
 
-  <!-- ═══════════ MAIN ═══════════ -->
-  <main class="main">
-    <div class="main-inner">
-      <div>
-        <h1 class="page-title">Tools</h1>
-        <p class="page-subtitle">Developer utilities — pick one to get started</p>
-      </div>
-      <div class="tools-grid" id="toolsGrid"></div>
-    </div>
-  </main>
-</div>
-
-<!-- ═══════════ TOOL PANEL ═══════════ -->
-<div class="tool-panel" id="toolPanel" role="dialog" aria-modal="true">
-  <div class="tool-panel-header">
-    <button class="tool-back-btn" id="toolBackBtn" aria-label="Back to tools">
+  <!-- HEADER -->
+  <header class="header">
+    <a class="header-back" href="/index.html" aria-label="Back to editor">
       <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-    </button>
-    <div style="flex:1;min-width:0;">
-      <div class="tool-panel-title" id="toolPanelTitle">—</div>
-      <div class="tool-panel-subtitle" id="toolPanelSubtitle"></div>
+    </a>
+    <a class="header-brand" href="/index.html">
+      <div class="header-brand-icon">
+        <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none'">
+      </div>
+      <div class="header-brand-text">
+        <div class="header-brand-title">Folio<span class="sub">Tools</span></div>
+      </div>
+    </a>
+    <div class="header-search" id="headerSearch" role="button" tabindex="0">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Search tools…</span>
+      <kbd>⌘K</kbd>
     </div>
+    <button class="header-icon-btn" id="btnHeaderSearch" aria-label="Search" type="button">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </button>
+  </header>
+
+  <!-- TABS -->
+  <div class="tabs-shell">
+    <div class="tabs-categories" id="tabsCategories"></div>
+    <div class="top-tabs-bar" id="topTabsBar" role="tablist" aria-label="Tools"></div>
   </div>
-  <div class="tool-panel-body" id="toolPanelBody"></div>
+
+  <!-- BODY -->
+  <div class="body" id="body">
+    <div class="body-inner" id="bodyInner"></div>
+  </div>
+
 </div>
 
-<!-- ═══════════ BOTTOM NAV ═══════════ -->
-<nav class="bottom-nav" aria-label="Main navigation" id="bottomNav">
-  <a class="nav-btn" href="/">
-    <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-    <span>Editor</span>
-  </a>
-  <a class="nav-btn" href="/projects">
-    <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-    <span>Projects</span>
-  </a>
-  <a class="nav-btn" href="/profile">
-    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-    <span>Profile</span>
-  </a>
-  <a class="nav-btn" href="/settings">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    <span>Settings</span>
-  </a>
-</nav>
+<!-- Search overlay -->
+<div class="search-overlay" id="searchOverlay" role="dialog" aria-modal="true" aria-label="Search tools">
+  <div class="search-panel">
+    <div class="search-input-wrap">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchInput" placeholder="Search tools by name, description, or tag…" autocomplete="off" spellcheck="false">
+      <kbd>Esc</kbd>
+    </div>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+</div>
 
-<!-- ═══════════ MODAL ═══════════ -->
+<!-- Modal -->
 <div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
-  <div class="modal" id="modalContent">
+  <div class="modal">
     <div class="modal-handle"></div>
     <div id="modalBody"></div>
   </div>
 </div>
 
-<!-- ═══════════ LOADING ═══════════ -->
+<!-- Loading -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner"></div>
   <div class="loading-title" id="loadingTitle">Loading…</div>
   <div class="loading-desc" id="loadingDesc"></div>
 </div>
 
-<!-- ═══════════ TOAST ═══════════ -->
+<!-- Toasts -->
 <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
 <script>
@@ -1068,91 +1661,88 @@ svg { display: block; }
     pendingInsert: 'folio.pendingInsert',
     flierConfig: 'folio.tools.flier.lastConfig',
     flierRenders: 'folio.tools.flier.renders',
-    colorHistory: 'folio.tools.color.history',
+    recentTools: 'folio.tools.recent',
+    activeCategory: 'folio.tools.category',
   };
+
+  const CATEGORIES = [
+    { id: 'all', label: 'All' },
+    { id: 'images', label: 'Images' },
+    { id: 'text', label: 'Text' },
+    { id: 'data', label: 'Data' },
+    { id: 'network', label: 'Network' },
+  ];
 
   const TOOLS = [
     {
-      id: 'image',
-      name: 'Image Generator',
-      subtitle: 'Powered by Flier',
-      description: 'Create polished images from 16 templates with full style control. Download as PNG.',
-      icon: 'image',
-      requiresAuth: true,
-      badge: 'NEW',
+      id: 'image', name: 'Image Generator', subtitle: 'Powered by Flier',
+      description: 'Create polished images from 15 templates with full style control. Download as PNG.',
+      icon: 'image', requiresAuth: true, badge: 'NEW', category: 'images',
+      tags: ['image', 'flier', 'graphic', 'poster', 'avatar', 'design'],
       render: renderFlierTool,
     },
     {
-      id: 'picsum',
-      name: 'Picsum',
-      subtitle: 'Image generator',
+      id: 'picsum', name: 'Picsum', subtitle: 'Placeholder images',
       description: 'Generate placeholder image URLs with size, seed, and filters.',
-      icon: 'image',
+      icon: 'image', category: 'images',
+      tags: ['image', 'placeholder', 'lorem', 'picsum'],
       render: renderPicsumTool,
     },
     {
-      id: 'color',
-      name: 'Color',
-      subtitle: 'Color tools',
-      description: 'Pick colors, check WCAG contrast, extract palettes from images.',
-      icon: 'palette',
-      render: renderColorTool,
-    },
-    {
-      id: 'font',
-      name: 'Font',
-      subtitle: 'Font selector',
-      description: 'Preview web-safe font stacks and copy CSS.',
-      icon: 'type',
-      render: renderFontTool,
-    },
-    {
-      id: 'json',
-      name: 'JSON',
-      subtitle: 'JSON generator',
-      description: 'Build JSON from a form or generate a form from JSON.',
-      icon: 'braces',
-      render: renderJsonTool,
-    },
-    {
-      id: 'markdown',
-      name: 'Markdown',
-      subtitle: 'Markdown preview',
-      description: 'Write Markdown, see rendered HTML, copy the result.',
-      icon: 'file-text',
-      render: renderMarkdownTool,
-    },
-    {
-      id: 'ocr',
-      name: 'OCR',
-      subtitle: 'Screenshot to text',
-      description: 'Extract text from images. Runs entirely in your browser.',
-      icon: 'scan',
-      render: renderOcrTool,
-    },
-    {
-      id: 'api',
-      name: 'API Tester',
-      subtitle: 'HTTP client',
-      description: 'Test CORS-enabled APIs. See status, headers, and response.',
-      icon: 'zap',
-      render: renderApiTool,
-    },
-    {
-      id: 'qr',
-      name: 'QR Code',
-      subtitle: 'QR generator',
+      id: 'qr', name: 'QR Code', subtitle: 'QR generator',
       description: 'Generate QR codes for URLs and text. Download as PNG.',
-      icon: 'grid',
+      icon: 'grid', category: 'images',
+      tags: ['qr', 'code', 'barcode', 'url', 'link'],
       render: renderQrTool,
     },
     {
-      id: 'base64',
-      name: 'Base64',
-      subtitle: 'Encode / decode',
+      id: 'ocr', name: 'OCR', subtitle: 'Screenshot to text',
+      description: 'Extract text from images. Runs entirely in your browser.',
+      icon: 'scan', category: 'images',
+      tags: ['ocr', 'image', 'text', 'extract', 'tesseract'],
+      render: renderOcrTool,
+    },
+    {
+      id: 'color', name: 'Color', subtitle: 'Color tools',
+      description: 'Pick colors, check WCAG contrast, browse Material and Tailwind palettes.',
+      icon: 'palette', category: 'images',
+      tags: ['color', 'hex', 'rgb', 'hsl', 'wcag', 'contrast', 'palette'],
+      render: renderColorTool,
+    },
+    {
+      id: 'font', name: 'Font', subtitle: 'Font preview',
+      description: 'Preview web-safe font stacks and copy CSS.',
+      icon: 'type', category: 'text',
+      tags: ['font', 'type', 'typography', 'css', 'preview'],
+      render: renderFontTool,
+    },
+    {
+      id: 'markdown', name: 'Markdown', subtitle: 'Markdown preview',
+      description: 'Write Markdown, see rendered HTML, copy the result.',
+      icon: 'file-text', category: 'text',
+      tags: ['markdown', 'md', 'preview', 'html', 'docs'],
+      render: renderMarkdownTool,
+    },
+    {
+      id: 'base64', name: 'Base64', subtitle: 'Encode / decode',
       description: 'Encode or decode Base64 strings with URL-safe option.',
-      icon: 'code',
+      icon: 'code', category: 'text',
+      tags: ['base64', 'encode', 'decode', 'b64', 'text'],
       render: renderBase64Tool,
+    },
+    {
+      id: 'json', name: 'JSON', subtitle: 'JSON formatter',
+      description: 'Format, validate, and beautify JSON. Download or copy.',
+      icon: 'braces', category: 'data',
+      tags: ['json', 'format', 'validate', 'minify', 'data'],
+      render: renderJsonTool,
+    },
+    {
+      id: 'api', name: 'API Tester', subtitle: 'HTTP client',
+      description: 'Test CORS-enabled APIs. See status, headers, and response.',
+      icon: 'zap', category: 'network',
+      tags: ['api', 'http', 'rest', 'cors', 'fetch', 'request'],
+      render: renderApiTool,
     },
   ];
 
@@ -1183,11 +1773,11 @@ svg { display: block; }
   ];
 
   const FLIER_SIZES = [
-    { id: '1080x1080', label: 'Square', w: 1080, h: 1080 },
-    { id: '1080x1350', label: 'Portrait', w: 1080, h: 1350 },
-    { id: '1080x1920', label: 'Story', w: 1080, h: 1920 },
-    { id: '1200x630', label: 'Landscape', w: 1200, h: 630 },
-    { id: '1600x900', label: 'Wide', w: 1600, h: 900 },
+    { id: '1080x1080', label: 'Square' },
+    { id: '1080x1350', label: 'Portrait' },
+    { id: '1080x1920', label: 'Story' },
+    { id: '1200x630', label: 'Landscape' },
+    { id: '1600x900', label: 'Wide' },
   ];
 
   // ═══════════════════════════════════════════════════════════
@@ -1218,9 +1808,8 @@ svg { display: block; }
     lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
     clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
-    sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
-    palette2: '<circle cx="12" cy="12" r="10"/>',
-    text: '<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>',
+    eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    chevronRight: '<polyline points="9 18 15 12 9 6"/>',
   };
 
   const svg = (name, size = 16, sw = 2.2) =>
@@ -1231,47 +1820,30 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   const S = {
-    session: null,
-    user: null,
-    uid: null,
-    isAuthed: false,
+    session: null, user: null, uid: null, isAuthed: false,
     activeTool: null,
-    // Flier state
+    category: 'all',
+    search: '',
+    recentTools: [],
+    searchOverlayOpen: false,
+    searchSelectedIndex: 0,
+    searchMatches: [],
     flier: {
       template: 'hero-short',
       size: '1080x1080',
       activeTab: 'templates',
       preset: 'amber',
-      text: {
-        kicker: '',
-        headline: '',
-        subheadline: '',
-        body: '',
-        footer: '',
-        metric: '',
-        metricLabel: '',
-      },
+      text: { kicker: '', headline: '', subtitle: '', body: '', footer: '', metric: '', metricLabel: '' },
       style: {
-        variant: 'dark',
-        pattern: 'none',
-        align: 'center',
-        headlineCase: 'auto',
-        radius: 24,
-        primaryColor: '#F59E0B',
-        accentColor: '#f97316',
-        bgType: 'gradient',
-        bgFrom: '#F59E0B',
-        bgTo: '#f97316',
-        bgAngle: 135,
-        bgSolid: '#0a0a0d',
+        variant: 'dark', pattern: 'none', align: 'center', headlineCase: 'auto', radius: 24,
+        primaryColor: '#F59E0B', accentColor: '#f97316',
+        bgType: 'gradient', bgFrom: '#F59E0B', bgTo: '#f97316', bgAngle: 135, bgSolid: '#0a0a0d',
         watermark: false,
       },
-      previewUrl: null,
-      lastRenderKey: null,
-      rendering: false,
+      previewUrl: null, lastRenderKey: null, rendering: false,
       thumbnailCache: new Map(),
     },
-    rateLimit: { remaining: 60, limit: 60, resetAt: 0 },
+    rateLimit: { remaining: 60, limit: 60 },
   };
 
   const $ = id => document.getElementById(id);
@@ -1282,51 +1854,39 @@ svg { display: block; }
   // UTILS
   // ═══════════════════════════════════════════════════════════
 
-  function timeAgo(ts) {
-    if (!ts) return '—';
-    const diff = Date.now() - ts;
-    if (diff < 60000) return 'just now';
-    const m = Math.floor(diff / 60000);
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    return new Date(ts).toLocaleDateString();
+  function copyToClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+      return navigator.clipboard.writeText(text).catch(() => {
+        // fall through to legacy
+        return legacyCopy(text);
+      });
+    }
+    return Promise.resolve(legacyCopy(text));
   }
 
-  function copyToClipboard(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text);
-    }
-    return new Promise((resolve, reject) => {
+  function legacyCopy(text) {
+    try {
       const ta = document.createElement('textarea');
       ta.value = text;
       ta.style.position = 'fixed';
       ta.style.left = '-9999px';
       document.body.appendChild(ta);
       ta.select();
-      try {
-        document.execCommand('copy');
-        resolve();
-      } catch (err) { reject(err); }
+      document.execCommand('copy');
       document.body.removeChild(ta);
-    });
+      return true;
+    } catch { return false; }
   }
 
   function insertIntoEditor(content) {
     try {
-      localStorage.setItem(STORAGE.pendingInsert, JSON.stringify({
-        content,
-        mode: 'insert',
-        at: Date.now(),
-      }));
+      localStorage.setItem(STORAGE.pendingInsert, JSON.stringify({ content, mode: 'insert', at: Date.now() }));
       toast('Will insert when editor opens', 'success', 2000);
       setTimeout(() => {
         const w = window.open('/index.html', '_blank');
-        if (!w) toast('Open editor to paste content', 'info', 2500);
+        if (!w) toast('Open the editor to paste content', 'info', 2500);
       }, 200);
-    } catch {
-      toast('Couldn\'t prepare insert', 'error');
-    }
+    } catch { toast("Couldn't prepare insert", 'error'); }
   }
 
   function readSession() {
@@ -1352,10 +1912,6 @@ svg { display: block; }
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // TOAST
-  // ═══════════════════════════════════════════════════════════
-
   function toast(msg, type = 'info', duration = 2400) {
     const el = document.createElement('div');
     el.className = 'toast ' + type;
@@ -1364,32 +1920,38 @@ svg { display: block; }
     el.querySelector('span').textContent = msg;
     $('toastContainer').appendChild(el);
     requestAnimationFrame(() => el.classList.add('show'));
-    setTimeout(() => {
-      el.classList.remove('show');
-      setTimeout(() => el.remove(), 300);
-    }, duration);
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, duration);
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // LOADING / MODAL
-  // ═══════════════════════════════════════════════════════════
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
 
   function showLoading(title, desc) {
     $('loadingTitle').textContent = title || 'Loading…';
     $('loadingDesc').textContent = desc || '';
     $('loadingOverlay').classList.add('active');
   }
-
   function hideLoading() { $('loadingOverlay').classList.remove('active'); }
 
-  function openModal(html) {
-    $('modalBody').innerHTML = html;
-    $('modalOverlay').classList.add('active');
+  function openModal(html) { $('modalBody').innerHTML = html; $('modalOverlay').classList.add('active'); }
+  function closeModal() { $('modalOverlay').classList.remove('active'); setTimeout(() => { $('modalBody').innerHTML = ''; }, 250); }
+
+  // ═══════════════════════════════════════════════════════════
+  // RECENT TOOLS
+  // ═══════════════════════════════════════════════════════════
+
+  function loadRecentTools() {
+    try {
+      const raw = localStorage.getItem(STORAGE.recentTools);
+      if (raw) S.recentTools = JSON.parse(raw).filter(id => TOOLS.some(t => t.id === id));
+    } catch { S.recentTools = []; }
   }
 
-  function closeModal() {
-    $('modalOverlay').classList.remove('active');
-    setTimeout(() => { $('modalBody').innerHTML = ''; }, 250);
+  function pushRecentTool(id) {
+    S.recentTools = [id, ...S.recentTools.filter(t => t !== id)].slice(0, 3);
+    try { localStorage.setItem(STORAGE.recentTools, JSON.stringify(S.recentTools)); } catch {}
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1400,52 +1962,27 @@ svg { display: block; }
     const h = location.hash.replace(/^#\/?/, '');
     return TOOLS.some(t => t.id === h) ? h : null;
   }
-
   function setHashTool(id) {
-    const newHash = `#/${id}`;
-    if (location.hash !== newHash) history.replaceState(null, '', newHash);
+    const newHash = id ? `#/${id}` : '';
+    if (location.hash !== newHash) {
+      history.replaceState(null, '', location.pathname + newHash);
+    }
   }
 
   function openTool(id) {
     const tool = TOOLS.find(t => t.id === id);
     if (!tool) return;
-
-    // Auth check
-    if (tool.requiresAuth && !S.isAuthed) {
-      showSignInPrompt(tool.name);
-      return;
-    }
-
+    if (tool.requiresAuth && !S.isAuthed) { showSignInPrompt(tool.name); return; }
     S.activeTool = id;
     setHashTool(id);
-
-    $('toolPanelTitle').textContent = tool.name;
-    $('toolPanelSubtitle').textContent = tool.subtitle || '';
-    $('toolPanelBody').innerHTML = '';
-    $('toolPanel').classList.add('active');
-    $('bottomNav')?.classList.add('hidden');
-    document.body.style.overflow = 'hidden';
-
-    // Render tool
-    try {
-      tool.render($('toolPanelBody'));
-    } catch (err) {
-      console.error('[Tool]', err);
-      $('toolPanelBody').innerHTML = `<div class="empty-state">
-        <div class="empty-icon">${svg('alert', 22, 2)}</div>
-        <div class="empty-title">Tool failed to load</div>
-        <div class="empty-desc">${escapeHTML(err.message || 'Unknown error')}</div>
-      </div>`;
-    }
+    pushRecentTool(id);
+    renderAll();
   }
 
   function closeTool() {
     S.activeTool = null;
-    history.replaceState(null, '', location.pathname);
-    $('toolPanel').classList.remove('active');
-    $('bottomNav')?.classList.remove('hidden');
-    document.body.style.overflow = '';
-    setTimeout(() => { $('toolPanelBody').innerHTML = ''; }, 350);
+    setHashTool(null);
+    renderAll();
   }
 
   function showSignInPrompt(toolName) {
@@ -1454,42 +1991,241 @@ svg { display: block; }
       <div class="modal-desc">This tool needs a Folio account for image hosting. All other tools work without an account.</div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="ToolsPage.closeModal()">Cancel</button>
-        <a class="btn btn-primary" href="/register?next=${encodeURIComponent('/tools#/' + S.activeTool || '/tools')}">Sign in</a>
+        <a class="btn btn-primary" href="/register.html?next=${encodeURIComponent('/tools.html#/' + (S.activeTool || 'image'))}">Sign in</a>
       </div>
     `);
   }
 
   // ═══════════════════════════════════════════════════════════
-  // RENDER: TOOLS GRID
+  // TABS RENDERING
   // ═══════════════════════════════════════════════════════════
 
-  function renderToolsGrid() {
-    const grid = $('toolsGrid');
-    if (!grid) return;
+  function getVisibleTools() {
+    let list = TOOLS;
+    if (S.category !== 'all') list = list.filter(t => t.category === S.category);
+    if (S.search.trim()) {
+      const q = S.search.toLowerCase();
+      list = list.filter(t =>
+        t.name.toLowerCase().includes(q) ||
+        (t.subtitle || '').toLowerCase().includes(q) ||
+        (t.description || '').toLowerCase().includes(q) ||
+        (t.tags || []).some(tag => tag.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }
 
-    grid.innerHTML = TOOLS.map(tool => {
-      const locked = tool.requiresAuth && !S.isAuthed;
+  function renderCategories() {
+    const el = $('tabsCategories');
+    el.innerHTML = CATEGORIES.map(c => `
+      <button class="category-pill ${c.id === S.category ? 'active' : ''}" data-category="${c.id}" type="button">${c.label}</button>
+    `).join('');
+    el.querySelectorAll('[data-category]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.category = btn.dataset.category;
+        try { localStorage.setItem(STORAGE.activeCategory, S.category); } catch {}
+        renderAll();
+      });
+    });
+  }
+
+  function renderTopTabs() {
+    const bar = $('topTabsBar');
+    const visible = getVisibleTools();
+
+    if (visible.length === 0) {
+      bar.innerHTML = `<div class="tab-empty">No tools match "${escapeHTML(S.search || S.category)}"</div>`;
+      return;
+    }
+
+    bar.innerHTML = visible.map(t => {
+      const active = t.id === S.activeTool;
+      const locked = t.requiresAuth && !S.isAuthed;
       return `
-        <button class="tool-tile" data-tool="${escapeAttr(tool.id)}" type="button">
-          ${tool.badge ? `<span class="tool-tile-badge">${escapeHTML(tool.badge)}</span>` : ''}
-          ${locked && !tool.badge ? `<span class="tool-tile-badge locked">${svg('lock', 9, 2.4)} Sign in</span>` : ''}
-          <div class="tool-tile-icon">${svg(tool.icon, 20, 2)}</div>
-          <div>
-            <div class="tool-tile-title">${escapeHTML(tool.name)}</div>
-            <div class="tool-tile-subtitle">${escapeHTML(tool.subtitle || '')}</div>
-          </div>
-          <div class="tool-tile-desc">${escapeHTML(tool.description || '')}</div>
+        <button class="top-tab-btn ${active ? 'active' : ''}"
+                data-tool="${escapeAttr(t.id)}"
+                type="button"
+                role="tab"
+                aria-selected="${active}">
+          ${svg(t.icon, 13, 2.2)}
+          <span>${escapeHTML(t.name)}</span>
+          ${locked ? `<span style="opacity:0.55;margin-left:2px;">${svg('lock', 10, 2.4)}</span>` : ''}
         </button>
       `;
     }).join('');
 
-    grid.querySelectorAll('[data-tool]').forEach(btn => {
+    bar.querySelectorAll('[data-tool]').forEach(btn => {
       btn.addEventListener('click', () => openTool(btn.dataset.tool));
+    });
+
+    // Scroll active tab into view
+    const activeBtn = bar.querySelector('.top-tab-btn.active');
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BODY RENDERING
+  // ═══════════════════════════════════════════════════════════
+
+  function renderAll() {
+    renderCategories();
+    renderTopTabs();
+    renderBody();
+  }
+
+  function renderBody() {
+    const container = $('bodyInner');
+    const tool = S.activeTool ? TOOLS.find(t => t.id === S.activeTool) : null;
+
+    if (!tool) {
+      renderLanding(container);
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="tool-view">
+        <div class="tool-header">
+          <div class="tool-header-icon">${svg(tool.icon, 20, 2)}</div>
+          <div class="tool-header-text">
+            <div class="tool-header-title">${escapeHTML(tool.name)}</div>
+            <div class="tool-header-subtitle">${escapeHTML(tool.subtitle || '')}</div>
+            <div class="tool-header-desc">${escapeHTML(tool.description || '')}</div>
+          </div>
+        </div>
+        <div id="toolMount"></div>
+      </div>
+    `;
+
+    const mount = $('toolMount');
+    try {
+      tool.render(mount);
+    } catch (err) {
+      console.error('[Tool]', err);
+      mount.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">${svg('alert', 22, 2)}</div>
+        <div class="empty-title">Tool failed to load</div>
+        <div class="empty-desc">${escapeHTML(err.message || 'Unknown error')}</div>
+      </div>`;
+    }
+
+    // Scroll to top when switching tools
+    setTimeout(() => {
+      const body = $('body');
+      if (body) body.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 20);
+  }
+
+  function renderLanding(container) {
+    const visible = getVisibleTools();
+    const recentList = S.recentTools.map(id => TOOLS.find(t => t.id === id)).filter(Boolean);
+
+    container.innerHTML = `
+      <div class="landing">
+        <div class="landing-hero">
+          <h1>${S.search || S.category !== 'all' ? `Matching tools` : `Developer tools`}</h1>
+          <p>${visible.length} ${visible.length === 1 ? 'tool' : 'tools'} available. Pick one from the tabs above, or click a card below.</p>
+        </div>
+
+        ${!S.search && S.category === 'all' && recentList.length > 0 ? `
+          <div>
+            <div class="landing-recent-label">Recently used</div>
+            <div class="landing-grid">
+              ${recentList.map(t => renderToolCard(t)).join('')}
+            </div>
+          </div>
+        ` : ''}
+
+        <div>
+          <div class="landing-recent-label">${S.search || S.category !== 'all' ? 'Results' : 'All tools'}</div>
+          <div class="landing-grid" id="landingGrid">
+            ${visible.map(t => renderToolCard(t)).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+
+    container.querySelectorAll('[data-landing-tool]').forEach(card => {
+      card.addEventListener('click', () => openTool(card.dataset.landingTool));
+    });
+  }
+
+  function renderToolCard(tool) {
+    const locked = tool.requiresAuth && !S.isAuthed;
+    return `
+      <button class="tool-card" data-landing-tool="${escapeAttr(tool.id)}" type="button">
+        ${tool.badge ? `<span class="tool-card-badge">${escapeHTML(tool.badge)}</span>` : ''}
+        ${locked && !tool.badge ? `<span class="tool-card-badge locked">${svg('lock', 9, 2.4)} Sign in</span>` : ''}
+        <div class="tool-card-icon">${svg(tool.icon, 17, 2)}</div>
+        <div>
+          <div class="tool-card-title">${escapeHTML(tool.name)}</div>
+          <div class="tool-card-sub">${escapeHTML(tool.subtitle || '')}</div>
+        </div>
+        <div class="tool-card-desc">${escapeHTML(tool.description || '')}</div>
+      </button>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SEARCH OVERLAY
+  // ═══════════════════════════════════════════════════════════
+
+  function openSearchOverlay() {
+    S.searchOverlayOpen = true;
+    S.searchSelectedIndex = 0;
+    $('searchOverlay').classList.add('active');
+    $('searchInput').value = '';
+    updateSearchResults('');
+    setTimeout(() => $('searchInput').focus(), 100);
+  }
+
+  function closeSearchOverlay() {
+    S.searchOverlayOpen = false;
+    $('searchOverlay').classList.remove('active');
+  }
+
+  function updateSearchResults(query) {
+    const q = query.trim().toLowerCase();
+    let matches = q
+      ? TOOLS.filter(t =>
+          t.name.toLowerCase().includes(q) ||
+          (t.subtitle || '').toLowerCase().includes(q) ||
+          (t.description || '').toLowerCase().includes(q) ||
+          (t.tags || []).some(tag => tag.toLowerCase().includes(q))
+        )
+      : TOOLS.slice(0, 8);
+
+    S.searchMatches = matches;
+    S.searchSelectedIndex = Math.min(S.searchSelectedIndex, Math.max(0, matches.length - 1));
+
+    const results = $('searchResults');
+    if (matches.length === 0) {
+      results.innerHTML = `<div class="search-empty">No tools found for "${escapeHTML(query)}"</div>`;
+      return;
+    }
+
+    results.innerHTML = matches.map((t, i) => `
+      <div class="search-result ${i === S.searchSelectedIndex ? 'selected' : ''}" data-search-tool="${escapeAttr(t.id)}">
+        <div class="search-result-icon">${svg(t.icon, 14, 2.2)}</div>
+        <div class="search-result-text">
+          <div class="search-result-title">${escapeHTML(t.name)}</div>
+          <div class="search-result-sub">${escapeHTML(t.description || t.subtitle || '')}</div>
+        </div>
+        <div class="search-result-arrow">${svg('chevronRight', 12, 2.4)}</div>
+      </div>
+    `).join('');
+
+    results.querySelectorAll('[data-search-tool]').forEach(r => {
+      r.addEventListener('click', () => {
+        closeSearchOverlay();
+        openTool(r.dataset.searchTool);
+      });
     });
   }
 
   // ═══════════════════════════════════════════════════════════
-  // TOOL: FLIER IMAGE GENERATOR
+  // TOOL: FLIER (image generator)
   // ═══════════════════════════════════════════════════════════
 
   function loadFlierConfig() {
@@ -1509,60 +2245,13 @@ svg { display: block; }
   function saveFlierConfig() {
     try {
       localStorage.setItem(STORAGE.flierConfig, JSON.stringify({
-        template: S.flier.template,
-        size: S.flier.size,
-        preset: S.flier.preset,
-        text: S.flier.text,
-        style: S.flier.style,
+        template: S.flier.template, size: S.flier.size, preset: S.flier.preset,
+        text: S.flier.text, style: S.flier.style,
       }));
     } catch {}
   }
 
-  function loadRateLimit() {
-    try {
-      const raw = localStorage.getItem(STORAGE.flierRenders);
-      if (raw) {
-        const r = JSON.parse(raw);
-        const age = Date.now() - (r.windowStart || 0);
-        if (age > 60 * 60 * 1000) {
-          S.rateLimit.remaining = 60;
-          S.rateLimit.limit = 60;
-        } else {
-          S.rateLimit.remaining = Math.max(0, 60 - (r.count || 0));
-          S.rateLimit.limit = 60;
-        }
-      }
-    } catch {}
-  }
-
-  function incrementRateLimit() {
-    try {
-      let data = { count: 0, windowStart: Date.now() };
-      try {
-        const raw = localStorage.getItem(STORAGE.flierRenders);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Date.now() - (parsed.windowStart || 0) < 60 * 60 * 1000) {
-            data = { count: parsed.count || 0, windowStart: parsed.windowStart };
-          }
-        }
-      } catch {}
-      data.count++;
-      localStorage.setItem(STORAGE.flierRenders, JSON.stringify(data));
-      S.rateLimit.remaining = Math.max(0, 60 - data.count);
-    } catch {}
-  }
-
-  function updateRateLimitFromHeaders(headers) {
-    if (!headers) return;
-    const remaining = headers.get('x-ratelimit-remaining');
-    const limit = headers.get('x-ratelimit-limit');
-    if (remaining !== null) S.rateLimit.remaining = parseInt(remaining, 10);
-    if (limit !== null) S.rateLimit.limit = parseInt(limit, 10);
-  }
-
   function getTemplateFields(templateId) {
-    // Return which fields this template uses
     if (templateId === 'stat-hero') return { metric: true, metricLabel: true, body: true };
     if (templateId === 'quote-card') return { headline: true, subheadline: true };
     if (['newspaper-classic', 'event-poster'].includes(templateId)) {
@@ -1584,10 +2273,7 @@ svg { display: block; }
     if (fields.footer && S.flier.text.footer) text.footer = S.flier.text.footer;
     if (fields.metric && S.flier.text.metric) text.metric = S.flier.text.metric;
     if (fields.metricLabel && S.flier.text.metricLabel) text.metricLabel = S.flier.text.metricLabel;
-
-    if (!text.headline && !text.subheadline && !text.body && !text.metric) {
-      text.headline = 'Your image';
-    }
+    if (!text.headline && !text.subheadline && !text.body && !text.metric) text.headline = 'Your image';
 
     const style = {
       variant: S.flier.style.variant,
@@ -1595,42 +2281,23 @@ svg { display: block; }
       align: S.flier.style.align,
       headlineCase: S.flier.style.headlineCase,
       radius: S.flier.style.radius,
-      colors: {
-        primary: S.flier.style.primaryColor,
-        accent: S.flier.style.accentColor,
-      },
+      colors: { primary: S.flier.style.primaryColor, accent: S.flier.style.accentColor },
       watermark: S.flier.style.watermark,
     };
-
     if (S.flier.style.bgType === 'gradient') {
-      style.background = {
-        type: 'gradient',
-        from: S.flier.style.bgFrom,
-        to: S.flier.style.bgTo,
-        angle: S.flier.style.bgAngle,
-      };
+      style.background = { type: 'gradient', from: S.flier.style.bgFrom, to: S.flier.style.bgTo, angle: S.flier.style.bgAngle };
     } else {
-      style.background = {
-        type: 'solid',
-        color: S.flier.style.bgSolid,
-      };
+      style.background = { type: 'solid', color: S.flier.style.bgSolid };
     }
 
     return {
-      template: S.flier.template,
-      size: S.flier.size,
-      mode: 'preview',
-      data: {
-        text,
-        style,
-        images: {},
-      },
+      template: S.flier.template, size: S.flier.size, mode: 'preview',
+      data: { text, style, images: {} },
     };
   }
 
   function renderFlierTool(container) {
     loadFlierConfig();
-    loadRateLimit();
 
     container.innerHTML = `
       <div class="tool-split">
@@ -1657,20 +2324,12 @@ svg { display: block; }
                 </div>
               </div>
               <div class="preview-actions">
-                <button class="btn btn-primary btn-sm" id="flierDownloadBtn">
-                  ${svg('download', 12, 2.4)} Download
-                </button>
-                <button class="btn btn-secondary btn-sm" id="flierCopyUrlBtn">
-                  ${svg('copy', 12, 2.4)} Copy URL
-                </button>
+                <button class="btn btn-primary btn-sm" id="flierDownloadBtn">${svg('download', 12, 2.4)} Download</button>
+                <button class="btn btn-secondary btn-sm" id="flierCopyUrlBtn">${svg('copy', 12, 2.4)} Copy URL</button>
               </div>
               <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap;">
-                <span class="rate-limit-badge ${S.rateLimit.remaining < 10 ? 'warn' : ''} ${S.rateLimit.remaining === 0 ? 'danger' : ''}" id="flierRateBadge">
-                  ${svg('clock', 10, 2.4)} ${S.rateLimit.remaining} / ${S.rateLimit.limit}
-                </span>
-                <button class="btn btn-ghost btn-sm" id="flierResetBtn" type="button">
-                  ${svg('refresh', 11, 2.4)} Reset
-                </button>
+                <span class="rate-limit-badge" id="flierRateBadge">${svg('clock', 10, 2.4)} ${S.rateLimit.remaining} / ${S.rateLimit.limit}</span>
+                <button class="btn btn-ghost btn-sm" id="flierResetBtn" type="button">${svg('refresh', 11, 2.4)} Reset</button>
               </div>
             </div>
           </div>
@@ -1689,7 +2348,7 @@ svg { display: block; }
 
     if (S.flier.activeTab === 'templates') {
       content.innerHTML = `
-        <div class="templates-grid" id="flierTemplates">
+        <div class="templates-grid">
           ${FLIER_TEMPLATES.map(t => {
             const cached = S.flier.thumbnailCache.get(t.id);
             const selected = S.flier.template === t.id;
@@ -1701,20 +2360,18 @@ svg { display: block; }
             `;
           }).join('')}
         </div>
-        <div class="field-hint" style="margin-top:10px;">Pick a layout. Each has a different composition.</div>
+        <div class="field-hint" style="margin-top:10px;">Each template has a different layout.</div>
       `;
 
       content.querySelectorAll('[data-template]').forEach(btn => {
         btn.addEventListener('click', () => {
           S.flier.template = btn.dataset.template;
-          S.flier.thumbnailCache.clear();
           saveFlierConfig();
           renderFlierTab();
           refreshFlierPreview();
         });
       });
 
-      // Load thumbnails
       loadFlierThumbnails();
     } else if (S.flier.activeTab === 'style') {
       content.innerHTML = `
@@ -1742,7 +2399,7 @@ svg { display: block; }
           </div>
         ` : `
           <div class="field">
-            <label class="field-label">Gradient colors</label>
+            <label class="field-label">Gradient</label>
             <div style="display:flex;gap:8px;align-items:center;">
               <input type="color" class="color-input" data-style-color="bgFrom" value="${escapeAttr(S.flier.style.bgFrom)}">
               <span style="color:var(--theme-text-tertiary);">→</span>
@@ -1764,20 +2421,20 @@ svg { display: block; }
         </div>
 
         <div class="field">
-          <label class="field-label">Text alignment</label>
+          <label class="field-label">Alignment</label>
           <div class="pill-group">
             ${['left', 'center', 'right'].map(a => `<button class="pill ${S.flier.style.align === a ? 'active' : ''}" data-align="${a}" type="button">${a}</button>`).join('')}
           </div>
         </div>
 
         <div class="field">
-          <label class="field-label">Accent color</label>
+          <label class="field-label">Accent</label>
           <input type="color" class="color-input" data-style-color="accentColor" value="${escapeAttr(S.flier.style.accentColor)}">
         </div>
 
         <div class="slider-row">
-          <span class="slider-label">Border radius</span>
-          <input type="range" class="slider-min slider-input" min="0" max="80" value="${S.flier.style.radius}" data-style-range="radius">
+          <span class="slider-label">Radius</span>
+          <input type="range" class="slider-input" min="0" max="80" value="${S.flier.style.radius}" data-style-range="radius">
           <span class="slider-value" id="radiusVal">${S.flier.style.radius}px</span>
         </div>
 
@@ -1787,7 +2444,7 @@ svg { display: block; }
         </div>
 
         <details class="advanced-details">
-          <summary>Advanced options</summary>
+          <summary>Advanced</summary>
           <div>
             <div class="field">
               <label class="field-label">Theme</label>
@@ -1815,55 +2472,23 @@ svg { display: block; }
     } else if (S.flier.activeTab === 'text') {
       const fields = getTemplateFields(S.flier.template);
       content.innerHTML = `
-        ${fields.kicker ? `
-          <div class="field">
-            <label class="field-label">Kicker</label>
-            <input class="input" data-flier-text="kicker" placeholder="Small tag above headline" value="${escapeAttr(S.flier.text.kicker)}" maxlength="40">
-          </div>
-        ` : ''}
+        ${fields.kicker ? `<div class="field"><label class="field-label">Kicker</label><input class="input" data-flier-text="kicker" placeholder="Small tag above headline" value="${escapeAttr(S.flier.text.kicker)}" maxlength="40"></div>` : ''}
         ${fields.metric ? `
-          <div class="field">
-            <label class="field-label">Metric</label>
-            <input class="input" data-flier-text="metric" placeholder="e.g. 300%" value="${escapeAttr(S.flier.text.metric)}" maxlength="12">
-          </div>
-          <div class="field">
-            <label class="field-label">Metric label</label>
-            <input class="input" data-flier-text="metricLabel" placeholder="e.g. growth this quarter" value="${escapeAttr(S.flier.text.metricLabel)}" maxlength="60">
-          </div>
+          <div class="field"><label class="field-label">Metric</label><input class="input" data-flier-text="metric" placeholder="e.g. 300%" value="${escapeAttr(S.flier.text.metric)}" maxlength="12"></div>
+          <div class="field"><label class="field-label">Metric label</label><input class="input" data-flier-text="metricLabel" placeholder="e.g. growth this quarter" value="${escapeAttr(S.flier.text.metricLabel)}" maxlength="60"></div>
         ` : ''}
-        ${fields.headline ? `
-          <div class="field">
-            <label class="field-label">Headline</label>
-            <textarea class="textarea" data-flier-text="headline" placeholder="Your main text" maxlength="120">${escapeHTML(S.flier.text.headline)}</textarea>
-          </div>
-        ` : ''}
-        ${fields.subheadline ? `
-          <div class="field">
-            <label class="field-label">Subheadline</label>
-            <input class="input" data-flier-text="subheadline" placeholder="Secondary line" value="${escapeAttr(S.flier.text.subheadline)}" maxlength="180">
-          </div>
-        ` : ''}
-        ${fields.body ? `
-          <div class="field">
-            <label class="field-label">Body</label>
-            <textarea class="textarea" data-flier-text="body" placeholder="Paragraph text" maxlength="600">${escapeHTML(S.flier.text.body)}</textarea>
-          </div>
-        ` : ''}
-        ${fields.footer ? `
-          <div class="field">
-            <label class="field-label">Footer</label>
-            <input class="input" data-flier-text="footer" placeholder="Small line at bottom" value="${escapeAttr(S.flier.text.footer)}" maxlength="120">
-          </div>
-        ` : ''}
+        ${fields.headline ? `<div class="field"><label class="field-label">Headline</label><textarea class="textarea" data-flier-text="headline" placeholder="Your main text" maxlength="120">${escapeHTML(S.flier.text.headline)}</textarea></div>` : ''}
+        ${fields.subheadline ? `<div class="field"><label class="field-label">Subheadline</label><input class="input" data-flier-text="subheadline" placeholder="Secondary line" value="${escapeAttr(S.flier.text.subheadline)}" maxlength="180"></div>` : ''}
+        ${fields.body ? `<div class="field"><label class="field-label">Body</label><textarea class="textarea" data-flier-text="body" placeholder="Paragraph text" maxlength="600">${escapeHTML(S.flier.text.body)}</textarea></div>` : ''}
+        ${fields.footer ? `<div class="field"><label class="field-label">Footer</label><input class="input" data-flier-text="footer" placeholder="Small line at bottom" value="${escapeAttr(S.flier.text.footer)}" maxlength="120"></div>` : ''}
       `;
 
       content.querySelectorAll('[data-flier-text]').forEach(input => {
-        const handler = debounce(() => {
+        input.addEventListener('input', debounce(() => {
           S.flier.text[input.dataset.flierText] = input.value;
           saveFlierConfig();
           refreshFlierPreview();
-        }, 400);
-        input.addEventListener('input', handler);
+        }, 400));
       });
     }
   }
@@ -1871,66 +2496,50 @@ svg { display: block; }
   async function loadFlierThumbnails() {
     if (!S.isAuthed) return;
 
-    // Load 4 at a time to stay under rate limit
     const queue = FLIER_TEMPLATES.filter(t => !S.flier.thumbnailCache.has(t.id));
-    const limit = 4;
+    if (queue.length === 0) return;
 
     async function worker() {
       while (queue.length) {
         const template = queue.shift();
         if (S.flier.thumbnailCache.has(template.id)) continue;
-
         const body = buildFlierBody();
         body.template = template.id;
         body.size = '1080x1080';
 
         try {
           const res = await apiFetch(API_FLIER + '?action=avatar/custom', {
-            method: 'POST',
-            body: JSON.stringify(body),
+            method: 'POST', body: JSON.stringify(body),
           });
           if (res.ok && res.data?.preview) {
             S.flier.thumbnailCache.set(template.id, res.data.preview);
-            updateFlierThumbnail(template.id, res.data.preview);
+            const tile = document.querySelector(`[data-template="${template.id}"]`);
+            if (tile) {
+              const loading = tile.querySelector('.template-tile-loading');
+              if (loading) loading.outerHTML = `<img src="${escapeAttr(res.data.preview)}" alt="">`;
+            }
           }
         } catch {}
       }
     }
 
-    // Only spawn workers if not all cached
-    if (queue.length > 0) {
-      const workers = [];
-      for (let i = 0; i < Math.min(limit, queue.length); i++) workers.push(worker());
-      await Promise.all(workers);
-    }
-  }
-
-  function updateFlierThumbnail(templateId, url) {
-    const tile = document.querySelector(`[data-template="${templateId}"]`);
-    if (!tile) return;
-    const loading = tile.querySelector('.template-tile-loading');
-    if (loading) {
-      loading.outerHTML = `<img src="${escapeAttr(url)}" alt="">`;
-    }
+    const workers = [];
+    for (let i = 0; i < Math.min(4, queue.length); i++) workers.push(worker());
+    await Promise.all(workers);
   }
 
   function wireFlierTool(container) {
-    // Tabs
     container.querySelectorAll('[data-flier-tab]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.flier.activeTab = btn.dataset.flierTab;
-        container.querySelectorAll('[data-flier-tab]').forEach(b => b.classList.toggle('active', b === btn));
         renderFlierTab();
+        container.querySelectorAll('[data-flier-tab]').forEach(b => b.classList.toggle('active', b === btn));
       });
     });
 
-    // Download
     $('flierDownloadBtn')?.addEventListener('click', flierDownload);
-
-    // Copy URL
     $('flierCopyUrlBtn')?.addEventListener('click', flierCopyUrl);
 
-    // Reset
     $('flierResetBtn')?.addEventListener('click', () => {
       S.flier.thumbnailCache.clear();
       S.flier.previewUrl = null;
@@ -1946,7 +2555,6 @@ svg { display: block; }
     const content = $('flierTabContent');
     if (!content) return;
 
-    // Presets
     content.querySelectorAll('[data-preset]').forEach(btn => {
       btn.addEventListener('click', () => {
         const preset = FLIER_PRESETS.find(p => p.id === btn.dataset.preset);
@@ -1964,7 +2572,6 @@ svg { display: block; }
       });
     });
 
-    // BG type
     content.querySelectorAll('[data-bg-type]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.flier.style.bgType = btn.dataset.bgType;
@@ -1974,7 +2581,6 @@ svg { display: block; }
       });
     });
 
-    // Colors
     content.querySelectorAll('[data-style-color]').forEach(input => {
       input.addEventListener('input', () => {
         S.flier.style[input.dataset.styleColor] = input.value;
@@ -1983,7 +2589,6 @@ svg { display: block; }
       });
     });
 
-    // Ranges
     content.querySelectorAll('[data-style-range]').forEach(input => {
       input.addEventListener('input', () => {
         const key = input.dataset.styleRange;
@@ -1995,7 +2600,6 @@ svg { display: block; }
       });
     });
 
-    // Pattern
     content.querySelectorAll('[data-pattern]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.flier.style.pattern = btn.dataset.pattern;
@@ -2005,7 +2609,6 @@ svg { display: block; }
       });
     });
 
-    // Align
     content.querySelectorAll('[data-align]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.flier.style.align = btn.dataset.align;
@@ -2015,7 +2618,6 @@ svg { display: block; }
       });
     });
 
-    // Watermark toggle
     content.querySelector('[data-toggle="watermark"]')?.addEventListener('click', (e) => {
       S.flier.style.watermark = !S.flier.style.watermark;
       e.target.classList.toggle('on', S.flier.style.watermark);
@@ -2023,7 +2625,6 @@ svg { display: block; }
       refreshFlierPreview();
     });
 
-    // Variant
     content.querySelectorAll('[data-variant]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.flier.style.variant = btn.dataset.variant;
@@ -2033,7 +2634,6 @@ svg { display: block; }
       });
     });
 
-    // Case
     content.querySelectorAll('[data-case]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.flier.style.headlineCase = btn.dataset.case;
@@ -2043,7 +2643,6 @@ svg { display: block; }
       });
     });
 
-    // Size select
     $('flierSizeSelect')?.addEventListener('change', (e) => {
       S.flier.size = e.target.value;
       saveFlierConfig();
@@ -2053,16 +2652,10 @@ svg { display: block; }
 
   async function refreshFlierPreview() {
     if (!S.isAuthed) return;
-
     const body = buildFlierBody();
     const key = JSON.stringify(body);
-
     if (key === S.flier.lastRenderKey && S.flier.previewUrl) return;
-
-    if (S.rateLimit.remaining <= 0) {
-      toast('Rate limit reached. Wait a few minutes.', 'warning', 3000);
-      return;
-    }
+    if (S.rateLimit.remaining <= 0) { toast('Rate limit reached', 'warning', 3000); return; }
 
     S.flier.rendering = true;
     const loadingEl = $('flierPreviewLoading');
@@ -2070,18 +2663,13 @@ svg { display: block; }
 
     try {
       const res = await apiFetch(API_FLIER + '?action=avatar/custom', {
-        method: 'POST',
-        body: JSON.stringify(body),
+        method: 'POST', body: JSON.stringify(body),
       });
-
       updateRateLimitFromHeaders(res.headers);
       updateRateLimitBadge();
 
       if (!res.ok || !res.data?.preview) {
-        if (res.status === 429) {
-          toast('Rate limit — try again in a few minutes', 'warning', 3000);
-          return;
-        }
+        if (res.status === 429) { toast('Rate limit — try again soon', 'warning', 3000); return; }
         throw new Error(res.data?.error || 'Render failed');
       }
 
@@ -2100,7 +2688,6 @@ svg { display: block; }
         }
       }
 
-      // Update rate limit
       incrementRateLimit();
       updateRateLimitBadge();
     } catch (err) {
@@ -2119,19 +2706,28 @@ svg { display: block; }
     badge.innerHTML = `${svg('clock', 10, 2.4)} ${S.rateLimit.remaining} / ${S.rateLimit.limit}`;
   }
 
+  function updateRateLimitFromHeaders(headers) {
+    if (!headers) return;
+    const remaining = headers.get('x-ratelimit-remaining');
+    const limit = headers.get('x-ratelimit-limit');
+    if (remaining !== null) S.rateLimit.remaining = parseInt(remaining, 10);
+    if (limit !== null) S.rateLimit.limit = parseInt(limit, 10);
+  }
+
+  function incrementRateLimit() {
+    S.rateLimit.remaining = Math.max(0, S.rateLimit.remaining - 1);
+  }
+
   async function flierDownload() {
     if (!S.flier.previewUrl) return;
     try {
       const body = { ...buildFlierBody(), mode: 'upload' };
       body.upload = { name: `tool_${Date.now()}` };
-
       const res = await apiFetch(API_FLIER + '?action=avatar/custom', {
-        method: 'POST',
-        body: JSON.stringify(body),
+        method: 'POST', body: JSON.stringify(body),
       });
       updateRateLimitFromHeaders(res.headers);
       updateRateLimitBadge();
-
       if (!res.ok || !res.data?.url) throw new Error('Upload failed');
 
       const imgRes = await fetch(res.data.url);
@@ -2144,13 +2740,10 @@ svg { display: block; }
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-
       incrementRateLimit();
       updateRateLimitBadge();
       toast('Downloaded', 'success');
-    } catch (err) {
-      toast('Download failed', 'error');
-    }
+    } catch { toast('Download failed', 'error'); }
   }
 
   async function flierCopyUrl() {
@@ -2158,23 +2751,17 @@ svg { display: block; }
     try {
       const body = { ...buildFlierBody(), mode: 'upload' };
       body.upload = { name: `tool_${Date.now()}` };
-
       const res = await apiFetch(API_FLIER + '?action=avatar/custom', {
-        method: 'POST',
-        body: JSON.stringify(body),
+        method: 'POST', body: JSON.stringify(body),
       });
       updateRateLimitFromHeaders(res.headers);
       updateRateLimitBadge();
-
       if (!res.ok || !res.data?.url) throw new Error('Upload failed');
-
       await copyToClipboard(res.data.url);
       incrementRateLimit();
       updateRateLimitBadge();
       toast('URL copied', 'success');
-    } catch (err) {
-      toast('Copy failed', 'error');
-    }
+    } catch { toast('Copy failed', 'error'); }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2185,60 +2772,44 @@ svg { display: block; }
     container.innerHTML = `
       <div class="tool-split">
         <div class="tool-split-controls">
-          <div class="card">
-            <div class="card-body">
-              <div class="field">
-                <label class="field-label">Width</label>
-                <input class="input" type="number" id="picsumWidth" value="800" min="100" max="3840">
-              </div>
-              <div class="field">
-                <label class="field-label">Height</label>
-                <input class="input" type="number" id="picsumHeight" value="600" min="100" max="3840">
-              </div>
-              <div class="field">
-                <label class="field-label">Presets</label>
-                <div class="pill-group">
-                  <button class="pill" data-preset="1920,1080" type="button">1920×1080</button>
-                  <button class="pill" data-preset="1080,1080" type="button">1080×1080</button>
-                  <button class="pill" data-preset="800,600" type="button">800×600</button>
-                  <button class="pill" data-preset="400,400" type="button">400×400</button>
-                  <button class="pill" data-preset="300,200" type="button">300×200</button>
-                </div>
-              </div>
-              <div class="field">
-                <label class="field-label">Seed (optional)</label>
-                <input class="input" type="text" id="picsumSeed" placeholder="Leave blank for random">
-              </div>
-              <div class="toggle-row">
-                <div style="font-size:12px;font-weight:600;color:var(--theme-text-secondary);">Grayscale</div>
-                <button class="switch" id="picsumGray" aria-label="Toggle grayscale"></button>
-              </div>
-              <div class="slider-row">
-                <span class="slider-label">Blur</span>
-                <input type="range" class="slider-input" id="picsumBlur" min="0" max="10" value="0">
-                <span class="slider-value" id="picsumBlurVal">0</span>
+          <div class="card"><div class="card-body">
+            <div class="field"><label class="field-label">Width</label><input class="input" type="number" id="picsumWidth" value="800" min="100" max="3840"></div>
+            <div class="field"><label class="field-label">Height</label><input class="input" type="number" id="picsumHeight" value="600" min="100" max="3840"></div>
+            <div class="field">
+              <label class="field-label">Presets</label>
+              <div class="pill-group">
+                <button class="pill" data-preset="1920,1080" type="button">1920×1080</button>
+                <button class="pill" data-preset="1080,1080" type="button">1080×1080</button>
+                <button class="pill" data-preset="800,600" type="button">800×600</button>
+                <button class="pill" data-preset="400,400" type="button">400×400</button>
+                <button class="pill" data-preset="300,200" type="button">300×200</button>
               </div>
             </div>
-          </div>
+            <div class="field"><label class="field-label">Seed (optional)</label><input class="input" type="text" id="picsumSeed" placeholder="Leave blank for random"></div>
+            <div class="toggle-row">
+              <div style="font-size:12px;font-weight:600;color:var(--theme-text-secondary);">Grayscale</div>
+              <button class="switch" id="picsumGray" aria-label="Toggle grayscale"></button>
+            </div>
+            <div class="slider-row">
+              <span class="slider-label">Blur</span>
+              <input type="range" class="slider-input" id="picsumBlur" min="0" max="10" value="0">
+              <span class="slider-value" id="picsumBlurVal">0</span>
+            </div>
+          </div></div>
         </div>
         <div class="tool-split-preview">
-          <div class="card">
-            <div class="card-body">
-              <div class="preview-frame wide" id="picsumPreview">
-                <img id="picsumImg" alt="" style="display:none;">
-                <div id="picsumPlaceholder" style="color:var(--theme-text-tertiary);font-size:12px;">Preview</div>
-              </div>
-              <div class="field" style="margin-top:12px;">
-                <label class="field-label">URL</label>
-                <input class="input mono" id="picsumUrl" readonly>
-              </div>
-              <div class="preview-actions">
-                <button class="btn btn-primary btn-sm" id="picsumCopyBtn">${svg('copy', 12, 2.4)} Copy</button>
-                <button class="btn btn-secondary btn-sm" id="picsumOpenBtn">${svg('external', 12, 2.4)} Open</button>
-                <button class="btn btn-secondary btn-sm" id="picsumInsertBtn">${svg('plus', 12, 2.4)} Insert</button>
-              </div>
+          <div class="card"><div class="card-body">
+            <div class="preview-frame wide">
+              <img id="picsumImg" alt="" style="display:none;">
+              <div id="picsumPlaceholder" style="color:var(--theme-text-tertiary);font-size:12px;">Preview</div>
             </div>
-          </div>
+            <div class="field" style="margin-top:12px;"><label class="field-label">URL</label><input class="input mono" id="picsumUrl" readonly></div>
+            <div class="preview-actions">
+              <button class="btn btn-primary btn-sm" id="picsumCopyBtn">${svg('copy', 12, 2.4)} Copy</button>
+              <button class="btn btn-secondary btn-sm" id="picsumOpenBtn">${svg('external', 12, 2.4)} Open</button>
+              <button class="btn btn-secondary btn-sm" id="picsumInsertBtn">${svg('plus', 12, 2.4)} Insert</button>
+            </div>
+          </div></div>
         </div>
       </div>
     `;
@@ -2250,16 +2821,13 @@ svg { display: block; }
       const gray = $('picsumGray').classList.contains('on');
       const blur = parseInt($('picsumBlur').value, 10);
       $('picsumBlurVal').textContent = blur;
-
       let url = `https://picsum.photos/${w}/${h}`;
       const params = [];
       if (seed) params.push(`seed=${encodeURIComponent(seed)}`);
       if (gray) params.push('grayscale');
       if (blur > 0) params.push(`blur=${blur}`);
       if (params.length) url += '?' + params.join('&');
-
       $('picsumUrl').value = url;
-
       const img = $('picsumImg');
       const placeholder = $('picsumPlaceholder');
       img.style.display = '';
@@ -2273,10 +2841,7 @@ svg { display: block; }
     $('picsumHeight').addEventListener('input', debounce(updateUrl, 300));
     $('picsumSeed').addEventListener('input', debounce(updateUrl, 300));
     $('picsumBlur').addEventListener('input', updateUrl);
-    $('picsumGray').addEventListener('click', (e) => {
-      e.target.classList.toggle('on');
-      updateUrl();
-    });
+    $('picsumGray').addEventListener('click', (e) => { e.target.classList.toggle('on'); updateUrl(); });
     container.querySelectorAll('[data-preset]').forEach(btn => {
       btn.addEventListener('click', () => {
         const [w, h] = btn.dataset.preset.split(',');
@@ -2292,7 +2857,6 @@ svg { display: block; }
     });
     $('picsumOpenBtn').addEventListener('click', () => window.open($('picsumUrl').value, '_blank'));
     $('picsumInsertBtn').addEventListener('click', () => insertIntoEditor($('picsumUrl').value));
-
     updateUrl();
   }
 
@@ -2306,16 +2870,11 @@ svg { display: block; }
     return { r: parseInt(m[0], 16), g: parseInt(m[1], 16), b: parseInt(m[2], 16) };
   }
 
-  function rgbToHex(r, g, b) {
-    return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
-  }
-
   function rgbToHsl(r, g, b) {
     r /= 255; g /= 255; b /= 255;
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    let h, s, l = (max + min) / 2;
-    if (max === min) { h = s = 0; }
-    else {
+    let h = 0, s = 0, l = (max + min) / 2;
+    if (max !== min) {
       const d = max - min;
       s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
       switch (max) {
@@ -2341,22 +2900,11 @@ svg { display: block; }
     const c2 = hexToRgb(hex2);
     const l1 = luminance(c1.r, c1.g, c1.b);
     const l2 = luminance(c2.r, c2.g, c2.b);
-    const lighter = Math.max(l1, l2);
-    const darker = Math.min(l1, l2);
-    return (lighter + 0.05) / (darker + 0.05);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
   }
 
-  const MATERIAL_PALETTE = [
-    '#F44336', '#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3',
-    '#03A9F4', '#00BCD4', '#009688', '#4CAF50', '#8BC34A', '#CDDC39',
-    '#FFEB3B', '#FFC107', '#FF9800', '#FF5722', '#795548', '#9E9E9E',
-  ];
-
-  const TAILWIND_PALETTE = [
-    '#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16', '#22C55E',
-    '#10B981', '#14B8A6', '#06B6D4', '#0EA5E9', '#3B82F6', '#6366F1',
-    '#8B5CF6', '#A855F7', '#D946EF', '#EC4899', '#F43F5E', '#64748B',
-  ];
+  const MATERIAL_PALETTE = ['#F44336','#E91E63','#9C27B0','#673AB7','#3F51B5','#2196F3','#03A9F4','#00BCD4','#009688','#4CAF50','#8BC34A','#CDDC39','#FFEB3B','#FFC107','#FF9800','#FF5722','#795548','#9E9E9E'];
+  const TAILWIND_PALETTE = ['#EF4444','#F97316','#F59E0B','#EAB308','#84CC16','#22C55E','#10B981','#14B8A6','#06B6D4','#0EA5E9','#3B82F6','#6366F1','#8B5CF6','#A855F7','#D946EF','#EC4899','#F43F5E','#64748B'];
 
   function renderColorTool(container) {
     container.innerHTML = `
@@ -2371,52 +2919,39 @@ svg { display: block; }
             </div>
           </div>
           <input class="input mono" id="colorHsl" value="hsl(38, 92%, 50%)" style="margin-bottom:8px;">
-          <button class="btn btn-secondary btn-sm btn-block" id="colorCopyBtn">
-            ${svg('copy', 12, 2.2)} Copy color
-          </button>
+          <button class="btn btn-secondary btn-sm btn-block" id="colorCopyBtn">${svg('copy', 12, 2.2)} Copy color</button>
         </div>
       </div>
-
       <div class="card">
-        <div class="card-header"><div class="card-title">${svg('grid', 14, 2.2)} Material Design</div></div>
+        <div class="card-header"><div class="card-title">${svg('grid', 14, 2.2)} Material</div></div>
         <div class="card-body">
           <div class="swatch-grid">
-            ${MATERIAL_PALETTE.map(c => `<div class="swatch" style="background:${c};" data-color="${c}" title="${c}"><span class="swatch-hex">${c.slice(1)}</span></div>`).join('')}
+            ${MATERIAL_PALETTE.map(c => `<div class="swatch" style="background:${c};" data-color="${c}"><span class="swatch-hex">${c.slice(1)}</span></div>`).join('')}
           </div>
         </div>
       </div>
-
       <div class="card">
         <div class="card-header"><div class="card-title">${svg('grid', 14, 2.2)} Tailwind</div></div>
         <div class="card-body">
           <div class="swatch-grid">
-            ${TAILWIND_PALETTE.map(c => `<div class="swatch" style="background:${c};" data-color="${c}" title="${c}"><span class="swatch-hex">${c.slice(1)}</span></div>`).join('')}
+            ${TAILWIND_PALETTE.map(c => `<div class="swatch" style="background:${c};" data-color="${c}"><span class="swatch-hex">${c.slice(1)}</span></div>`).join('')}
           </div>
         </div>
       </div>
-
       <div class="card">
         <div class="card-header"><div class="card-title">${svg('eye', 14, 2.2)} WCAG contrast</div></div>
         <div class="card-body">
           <div class="row-2" style="margin-bottom:10px;">
-            <div class="field">
-              <label class="field-label">Background</label>
-              <input type="color" class="color-input" id="wcagBg" value="#0a0c10" style="width:100%;height:36px;">
-            </div>
-            <div class="field">
-              <label class="field-label">Foreground</label>
-              <input type="color" class="color-input" id="wcagFg" value="#e8ecf1" style="width:100%;height:36px;">
-            </div>
+            <div class="field"><label class="field-label">Background</label><input type="color" class="color-input" id="wcagBg" value="#0a0c10" style="width:100%;height:36px;"></div>
+            <div class="field"><label class="field-label">Foreground</label><input type="color" class="color-input" id="wcagFg" value="#e8ecf1" style="width:100%;height:36px;"></div>
           </div>
-          <div id="wcagPreview" style="padding:14px;border-radius:8px;font-size:14px;font-weight:600;text-align:center;margin-bottom:10px;background:#0a0c10;color:#e8ecf1;">
-            Sample text
-          </div>
+          <div id="wcagPreview" style="padding:14px;border-radius:8px;font-size:14px;font-weight:600;text-align:center;margin-bottom:10px;background:#0a0c10;color:#e8ecf1;">Sample text</div>
           <div id="wcagResult" style="font-size:12px;line-height:1.6;color:var(--theme-text-secondary);"></div>
         </div>
       </div>
     `;
 
-    const updateColorOutputs = (hex) => {
+    const updateOutputs = (hex) => {
       const rgb = hexToRgb(hex);
       const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
       $('colorPicker').value = hex;
@@ -2425,14 +2960,13 @@ svg { display: block; }
       $('colorHsl').value = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
     };
 
-    $('colorPicker').addEventListener('input', (e) => updateColorOutputs(e.target.value));
+    $('colorPicker').addEventListener('input', (e) => updateOutputs(e.target.value));
 
     container.querySelectorAll('[data-color]').forEach(swatch => {
       swatch.addEventListener('click', () => {
-        const hex = swatch.dataset.color;
-        updateColorOutputs(hex);
-        copyToClipboard(hex);
-        toast(`Copied ${hex}`, 'success', 1400);
+        updateOutputs(swatch.dataset.color);
+        copyToClipboard(swatch.dataset.color);
+        toast(`Copied ${swatch.dataset.color}`, 'success', 1400);
       });
     });
 
@@ -2442,31 +2976,23 @@ svg { display: block; }
     });
 
     const updateWcag = () => {
-      const bg = $('wcagBg').value;
-      const fg = $('wcagFg').value;
+      const bg = $('wcagBg').value, fg = $('wcagFg').value;
       const ratio = contrastRatio(bg, fg);
-      const preview = $('wcagPreview');
-      preview.style.background = bg;
-      preview.style.color = fg;
-
-      const aaNormal = ratio >= 4.5;
-      const aaLarge = ratio >= 3;
-      const aaaNormal = ratio >= 7;
-      const aaaLarge = ratio >= 4.5;
-
+      $('wcagPreview').style.background = bg;
+      $('wcagPreview').style.color = fg;
+      const aaNormal = ratio >= 4.5, aaLarge = ratio >= 3, aaaNormal = ratio >= 7, aaaLarge = ratio >= 4.5;
       $('wcagResult').innerHTML = `
         <div style="font-weight:700;margin-bottom:6px;">Contrast: ${ratio.toFixed(2)}:1</div>
-        <div>Normal text AA: <span style="color:${aaNormal ? 'var(--theme-success)' : 'var(--theme-danger)'};font-weight:700;">${aaNormal ? 'Pass' : 'Fail'}</span></div>
-        <div>Normal text AAA: <span style="color:${aaaNormal ? 'var(--theme-success)' : 'var(--theme-danger)'};font-weight:700;">${aaaNormal ? 'Pass' : 'Fail'}</span></div>
-        <div>Large text AA: <span style="color:${aaLarge ? 'var(--theme-success)' : 'var(--theme-danger)'};font-weight:700;">${aaLarge ? 'Pass' : 'Fail'}</span></div>
-        <div>Large text AAA: <span style="color:${aaaLarge ? 'var(--theme-success)' : 'var(--theme-danger)'};font-weight:700;">${aaaLarge ? 'Pass' : 'Fail'}</span></div>
+        <div>Normal AA: <span style="color:${aaNormal ? 'var(--theme-success)' : 'var(--theme-danger)'};font-weight:700;">${aaNormal ? 'Pass' : 'Fail'}</span></div>
+        <div>Normal AAA: <span style="color:${aaaNormal ? 'var(--theme-success)' : 'var(--theme-danger)'};font-weight:700;">${aaaNormal ? 'Pass' : 'Fail'}</span></div>
+        <div>Large AA: <span style="color:${aaLarge ? 'var(--theme-success)' : 'var(--theme-danger)'};font-weight:700;">${aaLarge ? 'Pass' : 'Fail'}</span></div>
+        <div>Large AAA: <span style="color:${aaaLarge ? 'var(--theme-success)' : 'var(--theme-danger)'};font-weight:700;">${aaaLarge ? 'Pass' : 'Fail'}</span></div>
       `;
     };
-
     $('wcagBg').addEventListener('input', updateWcag);
     $('wcagFg').addEventListener('input', updateWcag);
     updateWcag();
-    updateColorOutputs('#F59E0B');
+    updateOutputs('#F59E0B');
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2479,73 +3005,46 @@ svg { display: block; }
     { label: 'Helvetica', value: 'Helvetica, Arial, sans-serif' },
     { label: 'Verdana', value: 'Verdana, Geneva, sans-serif' },
     { label: 'Georgia', value: 'Georgia, "Times New Roman", serif' },
-    { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
-    { label: 'Courier New', value: '"Courier New", Courier, monospace' },
+    { label: 'Times', value: '"Times New Roman", Times, serif' },
+    { label: 'Courier', value: '"Courier New", Courier, monospace' },
     { label: 'Menlo', value: 'Menlo, Monaco, Consolas, monospace' },
     { label: 'JetBrains Mono', value: '"JetBrains Mono", "SF Mono", Consolas, monospace' },
-    { label: 'Trebuchet MS', value: '"Trebuchet MS", Helvetica, sans-serif' },
-    { label: 'Roboto', value: 'Roboto, "Helvetica Neue", Arial, sans-serif' },
+    { label: 'Trebuchet', value: '"Trebuchet MS", Helvetica, sans-serif' },
   ];
 
   function renderFontTool(container) {
     container.innerHTML = `
       <div class="card">
-        <div class="card-header"><div class="card-title">${svg('type', 14, 2.2)} Font settings</div></div>
+        <div class="card-header"><div class="card-title">${svg('type', 14, 2.2)} Settings</div></div>
         <div class="card-body">
           <div class="field">
             <label class="field-label">Font family</label>
-            <select class="select" id="fontFamily">
-              ${FONT_STACKS.map(f => `<option value="${escapeAttr(f.value)}">${escapeHtml(f.label)}</option>`).join('')}
-            </select>
+            <select class="select" id="fontFamily">${FONT_STACKS.map(f => `<option value="${escapeAttr(f.value)}">${escapeHTML(f.label)}</option>`).join('')}</select>
           </div>
-          <div class="slider-row">
-            <span class="slider-label">Font size</span>
-            <input type="range" class="slider-input" id="fontSize" min="12" max="72" value="24">
-            <span class="slider-value" id="fontSizeVal">24px</span>
-          </div>
+          <div class="slider-row"><span class="slider-label">Size</span><input type="range" class="slider-input" id="fontSize" min="12" max="72" value="24"><span class="slider-value" id="fontSizeVal">24px</span></div>
           <div class="field">
-            <label class="field-label">Font weight</label>
-            <select class="select" id="fontWeight">
-              ${[300, 400, 500, 600, 700, 800, 900].map(w => `<option value="${w}" ${w === 400 ? 'selected' : ''}>${w}</option>`).join('')}
-            </select>
+            <label class="field-label">Weight</label>
+            <select class="select" id="fontWeight">${[300,400,500,600,700,800,900].map(w => `<option value="${w}" ${w===400?'selected':''}>${w}</option>`).join('')}</select>
           </div>
-          <div class="slider-row">
-            <span class="slider-label">Line height</span>
-            <input type="range" class="slider-input" id="fontLineHeight" min="1" max="2" step="0.1" value="1.5">
-            <span class="slider-value" id="fontLineHeightVal">1.5</span>
-          </div>
-          <div class="slider-row">
-            <span class="slider-label">Letter spacing</span>
-            <input type="range" class="slider-input" id="fontLetterSpacing" min="-2" max="5" step="0.1" value="0">
-            <span class="slider-value" id="fontLetterSpacingVal">0</span>
-          </div>
+          <div class="slider-row"><span class="slider-label">Line height</span><input type="range" class="slider-input" id="fontLineHeight" min="1" max="2" step="0.1" value="1.5"><span class="slider-value" id="fontLineHeightVal">1.5</span></div>
+          <div class="slider-row"><span class="slider-label">Letter spacing</span><input type="range" class="slider-input" id="fontLetterSpacing" min="-2" max="5" step="0.1" value="0"><span class="slider-value" id="fontLetterSpacingVal">0</span></div>
           <div class="field">
-            <label class="field-label">Sample text</label>
+            <label class="field-label">Sample</label>
             <textarea class="textarea" id="fontSample" rows="3">The quick brown fox jumps over the lazy dog.</textarea>
           </div>
         </div>
       </div>
-
       <div class="card">
         <div class="card-header"><div class="card-title">Preview</div></div>
         <div class="card-body">
-          <div id="fontPreview" style="padding:16px;background:var(--theme-glass-bg);border-radius:8px;word-wrap:break-word;">
-            The quick brown fox jumps over the lazy dog.
-          </div>
+          <div id="fontPreview" style="padding:16px;background:var(--theme-glass-bg);border-radius:8px;word-wrap:break-word;">The quick brown fox jumps over the lazy dog.</div>
         </div>
       </div>
-
       <div class="card">
         <div class="card-header"><div class="card-title">Output</div></div>
         <div class="card-body">
-          <div class="field">
-            <label class="field-label">font-family</label>
-            <input class="input mono" id="fontFamilyOut" readonly>
-          </div>
-          <div class="field">
-            <label class="field-label">Full CSS</label>
-            <div class="code-preview" id="fontCssOut"></div>
-          </div>
+          <div class="field"><label class="field-label">font-family</label><input class="input mono" id="fontFamilyOut" readonly></div>
+          <div class="field"><label class="field-label">CSS</label><div class="code-preview" id="fontCssOut"></div></div>
           <div class="preview-actions">
             <button class="btn btn-secondary btn-sm" id="fontCopyFamily">${svg('copy', 12, 2.2)} Copy family</button>
             <button class="btn btn-primary btn-sm" id="fontCopyCss">${svg('copy', 12, 2.2)} Copy CSS</button>
@@ -2555,51 +3054,26 @@ svg { display: block; }
     `;
 
     const update = () => {
-      const family = $('fontFamily').value;
-      const size = $('fontSize').value;
-      const weight = $('fontWeight').value;
-      const lh = $('fontLineHeight').value;
-      const ls = $('fontLetterSpacing').value;
-      const sample = $('fontSample').value;
-
+      const family = $('fontFamily').value, size = $('fontSize').value, weight = $('fontWeight').value;
+      const lh = $('fontLineHeight').value, ls = $('fontLetterSpacing').value;
       $('fontSizeVal').textContent = size + 'px';
       $('fontLineHeightVal').textContent = lh;
       $('fontLetterSpacingVal').textContent = ls + 'px';
-
-      const preview = $('fontPreview');
-      preview.style.fontFamily = family;
-      preview.style.fontSize = size + 'px';
-      preview.style.fontWeight = weight;
-      preview.style.lineHeight = lh;
-      preview.style.letterSpacing = ls + 'px';
-      preview.textContent = sample;
-
+      const p = $('fontPreview');
+      p.style.cssText = `padding:16px;background:var(--theme-glass-bg);border-radius:8px;word-wrap:break-word;font-family:${family};font-size:${size}px;font-weight:${weight};line-height:${lh};letter-spacing:${ls}px;`;
+      p.textContent = $('fontSample').value;
       $('fontFamilyOut').value = family;
-      $('fontCssOut').textContent = `font-family: ${family};
-font-size: ${size}px;
-font-weight: ${weight};
-line-height: ${lh};
-letter-spacing: ${ls}px;`;
+      $('fontCssOut').textContent = `font-family: ${family};\nfont-size: ${size}px;\nfont-weight: ${weight};\nline-height: ${lh};\nletter-spacing: ${ls}px;`;
     };
 
-    ['fontFamily', 'fontSize', 'fontWeight', 'fontLineHeight', 'fontLetterSpacing', 'fontSample'].forEach(id => {
+    ['fontFamily','fontSize','fontWeight','fontLineHeight','fontLetterSpacing','fontSample'].forEach(id => {
       $(id).addEventListener('input', update);
       $(id).addEventListener('change', update);
     });
-
-    $('fontCopyFamily').addEventListener('click', async () => {
-      await copyToClipboard($('fontFamilyOut').value);
-      toast('Copied', 'success');
-    });
-    $('fontCopyCss').addEventListener('click', async () => {
-      await copyToClipboard($('fontCssOut').textContent);
-      toast('Copied', 'success');
-    });
-
+    $('fontCopyFamily').addEventListener('click', async () => { await copyToClipboard($('fontFamilyOut').value); toast('Copied', 'success'); });
+    $('fontCopyCss').addEventListener('click', async () => { await copyToClipboard($('fontCssOut').textContent); toast('Copied', 'success'); });
     update();
   }
-
-  function escapeHtml(s) { return escapeHTML(s); }
 
   // ═══════════════════════════════════════════════════════════
   // TOOL: JSON
@@ -2615,10 +3089,10 @@ letter-spacing: ${ls}px;`;
             <textarea class="textarea mono" id="jsonInput" rows="10" placeholder='{"name": "Alice", "age": 30}'>{}</textarea>
           </div>
           <div class="preview-actions">
-            <button class="btn btn-primary btn-sm" id="jsonFormat">${svg('code', 12, 2.2)} Format</button>
-            <button class="btn btn-secondary btn-sm" id="jsonMinify">${svg('code', 12, 2.2)} Minify</button>
+            <button class="btn btn-primary btn-sm" id="jsonFormat">Format</button>
+            <button class="btn btn-secondary btn-sm" id="jsonMinify">Minify</button>
             <button class="btn btn-secondary btn-sm" id="jsonCopy">${svg('copy', 12, 2.2)} Copy</button>
-            <button class="btn btn-secondary btn-sm" id="jsonDownload">${svg('download', 12, 2.2)} Download</button>
+            <button class="btn btn-secondary btn-sm" id="jsonDownload">${svg('download', 12, 2.2)} .json</button>
             <button class="btn btn-secondary btn-sm" id="jsonInsert">${svg('plus', 12, 2.2)} Insert</button>
           </div>
           <div class="field" style="margin-top:12px;">
@@ -2630,55 +3104,29 @@ letter-spacing: ${ls}px;`;
     `;
 
     const validate = () => {
-      const input = $('jsonInput').value;
-      try {
-        JSON.parse(input);
-        $('jsonStatus').textContent = 'Valid JSON';
-        $('jsonStatus').style.color = 'var(--theme-success)';
-      } catch (err) {
-        $('jsonStatus').textContent = 'Invalid: ' + err.message;
-        $('jsonStatus').style.color = 'var(--theme-danger)';
-      }
+      try { JSON.parse($('jsonInput').value); $('jsonStatus').textContent = 'Valid JSON'; $('jsonStatus').style.color = 'var(--theme-success)'; }
+      catch (err) { $('jsonStatus').textContent = 'Invalid: ' + err.message; $('jsonStatus').style.color = 'var(--theme-danger)'; }
     };
-
     $('jsonInput').addEventListener('input', debounce(validate, 300));
 
     $('jsonFormat').addEventListener('click', () => {
-      try {
-        const parsed = JSON.parse($('jsonInput').value);
-        $('jsonInput').value = JSON.stringify(parsed, null, 2);
-        validate();
-      } catch { toast('Invalid JSON', 'error'); }
+      try { const p = JSON.parse($('jsonInput').value); $('jsonInput').value = JSON.stringify(p, null, 2); validate(); }
+      catch { toast('Invalid JSON', 'error'); }
     });
-
     $('jsonMinify').addEventListener('click', () => {
-      try {
-        const parsed = JSON.parse($('jsonInput').value);
-        $('jsonInput').value = JSON.stringify(parsed);
-        validate();
-      } catch { toast('Invalid JSON', 'error'); }
+      try { const p = JSON.parse($('jsonInput').value); $('jsonInput').value = JSON.stringify(p); validate(); }
+      catch { toast('Invalid JSON', 'error'); }
     });
-
-    $('jsonCopy').addEventListener('click', async () => {
-      await copyToClipboard($('jsonInput').value);
-      toast('Copied', 'success');
-    });
-
+    $('jsonCopy').addEventListener('click', async () => { await copyToClipboard($('jsonInput').value); toast('Copied', 'success'); });
     $('jsonDownload').addEventListener('click', () => {
       const blob = new Blob([$('jsonInput').value], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `data-${Date.now()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const a = document.createElement('a'); a.href = url; a.download = `data-${Date.now()}.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast('Downloaded', 'success');
     });
-
     $('jsonInsert').addEventListener('click', () => insertIntoEditor($('jsonInput').value));
-
     validate();
   }
 
@@ -2687,16 +3135,11 @@ letter-spacing: ${ls}px;`;
   // ═══════════════════════════════════════════════════════════
 
   let markedLoaded = null;
-
   async function loadMarked() {
     if (markedLoaded) return markedLoaded;
     markedLoaded = (async () => {
-      try {
-        const mod = await import('https://esm.sh/marked@11');
-        return mod.marked;
-      } catch {
-        return (text) => text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      }
+      try { const mod = await import('https://esm.sh/marked@11'); return mod.marked; }
+      catch { return (text) => escapeHTML(text); }
     })();
     return markedLoaded;
   }
@@ -2718,9 +3161,9 @@ This is a **markdown** preview tool.
 - Copy HTML
 - Download files
 
-` + "```" + `js
+\`\`\`js
 const greeting = "Hello";
-` + "```" + `
+\`\`\`
 
 > Built with Folio tools.</textarea>
               <div class="preview-actions" style="margin-top:10px;">
@@ -2743,40 +3186,24 @@ const greeting = "Hello";
     `;
 
     let lastHtml = '';
-
     const render = async () => {
       const md = $('mdInput').value;
       const marked = await loadMarked();
-      try {
-        lastHtml = marked(md);
-        $('mdPreview').innerHTML = lastHtml;
-      } catch {
-        $('mdPreview').innerHTML = `<pre>${escapeHTML(md)}</pre>`;
-      }
+      try { lastHtml = marked(md); $('mdPreview').innerHTML = lastHtml; }
+      catch { $('mdPreview').innerHTML = `<pre>${escapeHTML(md)}</pre>`; }
     };
 
     $('mdInput').addEventListener('input', debounce(render, 300));
-
-    $('mdCopyHtml').addEventListener('click', async () => {
-      await copyToClipboard(lastHtml);
-      toast('HTML copied', 'success');
-    });
-
+    $('mdCopyHtml').addEventListener('click', async () => { await copyToClipboard(lastHtml); toast('HTML copied', 'success'); });
     $('mdDownload').addEventListener('click', () => {
       const blob = new Blob([$('mdInput').value], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `document-${Date.now()}.md`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const a = document.createElement('a'); a.href = url; a.download = `doc-${Date.now()}.md`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast('Downloaded', 'success');
     });
-
     $('mdInsert').addEventListener('click', () => insertIntoEditor($('mdInput').value));
-
     render();
   }
 
@@ -2786,23 +3213,16 @@ const greeting = "Hello";
 
   function renderOcrTool(container) {
     container.innerHTML = `
-      <div class="info-banner">
-        ${svg('info', 13, 2.2)}
-        <span>Runs entirely in your browser. First use downloads ~30MB of language data (cached after).</span>
-      </div>
+      <div class="info-banner">${svg('info', 13, 2.2)}<span>Runs entirely in your browser. First use downloads ~30MB of language data (cached after).</span></div>
       <div class="card">
         <div class="card-header"><div class="card-title">${svg('scan', 14, 2.2)} Upload image</div></div>
         <div class="card-body">
           <input type="file" id="ocrFile" accept="image/*" style="display:none;">
-          <button class="btn btn-secondary btn-block" id="ocrUploadBtn">
-            ${svg('upload', 14, 2.2)} Choose image
-          </button>
+          <button class="btn btn-secondary btn-block" id="ocrUploadBtn">${svg('upload', 14, 2.2)} Choose image</button>
           <div id="ocrThumbWrap" style="margin-top:12px;display:none;">
             <img id="ocrThumb" style="max-width:100%;border-radius:8px;border:1px solid var(--theme-card-border);display:block;">
           </div>
-          <button class="btn btn-primary btn-block" id="ocrRunBtn" disabled style="margin-top:10px;">
-            ${svg('scan', 14, 2.2)} Recognize text
-          </button>
+          <button class="btn btn-primary btn-block" id="ocrRunBtn" disabled style="margin-top:10px;">${svg('scan', 14, 2.2)} Recognize text</button>
         </div>
       </div>
       <div class="card">
@@ -2817,51 +3237,36 @@ const greeting = "Hello";
       </div>
     `;
 
-    let selectedFile = null;
-    let worker = null;
-
+    let selectedFile = null, worker = null;
     $('ocrUploadBtn').addEventListener('click', () => $('ocrFile').click());
-
     $('ocrFile').addEventListener('change', (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+      const file = e.target.files?.[0]; if (!file) return;
       selectedFile = file;
-      const thumb = $('ocrThumb');
-      thumb.src = URL.createObjectURL(file);
+      $('ocrThumb').src = URL.createObjectURL(file);
       $('ocrThumbWrap').style.display = 'block';
       $('ocrRunBtn').disabled = false;
     });
-
     $('ocrRunBtn').addEventListener('click', async () => {
       if (!selectedFile) return;
-
       const btn = $('ocrRunBtn');
       btn.disabled = true;
       btn.innerHTML = `${svg('refresh', 14, 2.2)} Loading engine…`;
-
       try {
         if (!worker) {
           const { createWorker } = await import('https://esm.sh/tesseract.js@5');
           worker = await createWorker('eng');
         }
-
         btn.innerHTML = `${svg('refresh', 14, 2.2)} Recognizing…`;
         const { data } = await worker.recognize(selectedFile);
         $('ocrText').value = data.text || '(no text found)';
         toast('Done', 'success');
-      } catch (err) {
-        toast('OCR failed: ' + (err.message || 'unknown'), 'error');
-      } finally {
+      } catch (err) { toast('OCR failed: ' + (err.message || 'unknown'), 'error'); }
+      finally {
         btn.disabled = false;
         btn.innerHTML = `${svg('scan', 14, 2.2)} Recognize text`;
       }
     });
-
-    $('ocrCopyBtn').addEventListener('click', async () => {
-      await copyToClipboard($('ocrText').value);
-      toast('Copied', 'success');
-    });
-
+    $('ocrCopyBtn').addEventListener('click', async () => { await copyToClipboard($('ocrText').value); toast('Copied', 'success'); });
     $('ocrInsertBtn').addEventListener('click', () => insertIntoEditor($('ocrText').value));
   }
 
@@ -2871,27 +3276,15 @@ const greeting = "Hello";
 
   function renderApiTool(container) {
     container.innerHTML = `
-      <div class="info-banner">
-        ${svg('info', 13, 2.2)}
-        <span>Only works with APIs that allow CORS. Non-CORS APIs will fail with a network error.</span>
-      </div>
-      <div class="card">
-        <div class="card-body">
-          <div class="row-2" style="margin-bottom:10px;">
-            <select class="select" id="apiMethod">
-              <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option>
-            </select>
-            <input class="input mono" id="apiUrl" placeholder="https://api.example.com/endpoint" value="https://jsonplaceholder.typicode.com/posts/1">
-          </div>
-          <div class="field">
-            <label class="field-label">Body (JSON)</label>
-            <textarea class="textarea mono" id="apiBody" rows="4" placeholder="{}"></textarea>
-          </div>
-          <button class="btn btn-primary btn-block" id="apiSendBtn">
-            ${svg('zap', 14, 2.2)} Send request
-          </button>
+      <div class="info-banner">${svg('info', 13, 2.2)}<span>Only works with APIs that allow CORS. Non-CORS APIs will fail with a network error.</span></div>
+      <div class="card"><div class="card-body">
+        <div class="row-2" style="margin-bottom:10px;">
+          <select class="select" id="apiMethod"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option></select>
+          <input class="input mono" id="apiUrl" placeholder="https://api.example.com/endpoint" value="https://jsonplaceholder.typicode.com/posts/1">
         </div>
-      </div>
+        <div class="field"><label class="field-label">Body (JSON)</label><textarea class="textarea mono" id="apiBody" rows="4" placeholder="{}"></textarea></div>
+        <button class="btn btn-primary btn-block" id="apiSendBtn">${svg('zap', 14, 2.2)} Send request</button>
+      </div></div>
       <div class="card">
         <div class="card-header"><div class="card-title">${svg('code', 14, 2.2)} Response</div></div>
         <div class="card-body">
@@ -2906,30 +3299,18 @@ const greeting = "Hello";
       const url = $('apiUrl').value.trim();
       const body = $('apiBody').value.trim();
       if (!url) { toast('URL required', 'error'); return; }
-
       const start = performance.now();
       $('apiStatus').textContent = 'Sending…';
       $('apiResponse').textContent = '—';
-
       try {
         const opts = { method, headers: {} };
-        if (body && ['POST', 'PUT', 'PATCH'].includes(method)) {
-          opts.headers['Content-Type'] = 'application/json';
-          opts.body = body;
-        }
-
+        if (body && ['POST','PUT','PATCH'].includes(method)) { opts.headers['Content-Type'] = 'application/json'; opts.body = body; }
         const res = await fetch(url, opts);
         const ms = Math.round(performance.now() - start);
         const text = await res.text();
-
         $('apiStatus').innerHTML = `<span style="color:${res.ok ? 'var(--theme-success)' : 'var(--theme-danger)'};font-weight:700;">${res.status} ${res.statusText}</span> · ${ms}ms · ${text.length} bytes`;
-
-        try {
-          const json = JSON.parse(text);
-          $('apiResponse').textContent = JSON.stringify(json, null, 2);
-        } catch {
-          $('apiResponse').textContent = text;
-        }
+        try { $('apiResponse').textContent = JSON.stringify(JSON.parse(text), null, 2); }
+        catch { $('apiResponse').textContent = text; }
       } catch (err) {
         $('apiStatus').innerHTML = `<span style="color:var(--theme-danger);font-weight:700;">Network error</span>`;
         $('apiResponse').textContent = err.message + '\n\nThis may be a CORS issue.';
@@ -2938,18 +3319,15 @@ const greeting = "Hello";
   }
 
   // ═══════════════════════════════════════════════════════════
-  // TOOL: QR CODE
+  // TOOL: QR
   // ═══════════════════════════════════════════════════════════
 
   let qrLibLoaded = null;
-
   async function loadQrLib() {
     if (qrLibLoaded) return qrLibLoaded;
     qrLibLoaded = (async () => {
-      try {
-        const mod = await import('https://esm.sh/qrcode@1.5.3');
-        return mod.default || mod;
-      } catch { return null; }
+      try { const mod = await import('https://esm.sh/qrcode@1.5.3'); return mod.default || mod; }
+      catch { return null; }
     })();
     return qrLibLoaded;
   }
@@ -2958,74 +3336,48 @@ const greeting = "Hello";
     container.innerHTML = `
       <div class="tool-split">
         <div class="tool-split-controls">
-          <div class="card">
-            <div class="card-body">
-              <div class="field">
-                <label class="field-label">Content</label>
-                <textarea class="textarea" id="qrContent" rows="4" placeholder="https://example.com or any text">https://foliostudios.vercel.app</textarea>
-              </div>
-              <div class="field">
-                <label class="field-label">Size</label>
-                <div class="pill-group">
-                  ${[128, 256, 512, 1024].map(s => `<button class="pill ${s === 256 ? 'active' : ''}" data-qr-size="${s}" type="button">${s}</button>`).join('')}
-                </div>
-              </div>
-              <div class="field">
-                <label class="field-label">Error correction</label>
-                <div class="pill-group">
-                  ${['L', 'M', 'Q', 'H'].map(l => `<button class="pill ${l === 'M' ? 'active' : ''}" data-qr-ec="${l}" type="button">${l}</button>`).join('')}
-                </div>
-              </div>
-              <div class="row-2">
-                <div class="field">
-                  <label class="field-label">Foreground</label>
-                  <input type="color" class="color-input" id="qrFg" value="#000000" style="width:100%;height:36px;">
-                </div>
-                <div class="field">
-                  <label class="field-label">Background</label>
-                  <input type="color" class="color-input" id="qrBg" value="#ffffff" style="width:100%;height:36px;">
-                </div>
-              </div>
+          <div class="card"><div class="card-body">
+            <div class="field"><label class="field-label">Content</label><textarea class="textarea" id="qrContent" rows="4" placeholder="https://example.com">https://foliostudios.vercel.app</textarea></div>
+            <div class="field">
+              <label class="field-label">Size</label>
+              <div class="pill-group">${[128,256,512,1024].map(s => `<button class="pill ${s===256?'active':''}" data-qr-size="${s}" type="button">${s}</button>`).join('')}</div>
             </div>
-          </div>
+            <div class="field">
+              <label class="field-label">Error correction</label>
+              <div class="pill-group">${['L','M','Q','H'].map(l => `<button class="pill ${l==='M'?'active':''}" data-qr-ec="${l}" type="button">${l}</button>`).join('')}</div>
+            </div>
+            <div class="row-2">
+              <div class="field"><label class="field-label">Foreground</label><input type="color" class="color-input" id="qrFg" value="#000000" style="width:100%;height:36px;"></div>
+              <div class="field"><label class="field-label">Background</label><input type="color" class="color-input" id="qrBg" value="#ffffff" style="width:100%;height:36px;"></div>
+            </div>
+          </div></div>
         </div>
         <div class="tool-split-preview">
-          <div class="card">
-            <div class="card-body">
-              <div class="preview-frame" id="qrPreview" style="background:#ffffff;"></div>
-              <div class="preview-actions" style="margin-top:10px;">
-                <button class="btn btn-primary btn-sm" id="qrDownloadBtn">${svg('download', 12, 2.4)} Download</button>
-                <button class="btn btn-secondary btn-sm" id="qrCopyBtn">${svg('copy', 12, 2.4)} Copy image</button>
-              </div>
+          <div class="card"><div class="card-body">
+            <div class="preview-frame" id="qrPreview" style="background:#ffffff;"></div>
+            <div class="preview-actions" style="margin-top:10px;">
+              <button class="btn btn-primary btn-sm" id="qrDownloadBtn">${svg('download', 12, 2.4)} Download</button>
+              <button class="btn btn-secondary btn-sm" id="qrCopyBtn">${svg('copy', 12, 2.4)} Copy</button>
             </div>
-          </div>
+          </div></div>
         </div>
       </div>
     `;
 
-    let qrSize = 256;
-    let qrEc = 'M';
-    let lastDataUrl = '';
-
+    let qrSize = 256, qrEc = 'M', lastDataUrl = '';
     const render = async () => {
       const lib = await loadQrLib();
-      if (!lib) { toast('QR library failed to load', 'error'); return; }
-
+      if (!lib) { toast('QR library failed', 'error'); return; }
       const content = $('qrContent').value.trim();
       if (!content) { $('qrPreview').innerHTML = ''; return; }
-
       try {
         const dataUrl = await lib.toDataURL(content, {
-          width: qrSize,
-          errorCorrectionLevel: qrEc,
-          color: { dark: $('qrFg').value, light: $('qrBg').value },
-          margin: 2,
+          width: qrSize, errorCorrectionLevel: qrEc,
+          color: { dark: $('qrFg').value, light: $('qrBg').value }, margin: 2,
         });
         lastDataUrl = dataUrl;
         $('qrPreview').innerHTML = `<img src="${dataUrl}" alt="QR" style="width:100%;height:100%;object-fit:contain;">`;
-      } catch (err) {
-        toast('QR failed: ' + (err.message || 'unknown'), 'error');
-      }
+      } catch (err) { toast('QR failed: ' + (err.message || 'unknown'), 'error'); }
     };
 
     $('qrContent').addEventListener('input', debounce(render, 300));
@@ -3045,26 +3397,19 @@ const greeting = "Hello";
         render();
       });
     });
-
     $('qrDownloadBtn').addEventListener('click', () => {
       if (!lastDataUrl) return;
-      const a = document.createElement('a');
-      a.href = lastDataUrl;
-      a.download = `qr-${Date.now()}.png`;
-      a.click();
+      const a = document.createElement('a'); a.href = lastDataUrl; a.download = `qr-${Date.now()}.png`; a.click();
       toast('Downloaded', 'success');
     });
-
     $('qrCopyBtn').addEventListener('click', async () => {
       if (!lastDataUrl) return;
       try {
-        const res = await fetch(lastDataUrl);
-        const blob = await res.blob();
+        const res = await fetch(lastDataUrl); const blob = await res.blob();
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        toast('Image copied', 'success');
+        toast('Copied', 'success');
       } catch { toast('Copy failed', 'error'); }
     });
-
     render();
   }
 
@@ -3074,34 +3419,26 @@ const greeting = "Hello";
 
   function renderBase64Tool(container) {
     container.innerHTML = `
-      <div class="card">
-        <div class="card-body">
-          <div class="field">
-            <label class="field-label">Mode</label>
-            <div class="pill-group">
-              <button class="pill active" data-b64-mode="encode" type="button">Encode</button>
-              <button class="pill" data-b64-mode="decode" type="button">Decode</button>
-            </div>
-          </div>
-          <div class="field">
-            <label class="field-label">Input</label>
-            <textarea class="textarea mono" id="b64Input" rows="6" placeholder="Enter text…"></textarea>
-          </div>
-          <div class="field">
-            <label class="field-label">Output</label>
-            <textarea class="textarea mono" id="b64Output" rows="6" readonly></textarea>
-          </div>
-          <div class="toggle-row">
-            <div style="font-size:12px;font-weight:600;color:var(--theme-text-secondary);">URL-safe</div>
-            <button class="switch" id="b64UrlSafe" aria-label="Toggle url-safe"></button>
-          </div>
-          <div class="preview-actions">
-            <button class="btn btn-primary btn-sm" id="b64CopyBtn">${svg('copy', 12, 2.2)} Copy</button>
-            <button class="btn btn-secondary btn-sm" id="b64InsertBtn">${svg('plus', 12, 2.2)} Insert</button>
-            <button class="btn btn-secondary btn-sm" id="b64ClearBtn">${svg('trash', 12, 2.2)} Clear</button>
+      <div class="card"><div class="card-body">
+        <div class="field">
+          <label class="field-label">Mode</label>
+          <div class="pill-group">
+            <button class="pill active" data-b64-mode="encode" type="button">Encode</button>
+            <button class="pill" data-b64-mode="decode" type="button">Decode</button>
           </div>
         </div>
-      </div>
+        <div class="field"><label class="field-label">Input</label><textarea class="textarea mono" id="b64Input" rows="6" placeholder="Enter text…"></textarea></div>
+        <div class="field"><label class="field-label">Output</label><textarea class="textarea mono" id="b64Output" rows="6" readonly></textarea></div>
+        <div class="toggle-row">
+          <div style="font-size:12px;font-weight:600;color:var(--theme-text-secondary);">URL-safe</div>
+          <button class="switch" id="b64UrlSafe" aria-label="Toggle url-safe"></button>
+        </div>
+        <div class="preview-actions">
+          <button class="btn btn-primary btn-sm" id="b64CopyBtn">${svg('copy', 12, 2.2)} Copy</button>
+          <button class="btn btn-secondary btn-sm" id="b64InsertBtn">${svg('plus', 12, 2.2)} Insert</button>
+          <button class="btn btn-secondary btn-sm" id="b64ClearBtn">${svg('trash', 12, 2.2)} Clear</button>
+        </div>
+      </div></div>
     `;
 
     let mode = 'encode';
@@ -3134,22 +3471,11 @@ const greeting = "Hello";
         convert();
       });
     });
-
     $('b64Input').addEventListener('input', debounce(convert, 150));
-    $('b64UrlSafe').addEventListener('click', (e) => {
-      e.target.classList.toggle('on');
-      convert();
-    });
-
-    $('b64CopyBtn').addEventListener('click', async () => {
-      await copyToClipboard($('b64Output').value);
-      toast('Copied', 'success');
-    });
+    $('b64UrlSafe').addEventListener('click', (e) => { e.target.classList.toggle('on'); convert(); });
+    $('b64CopyBtn').addEventListener('click', async () => { await copyToClipboard($('b64Output').value); toast('Copied', 'success'); });
     $('b64InsertBtn').addEventListener('click', () => insertIntoEditor($('b64Output').value));
-    $('b64ClearBtn').addEventListener('click', () => {
-      $('b64Input').value = '';
-      $('b64Output').value = '';
-    });
+    $('b64ClearBtn').addEventListener('click', () => { $('b64Input').value = ''; $('b64Output').value = ''; });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -3158,20 +3484,57 @@ const greeting = "Hello";
 
   function boot() {
     readSession();
-    renderToolsGrid();
+    loadRecentTools();
+
+    // Restore category
+    try {
+      const savedCat = localStorage.getItem(STORAGE.activeCategory);
+      if (savedCat && CATEGORIES.some(c => c.id === savedCat)) S.category = savedCat;
+    } catch {}
 
     // Initial tool from hash
     const hashTool = getHashTool();
-    if (hashTool) openTool(hashTool);
+    if (hashTool) {
+      const t = TOOLS.find(x => x.id === hashTool);
+      if (t && (!t.requiresAuth || S.isAuthed)) S.activeTool = hashTool;
+    }
 
-    // Back button
-    $('toolBackBtn').addEventListener('click', closeTool);
+    renderAll();
 
-    // Escape
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        if ($('modalOverlay').classList.contains('active')) return closeModal();
-        if (S.activeTool) return closeTool();
+    // Header search
+    $('headerSearch').addEventListener('click', openSearchOverlay);
+    $('headerSearch').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSearchOverlay(); }
+    });
+    $('btnHeaderSearch').addEventListener('click', openSearchOverlay);
+
+    // Search overlay
+    $('searchOverlay').addEventListener('click', (e) => {
+      if (e.target === $('searchOverlay')) closeSearchOverlay();
+    });
+    $('searchInput').addEventListener('input', (e) => {
+      S.searchSelectedIndex = 0;
+      updateSearchResults(e.target.value);
+    });
+    $('searchInput').addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        S.searchSelectedIndex = Math.min(S.searchSelectedIndex + 1, S.searchMatches.length - 1);
+        updateSearchResults($('searchInput').value);
+        const selected = $('searchResults').querySelector('.search-result.selected');
+        selected?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        S.searchSelectedIndex = Math.max(0, S.searchSelectedIndex - 1);
+        updateSearchResults($('searchInput').value);
+        const selected = $('searchResults').querySelector('.search-result.selected');
+        selected?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const tool = S.searchMatches[S.searchSelectedIndex];
+        if (tool) { closeSearchOverlay(); openTool(tool.id); }
+      } else if (e.key === 'Escape') {
+        closeSearchOverlay();
       }
     });
 
@@ -3183,27 +3546,51 @@ const greeting = "Hello";
     // Hash change
     window.addEventListener('hashchange', () => {
       const t = getHashTool();
-      if (t && t !== S.activeTool) openTool(t);
-      else if (!t && S.activeTool) closeTool();
+      if (t && t !== S.activeTool) {
+        const tool = TOOLS.find(x => x.id === t);
+        if (tool && (!tool.requiresAuth || S.isAuthed)) {
+          S.activeTool = t;
+          renderAll();
+        }
+      } else if (!t && S.activeTool) {
+        S.activeTool = null;
+        renderAll();
+      }
+    });
+
+    // Global keyboard
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if ($('modalOverlay').classList.contains('active')) return closeModal();
+        if (S.searchOverlayOpen) return closeSearchOverlay();
+        if (S.activeTool) return closeTool();
+      }
+      // Cmd/Ctrl + K opens search
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (S.searchOverlayOpen) closeSearchOverlay();
+        else openSearchOverlay();
+      }
+      // "/" opens search
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
+        const tag = (e.target.tagName || '').toLowerCase();
+        const inField = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+        if (!inField && !S.searchOverlayOpen) { e.preventDefault(); openSearchOverlay(); }
+      }
+      // Number keys 1-9 jump to visible tools
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && /^[1-9]$/.test(e.key)) {
+        const tag = (e.target.tagName || '').toLowerCase();
+        const inField = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+        if (inField) return;
+        const visible = getVisibleTools();
+        const idx = parseInt(e.key, 10) - 1;
+        if (visible[idx]) { e.preventDefault(); openTool(visible[idx].id); }
+      }
     });
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // DEBOUNCE
-  // ═══════════════════════════════════════════════════════════
-
-  function debounce(fn, ms) {
-    let t;
-    return (...args) => {
-      clearTimeout(t);
-      t = setTimeout(() => fn(...args), ms);
-    };
-  }
-
   // Expose for inline onclick
-  window.ToolsPage = {
-    closeModal,
-  };
+  window.ToolsPage = { closeModal };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
