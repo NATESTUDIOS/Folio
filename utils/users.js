@@ -161,6 +161,7 @@ const RESERVED = new Set([
   "notify", "analytics", "host", "flier", "metatag",
   "register", "logout", "me", "refresh", "db", "logs",
   "www", "mail", "vercel", "folio",
+  "projects", "project", "tools", "index", "analytics",
 ]);
 
 export function isReservedUsername(username) {
@@ -301,6 +302,122 @@ export async function canEditProject(uid, pid) {
 }
 
 // =========================================================================
+// Project CRUD helpers (NEW — used by host.js)
+// =========================================================================
+
+/**
+ * List all projects where uid is owner or has a role.
+ * Returns sanitized project records (apiKeyHash stripped).
+ */
+export async function listUserProjects(uid) {
+  if (!uid) return [];
+
+  // Owned projects (via ownerId index)
+  const owned = [];
+  const ownedSnap = await db.ref("projects").orderByChild("ownerId").equalTo(uid).once("value");
+  if (ownedSnap.exists()) {
+    ownedSnap.forEach(child => {
+      owned.push({ pid: child.key, ...child.val() });
+    });
+  }
+
+  // Shared projects (from user.projectIds where ownerId !== uid)
+  const user = await getUser(uid);
+  const pids = user?.projectIds || {};
+  const shared = [];
+  for (const pid of Object.keys(pids)) {
+    if (owned.some(p => p.pid === pid)) continue;
+    const snap = await db.ref(`projects/${pid}`).once("value");
+    if (!snap.exists()) continue;
+    const p = snap.val();
+    if (p.ownerId === uid) continue;
+    shared.push({ pid, ...p, myRole: p.roles?.[uid] || null });
+  }
+
+  const sanitize = (p) => {
+    const { apiKeyHash, ...safe } = p;
+    return safe;
+  };
+
+  return [...owned.map(sanitize), ...shared.map(sanitize)];
+}
+
+/**
+ * Create a project record and add to owner's projectIds.
+ * Returns the created project (without apiKeyHash).
+ */
+export async function createProjectRecord(ownerUid, { name, description, storageLimit }) {
+  if (!ownerUid) throw new Error("Missing ownerUid");
+  if (!name || typeof name !== "string") throw new Error("Missing name");
+
+  const pid = "p_" + Date.now() + "_" + crypto.randomBytes(3).toString("hex");
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || "project";
+
+  const now = Date.now();
+  const project = {
+    ownerId: ownerUid,
+    name,
+    slug,
+    description: description || "",
+    createdAt: now,
+    updatedAt: now,
+    visibility: {
+      profile: "private",
+      liveSite: "private",
+      code: "private",
+      languages: "private",
+      db: "private",
+    },
+    roles: {},
+    publicFiles: {},
+    metaTags: {},
+    languages: { breakdown: {}, totalLines: 0, computedAt: null },
+    deployment: null,
+    storageLimit: storageLimit || 10 * 1024 * 1024,
+  };
+
+  await db.ref(`projects/${pid}`).set(project);
+  await db.ref(`users/${ownerUid}/projectIds/${pid}`).set(true);
+
+  return { pid, ...project };
+}
+
+/**
+ * Delete a project and all its scoped data.
+ * Removes from all users' projectIds.
+ */
+export async function deleteProjectRecord(pid, ownerUid) {
+  if (!pid || !ownerUid) return;
+
+  // Remove from all users' projectIds
+  const rolesSnap = await db.ref(`projects/${pid}/roles`).once("value");
+  const roleUids = rolesSnap.exists() ? Object.keys(rolesSnap.val()) : [];
+
+  const updates = {};
+  updates[`users/${ownerUid}/projectIds/${pid}`] = null;
+  for (const uid of roleUids) {
+    updates[`users/${uid}/projectIds/${pid}`] = null;
+  }
+  await db.ref().update(updates);
+
+  // Delete all project-scoped data
+  await Promise.all([
+    db.ref(`projects/${pid}`).remove(),
+    db.ref(`projectData/${pid}`).remove(),
+    db.ref(`projectSchemas/${pid}`).remove(),
+    db.ref(`logs/project/${pid}`).remove(),
+    db.ref(`analytics/${pid}`).remove(),
+    db.ref(`versions/${pid}`).remove(),
+  ]);
+
+  await logUserEvent(ownerUid, "project", "project.deleted", { pid });
+}
+
+// =========================================================================
 // Project API keys
 // =========================================================================
 
@@ -372,13 +489,14 @@ export function sanitizeFirebasePath(input) {
 
 const LOG_LIMIT = 500;
 const LOG_BUFFER = 50;
+const ACTIVITY_LIMIT = 100;
 
-async function trimLogs(path, max = LOG_LIMIT) {
+async function trimLogs(path, max = LOG_LIMIT, buffer = LOG_BUFFER) {
   const snap = await db.ref(path).once("value");
   if (!snap.exists()) return;
   const entries = [];
   snap.forEach(child => entries.push({ key: child.key, ts: child.val().ts || 0 }));
-  if (entries.length <= max + LOG_BUFFER) return;
+  if (entries.length <= max + buffer) return;
   entries.sort((a, b) => a.ts - b.ts);
   const toDelete = entries.slice(0, entries.length - max);
   const updates = {};
@@ -398,15 +516,45 @@ export async function logUserEvent(uid, type, action, meta = {}) {
   await trimLogs(`logs/user/${uid}`);
 }
 
+/**
+ * Log a project event.
+ * Writes to both /logs/project/{pid} (full audit trail) AND
+ * /analytics/{pid}/activity (recent feed read by analytics: activity).
+ */
 export async function logProjectEvent(pid, uid, type, action, meta = {}) {
   if (!pid) return;
   const logId = `log_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
-  await db.ref(`logs/project/${pid}/${logId}`).set({
+  const record = {
     ts: Date.now(),
     uid: uid || null,
     type,
     action,
     meta,
-  });
-  await trimLogs(`logs/project/${pid}`);
+  };
+
+  // Primary audit log
+  await db.ref(`logs/project/${pid}/${logId}`).set(record);
+
+  // Activity feed for analytics
+  await db.ref(`analytics/${pid}/activity/${logId}`).set(record).catch(() => {});
+
+  await Promise.all([
+    trimLogs(`logs/project/${pid}`),
+    trimLogs(`analytics/${pid}/activity`, ACTIVITY_LIMIT, 20).catch(() => {}),
+  ]);
+}
+
+/**
+ * Increment per-project API call counter (used by host.js router finally).
+ * Writes to /analytics/{pid}/api/{date} → { calls, errors }
+ */
+export async function logProjectApiCall(pid, success = true) {
+  if (!pid) return;
+  const today = new Date().toISOString().slice(0, 10);
+  await db.ref(`analytics/${pid}/api/${today}`).transaction(cur => {
+    const c = cur || { calls: 0, errors: 0 };
+    c.calls = (c.calls || 0) + 1;
+    if (!success) c.errors = (c.errors || 0) + 1;
+    return c;
+  }).catch(() => {});
 }
