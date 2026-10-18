@@ -3,15 +3,17 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/app", "destination": "/index.html" },
-    { "source": "/app/(.*)", "destination": "/index.html" },
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/register", "destination": "/register.html" },
     { "source": "/profile", "destination": "/profile.html" },
-    { "source": "/login", "destination": "/login.html" },
+    { "source": "/project", "destination": "/project.html" },
+    { "source": "/tools", "destination": "/tools.html" },
     { "source": "/settings", "destination": "/settings.html" },
-    { "source": "/dashboard", "destination": "/dashboard.html" },
-    { "source": "/invite", "destination": "/invite.html" },
+    { "source": "/analytics", "destination": "/analytics.html" },
     { "source": "/offline", "destination": "/offline.html" },
+
     { "source": "/p/:pid", "destination": "/api/host?action=share&pid=:pid" },
+
     { "source": "/:username/:project/:file", "destination": "/api/host?action=share&username=:username&project=:project&file=:file" },
     { "source": "/:username/:project", "destination": "/api/host?action=share&username=:username&project=:project" },
     { "source": "/:username", "destination": "/api/host?action=profile&username=:username" }
@@ -29,6 +31,13 @@
       "headers": [
         { "key": "Content-Type", "value": "application/manifest+json" },
         { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    },
+    {
+      "source": "/syntax.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json" },
+        { "key": "Cache-Control", "value": "public, max-age=3600, must-revalidate" }
       ]
     },
     {
@@ -58,8 +67,5 @@
         { "key": "Permissions-Policy", "value": "geolocation=(), microphone=(), camera=()" }
       ]
     }
-  ],
-  "redirects": [
-    { "source": "/", "destination": "/app", "permanent": false }
   ]
 }
