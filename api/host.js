@@ -45,6 +45,15 @@ const RATE_LIMITS = {
   projectsGet:        { max: 120,  window: 60 * 60 * 1000 },
   projectsCreate:     { max: 20,   window: 60 * 60 * 1000 },
   projectsDelete:     { max: 10,   window: 60 * 60 * 1000 },
+  projectsUpdate:     { max: 60,   window: 60 * 60 * 1000 },
+  deploymentHistory:  { max: 120,  window: 60 * 60 * 1000 },
+  deploymentOffline:  { max: 10,   window: 60 * 60 * 1000 },
+  deploymentDelete:   { max: 20,   window: 60 * 60 * 1000 },
+  versionsClear:      { max: 5,    window: 60 * 60 * 1000 },
+  cacheClear:         { max: 10,   window: 60 * 60 * 1000 },
+  projectExport:      { max: 30,   window: 60 * 60 * 1000 },
+  projectSyncBack:    { max: 60,   window: 60 * 60 * 1000 },
+  projectCopy:        { max: 20,   window: 60 * 60 * 1000 },
 };
 
 async function checkRateLimit(identifier, action) {
@@ -124,6 +133,10 @@ function dayString(d = new Date()) {
 
 function shortId(pid) {
   return pid.replace(/[^a-z0-9]/gi, "").slice(-8);
+}
+
+function nowIso() {
+  return new Date().toISOString();
 }
 
 const templateCache = new Map();
@@ -291,6 +304,23 @@ async function callVercelDeploy(payload) {
   return body;
 }
 
+async function callVercelDeleteDeployment(deploymentId) {
+  if (!deploymentId) return { ok: false, reason: "no_id" };
+  const url = VERCEL_TEAM_ID
+    ? `https://api.vercel.com/v13/deployments/${deploymentId}?teamId=${encodeURIComponent(VERCEL_TEAM_ID)}`
+    : `https://api.vercel.com/v13/deployments/${deploymentId}`;
+  try {
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${VERCEL_TOKEN}` },
+    });
+    return { ok: res.ok, status: res.status };
+  } catch (err) {
+    log("host.vercel_delete_failed", { deploymentId, message: err.message });
+    return { ok: false, reason: err.message };
+  }
+}
+
 async function callNotify(type, uid, payload) {
   try {
     const res = await fetch(`${BASE_URL}/api/notify?action=create`, {
@@ -308,7 +338,115 @@ async function callNotify(type, uid, payload) {
 }
 
 // =========================================================================
-// PROJECTS CRUD (NEW)
+// ZIP BUILDER (server-side, no external dep)
+// =========================================================================
+// Minimal store-only ZIP writer — no compression, no encryption.
+// Good enough for .folio/.zip project exports up to a few MB.
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buf) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) {
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buf[i]) & 0xFF];
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function dosDateTime(date = new Date()) {
+  const time = ((date.getHours() & 0x1F) << 11)
+    | ((date.getMinutes() & 0x3F) << 5)
+    | ((Math.floor(date.getSeconds() / 2)) & 0x1F);
+  const dt = (((date.getFullYear() - 1980) & 0x7F) << 9)
+    | (((date.getMonth() + 1) & 0x0F) << 5)
+    | (date.getDate() & 0x1F);
+  return { time, date: dt };
+}
+
+function buildZip(entries) {
+  // entries: [{ name: "path/to/file", data: Buffer }]
+  const localHeaders = [];
+  const centralDir = [];
+  let offset = 0;
+
+  const { time, date } = dosDateTime();
+
+  for (const entry of entries) {
+    const nameBuf = Buffer.from(entry.name, "utf8");
+    const data = entry.data;
+    const crc = crc32(data);
+
+    // Local file header (30 bytes + name)
+    const localHeader = Buffer.alloc(30 + nameBuf.length);
+    localHeader.writeUInt32LE(0x04034b50, 0);       // signature
+    localHeader.writeUInt16LE(20, 4);               // version needed
+    localHeader.writeUInt16LE(0x0800, 6);           // flags (UTF-8)
+    localHeader.writeUInt16LE(0, 8);                // compression (store)
+    localHeader.writeUInt16LE(time, 10);
+    localHeader.writeUInt16LE(date, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(data.length, 18);     // compressed size
+    localHeader.writeUInt32LE(data.length, 22);     // uncompressed size
+    localHeader.writeUInt16LE(nameBuf.length, 26);
+    localHeader.writeUInt16LE(0, 28);               // extra length
+    nameBuf.copy(localHeader, 30);
+
+    localHeaders.push(localHeader);
+    localHeaders.push(data);
+
+    // Central directory header (46 bytes + name)
+    const central = Buffer.alloc(46 + nameBuf.length);
+    central.writeUInt32LE(0x02014b50, 0);           // signature
+    central.writeUInt16LE(20, 4);                   // version made by
+    central.writeUInt16LE(20, 6);                   // version needed
+    central.writeUInt16LE(0x0800, 8);               // flags
+    central.writeUInt16LE(0, 10);                   // compression
+    central.writeUInt16LE(time, 12);
+    central.writeUInt16LE(date, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt16LE(0, 30);                   // extra length
+    central.writeUInt16LE(0, 32);                   // comment length
+    central.writeUInt16LE(0, 34);                   // disk number
+    central.writeUInt16LE(0, 36);                   // internal attrs
+    central.writeUInt32LE(0, 38);                   // external attrs
+    central.writeUInt32LE(offset, 42);              // local header offset
+    nameBuf.copy(central, 46);
+
+    centralDir.push(central);
+    offset += localHeader.length + data.length;
+  }
+
+  const centralStart = offset;
+  let centralSize = 0;
+  for (const c of centralDir) centralSize += c.length;
+
+  // End of central directory (22 bytes)
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(centralDir.length, 8);
+  end.writeUInt16LE(centralDir.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(centralStart, 16);
+  end.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localHeaders, ...centralDir, end]);
+}
+
+// =========================================================================
+// PROJECTS CRUD
 // =========================================================================
 
 async function handleProjectsList(req, res, reqId) {
@@ -368,6 +506,43 @@ async function handleProjectsCreate(req, res, reqId) {
   }
 }
 
+async function handleProjectsUpdate(req, res, reqId) {
+  const { pid, name, description } = req.body || {};
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "projectsUpdate", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "editor");
+  if (!access) return;
+
+  const patch = {};
+  if (name !== undefined) {
+    if (typeof name !== "string" || name.length < 1 || name.length > 100) {
+      return res.status(400).json({ success: false, error: "name must be 1–100 chars" });
+    }
+    patch.name = name.trim();
+  }
+  if (description !== undefined) {
+    if (typeof description !== "string" || description.length > 500) {
+      return res.status(400).json({ success: false, error: "description must be ≤500 chars" });
+    }
+    patch.description = description.trim();
+  }
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ success: false, error: "No fields to update" });
+  }
+
+  patch.updatedAt = Date.now();
+  await db.ref(`projects/${pid}`).update(patch);
+  await logProjectEvent(pid, access.uid, "project", "project.updated", {
+    fields: Object.keys(patch).filter(k => k !== "updatedAt"),
+  });
+
+  const snap = await db.ref(`projects/${pid}`).once("value");
+  const p = snap.exists() ? snap.val() : {};
+  const { apiKeyHash, ...safe } = p;
+  return res.status(200).json({ success: true, project: { pid, ...safe } });
+}
+
 async function handleProjectsDelete(req, res, reqId) {
   const { pid } = req.body || {};
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
@@ -419,14 +594,40 @@ async function handleDeploy(req, res, reqId) {
   const url = deployment.url ? `https://${deployment.url}` : null;
   const stateUrl = deployment.inspectorUrl || null;
 
-  await db.ref(`projects/${pid}/deployment`).set({
+  const deploymentRecord = {
     url,
     versionId: versionId || null,
     deployedAt: Date.now(),
     deploymentId: deployment.id || null,
     state: deployment.readyState || "QUEUED",
     stateUrl,
-  });
+    deployedBy: access.uid,
+  };
+
+  // Current deployment
+  await db.ref(`projects/${pid}/deployment`).set(deploymentRecord);
+
+  // Append to history (last 30 kept)
+  if (deployment.id) {
+    await db.ref(`projects/${pid}/deployments/${deployment.id}`).set(deploymentRecord);
+    try {
+      const histSnap = await db.ref(`projects/${pid}/deployments`).once("value");
+      if (histSnap.exists()) {
+        const entries = [];
+        histSnap.forEach(child => {
+          entries.push({ id: child.key, at: child.val()?.deployedAt || 0 });
+        });
+        if (entries.length > 30) {
+          entries.sort((a, b) => a.at - b.at);
+          const toDelete = entries.slice(0, entries.length - 30);
+          const updates = {};
+          toDelete.forEach(e => { updates[e.id] = null; });
+          await db.ref(`projects/${pid}/deployments`).update(updates);
+        }
+      }
+    } catch {}
+  }
+
   await db.ref(`projects/${pid}/updatedAt`).set(Date.now());
 
   await logProjectEvent(pid, access.uid, "deploy", "project.deployed", {
@@ -483,6 +684,491 @@ async function handleStatus(req, res, reqId) {
   const snap = await db.ref(`projects/${pid}/deployment`).once("value");
   const deployment = snap.exists() ? snap.val() : null;
   return res.status(200).json({ success: true, deployment });
+}
+
+async function handleDeploymentHistory(req, res, reqId) {
+  const pid = String(req.query?.pid || "").trim();
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "deploymentHistory", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "viewer");
+  if (!access) return;
+
+  const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 30, 1), 100);
+  const offset = Math.max(parseInt(req.query?.offset, 10) || 0, 0);
+
+  const snap = await db.ref(`projects/${pid}/deployments`).once("value");
+  const deployments = [];
+  if (snap.exists()) {
+    snap.forEach(child => {
+      deployments.push({ id: child.key, ...child.val() });
+    });
+  }
+  deployments.sort((a, b) => (b.deployedAt || 0) - (a.deployedAt || 0));
+
+  const slice = deployments.slice(offset, offset + limit);
+  const currentSnap = await db.ref(`projects/${pid}/deployment/deploymentId`).once("value");
+  const currentId = currentSnap.exists() ? currentSnap.val() : null;
+
+  return res.status(200).json({
+    success: true,
+    deployments: slice,
+    total: deployments.length,
+    hasMore: offset + limit < deployments.length,
+    currentDeploymentId: currentId,
+  });
+}
+
+async function handleDeploymentOffline(req, res, reqId) {
+  const { pid } = req.body || {};
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "deploymentOffline", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "editor");
+  if (!access) return;
+
+  // Mark current deployment as offline in DB but don't delete from Vercel.
+  const deploymentSnap = await db.ref(`projects/${pid}/deployment`).once("value");
+  if (!deploymentSnap.exists()) {
+    return res.status(400).json({ success: false, error: "No active deployment" });
+  }
+  const current = deploymentSnap.val();
+
+  await db.ref(`projects/${pid}/deployment`).update({
+    state: "OFFLINE",
+    offlineAt: Date.now(),
+    offlineBy: access.uid,
+    previousUrl: current.url || null,
+    url: null,
+  });
+
+  await logProjectEvent(pid, access.uid, "deploy", "deployment.offline", {});
+
+  return res.status(200).json({ success: true });
+}
+
+async function handleDeploymentDelete(req, res, reqId) {
+  const { pid, deploymentId } = req.body || {};
+  if (!pid || !deploymentId) {
+    return res.status(400).json({ success: false, error: "Missing pid or deploymentId" });
+  }
+  if (!(await enforceRate(req, res, "deploymentDelete", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  // Check if this is the current deployment
+  const currentSnap = await db.ref(`projects/${pid}/deployment/deploymentId`).once("value");
+  const isCurrent = currentSnap.exists() && currentSnap.val() === deploymentId;
+
+  // Best-effort Vercel delete
+  const vercelResult = await callVercelDeleteDeployment(deploymentId);
+
+  // Remove from history
+  await db.ref(`projects/${pid}/deployments/${deploymentId}`).remove();
+
+  // If it was the current deployment, clear the current node
+  if (isCurrent) {
+    await db.ref(`projects/${pid}/deployment`).remove();
+  }
+
+  await logProjectEvent(pid, access.uid, "deploy", "deployment.deleted", {
+    deploymentId,
+    vercelOk: vercelResult.ok,
+  });
+
+  return res.status(200).json({
+    success: true,
+    vercelDeleted: vercelResult.ok,
+  });
+}
+
+// =========================================================================
+// VERSIONS CLEAR
+// =========================================================================
+
+async function handleVersionsClear(req, res, reqId) {
+  const { pid } = req.body || {};
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "versionsClear", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  const snap = await db.ref(`versions/${pid}`).once("value");
+  let cleared = 0;
+  if (snap.exists()) {
+    const updates = {};
+    snap.forEach(child => { updates[child.key] = null; cleared++; });
+    if (cleared > 0) await db.ref(`versions/${pid}`).update(updates);
+  }
+
+  await logProjectEvent(pid, access.uid, "version", "versions.cleared", { count: cleared });
+  return res.status(200).json({ success: true, cleared });
+}
+
+// =========================================================================
+// CACHE CLEAR
+// =========================================================================
+
+async function handleCacheClear(req, res, reqId) {
+  const { pid } = req.body || {};
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "cacheClear", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  // Cache on the server side isn't a thing here (project.html caches client-side).
+  // But we can clear analytics counters, activity feed, or stale data if needed.
+  // For now: log the event; client clears IndexedDB itself.
+  await logProjectEvent(pid, access.uid, "project", "cache.cleared", {});
+  return res.status(200).json({ success: true, message: "Client cache is clearable via project.html" });
+}
+
+// =========================================================================
+// PROJECT EXPORT (folio/zip)
+// =========================================================================
+
+async function handleProjectExport(req, res, reqId) {
+  const pid = String(req.query?.pid || "").trim();
+  const format = String(req.query?.format || "folio").toLowerCase();
+  const versionId = String(req.query?.versionId || "").trim();
+  const publicOnly = String(req.query?.publicOnly || "false") === "true";
+
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!["folio", "zip"].includes(format)) {
+    return res.status(400).json({ success: false, error: "format must be folio or zip" });
+  }
+  if (!(await enforceRate(req, res, "projectExport", `pid_${pid}`))) return;
+
+  // Viewer+ can export public-only; editor+ can export full
+  let access = null;
+  if (publicOnly) {
+    const user = await requireAuth(req, res);
+    if (!user) return;
+    access = await canAccessProject(user.uid, pid);
+    if (!access) {
+      const visSnap = await db.ref(`projects/${pid}/visibility/profile`).once("value");
+      if (!visSnap.exists() || visSnap.val() !== "public") {
+        return res.status(403).json({ success: false, error: "Project is not public" });
+      }
+      access = { uid: null, role: "viewer" };
+    }
+  } else {
+    const a = await requireProjectRole(req, res, pid, "viewer");
+    if (!a) return;
+    access = a;
+  }
+
+  const projectSnap = await db.ref(`projects/${pid}`).once("value");
+  if (!projectSnap.exists()) {
+    return res.status(404).json({ success: false, error: "Project not found" });
+  }
+  const project = projectSnap.val();
+  const { apiKeyHash, roles, ...safeProject } = project;
+
+  // Get files: either from a version or from current files in DB
+  let filesObj = {};
+  if (versionId) {
+    const vSnap = await db.ref(`versions/${pid}/${versionId}`).once("value");
+    if (!vSnap.exists()) {
+      return res.status(404).json({ success: false, error: "Version not found" });
+    }
+    filesObj = vSnap.val().files || {};
+  } else {
+    const filesSnap = await db.ref(`files/${pid}`).once("value");
+    if (filesSnap.exists()) {
+      filesSnap.forEach(child => {
+        filesObj[child.key] = child.val()?.content || "";
+      });
+    }
+  }
+
+  // Filter for public-only
+  if (publicOnly) {
+    const publicFiles = project.publicFiles || {};
+    const filtered = {};
+    for (const [path, content] of Object.entries(filesObj)) {
+      const safePath = sanitizeFirebasePath(path.replace(/\//g, "__"));
+      if (publicFiles[safePath]) filtered[path] = content;
+    }
+    filesObj = filtered;
+  }
+
+  // Get versions (only for full .folio)
+  let versionsObj = {};
+  if (format === "folio" && !publicOnly) {
+    const vSnap = await db.ref(`versions/${pid}`).once("value");
+    if (vSnap.exists()) {
+      vSnap.forEach(child => {
+        versionsObj[child.key] = child.val();
+      });
+    }
+  }
+
+  // Get JSON DB (only for full .folio)
+  let jsonDb = null;
+  let jsonDbSchema = null;
+  if (format === "folio" && !publicOnly) {
+    const dbSnap = await db.ref(`projectData/${pid}`).once("value");
+    const schemaSnap = await db.ref(`projectSchemas/${pid}`).once("value");
+    jsonDb = dbSnap.exists() ? dbSnap.val() : null;
+    jsonDbSchema = schemaSnap.exists() ? schemaSnap.val() : null;
+  }
+
+  // Build zip entries
+  const entries = [];
+  const manifest = {
+    folioVersion: 1,
+    exportedAt: nowIso(),
+    exportedBy: access.uid || null,
+    pid,
+    name: safeProject.name || "",
+    slug: safeProject.slug || "",
+    description: safeProject.description || "",
+    language: safeProject.languages?.breakdown || {},
+    project: safeProject,
+    versions: format === "folio" ? Object.keys(versionsObj) : [],
+    hasJsonDb: !!jsonDb,
+    hasSchema: !!jsonDbSchema,
+    publicOnly,
+  };
+
+  entries.push({
+    name: "manifest.json",
+    data: Buffer.from(JSON.stringify(manifest, null, 2), "utf8"),
+  });
+
+  // Files
+  for (const [filePath, content] of Object.entries(filesObj)) {
+    const safeName = `files/${filePath}`;
+    const buf = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(String(content));
+    entries.push({ name: safeName, data: buf });
+  }
+
+  // Versions (folio only)
+  if (format === "folio" && !publicOnly) {
+    for (const [vid, v] of Object.entries(versionsObj)) {
+      entries.push({
+        name: `versions/${vid}.json`,
+        data: Buffer.from(JSON.stringify(v, null, 2), "utf8"),
+      });
+    }
+  }
+
+  // JSON DB (folio only)
+  if (format === "folio" && !publicOnly) {
+    if (jsonDb) {
+      entries.push({
+        name: "db.json",
+        data: Buffer.from(JSON.stringify(jsonDb, null, 2), "utf8"),
+      });
+    }
+    if (jsonDbSchema) {
+      entries.push({
+        name: "schema.json",
+        data: Buffer.from(JSON.stringify(jsonDbSchema, null, 2), "utf8"),
+      });
+    }
+  }
+
+  const zipBuffer = buildZip(entries);
+  const filename = `${(safeProject.slug || "project")}-${pid.slice(-6)}.${format === "folio" ? "folio" : "zip"}`;
+
+  res.setHeader("Content-Type", "application/octet-stream");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("X-Project-Pid", pid);
+  res.setHeader("X-Project-Format", format);
+  res.setHeader("X-Project-Files", String(Object.keys(filesObj).length));
+
+  await logProjectEvent(pid, access.uid, "project", "project.exported", {
+    format,
+    fileCount: Object.keys(filesObj).length,
+    publicOnly,
+  });
+
+  return res.status(200).send(zipBuffer);
+}
+
+// =========================================================================
+// PROJECT SYNC-BACK
+// =========================================================================
+
+async function handleProjectSyncBack(req, res, reqId) {
+  const { pid, files, versions, db: jsonDb, schema: jsonSchema, manifest } = req.body || {};
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "projectSyncBack", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "editor");
+  if (!access) return;
+
+  const projSnap = await db.ref(`projects/${pid}`).once("value");
+  if (!projSnap.exists()) {
+    return res.status(404).json({ success: false, error: "Project not found" });
+  }
+  const project = projSnap.val();
+
+  // Last-write-wins for v1
+  const result = {
+    filesWritten: 0,
+    filesSkipped: 0,
+    versionsWritten: 0,
+    dbWritten: false,
+    schemaWritten: false,
+  };
+
+  // Files
+  if (files && typeof files === "object") {
+    for (const [filePath, content] of Object.entries(files)) {
+      if (typeof content !== "string") {
+        result.filesSkipped++;
+        continue;
+      }
+      try {
+        await db.ref(`files/${pid}/${sanitizeFirebasePath(filePath.replace(/\//g, "__"))}`).set({
+          path: filePath,
+          content,
+          updatedAt: Date.now(),
+        });
+        result.filesWritten++;
+      } catch (err) {
+        log("host.sync_back.file_failed", { pid, path: filePath, message: err.message });
+        result.filesSkipped++;
+      }
+    }
+  }
+
+  // Versions (if provided and not already present)
+  if (versions && typeof versions === "object") {
+    for (const [vid, v] of Object.entries(versions)) {
+      try {
+        const exists = await db.ref(`versions/${pid}/${vid}`).once("value");
+        if (exists.exists()) continue;
+        await db.ref(`versions/${pid}/${vid}`).set(v);
+        result.versionsWritten++;
+      } catch {}
+    }
+  }
+
+  // JSON DB
+  if (jsonDb !== undefined && jsonDb !== null) {
+    try {
+      await db.ref(`projectData/${pid}`).set(jsonDb);
+      result.dbWritten = true;
+    } catch {}
+  }
+
+  if (jsonSchema !== undefined && jsonSchema !== null) {
+    try {
+      await db.ref(`projectSchemas/${pid}`).set(jsonSchema);
+      result.schemaWritten = true;
+    } catch {}
+  }
+
+  await db.ref(`projects/${pid}/updatedAt`).set(Date.now());
+
+  await logProjectEvent(pid, access.uid, "project", "project.synced_back", {
+    ...result,
+    manifestAt: manifest?.exportedAt || null,
+  });
+
+  return res.status(200).json({ success: true, ...result });
+}
+
+// =========================================================================
+// PROJECT COPY (fork)
+// =========================================================================
+
+async function handleProjectCopy(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+
+  const { pid: sourcePid, newName } = req.body || {};
+  if (!sourcePid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "projectCopy", `uid_${user.uid}`))) return;
+
+  const sourceSnap = await db.ref(`projects/${sourcePid}`).once("value");
+  if (!sourceSnap.exists()) {
+    return res.status(404).json({ success: false, error: "Source project not found" });
+  }
+  const source = sourceSnap.val();
+
+  // Determine access: owner/editor gets full copy, viewer/public gets public files only
+  const role = await canAccessProject(user.uid, sourcePid);
+  const canFullCopy = role === "owner" || role === "editor";
+  const isPublic = source.visibility?.profile === "public";
+  if (!canFullCopy && !isPublic) {
+    return res.status(403).json({ success: false, error: "Cannot copy this project" });
+  }
+
+  // Create new project
+  let newProject;
+  try {
+    newProject = await createProjectRecord(user.uid, {
+      name: (newName || `${source.name || "Copy"} (Copy)`).trim().slice(0, 100),
+      description: source.description || "",
+      storageLimit: user.settings?.globalLimit || 10 * 1024 * 1024,
+    });
+  } catch (err) {
+    log("host.project_copy.create_failed", { reqId, uid: user.uid, message: err.message });
+    return res.status(500).json({ success: false, error: "Could not create project" });
+  }
+
+  // Copy files (full or public-only)
+  const filesSnap = await db.ref(`files/${sourcePid}`).once("value");
+  let copiedFiles = 0;
+  if (filesSnap.exists()) {
+    const publicFiles = source.publicFiles || {};
+    for (const child of Object.values(filesSnap.toJSON ? filesSnap.toJSON() : {})) {
+      const path = child.path;
+      const content = child.content || "";
+      if (!canFullCopy) {
+        const safePath = sanitizeFirebasePath(path.replace(/\//g, "__"));
+        if (!publicFiles[safePath]) continue;
+      }
+      try {
+        await db.ref(`files/${newProject.pid}/${sanitizeFirebasePath(path.replace(/\//g, "__"))}`).set({
+          path,
+          content,
+          updatedAt: Date.now(),
+        });
+        copiedFiles++;
+      } catch {}
+    }
+  }
+
+  // Copy JSON DB (only for full copy)
+  if (canFullCopy) {
+    try {
+      const dbSnap = await db.ref(`projectData/${sourcePid}`).once("value");
+      if (dbSnap.exists()) await db.ref(`projectData/${newProject.pid}`).set(dbSnap.val());
+      const schemaSnap = await db.ref(`projectSchemas/${sourcePid}`).once("value");
+      if (schemaSnap.exists()) await db.ref(`projectSchemas/${newProject.pid}`).set(schemaSnap.val());
+    } catch {}
+  }
+
+  // Record fork source
+  await db.ref(`projects/${newProject.pid}`).update({
+    forkedFrom: sourcePid,
+    forkedAt: Date.now(),
+    forkedBy: user.uid,
+  });
+
+  await logProjectEvent(newProject.pid, user.uid, "project", "project.copied", {
+    sourcePid,
+    copiedFiles,
+    fullCopy: canFullCopy,
+  });
+
+  const { apiKeyHash, ...safeNew } = newProject;
+  return res.status(200).json({
+    success: true,
+    pid: newProject.pid,
+    project: safeNew,
+    copiedFiles,
+    fullCopy: canFullCopy,
+  });
 }
 
 // =========================================================================
@@ -951,7 +1637,7 @@ async function handleShare(req, res, reqId) {
     ? `<a class="btn" href="${BASE_URL}/${escapeHtml(username)}/${escapeHtml(slug)}/${escapeHtml(fileParam)}">View code</a>`
     : "";
   const editorBtn = isOwnerViewer
-    ? `<a class="btn" href="${BASE_URL}/?pid=${escapeHtml(pid)}">Open in editor</a>`
+    ? `<a class="btn" href="${BASE_URL}/project?pid=${escapeHtml(pid)}">Open dashboard</a>`
     : "";
 
   const langs = project.languages?.breakdown
@@ -1206,7 +1892,6 @@ export default async function handler(req, res) {
   const action = String(req.query?.action || req.body?.action || "").trim();
   const method = req.method;
 
-  // Extract pid for API call logging (best effort)
   const pidForLog = req.query?.pid || req.body?.pid || null;
 
   try {
@@ -1214,12 +1899,27 @@ export default async function handler(req, res) {
     if (method === "GET"  && action === "projects/list")        return await handleProjectsList(req, res, reqId);
     if (method === "GET"  && action === "projects/get")         return await handleProjectsGet(req, res, reqId);
     if (method === "POST" && action === "projects/create")      return await handleProjectsCreate(req, res, reqId);
+    if (method === "POST" && action === "projects/update")      return await handleProjectsUpdate(req, res, reqId);
     if (method === "POST" && action === "projects/delete")      return await handleProjectsDelete(req, res, reqId);
 
     // Deploy
     if (method === "POST" && action === "deploy")               return await handleDeploy(req, res, reqId);
     if (method === "POST" && action === "redeploy")             return await handleRedeploy(req, res, reqId);
     if (method === "GET"  && action === "status")               return await handleStatus(req, res, reqId);
+
+    // Deployment history + lifecycle
+    if (method === "GET"  && action === "deployment/history")   return await handleDeploymentHistory(req, res, reqId);
+    if (method === "POST" && action === "deployment/offline")   return await handleDeploymentOffline(req, res, reqId);
+    if (method === "POST" && action === "deployment/delete")    return await handleDeploymentDelete(req, res, reqId);
+
+    // Versions / cache
+    if (method === "POST" && action === "versions/clear")       return await handleVersionsClear(req, res, reqId);
+    if (method === "POST" && action === "cache/clear")          return await handleCacheClear(req, res, reqId);
+
+    // Project export / sync / copy
+    if (method === "GET"  && action === "project/export")       return await handleProjectExport(req, res, reqId);
+    if (method === "POST" && action === "project/sync-back")    return await handleProjectSyncBack(req, res, reqId);
+    if (method === "POST" && action === "project/copy")         return await handleProjectCopy(req, res, reqId);
 
     // JSON DB
     if (method === "POST" && action === "db/set")               return await handleDbSet(req, res, reqId);
