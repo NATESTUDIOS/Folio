@@ -1,128 +1,568 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
 <title>{{DISPLAY_NAME}} (@{{USERNAME}}) — Folio</title>
-<meta name="description" content="{{BIO}}">
-<link rel="canonical" href="{{CANONICAL_URL}}">
 
-<meta property="og:type" content="profile">
+<!-- Metatags (dynamic — custom > defaults) -->
+<meta name="description" content="{{OG_DESCRIPTION}}">
+<meta name="theme-color" content="#0a0c10">
+<meta name="robots" content="index,follow">
 <meta property="og:site_name" content="Folio">
+<meta property="og:type" content="profile">
+<meta property="og:url" content="{{CANONICAL_URL}}">
 <meta property="og:title" content="{{OG_TITLE}}">
 <meta property="og:description" content="{{OG_DESCRIPTION}}">
-<meta property="og:url" content="{{CANONICAL_URL}}">
 {{OG_IMAGE_META}}
-
-<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="{{OG_TITLE}}">
 <meta name="twitter:description" content="{{OG_DESCRIPTION}}">
 {{TWITTER_IMAGE_META}}
+<link rel="canonical" href="{{CANONICAL_URL}}">
 
-<meta name="theme-color" content="#0b0e14">
-<meta name="robots" content="index, follow">
-<link rel="icon" href="/icons/icon-192.png" type="image/png">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
-    --bg: #0b0e14; --bg-soft: #10141c; --bg-card: #161b25; --bg-card-hover: #1c2230;
-    --border: #262d3a; --border-soft: #1c2230;
-    --text: #e6edf3; --text-soft: #adbac7; --text-muted: #7d8590;
-    --accent: #F59E0B; --accent-soft: rgba(245, 158, 11, 0.14);
-    --radius: 14px; --radius-sm: 8px;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --primary: #F59E0B;
+    --primary-soft: rgba(245, 158, 11, 0.14);
+    --primary-glow: rgba(245, 158, 11, 0.4);
+    --bg: #0a0c10;
+    --surface: #0f1218;
+    --card: rgba(21, 25, 34, 0.72);
+    --card-solid: #151922;
+    --elevated: #1a1f2a;
+    --text: #e8ecf1;
+    --text-secondary: rgba(232, 236, 241, 0.72);
+    --text-tertiary: rgba(232, 236, 241, 0.44);
+    --border: rgba(255, 255, 255, 0.09);
+    --divider: rgba(255, 255, 255, 0.08);
+    --success: #10B981;
+    --success-soft: rgba(16, 185, 129, 0.14);
+    --danger: #EF4444;
+    --radius-sm: 10px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    color-scheme: dark;
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  .container { max-width: 960px; margin: 0 auto; padding: 24px 20px 64px; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; padding-bottom: 20px; margin-bottom: 32px; border-bottom: 1px solid var(--border-soft); }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); font-size: 18px; letter-spacing: -0.01em; }
-  .brand img { width: 24px; height: 24px; border-radius: 6px; }
-  .topbar-link { color: var(--text-soft); font-size: 14px; }
-  .profile-head { display: flex; gap: 24px; align-items: flex-start; margin-bottom: 40px; }
-  .avatar { width: 96px; height: 96px; border-radius: 50%; background: linear-gradient(135deg, var(--accent) 0%, #4a3aaa 100%); display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 700; color: #ffffff; flex-shrink: 0; border: 2px solid var(--border); overflow: hidden; }
-  .avatar img { width: 100%; height: 100%; object-fit: cover; }
-  .profile-info { flex: 1; min-width: 0; }
-  h1.display-name { margin: 0 0 4px; font-size: clamp(24px, 4vw, 32px); font-weight: 700; letter-spacing: -0.02em; color: var(--text); word-break: break-word; }
-  .username { color: var(--text-muted); font-family: var(--mono); font-size: 15px; margin-bottom: 12px; }
-  .bio { color: var(--text-soft); font-size: 16px; line-height: 1.55; margin: 12px 0 16px; max-width: 640px; white-space: pre-line; }
-  .links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
-  .links a { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-soft); padding: 4px 10px; border-radius: var(--radius-sm); background: var(--bg-card); border: 1px solid var(--border-soft); }
-  .links a:hover { color: var(--text); background: var(--bg-card-hover); text-decoration: none; }
-  .owner-controls { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
-  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; text-decoration: none; transition: all 0.15s ease; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); cursor: pointer; }
-  .btn:hover { text-decoration: none; background: var(--bg-soft); border-color: var(--accent); }
-  .btn.primary { background: var(--accent); color: #0b0e14; border-color: var(--accent); }
-  .btn.primary:hover { background: #e08c00; }
-  .section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 40px 0 20px; }
-  h2.section-title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); }
-  .section-count { font-size: 13px; color: var(--text-muted); font-family: var(--mono); }
-  .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-  .project-card { display: block; padding: 20px; border-radius: var(--radius); background: var(--bg-card); border: 1px solid var(--border-soft); color: var(--text); transition: all 0.15s ease; text-decoration: none; }
-  .project-card:hover { text-decoration: none; border-color: var(--accent); background: var(--bg-card-hover); transform: translateY(-2px); }
-  .project-card h3 { margin: 0 0 8px; font-size: 17px; font-weight: 700; color: var(--text); word-break: break-word; }
-  .project-card p { margin: 0 0 12px; font-size: 14px; color: var(--text-muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .card-badges { display: flex; flex-wrap: wrap; gap: 6px; }
-  .lang-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border-soft); font-size: 12px; color: var(--text-soft); font-family: var(--mono); }
-  .lang-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
-  .empty-state { padding: 48px 20px; text-align: center; background: var(--bg-card); border: 1px dashed var(--border); border-radius: var(--radius); color: var(--text-muted); }
-  .empty-state h3 { margin: 0 0 8px; font-size: 18px; color: var(--text-soft); font-weight: 600; }
-  .empty-state p { margin: 0; font-size: 14px; }
-  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border-soft); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; color: var(--text-muted); font-size: 13px; }
-  footer a { color: var(--text-soft); }
-  footer a:hover { color: var(--text); }
-  @media (max-width: 640px) {
-    .container { padding: 20px 16px 48px; }
-    .profile-head { flex-direction: column; gap: 16px; }
-    .avatar { width: 80px; height: 80px; font-size: 32px; }
-    .project-grid { grid-template-columns: 1fr; }
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%),
+      radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.08) 0%, transparent 55%);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    overflow-x: hidden;
   }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { color: #fbbf24; }
+  button { font: inherit; color: inherit; cursor: pointer; background: none; border: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* ── Shell ─────────────────────────────────────────────── */
+  .shell {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 20px 64px;
+  }
+  @media (min-width: 640px) { .shell { padding: 48px 32px 80px; } }
+
+  /* ── Top bar ───────────────────────────────────────────── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: -0.3px;
+  }
+  .brand-icon {
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+    overflow: hidden;
+  }
+  .brand-icon img { width: 100%; height: 100%; object-fit: cover; }
+  .brand-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .brand-sub {
+    display: block;
+    font-size: 9px;
+    color: var(--primary);
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    border: 1px solid transparent;
+    transition: all 0.15s var(--ease);
+    white-space: nowrap;
+    text-decoration: none;
+    min-height: 40px;
+  }
+  .btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; stroke-linecap: round; stroke-linejoin: round; }
+  .btn:active { transform: scale(0.97); }
+  .btn.primary { background: var(--primary); color: #0a0c10; }
+  .btn.primary:hover { background: #fbbf24; }
+  .btn.secondary {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .btn.secondary:hover { background: var(--elevated); border-color: var(--primary-glow); }
+  .btn.ghost { background: transparent; color: var(--text-secondary); }
+  .btn.ghost:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+  .btn.sm { padding: 7px 14px; font-size: 12px; min-height: 32px; border-radius: 8px; }
+  .btn.sm svg { width: 12px; height: 12px; }
+
+  /* ── Header ────────────────────────────────────────────── */
+  .profile-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+    padding-bottom: 32px;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--divider);
+    flex-wrap: wrap;
+  }
+  .avatar {
+    width: 96px; height: 96px;
+    border-radius: 24px;
+    overflow: hidden;
+    border: 2px solid var(--border);
+    background: var(--elevated);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .avatar span {
+    font-size: 32px;
+    font-weight: 800;
+    color: #0a0c10;
+  }
+  .head-info { flex: 1; min-width: 0; }
+  .head-name {
+    font-size: clamp(24px, 4vw, 32px);
+    font-weight: 900;
+    letter-spacing: -0.6px;
+    line-height: 1.15;
+    color: var(--text);
+    margin-bottom: 4px;
+    overflow-wrap: break-word;
+  }
+  .head-handle {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 12px;
+    font-family: monospace;
+  }
+  .bio {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin-bottom: 12px;
+    max-width: 65ch;
+    overflow-wrap: break-word;
+  }
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: all 0.15s var(--ease);
+  }
+  .links a:hover { color: var(--primary); border-color: var(--primary-glow); }
+  .head-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-bottom: 16px;
+  }
+  .head-meta-item { display: inline-flex; align-items: center; gap: 5px; }
+  .head-meta-item svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .owner-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .signin-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--primary-soft);
+    border: 1px solid var(--primary-glow);
+    border-radius: 12px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .signin-banner span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .signin-banner svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  /* ── Section title ─────────────────────────────────────── */
+  .section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .section-title h2 {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title h2 svg { width: 16px; height: 16px; stroke: var(--primary); fill: none; stroke-width: 2.2; }
+  .section-count {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    background: var(--divider);
+    border-radius: 6px;
+    color: var(--text-tertiary);
+  }
+
+  /* ── Project grid ──────────────────────────────────────── */
+  .project-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  @media (min-width: 640px) { .project-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; } }
+  @media (min-width: 1024px) { .project-grid { grid-template-columns: repeat(3, 1fr); } }
+
+  .project-card {
+    display: flex;
+    gap: 14px;
+    padding: 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    transition: all 0.2s var(--ease);
+    min-width: 0;
+    text-decoration: none;
+  }
+  .project-card:hover {
+    border-color: var(--primary-glow);
+    background: var(--elevated);
+    transform: translateY(-2px);
+  }
+  .project-icon {
+    flex-shrink: 0;
+    width: 44px; height: 44px;
+    border-radius: 11px;
+    overflow: hidden;
+    background: var(--elevated);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .project-icon img { width: 100%; height: 100%; object-fit: cover; }
+  .project-icon span { font-size: 15px; font-weight: 800; color: #0a0c10; }
+  .project-info { flex: 1; min-width: 0; }
+  .project-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .project-desc {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin-bottom: 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .card-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+  .lang-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 7px;
+    background: var(--divider);
+    border-radius: 4px;
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+  }
+  .lang-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
+  .project-time { font-size: 10px; color: var(--text-tertiary); font-weight: 500; }
+
+  /* ── Empty state ───────────────────────────────────────── */
+  .empty-state {
+    grid-column: 1 / -1;
+    padding: 48px 24px;
+    text-align: center;
+    background: var(--card);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .empty-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    background: var(--primary-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+  }
+  .empty-icon svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .empty-state h3 { font-size: 15px; font-weight: 800; color: var(--text); }
+  .empty-state p { font-size: 12.5px; color: var(--text-secondary); max-width: 320px; }
+
+  /* ── Footer ────────────────────────────────────────────── */
+  .footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--divider);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+  .footer-links { display: flex; gap: 14px; flex-wrap: wrap; }
+  .footer a { color: var(--text-secondary); font-weight: 600; }
+  .footer a:hover { color: var(--primary); }
+
+  /* ── Toast ─────────────────────────────────────────────── */
+  .toast-container {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    width: calc(100% - 40px);
+    max-width: 380px;
+  }
+  .toast {
+    padding: 12px 16px;
+    background: var(--card-solid);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--text);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    transform: translateY(20px);
+    opacity: 0;
+    transition: all 0.25s var(--ease);
+    pointer-events: all;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(16, 185, 129, 0.3); color: var(--success); }
+  .toast.error { border-color: rgba(239, 68, 68, 0.3); color: var(--danger); }
 </style>
 </head>
 <body>
 
-<div class="container">
-  <nav class="topbar">
-    <a href="/" class="brand">
-      <img src="/icons/icon-192.png" alt="" aria-hidden="true">
-      <span>Folio</span>
-    </a>
-    <a href="/app" class="topbar-link" data-owner-cta hidden>Open editor →</a>
-  </nav>
+<div class="shell">
 
-  <main>
-    <header class="profile-head">
-      <div class="avatar">{{AVATAR}}</div>
-      <div class="profile-info">
-        <h1 class="display-name">{{DISPLAY_NAME}}</h1>
-        <div class="username">@{{USERNAME}}</div>
-        {{BIO_BLOCK}}
-        {{LINKS_BLOCK}}
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-icon">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </span>
+      <span>Folio<span class="brand-sub">Profile</span></span>
+    </a>
+  </div>
+
+  <!-- SIGN IN BANNER (only if guest) -->
+  {{SIGNIN_CTA_HTML}}
+
+  <!-- PROFILE HEAD -->
+  <div class="profile-head">
+    <div class="avatar">{{AVATAR_HTML}}</div>
+    <div class="head-info">
+      <h1 class="head-name">{{DISPLAY_NAME}}</h1>
+      <div class="head-handle">@{{USERNAME}}</div>
+      {{BIO_BLOCK}}
+      {{LINKS_BLOCK}}
+      <div class="head-meta">
+        <span class="head-meta-item">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Joined {{JOINED_AT}}
+        </span>
+        <span class="head-meta-item">
+          <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          {{PROJECT_COUNT}} public project<span id="projectPlural"></span>
+        </span>
+      </div>
+      <div class="owner-controls">
+        {{SHARE_PROFILE_HTML}}
         {{OWNER_CONTROLS}}
       </div>
-    </header>
-
-    <div class="section-head">
-      <h2 class="section-title">Projects</h2>
-      <span class="section-count">{{PROJECT_COUNT}} public</span>
     </div>
+  </div>
 
+  <!-- PROJECTS -->
+  <div class="section-title">
+    <h2>
+      <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      Projects
+    </h2>
+    <span class="section-count">{{PROJECT_COUNT}}</span>
+  </div>
+
+  <div class="project-grid">
     {{PROJECT_GRID}}
-  </main>
+  </div>
 
-  <footer>
-    <span>Built with <a href="/">Folio</a> — code in your pocket.</span>
-    <span id="folio-view-counter"></span>
+  <!-- FOOTER -->
+  <footer class="footer">
+    <span>Made on <a href="/">Folio</a></span>
+    <div class="footer-links">
+      <a href="/projects">Projects</a>
+      <a href="/register">Sign in</a>
+    </div>
   </footer>
+
 </div>
 
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
 {{INJECT_PROFILE_SCRIPT}}
-<script type="module">
-  import { initProfileTemplate } from "/js/public.js";
-  initProfileTemplate();
+
+<script>
+(function () {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+
+  function toast(msg, type = 'info', duration = 2400) {
+    const container = $('toastContainer');
+    if (!container) return;
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.textContent = msg;
+    container.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 250);
+    }, duration);
+  }
+
+  function copyToClipboard(text) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {});
+        return true;
+      }
+    } catch {}
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch { return false; }
+  }
+
+  // Pluralize the project count
+  const countEl = document.querySelector('.section-count');
+  const pluralEl = document.getElementById('projectPlural');
+  if (countEl && pluralEl) {
+    const n = parseInt(countEl.textContent, 10) || 0;
+    pluralEl.textContent = n === 1 ? '' : 's';
+  }
+
+  // Copy profile link
+  document.querySelectorAll('[data-action="share-profile"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const url = btn.getAttribute('data-url') || location.origin + location.pathname;
+      if (copyToClipboard(url)) toast('Profile link copied', 'success', 1400);
+      else toast('Copy failed', 'error');
+    });
+  });
+
+})();
 </script>
 </body>
 </html>

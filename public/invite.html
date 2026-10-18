@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Folio — Invitation</title>
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<link rel="stylesheet" href="/app.css">
+
+<style>
+/* ── Invite page specific (kept small — the bulk lives in app.css) ── */
+:root {
+  --inv-primary: var(--theme-primary);
+  --inv-danger: var(--theme-danger, #EF4444);
+  --inv-success: var(--theme-success, #10B981);
+  --inv-bg: var(--theme-bg, #0a0c10);
+  --inv-surface: var(--theme-surface, #0f1218);
+  --inv-card: var(--theme-surface-card, rgba(21,25,34,0.72));
+  --inv-border: var(--theme-card-border, rgba(255,255,255,0.08));
+  --inv-text: var(--theme-text, #e8ecf1);
+  --inv-muted: var(--theme-text-secondary, rgba(232,236,241,0.72));
+  --inv-faint: var(--theme-text-tertiary, rgba(232,236,241,0.44));
+  --inv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  background: var(--inv-bg);
+  color: var(--inv-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+body { overflow: hidden; }
+
+.app {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  grid-template-rows: 1fr;
+  grid-template-areas: "rail body";
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+}
+@media (max-width: 1023px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "body"; }
+}
+
+.rail {
+  grid-area: rail;
+  background: var(--inv-surface);
+  border-right: 1px solid var(--theme-glass-border, rgba(255,255,255,0.09));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 0 calc(16px + env(safe-area-inset-bottom, 0px));
+}
+@media (max-width: 1023px) { .rail { display: none; } }
+
+.rail-logo, .rail-btn {
+  width: 40px; height: 40px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--inv-faint);
+  text-decoration: none;
+  transition: all 0.2s var(--inv-ease);
+}
+.rail-logo { margin-bottom: 16px; background: var(--theme-surface-elevated, #1a1f2a); border: 1px solid var(--theme-glass-border, rgba(255,255,255,0.09)); color: var(--inv-primary); overflow: hidden; }
+.rail-logo img { width: 100%; height: 100%; object-fit: cover; }
+.rail-logo svg, .rail-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; }
+.rail-btn:hover { color: var(--inv-text); background: var(--theme-glass-bg, rgba(255,255,255,0.05)); }
+.rail-top, .rail-bottom { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rail-divider { width: 24px; height: 1px; background: var(--theme-divider, rgba(255,255,255,0.08)); margin: 6px 0; }
+
+.body {
+  grid-area: body;
+  overflow-y: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+}
+
+.wrap {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: center;
+}
+
+/* ── Icon ────────────────────────────────────────────────── */
+.icon-wrap { display: flex; justify-content: center; margin-bottom: 4px; }
+.icon {
+  width: 88px; height: 88px;
+  border-radius: 22px;
+  background: var(--inv-card);
+  border: 1px solid var(--inv-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--inv-primary);
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  transition: all 0.3s var(--inv-ease);
+}
+.icon::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 28px;
+  background: var(--theme-primary-soft, rgba(245,158,11,0.14));
+  opacity: 0.4;
+  z-index: -1;
+  animation: pulse 3s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.98); }
+  50% { opacity: 0.5; transform: scale(1.04); }
+}
+.icon svg { width: 40px; height: 40px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon.success { color: var(--inv-success); }
+.icon.success::before { background: var(--theme-success-soft, rgba(16,185,129,0.14)); animation: none; }
+.icon.error { color: var(--inv-danger); }
+.icon.error::before { background: var(--theme-danger-soft, rgba(239,68,68,0.12)); animation: none; }
+.icon.loading::before { animation-duration: 1.6s; }
+
+/* ── Titles ──────────────────────────────────────────────── */
+.title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  color: var(--inv-text);
+}
+.subtitle {
+  font-size: 13.5px;
+  color: var(--inv-muted);
+  line-height: 1.55;
+  max-width: 340px;
+  margin: 6px auto 0;
+}
+
+/* ── Card for extra info ─────────────────────────────────── */
+.card {
+  background: var(--inv-card);
+  border: 1px solid var(--inv-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  text-align: left;
+}
+.card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.card-row + .card-row { margin-top: 10px; }
+.card-row-icon {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  background: var(--theme-glass-bg, rgba(255,255,255,0.05));
+  display: flex; align-items: center; justify-content: center;
+  color: var(--inv-faint);
+  flex-shrink: 0;
+}
+.card-row-icon svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.card-row-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--inv-muted);
+}
+.card-row-text strong { color: var(--inv-text); font-weight: 700; }
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.actions-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px 18px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: all 0.15s var(--inv-ease);
+}
+.btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary { background: var(--inv-primary); color: #0a0c10; }
+[data-theme="light"] .btn-primary { color: #ffffff; }
+.btn-primary:hover:not(:disabled) { background: var(--theme-primary-hover, #fbbf24); }
+
+.btn-secondary {
+  background: var(--theme-glass-bg, rgba(255,255,255,0.05));
+  color: var(--inv-text);
+  border-color: var(--inv-border);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--theme-surface-elevated, #1a1f2a);
+  border-color: var(--theme-primary-glow, rgba(245,158,11,0.4));
+}
+
+.btn-ghost { background: transparent; color: var(--inv-muted); }
+.btn-ghost:hover:not(:disabled) { background: var(--theme-glass-bg, rgba(255,255,255,0.05)); color: var(--inv-text); }
+
+.btn-block { width: 100%; }
+
+/* ── Spinner ─────────────────────────────────────────────── */
+.spinner {
+  width: 20px; height: 20px;
+  border: 2.5px solid var(--theme-primary-soft, rgba(245,158,11,0.14));
+  border-top-color: var(--inv-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner-inline {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ── Token display ───────────────────────────────────────── */
+.token-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--theme-glass-bg, rgba(255,255,255,0.05));
+  border: 1px solid var(--inv-border);
+  border-radius: 7px;
+  font-family: 'SF Mono', Consolas, Monaco, monospace;
+  font-size: 10.5px;
+  color: var(--inv-faint);
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.token-display svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.4; flex-shrink: 0; }
+
+/* ── Footer ──────────────────────────────────────────────── */
+.footer-note {
+  font-size: 10.5px;
+  color: var(--inv-faint);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.footer-note a {
+  color: var(--inv-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+.footer-note a:hover { text-decoration: underline; }
+
+/* ── Status pill ─────────────────────────────────────────── */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--theme-glass-bg, rgba(255,255,255,0.05));
+  border: 1px solid var(--inv-border);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--inv-faint);
+  margin: 0 auto;
+}
+.status-pill .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.status-pill.primary { color: var(--inv-primary); border-color: var(--theme-primary-glow, rgba(245,158,11,0.4)); background: var(--theme-primary-soft, rgba(245,158,11,0.14)); }
+.status-pill.danger { color: var(--inv-danger); background: var(--theme-danger-soft, rgba(239,68,68,0.12)); border-color: rgba(239,68,68,0.3); }
+.status-pill.success { color: var(--inv-success); background: var(--theme-success-soft, rgba(16,185,129,0.14)); border-color: rgba(16,185,129,0.3); }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- RAIL -->
+  <aside class="rail" aria-label="Main navigation">
+    <div class="rail-top">
+      <a class="rail-logo" href="/" aria-label="Folio">
+        <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none'">
+      </a>
+    </div>
+    <div class="rail-bottom">
+      <div class="rail-divider"></div>
+      <a class="rail-btn" href="/projects" aria-label="Projects">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </a>
+    </div>
+  </aside>
+
+  <!-- BODY -->
+  <main class="body">
+    <div class="wrap" id="wrap">
+      <!-- Everything renders here -->
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const API_BASE = 'https://foliostudios.vercel.app/api';
+  const API_AUTH = API_BASE + '/auth';
+  const API_HOST = API_BASE + '/host';
+
+  const STORAGE = {
+    session: 'folio.session',
+    user: 'folio.user',
+  };
+
+  const $ = id => document.getElementById(id);
+
+  const S = {
+    session: null,
+    user: null,
+    uid: null,
+    isAuthed: false,
+    token: null,
+    state: 'loading', // loading | no-token | guest | ready | accepting | success | error
+    errorCode: null,
+    errorMessage: null,
+    resolvedPid: null,
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // UTILS
+  // ═══════════════════════════════════════════════════════════
+
+  function escapeHTML(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  function svg(name, size = 15, sw = 2.4) {
+    const icons = {
+      mail: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+      check: '<polyline points="20 6 9 17 4 12"/>',
+      checkCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+      alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+      alertTriangle: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+      clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+      x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+      user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+      logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+      external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+      arrowRight: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+      refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+      link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    };
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SESSION
+  // ═══════════════════════════════════════════════════════════
+
+  function readSession() {
+    try { S.session = localStorage.getItem(STORAGE.session); } catch {}
+    try {
+      const raw = localStorage.getItem(STORAGE.user);
+      S.user = raw ? JSON.parse(raw) : null;
+    } catch {}
+    if (S.user) S.uid = S.user.uid || null;
+    S.isAuthed = !!S.session;
+  }
+
+  async function verifySession() {
+    if (!S.session) { S.isAuthed = false; return; }
+    try {
+      const res = await fetch(API_AUTH + '?action=me', {
+        headers: { 'Authorization': `Bearer ${S.session}` },
+      });
+      if (res.status === 401) {
+        try { localStorage.removeItem(STORAGE.session); localStorage.removeItem(STORAGE.user); } catch {}
+        S.session = null;
+        S.user = null;
+        S.uid = null;
+        S.isAuthed = false;
+        return;
+      }
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (data?.success && data.user) {
+        S.user = data.user;
+        S.uid = data.user.uid;
+        S.isAuthed = true;
+        try {
+          localStorage.setItem(STORAGE.user, JSON.stringify({
+            uid: S.user.uid,
+            username: S.user.profile?.username,
+            profile: S.user.profile,
+            email: S.user.email,
+          }));
+        } catch {}
+      } else {
+        S.isAuthed = false;
+      }
+    } catch {
+      // Network failure — treat as authed based on stored session
+      S.isAuthed = !!S.session;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TOKEN
+  // ═══════════════════════════════════════════════════════════
+
+  function readTokenFromUrl() {
+    try {
+      const token = new URLSearchParams(location.search).get('token');
+      if (!token) return null;
+      // Tokens are opaque; validate basic shape to avoid XSS in URL
+      if (!/^[a-zA-Z0-9_-]{8,128}$/.test(token)) return null;
+      return token;
+    } catch { return null; }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ACCEPT
+  // ═══════════════════════════════════════════════════════════
+
+  async function acceptInvite() {
+    if (!S.token || !S.isAuthed) return;
+    S.state = 'accepting';
+    render();
+
+    try {
+      const res = await fetch(API_HOST + '?action=invite/accept', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${S.session}`,
+        },
+        body: JSON.stringify({ token: S.token }),
+      });
+
+      let data = {};
+      try { data = await res.json(); } catch {}
+
+      if (res.ok && data.success) {
+        S.state = 'success';
+        S.resolvedPid = data.pid || null;
+        render();
+        // Auto-redirect after a beat
+        setTimeout(() => {
+          if (S.resolvedPid) {
+            window.location.href = '/project?pid=' + encodeURIComponent(S.resolvedPid);
+          } else {
+            window.location.href = '/projects';
+          }
+        }, 1400);
+        return;
+      }
+
+      // Map status → friendly message
+      if (res.status === 401) {
+        // Not authed — clear and show sign-in
+        try { localStorage.removeItem(STORAGE.session); localStorage.removeItem(STORAGE.user); } catch {}
+        S.session = null; S.user = null; S.uid = null;
+        S.isAuthed = false;
+        S.state = 'guest';
+        render();
+        return;
+      }
+
+      S.state = 'error';
+      if (res.status === 404) {
+        S.errorCode = 'not_found';
+        S.errorMessage = data.error || 'This invite link is invalid or has been cancelled.';
+      } else if (res.status === 410) {
+        const msg = (data.error || '').toLowerCase();
+        if (msg.includes('used')) {
+          S.errorCode = 'used';
+          S.errorMessage = 'You already accepted this invitation.';
+        } else if (msg.includes('expired')) {
+          S.errorCode = 'expired';
+          S.errorMessage = 'This invitation has expired.';
+        } else {
+          S.errorCode = 'gone';
+          S.errorMessage = data.error || 'This invitation is no longer valid.';
+        }
+      } else if (res.status === 403) {
+        S.errorCode = 'wrong_user';
+        S.errorMessage = 'This invitation was sent to a different account.';
+      } else {
+        S.errorCode = 'unknown';
+        S.errorMessage = data.error || 'Something went wrong. Please try again.';
+      }
+      render();
+    } catch (err) {
+      S.state = 'error';
+      S.errorCode = 'network';
+      S.errorMessage = "Couldn't reach the server.";
+      render();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════
+
+  function render() {
+    const wrap = $('wrap');
+    if (!wrap) return;
+
+    switch (S.state) {
+      case 'loading':
+        wrap.innerHTML = renderLoading();
+        break;
+      case 'no-token':
+        wrap.innerHTML = renderNoToken();
+        break;
+      case 'guest':
+        wrap.innerHTML = renderGuest();
+        break;
+      case 'ready':
+        wrap.innerHTML = renderReady();
+        break;
+      case 'accepting':
+        wrap.innerHTML = renderAccepting();
+        break;
+      case 'success':
+        wrap.innerHTML = renderSuccess();
+        break;
+      case 'error':
+        wrap.innerHTML = renderError();
+        break;
+      default:
+        wrap.innerHTML = renderLoading();
+    }
+
+    wireButtons();
+  }
+
+  function renderLoading() {
+    return `
+      <div class="icon-wrap">
+        <div class="icon loading">
+          <div class="spinner" style="width:36px;height:36px;border-width:3px;"></div>
+        </div>
+      </div>
+      <div>
+        <h1 class="title">Checking your invitation…</h1>
+        <p class="subtitle">Just a moment while we verify the invite.</p>
+      </div>
+    `;
+  }
+
+  function renderNoToken() {
+    return `
+      <div class="icon-wrap">
+        <div class="icon error">${svg('link', 40, 1.8)}</div>
+      </div>
+      <div>
+        <h1 class="title">Missing invite link</h1>
+        <p class="subtitle">This page needs an invitation link. Check your notifications, or ask the project owner to send a new one.</p>
+      </div>
+      <div class="actions">
+        <a class="btn btn-primary btn-block" href="/projects">
+          ${svg('folder', 15, 2.2)}
+          Go to projects
+        </a>
+        <a class="btn btn-secondary btn-block" href="/">
+          ${svg('code', 15, 2.2)}
+          Open editor
+        </a>
+      </div>
+    `;
+  }
+
+  function renderGuest() {
+    const next = encodeURIComponent(location.pathname + location.search);
+    return `
+      <div class="icon-wrap">
+        <div class="icon">${svg('mail', 40, 1.8)}</div>
+      </div>
+      <div>
+        <h1 class="title">Sign in to accept</h1>
+        <p class="subtitle">You've been invited to collaborate on a project. Sign in or create a free account to accept the invitation.</p>
+      </div>
+      <div class="actions">
+        <a class="btn btn-primary btn-block" href="/register?next=${next}">
+          ${svg('user', 15, 2.2)}
+          Sign in
+        </a>
+        <a class="btn btn-secondary btn-block" href="/register?mode=signup&next=${next}">
+          Create account
+        </a>
+      </div>
+      <p class="footer-note">
+        Signing in as someone else?<br>
+        <a href="/profile" target="_blank" rel="noopener">Sign out first</a> if you're already signed in on another account.
+      </p>
+    `;
+  }
+
+  function renderReady() {
+    return `
+      <div class="icon-wrap">
+        <div class="icon">${svg('mail', 40, 1.8)}</div>
+      </div>
+      <div>
+        <h1 class="title">You've been invited</h1>
+        <p class="subtitle">Accept to join this project as a collaborator.</p>
+      </div>
+      <div class="card">
+        <div class="card-row">
+          <div class="card-row-icon">${svg('user', 13, 2.2)}</div>
+          <div class="card-row-text">
+            Signed in as <strong>${escapeHTML(S.user?.profile?.displayName || S.user?.username || S.user?.email || 'you')}</strong>
+          </div>
+        </div>
+        <div class="card-row">
+          <div class="card-row-icon">${svg('clock', 13, 2.2)}</div>
+          <div class="card-row-text">
+            Invitations expire <strong>7 days</strong> after they're sent.
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary btn-block" id="btnAccept">
+          ${svg('check', 15, 2.4)}
+          Accept invitation
+        </button>
+        <button class="btn btn-ghost btn-block" id="btnDecline">
+          Decline
+        </button>
+      </div>
+      <p class="footer-note">
+        Not the right account?
+        <a href="/profile">Switch account</a>
+      </p>
+    `;
+  }
+
+  function renderAccepting() {
+    return `
+      <div class="icon-wrap">
+        <div class="icon loading">
+          <div class="spinner" style="width:36px;height:36px;border-width:3px;"></div>
+        </div>
+      </div>
+      <div>
+        <h1 class="title">Accepting invitation…</h1>
+        <p class="subtitle">Adding you to the project.</p>
+      </div>
+      <div class="status-pill primary" style="display:inline-flex;margin:0 auto;">
+        <span class="dot"></span>
+        Working
+      </div>
+    `;
+  }
+
+  function renderSuccess() {
+    return `
+      <div class="icon-wrap">
+        <div class="icon success">${svg('checkCircle', 40, 1.8)}</div>
+      </div>
+      <div>
+        <h1 class="title">You're in!</h1>
+        <p class="subtitle">You now have access to this project. Redirecting…</p>
+      </div>
+      <div class="status-pill success" style="display:inline-flex;margin:0 auto;">
+        <span class="dot"></span>
+        Invitation accepted
+      </div>
+      <div class="actions">
+        <a class="btn btn-primary btn-block" href="${S.resolvedPid ? '/project?pid=' + encodeURIComponent(S.resolvedPid) : '/projects'}">
+          ${svg('external', 15, 2.2)}
+          Open project now
+        </a>
+      </div>
+    `;
+  }
+
+  function renderError() {
+    const code = S.errorCode || 'unknown';
+    let icon = 'alert';
+    let iconClass = 'error';
+    let title = 'Something went wrong';
+    let subtitle = S.errorMessage || 'Please try again.';
+    let actions = '';
+    let footer = '';
+
+    switch (code) {
+      case 'not_found':
+        icon = 'alert';
+        title = 'Invitation not found';
+        subtitle = 'This invite link is invalid or has been cancelled. Ask the project owner to send a new invite.';
+        actions = `
+          <a class="btn btn-primary btn-block" href="/projects">
+            ${svg('folder', 15, 2.2)}
+            Go to projects
+          </a>
+        `;
+        break;
+      case 'used':
+        icon = 'checkCircle';
+        iconClass = 'success';
+        title = 'Already accepted';
+        subtitle = "You've already accepted this invitation. The project should appear in your projects list.";
+        actions = `
+          <a class="btn btn-primary btn-block" href="/projects">
+            ${svg('folder', 15, 2.2)}
+            Open projects
+          </a>
+        `;
+        break;
+      case 'expired':
+        icon = 'clock';
+        title = 'Invitation expired';
+        subtitle = 'This invitation was valid for 7 days. Ask the project owner to send a new invite.';
+        actions = `
+          <a class="btn btn-primary btn-block" href="/projects">
+            ${svg('folder', 15, 2.2)}
+            Go to projects
+          </a>
+        `;
+        break;
+      case 'wrong_user':
+        icon = 'alertTriangle';
+        title = 'Wrong account';
+        subtitle = S.errorMessage || 'This invitation was sent to a different account.';
+        actions = `
+          <a class="btn btn-primary btn-block" href="/profile">
+            ${svg('logout', 15, 2.2)}
+            Switch account
+          </a>
+          <a class="btn btn-ghost btn-block" href="/projects">
+            Go to projects
+          </a>
+        `;
+        footer = 'Sign out and sign in with the account that received the invite.';
+        break;
+      case 'network':
+        icon = 'alert';
+        title = "Couldn't reach the server";
+        subtitle = 'Check your connection and try again.';
+        actions = `
+          <button class="btn btn-primary btn-block" id="btnRetry">
+            ${svg('refresh', 15, 2.4)}
+            Retry
+          </button>
+          <a class="btn btn-ghost btn-block" href="/projects">Go to projects</a>
+        `;
+        break;
+      default:
+        actions = `
+          <button class="btn btn-primary btn-block" id="btnRetry">
+            ${svg('refresh', 15, 2.4)}
+            Try again
+          </button>
+          <a class="btn btn-ghost btn-block" href="/projects">Go to projects</a>
+        `;
+    }
+
+    return `
+      <div class="icon-wrap">
+        <div class="icon ${iconClass}">${svg(icon, 40, 1.8)}</div>
+      </div>
+      <div>
+        <h1 class="title">${escapeHTML(title)}</h1>
+        <p class="subtitle">${escapeHTML(subtitle)}</p>
+      </div>
+      <div class="actions">${actions}</div>
+      ${footer ? `<p class="footer-note">${footer}</p>` : ''}
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // WIRE
+  // ═══════════════════════════════════════════════════════════
+
+  function wireButtons() {
+    $('btnAccept')?.addEventListener('click', acceptInvite);
+
+    $('btnDecline')?.addEventListener('click', () => {
+      // Clear token from URL and navigate away
+      window.location.href = '/projects';
+    });
+
+    $('btnRetry')?.addEventListener('click', () => {
+      if (S.token) {
+        S.state = 'ready';
+        S.errorCode = null;
+        S.errorMessage = null;
+        render();
+      } else {
+        window.location.reload();
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BOOT
+  // ═══════════════════════════════════════════════════════════
+
+  async function boot() {
+    // 1. Read token
+    S.token = readTokenFromUrl();
+    if (!S.token) {
+      S.state = 'no-token';
+      render();
+      return;
+    }
+
+    // 2. Read + verify session
+    readSession();
+    await verifySession();
+
+    // 3. Not authed → guest prompt
+    if (!S.isAuthed) {
+      S.state = 'guest';
+      render();
+      return;
+    }
+
+    // 4. Authed → ready to accept
+    S.state = 'ready';
+    render();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+})();
+</script>
+
+</body>
+</html>

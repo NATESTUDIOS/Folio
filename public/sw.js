@@ -2,22 +2,26 @@
 // Folio — Service Worker
 // ============================================================
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
+const CACHE_BUILT_AT = Date.now();
 
-// Cross-origin hosts we want to allow through the fetch handler
-// so we can cache them for offline use.
+// Cross-origin hosts we allow through the fetch handler so we can
+// cache them for offline use.
 const CDN_HOSTS = new Set([
   'deno.land',
   'esm.sh',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
 ]);
 
 // ── Pre-cache list ──────────────────────────────────────────
-// Same-origin assets + the CodeMirror ESM bundle from deno.land.
+// Same-origin assets + CodeMirror ESM bundle from deno.land.
 const CACHED_FILES = [
   // ── HTML pages ──────────────────────────────────────────
   '/',
   '/index.html',
+  '/app.css',
   '/register.html',
   '/profile.html',
   '/project.html',
@@ -30,7 +34,6 @@ const CACHED_FILES = [
   '/manifest.json',
 
   // ── Icons ───────────────────────────────────────────────
-  '/icon.jpg',
   '/icons/icon-144.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -64,13 +67,16 @@ const CACHED_FILES = [
 const SHELL_ROUTES = new Set([
   '/',
   '/index.html',
-  '/app',
 ]);
 
 // ── Bypass rules ────────────────────────────────────────────
 // Anything we should NEVER intercept.
 function shouldBypass(url, request) {
   if (request.method !== 'GET') return true;
+
+  // Range requests (media, resumable downloads) — must go straight
+  // to network, caching byte-range slices breaks the semantics.
+  if (request.headers.get('range')) return true;
 
   // Cross-origin: only allow through the CDN hosts we explicitly
   // want to cache. All other cross-origin requests pass through.
@@ -86,37 +92,59 @@ function shouldBypass(url, request) {
   if (url.pathname.includes('firebase-messaging-sw.js')) return true;
   if (url.pathname.includes('/__/firebase/')) return true;
 
+  // Chrome extension internals (shouldn't happen, but be safe)
+  if (url.protocol === 'chrome-extension:') return true;
+
   return false;
 }
 
 // ═══════════════════════════════════════════════════════════
-// Install: pre-cache, tolerate failures, take over
+// Install
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('install', (event) => {
   console.log(`[Folio SW] installing ${CACHE_VERSION}`);
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
+
+    // Try bulk add first — fast path
+    let bulkOk = false;
+    try {
+      // Skip cross-origin in bulk (some browsers complain on opaque responses)
+      const sameOrigin = CACHED_FILES.filter(f => f.startsWith('/'));
+      await cache.addAll(sameOrigin);
+      bulkOk = true;
+    } catch (err) {
+      console.warn('[Folio SW] bulk addAll failed, falling back to per-file', err);
+    }
+
+    // Per-file fetch for whatever remains (and all cross-origin)
+    let fetched = 0, missed = 0;
     await Promise.allSettled(
       CACHED_FILES.map(async (url) => {
         try {
+          if (await cache.match(url)) { fetched++; return; }
           const res = await fetch(url, { cache: 'no-store' });
           if (res.ok) {
             await cache.put(url, res);
+            fetched++;
           } else {
             console.warn(`[Folio SW] skip ${url} (${res.status})`);
+            missed++;
           }
         } catch (err) {
           console.warn(`[Folio SW] miss ${url}`, err);
+          missed++;
         }
       })
     );
+
+    console.log(`[Folio SW] install complete — bulk=${bulkOk} fetched=${fetched} missed=${missed}`);
     await self.skipWaiting();
-    console.log(`[Folio SW] install complete`);
   })());
 });
 
 // ═══════════════════════════════════════════════════════════
-// Activate: drop old caches, claim clients, announce
+// Activate
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('activate', (event) => {
   console.log(`[Folio SW] activating ${CACHE_VERSION}`);
@@ -132,6 +160,7 @@ self.addEventListener('activate', (event) => {
     clients.forEach(c => c.postMessage({
       type: 'SW_ACTIVATED',
       version: CACHE_VERSION,
+      builtAt: CACHE_BUILT_AT,
       timestamp: Date.now(),
     }));
 
@@ -140,7 +169,7 @@ self.addEventListener('activate', (event) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Fetch: split strategy
+// Fetch
 //  - Shell routes         → cache-first
 //  - Other navigations    → network-first → cache → offline.html
 //  - Static assets        → stale-while-revalidate
@@ -153,7 +182,6 @@ self.addEventListener('fetch', (event) => {
 
   if (shouldBypass(url, req)) return;
 
-  // Navigation requests
   const isNav = req.mode === 'navigate' ||
     (req.headers.get('accept') || '').includes('text/html');
 
@@ -167,15 +195,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Everything else (same-origin assets + CDN modules) →
-  // stale-while-revalidate
   event.respondWith(staleWhileRevalidate(req));
 });
 
 async function cacheFirstShell(req) {
-  const cached = await caches.match(req, { ignoreSearch: true })
-              || await caches.match('/')
-              || await caches.match('/index.html');
+  // Try exact, then origin root, then index.html
+  let cached =
+    await caches.match(req, { ignoreSearch: true }) ||
+    await caches.match('/') ||
+    await caches.match('/index.html');
 
   // Fire-and-forget refresh
   fetch(req).then(res => {
@@ -184,20 +212,28 @@ async function cacheFirstShell(req) {
     }
   }).catch(() => {});
 
-  return cached || fetch(req).catch(() => offlinePage());
+  if (cached) return cached;
+
+  try {
+    return await fetch(req);
+  } catch {
+    return offlinePage(req);
+  }
 }
 
 async function networkFirstNav(req) {
   try {
     const res = await fetch(req);
-    if (res && res.ok) {
+    // Only cache successful HTML responses
+    if (res && res.ok && (res.headers.get('content-type') || '').includes('text/html')) {
       const copy = res.clone();
       caches.open(CACHE_NAME).then(c => c.put(req, copy)).catch(() => {});
     }
     return res;
   } catch {
     const cached = await caches.match(req, { ignoreSearch: true });
-    return cached || await caches.match('/offline.html') || offlinePage();
+    if (cached) return cached;
+    return offlinePage(req);
   }
 }
 
@@ -206,7 +242,6 @@ async function staleWhileRevalidate(req) {
   const cached = await cache.match(req, { ignoreSearch: true });
 
   const network = fetch(req).then(res => {
-    // Only cache ok responses from allowed origins
     if (res && res.ok) {
       try {
         const url = new URL(req.url);
@@ -219,19 +254,60 @@ async function staleWhileRevalidate(req) {
     return res;
   }).catch(() => null);
 
-  // Cache-first if we have it, otherwise wait for network, otherwise 404
-  return cached || await network || new Response('', { status: 404 });
+  if (cached) return cached;
+
+  const net = await network;
+  if (net) return net;
+
+  // No cache, no network
+  const accept = req.headers.get('accept') || '';
+  if (accept.includes('text/html')) return offlinePage(req);
+  return new Response('', { status: 404, statusText: 'Offline' });
 }
 
-function offlinePage() {
-  return caches.match('/offline.html').then(r => r || new Response(
-    '<!doctype html><meta charset=utf-8><title>Offline</title>' +
-    '<style>body{background:#0a0c10;color:#e8ecf1;font-family:system-ui,sans-serif;' +
-    'display:grid;place-items:center;height:100vh;margin:0;text-align:center;padding:24px}' +
-    'h1{font-size:20px;margin:0 0 6px}p{color:#a8b0bc;font-size:14px;margin:0}</style>' +
-    '<div><h1>Offline</h1><p>Reconnect to continue.</p></div>',
+// Build the offline URL with ?from= so Retry returns the right page.
+function offlineUrlFor(req) {
+  try {
+    const u = new URL(req.url);
+    const from = u.pathname + u.search;
+    return '/offline.html?from=' + encodeURIComponent(from);
+  } catch {
+    return '/offline.html';
+  }
+}
+
+async function offlinePage(req) {
+  // Try to serve the shell offline.html first (with ?from=)
+  const withFrom = req ? offlineUrlFor(req) : '/offline.html';
+  const cachedWithFrom = await caches.match(withFrom, { ignoreSearch: true });
+  if (cachedWithFrom) return cachedWithFrom;
+
+  const cachedPlain = await caches.match('/offline.html');
+  if (cachedPlain) return cachedPlain;
+
+  // Last-resort inline fallback (offline.html not yet cached)
+  return new Response(
+    '<!doctype html><meta charset=utf-8><title>Offline — Folio</title>' +
+    '<meta name="theme-color" content="#0a0c10">' +
+    '<style>' +
+    ':root{color-scheme:dark}' +
+    'body{background:#0a0c10;color:#e8ecf1;font-family:system-ui,-apple-system,sans-serif;' +
+    'display:grid;place-items:center;min-height:100vh;margin:0;text-align:center;padding:24px;' +
+    'line-height:1.5}' +
+    'h1{font-size:20px;margin:0 0 8px;font-weight:800;letter-spacing:-0.3px}' +
+    'p{color:#a8b0bc;font-size:14px;margin:0 0 16px;max-width:320px}' +
+    'a{color:#F59E0B;font-weight:700;text-decoration:none}' +
+    'button{background:#F59E0B;color:#0a0c10;border:none;padding:10px 18px;border-radius:9px;' +
+    'font-weight:700;font-size:13px;cursor:pointer;margin-top:8px}' +
+    '</style>' +
+    '<div>' +
+    '<h1>You\'re offline</h1>' +
+    '<p>Folio can\'t reach the network right now. Local projects still work.</p>' +
+    '<button onclick="location.reload()">Retry</button>' +
+    '<p style="margin-top:16px;font-size:11px;color:#666"><a href="/">Try the editor</a></p>' +
+    '</div>',
     { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-  ));
+  );
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -249,7 +325,11 @@ self.addEventListener('message', (event) => {
       break;
 
     case 'GET_VERSION':
-      event.ports?.[0]?.postMessage({ version: CACHE_VERSION, cache: CACHE_NAME });
+      event.ports?.[0]?.postMessage({
+        version: CACHE_VERSION,
+        cache: CACHE_NAME,
+        builtAt: CACHE_BUILT_AT,
+      });
       break;
 
     case 'CLEAR_CACHE':
@@ -257,20 +337,73 @@ self.addEventListener('message', (event) => {
         caches.keys()
           .then(keys => Promise.all(keys.map(k => caches.delete(k))))
           .then(() => event.ports?.[0]?.postMessage({ ok: true }))
+          .catch(() => event.ports?.[0]?.postMessage({ ok: false }))
       );
+      break;
+
+    case 'CHECK_QUEUE':
+      event.waitUntil((async () => {
+        let count = 0;
+        try {
+          const req = indexedDB.open('folio', 2);
+          const conn = await new Promise((res, rej) => {
+            req.onsuccess = () => res(req.result);
+            req.onerror = () => rej(req.error);
+          });
+          if (conn.objectStoreNames.contains('syncQueue')) {
+            const all = await new Promise((res) => {
+              const t = conn.transaction('syncQueue', 'readonly').objectStore('syncQueue');
+              const r = t.getAll();
+              r.onsuccess = () => res(r.result || []);
+              r.onerror = () => res([]);
+            });
+            count = all.length;
+          }
+          conn.close();
+        } catch {}
+        event.ports?.[0]?.postMessage({ count });
+      })());
       break;
   }
 });
 
 // ═══════════════════════════════════════════════════════════
-// Push + notification click — Phase 4 stubs
+// Push + notification click
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('push', (event) => {
-  console.debug('[Folio SW] push received (not yet handled)');
+  let payload = null;
+  try { payload = event.data?.json?.(); } catch {}
+  if (!payload) {
+    console.debug('[Folio SW] push received (no payload)');
+    return;
+  }
+  const title = payload.title || 'Folio';
+  const options = {
+    body: payload.body || '',
+    icon: payload.icon || '/icons/icon-192.png',
+    badge: payload.badge || '/icons/icon-144.png',
+    data: { url: payload.url || '/' },
+    tag: payload.tag || 'folio',
+    renotify: false,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const target = event.notification.data?.url || '/';
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of clients) {
+      try {
+        if (new URL(c.url).pathname === new URL(target, self.location.origin).pathname) {
+          c.focus();
+          return;
+        }
+      } catch {}
+    }
+    self.clients.openWindow(target);
+  })());
 });
 
 self.addEventListener('messageerror', () => {});

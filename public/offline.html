@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Folio — Offline</title>
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --theme-primary: #F59E0B;
+  --theme-primary-hover: #fbbf24;
+  --theme-primary-glow: rgba(245, 158, 11, 0.40);
+  --theme-primary-soft: rgba(245, 158, 11, 0.14);
+
+  --theme-bg: #0a0c10;
+  --theme-surface: #0f1218;
+  --theme-surface-card: rgba(21, 25, 34, 0.72);
+  --theme-surface-card-solid: #151922;
+  --theme-surface-elevated: #1a1f2a;
+  --theme-text: #e8ecf1;
+  --theme-text-secondary: rgba(232, 236, 241, 0.72);
+  --theme-text-tertiary: rgba(232, 236, 241, 0.44);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.05);
+  --theme-glass-border: rgba(255, 255, 255, 0.09);
+  --theme-overlay: rgba(10, 12, 16, 0.85);
+  --theme-card-border: rgba(255, 255, 255, 0.08);
+  --theme-divider: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(26, 31, 42, 0.88);
+
+  --theme-success: #10B981;
+  --theme-success-soft: rgba(16, 185, 129, 0.14);
+  --theme-danger: #EF4444;
+  --theme-danger-soft: rgba(239, 68, 68, 0.12);
+  --theme-warning: #D97706;
+  --theme-warning-soft: rgba(217, 119, 6, 0.14);
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.10) 0%, transparent 55%);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --rail-w: 60px;
+
+  --r-xs: 6px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', Consolas, Monaco, monospace;
+}
+
+[data-theme="light"] {
+  --theme-primary: #D97706;
+  --theme-primary-hover: #B45309;
+  --theme-primary-glow: rgba(217, 119, 6, 0.28);
+  --theme-primary-soft: rgba(217, 119, 6, 0.10);
+  --theme-bg: #f7f8fa;
+  --theme-surface: #ffffff;
+  --theme-surface-card: rgba(255, 255, 255, 0.85);
+  --theme-surface-card-solid: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-text: #121316;
+  --theme-text-secondary: rgba(18, 19, 22, 0.72);
+  --theme-text-tertiary: rgba(18, 19, 22, 0.48);
+  --theme-glass-bg: rgba(255, 255, 255, 0.75);
+  --theme-glass-border: rgba(0, 0, 0, 0.08);
+  --theme-overlay: rgba(18, 19, 22, 0.55);
+  --theme-card-border: rgba(0, 0, 0, 0.07);
+  --theme-divider: rgba(0, 0, 0, 0.06);
+  --input-bg: #ffffff;
+  --theme-success: #059669;
+  --theme-success-soft: rgba(5, 150, 105, 0.12);
+  --theme-danger: #DC2626;
+  --theme-danger-soft: rgba(220, 38, 38, 0.10);
+  --theme-warning: #B45309;
+  --theme-warning-soft: rgba(180, 83, 9, 0.10);
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(217, 119, 6, 0.08) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
+}
+
+@media (max-width: 639px) {
+  :root { --rail-w: 0px; }
+  html, body { font-size: 12px; }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  :root { --rail-w: 52px; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  background: var(--theme-bg);
+  font-family: var(--font);
+  color: var(--theme-text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
+  background-attachment: fixed;
+  overflow: hidden;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border: none; background: none; padding: 0; }
+a { color: var(--theme-primary); text-decoration: none; }
+svg { display: block; }
+.hidden { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SHELL
+   ═══════════════════════════════════════════════════════════ */
+.app {
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-rows: 1fr;
+  grid-template-areas: "rail body";
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+@media (max-width: 1023px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "body";
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RAIL
+   ═══════════════════════════════════════════════════════════ */
+.rail {
+  grid-area: rail;
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-glass-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(16px + var(--safe-top)) 0 calc(16px + var(--safe-bottom));
+  min-height: 0;
+}
+@media (max-width: 1023px) { .rail { display: none; } }
+
+.rail-top, .rail-bottom { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+.rail-logo {
+  width: 40px; height: 40px; border-radius: 11px; overflow: hidden;
+  margin-bottom: 16px; background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--theme-primary);
+}
+.rail-logo img { width: 100%; height: 100%; object-fit: cover; }
+.rail-logo svg { width: 20px; height: 20px; stroke-width: 2; }
+
+.rail-btn {
+  width: 40px; height: 40px; border-radius: 11px;
+  color: var(--theme-text-tertiary);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s var(--ease); position: relative;
+  text-decoration: none;
+}
+.rail-btn svg { width: 20px; height: 20px; stroke-width: 2; stroke: currentColor; fill: none; }
+.rail-btn:hover { color: var(--theme-text-secondary); background: var(--theme-glass-bg); }
+.rail-divider { width: 24px; height: 1px; background: var(--theme-divider); margin: 6px 0; }
+
+/* ═══════════════════════════════════════════════════════════
+   BODY
+   ═══════════════════════════════════════════════════════════ */
+.body {
+  grid-area: body;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(24px + var(--safe-top)) 16px calc(24px + var(--safe-bottom));
+  min-height: 0;
+  min-width: 0;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   OFFLINE ICON
+   ═══════════════════════════════════════════════════════════ */
+.offline-icon-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+.offline-icon {
+  width: 88px; height: 88px;
+  border-radius: 22px;
+  background: var(--theme-surface-card);
+  border: 1px solid var(--theme-card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+.offline-icon::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 28px;
+  background: var(--theme-primary-soft);
+  opacity: 0.4;
+  z-index: -1;
+  animation: pulse-soft 3s ease-in-out infinite;
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.3; transform: scale(0.98); }
+  50% { opacity: 0.5; transform: scale(1.03); }
+}
+.offline-icon svg { width: 40px; height: 40px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+.offline-icon.online {
+  color: var(--theme-success);
+}
+.offline-icon.online::before {
+  background: var(--theme-success-soft);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TITLES
+   ═══════════════════════════════════════════════════════════ */
+.title-block {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--theme-text);
+  line-height: 1.2;
+}
+.subtitle {
+  font-size: 13.5px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  max-width: 340px;
+  margin: 0 auto;
+}
+
+/* Status dot */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  margin: 4px auto 0;
+  transition: all 0.2s var(--ease);
+}
+.status-pill .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--theme-text-tertiary);
+  transition: background 0.2s var(--ease);
+}
+.status-pill.online {
+  color: var(--theme-success);
+  border-color: var(--theme-success-soft);
+  background: var(--theme-success-soft);
+}
+.status-pill.online .dot {
+  background: var(--theme-success);
+  box-shadow: 0 0 0 3px var(--theme-success-soft);
+}
+.status-pill.offline {
+  color: var(--theme-warning);
+  border-color: rgba(217, 119, 6, 0.3);
+  background: var(--theme-warning-soft);
+}
+.status-pill.offline .dot { background: var(--theme-warning); }
+
+/* ═══════════════════════════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════════════════════════ */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.actions-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px 18px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  transition: all 0.15s var(--ease);
+  white-space: nowrap;
+  min-height: 44px;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary { background: var(--theme-primary); color: #0a0c10; }
+[data-theme="light"] .btn-primary { color: #ffffff; }
+.btn-primary:hover:not(:disabled) { background: var(--theme-primary-hover); }
+
+.btn-secondary { background: var(--theme-glass-bg); color: var(--theme-text); border-color: var(--theme-card-border); }
+.btn-secondary:hover:not(:disabled) { background: var(--theme-surface-elevated); border-color: var(--theme-primary-glow); }
+
+.btn-ghost { background: transparent; color: var(--theme-text-secondary); border-color: transparent; }
+.btn-ghost:hover:not(:disabled) { color: var(--theme-text); background: var(--theme-glass-bg); }
+
+.btn-block { width: 100%; }
+
+/* ═══════════════════════════════════════════════════════════
+   INFO CARD
+   ═══════════════════════════════════════════════════════════ */
+.card {
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.card-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--theme-divider);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--theme-text);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.card-title svg { width: 14px; height: 14px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; }
+.card-badge {
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--theme-glass-bg);
+  color: var(--theme-text-tertiary);
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.card-badge.warn {
+  background: var(--theme-warning-soft);
+  color: var(--theme-warning);
+}
+
+.card-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.info-row-icon {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  background: var(--theme-glass-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.info-row-icon svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.info-row-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+}
+.info-row-text strong {
+  color: var(--theme-text);
+  font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   QUEUE ITEMS
+   ═══════════════════════════════════════════════════════════ */
+.queue-empty {
+  font-size: 11.5px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.5;
+  text-align: center;
+  padding: 4px 0;
+}
+.queue-hint {
+  font-size: 10.5px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.4;
+  margin-top: -2px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════════════════════ */
+.footer-note {
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.footer-note a {
+  color: var(--theme-primary);
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOASTS
+   ═══════════════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: calc(16px + var(--safe-bottom));
+  left: 50%; transform: translateX(-50%);
+  z-index: 1000;
+  width: 92%; max-width: 380px;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+@media (min-width: 1024px) {
+  .toast-container { left: auto; right: 20px; transform: none; bottom: 20px; }
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text);
+  transform: translateY(20px);
+  opacity: 0;
+  transition: all 0.3s var(--ease-spring);
+  pointer-events: all;
+  overflow-wrap: break-word;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast svg { width: 15px; height: 15px; flex-shrink: 0; }
+.toast.success svg { stroke: var(--theme-success); }
+.toast.error svg { stroke: var(--theme-danger); }
+.toast.info svg { stroke: var(--theme-primary); }
+.toast.warning svg { stroke: var(--theme-warning); }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- RAIL -->
+  <aside class="rail" aria-label="Main navigation">
+    <div class="rail-top">
+      <a class="rail-logo" href="/" aria-label="Folio">
+        <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
+      </a>
+      <a class="rail-btn" href="/" aria-label="Editor">
+        <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </a>
+      <a class="rail-btn" href="/projects" aria-label="Projects">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </a>
+      <a class="rail-btn" href="/tools" aria-label="Tools">
+        <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      </a>
+      <a class="rail-btn" href="/analytics" aria-label="Analytics">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+      </a>
+      <a class="rail-btn" href="/settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </a>
+    </div>
+    <div class="rail-bottom">
+      <div class="rail-divider"></div>
+      <a class="rail-btn" href="/profile" aria-label="Profile">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </a>
+    </div>
+  </aside>
+
+  <!-- BODY -->
+  <main class="body">
+    <div class="wrap">
+
+      <!-- Icon -->
+      <div class="offline-icon-wrap">
+        <div class="offline-icon" id="offlineIcon">
+          <svg viewBox="0 0 24 24" id="offlineIconSvg">
+            <line x1="1" y1="1" x2="23" y2="23"/>
+            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+            <path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+            <line x1="12" y1="20" x2="12.01" y2="20"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Title + subtitle -->
+      <div class="title-block">
+        <h1 class="title" id="pageTitle">You're offline</h1>
+        <p class="subtitle" id="pageSubtitle">Folio can't reach the network right now. Local projects, cached files, and the editor still work.</p>
+        <div class="status-pill offline" id="statusPill">
+          <span class="dot"></span>
+          <span id="statusText">No connection</span>
+        </div>
+      </div>
+
+      <!-- Primary action -->
+      <div class="actions">
+        <button class="btn btn-primary btn-block" id="retryBtn">
+          <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <span id="retryLabel">Retry</span>
+        </button>
+        <div class="actions-row">
+          <a class="btn btn-secondary" href="/">
+            <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            Open editor
+          </a>
+          <a class="btn btn-secondary" href="/projects">
+            <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            Projects
+          </a>
+        </div>
+      </div>
+
+      <!-- What still works -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            Still available offline
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="info-row">
+            <div class="info-row-icon">
+              <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            </div>
+            <div class="info-row-text"><strong>Local projects</strong> — projects saved to this device open and edit normally.</div>
+          </div>
+          <div class="info-row">
+            <div class="info-row-icon">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div class="info-row-text"><strong>Cached files</strong> — files already loaded once are available from IndexedDB.</div>
+          </div>
+          <div class="info-row">
+            <div class="info-row-icon">
+              <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            </div>
+            <div class="info-row-text"><strong>The editor</strong> — syntax highlighting, search, and save all work without internet.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Queued changes -->
+      <div class="card" id="queueCard" style="display:none;">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Pending changes
+          </div>
+          <span class="card-badge warn" id="queueBadge">0</span>
+        </div>
+        <div class="card-body" style="gap:8px;">
+          <div class="info-row-text" id="queueText">You have unsaved changes waiting to sync. They'll go out automatically when you're back online.</div>
+          <button class="btn btn-secondary btn-block" id="drainQueueBtn" disabled>
+            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Sync when online
+          </button>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <p class="footer-note">
+        Troubleshooting? Check your Wi-Fi or mobile data, then tap Retry.
+        <br>If the problem persists, <a href="/register">sign in</a> from a connected device or restart Folio.
+      </p>
+    </div>
+  </main>
+</div>
+
+<!-- Toasts -->
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  const DB_NAME = 'folio';
+  const DB_VERSION = 2;
+
+  const $ = id => document.getElementById(id);
+  const escapeHTML = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // ═══════════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════════
+
+  const S = {
+    online: navigator.onLine,
+    queueCount: 0,
+    retrying: false,
+    returnUrl: null,
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // SVG (inline)
+  // ═══════════════════════════════════════════════════════════
+
+  const ICONS = {
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    wifi: '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>',
+  };
+
+  function icon(name, size = 15, sw = 2.4) {
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TOAST
+  // ═══════════════════════════════════════════════════════════
+
+  function toast(msg, type = 'info', duration = 2400) {
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    const iconName = type === 'success' ? 'check' : type === 'error' ? 'alert' : type === 'warning' ? 'alert' : 'info';
+    el.innerHTML = icon(iconName, 15, 2.4) + '<span></span>';
+    el.querySelector('span').textContent = msg;
+    $('toastContainer').appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // IDB — read sync queue
+  // ═══════════════════════════════════════════════════════════
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => resolve(req.result);
+      req.onupgradeneeded = () => { /* project.html/index.html create the stores */ };
+    });
+  }
+
+  async function readSyncQueue() {
+    try {
+      const conn = await openDB();
+      if (!conn.objectStoreNames.contains('syncQueue')) { conn.close(); return []; }
+      return new Promise((resolve) => {
+        try {
+          const tx = conn.transaction('syncQueue', 'readonly').objectStore('syncQueue');
+          const all = tx.getAll();
+          all.onsuccess = () => { conn.close(); resolve(all.result || []); };
+          all.onerror = () => { conn.close(); resolve([]); };
+        } catch { conn.close(); resolve([]); }
+      });
+    } catch { return []; }
+  }
+
+  async function clearSyncQueue() {
+    try {
+      const conn = await openDB();
+      if (!conn.objectStoreNames.contains('syncQueue')) { conn.close(); return; }
+      return new Promise((resolve) => {
+        try {
+          const tx = conn.transaction('syncQueue', 'readwrite');
+          tx.objectStore('syncQueue').clear();
+          tx.oncomplete = () => { conn.close(); resolve(); };
+          tx.onerror = () => { conn.close(); resolve(); };
+        } catch { conn.close(); resolve(); }
+      });
+    } catch {}
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RETURN URL — remember where the user was before hitting offline.html
+  // ═══════════════════════════════════════════════════════════
+
+  function resolveReturnUrl() {
+    // 1. ?from=...  (SW can pass this)
+    try {
+      const from = new URLSearchParams(location.search).get('from');
+      if (from && from.startsWith('/')) return from;
+    } catch {}
+
+    // 2. sessionStorage (set by app shell when navigating)
+    try {
+      const stored = sessionStorage.getItem('folio.offlineReturn');
+      if (stored && stored.startsWith('/')) return stored;
+    } catch {}
+
+    // 3. Document referrer
+    try {
+      if (document.referrer) {
+        const ref = new URL(document.referrer);
+        if (ref.origin === location.origin) {
+          return ref.pathname + ref.search + ref.hash;
+        }
+      }
+    } catch {}
+
+    // 4. Fallback
+    return '/';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER STATE
+  // ═══════════════════════════════════════════════════════════
+
+  function applyConnectionState() {
+    const isOnline = navigator.onLine;
+    const changed = isOnline !== S.online;
+    S.online = isOnline;
+
+    const iconEl = $('offlineIcon');
+    const svgEl = $('offlineIconSvg');
+    const title = $('pageTitle');
+    const subtitle = $('pageSubtitle');
+    const pill = $('statusPill');
+    const statusText = $('statusText');
+    const retryLabel = $('retryLabel');
+    const drainBtn = $('drainQueueBtn');
+
+    if (isOnline) {
+      if (iconEl) iconEl.classList.add('online');
+      if (svgEl) {
+        svgEl.innerHTML = `
+          <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+          <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+          <line x1="12" y1="20" x2="12.01" y2="20"/>
+        `;
+      }
+      if (title) title.textContent = "You're back online";
+      if (subtitle) subtitle.textContent = 'Connection restored. Reload to continue what you were doing.';
+      if (pill) { pill.classList.remove('offline'); pill.classList.add('online'); }
+      if (statusText) statusText.textContent = 'Connected';
+      if (retryLabel) retryLabel.textContent = 'Reload';
+      if (drainBtn) drainBtn.disabled = S.queueCount === 0;
+
+      if (changed) toast('Connection restored', 'success', 2000);
+    } else {
+      if (iconEl) iconEl.classList.remove('online');
+      if (svgEl) {
+        svgEl.innerHTML = `
+          <line x1="1" y1="1" x2="23" y2="23"/>
+          <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+          <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+          <path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+          <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+          <line x1="12" y1="20" x2="12.01" y2="20"/>
+        `;
+      }
+      if (title) title.textContent = "You're offline";
+      if (subtitle) subtitle.textContent = "Folio can't reach the network right now. Local projects, cached files, and the editor still work.";
+      if (pill) { pill.classList.remove('online'); pill.classList.add('offline'); }
+      if (statusText) statusText.textContent = 'No connection';
+      if (retryLabel) retryLabel.textContent = 'Retry';
+      if (drainBtn) drainBtn.disabled = true;
+
+      if (changed) toast('Connection lost', 'warning', 2000);
+    }
+  }
+
+  async function refreshQueue() {
+    const items = await readSyncQueue();
+    S.queueCount = items.length;
+
+    const card = $('queueCard');
+    const badge = $('queueBadge');
+    const text = $('queueText');
+    const drainBtn = $('drainQueueBtn');
+
+    if (!card) return;
+
+    if (items.length === 0) {
+      card.style.display = 'none';
+      return;
+    }
+
+    card.style.display = '';
+    if (badge) badge.textContent = String(items.length);
+    if (text) {
+      const n = items.length;
+      text.textContent = `${n} pending change${n === 1 ? '' : 's'} waiting to sync. ${S.online ? 'Tap Sync to send now.' : "They'll go out automatically when you're back online."}`;
+    }
+    if (drainBtn) drainBtn.disabled = !S.online;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ACTIONS
+  // ═══════════════════════════════════════════════════════════
+
+  function handleRetry() {
+    if (S.retrying) return;
+    S.retrying = true;
+    const btn = $('retryBtn');
+    if (btn) btn.disabled = true;
+
+    if (!navigator.onLine) {
+      toast('Still offline — try again in a moment', 'warning', 2200);
+      setTimeout(() => {
+        S.retrying = false;
+        if (btn) btn.disabled = false;
+      }, 900);
+      return;
+    }
+
+    // Prefer returning the user to where they were
+    const returnUrl = S.returnUrl || resolveReturnUrl();
+
+    // Test that we can actually reach the network
+    fetch(location.origin + '/manifest.json', { method: 'HEAD', cache: 'no-store' })
+      .then(() => {
+        toast('Connected — reloading', 'success', 1200);
+        setTimeout(() => { window.location.href = returnUrl; }, 400);
+      })
+      .catch(() => {
+        // Connection looks up but network might not actually be reachable
+        toast('Connection unstable — reloading anyway', 'warning', 1800);
+        setTimeout(() => { window.location.href = returnUrl; }, 500);
+      });
+  }
+
+  async function handleDrainQueue() {
+    if (!S.online) { toast('Still offline', 'warning'); return; }
+    if (S.queueCount === 0) { toast('Nothing to sync', 'info', 1500); return; }
+
+    const btn = $('drainQueueBtn');
+    if (btn) btn.disabled = true;
+
+    // Hand off to the editor which owns the sync logic
+    try {
+      sessionStorage.setItem('folio.pendingSyncDrain', 'true');
+    } catch {}
+
+    toast('Opening editor to sync changes…', 'info', 1800);
+    setTimeout(() => { window.location.href = '/'; }, 800);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // WIRING
+  // ═══════════════════════════════════════════════════════════
+
+  function wire() {
+    $('retryBtn')?.addEventListener('click', handleRetry);
+    $('drainQueueBtn')?.addEventListener('click', handleDrainQueue);
+
+    window.addEventListener('online', () => {
+      applyConnectionState();
+      refreshQueue();
+    });
+    window.addEventListener('offline', () => {
+      applyConnectionState();
+      refreshQueue();
+    });
+
+    // Check if we can actually reach the network when the page loads.
+    // navigator.onLine can say true while the network is unusable.
+    if (navigator.onLine) {
+      fetch(location.origin + '/manifest.json', { method: 'HEAD', cache: 'no-store' })
+        .then(() => { applyConnectionState(); })
+        .catch(() => { applyConnectionState(); });
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BOOT
+  // ═══════════════════════════════════════════════════════════
+
+  function boot() {
+    // Resolve return URL once
+    S.returnUrl = resolveReturnUrl();
+
+    // Initial state
+    applyConnectionState();
+    refreshQueue();
+    wire();
+
+    // Refresh queue periodically while page is open
+    setInterval(() => {
+      refreshQueue().catch(() => {});
+    }, 15000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+})();
+</script>
+
+</body>
+</html>

@@ -1454,7 +1454,7 @@ svg { display: block; }
       <a class="rail-logo" href="/" aria-label="Folio">
         <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
       </a>
-      <a class="rail-item" href="/index.html" aria-label="Editor">
+      <a class="rail-item" href="/" aria-label="Editor">
         <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
       </a>
       <a class="rail-item active" href="/projects.html" aria-label="Projects">
@@ -1582,6 +1582,7 @@ svg { display: block; }
     lastTab: 'folio.project.lastTab', rememberTab: 'folio.project.rememberTab',
     cache: 'folio.project.cache', theme: 'folio.theme',
     expanded: 'folio.project.expanded',
+    lastProject: 'folio.lastProject',
   };
 
   const DB_NAME = 'folio';
@@ -1638,6 +1639,7 @@ svg { display: block; }
     code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
     expand: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>',
     collapse: '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>',
+    chevronRight: '<polyline points="9 18 15 12 9 6"/>',
   };
 
   function svg(name, size = 14, sw = 2.2) {
@@ -1645,7 +1647,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SHARED IDB
+  // IDB
   // ═══════════════════════════════════════════════════════════
 
   let dbConn = null;
@@ -1699,6 +1701,7 @@ svg { display: block; }
     return {
       pid: p.pid, name: p.name || 'Untitled project', slug: p.slug || '',
       description: p.description || '', iconUrl: p.iconUrl || null,
+      primaryFile: p.primaryFile || null,
       createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
       updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
       _server: true,
@@ -1773,6 +1776,9 @@ svg { display: block; }
     if (['png','jpg','jpeg','gif','svg','webp'].includes(ext)) return 'image';
     return 'file';
   }
+  function isTextFile(path) {
+    return /\.(html?|css|js|mjs|cjs|jsx|tsx?|py|json|md|txt|ya?ml|svg|xml)$/i.test(path);
+  }
 
   function toast(msg, type = 'info', duration = 2500) {
     const container = $('toastContainer');
@@ -1790,6 +1796,10 @@ svg { display: block; }
     $('loadingTitle').textContent = title;
     $('loadingDesc').textContent = desc;
     $('loadingOverlay').classList.add('active');
+  }
+  function setLoadingDesc(desc) {
+    const el = $('loadingDesc');
+    if (el) el.textContent = desc || '';
   }
   function hideLoading() { $('loadingOverlay').classList.remove('active'); }
 
@@ -1858,7 +1868,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // CACHE (offline fallback)
+  // CACHE
   // ═══════════════════════════════════════════════════════════
 
   function cacheProject(project) {
@@ -1909,7 +1919,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // MODE BANNER (local project / offline)
+  // MODE BANNER
   // ═══════════════════════════════════════════════════════════
 
   function updateModeBanner() {
@@ -1921,11 +1931,11 @@ svg { display: block; }
     if (S.isLocalOnly) {
       banner.hidden = false;
       banner.classList.add('visible');
-      text.textContent = 'Local project — files live only on this device. Sign in to sync to your Folio account.';
-      action.textContent = 'Sync';
-      action.onclick = () => {
-        window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
-      };
+      text.textContent = S.session
+        ? 'Local project — files live only on this device. Sync to your account to unlock deploys, analytics, and sharing.'
+        : 'Local project — files live only on this device. Sign in to sync and unlock deploys.';
+      action.textContent = S.session ? 'Sync now' : 'Sign in';
+      action.onclick = () => promoteLocalProject();
     } else if (!S.online) {
       banner.hidden = false;
       banner.classList.add('visible');
@@ -1971,7 +1981,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ICON PICKER (Wave 3)
+  // ICON PICKER
   // ═══════════════════════════════════════════════════════════
 
   async function openIconPicker() {
@@ -2047,7 +2057,6 @@ svg { display: block; }
       ` : ''}
     `);
 
-    // Tabs
     document.querySelectorAll('[data-icon-tab]').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('[data-icon-tab]').forEach(b => b.classList.remove('active'));
@@ -2058,7 +2067,6 @@ svg { display: block; }
       });
     });
 
-    // Initial preset generation + shuffle
     await generateIcons();
     $('iconShuffleBtn')?.addEventListener('click', async () => {
       S.iconVariants = [];
@@ -2067,7 +2075,6 @@ svg { display: block; }
       await generateIcons({ shuffle: true });
     });
 
-    // Custom tab
     let customStyle = 'solid';
     document.querySelectorAll('[data-icon-style]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -2229,7 +2236,7 @@ svg { display: block; }
       const uploadData = await uploadRes.json();
       if (!uploadData.success || !uploadData.url) throw new Error(uploadData.error || 'Upload failed');
 
-      if (S.session && S.online) {
+      if (S.session && S.online && !S.isLocalOnly) {
         const updateRes = await apiFetch(API_HOST + '?action=projects/update', {
           method: 'POST', body: JSON.stringify({ pid: S.pid, iconUrl: uploadData.url }),
         });
@@ -2245,7 +2252,6 @@ svg { display: block; }
       closeModal();
       hideLoading();
       toast('Icon saved', 'success');
-      // Optimistic refresh of overview card if visible
       if (S.activeTab === 'overview') {
         const card = document.getElementById('overviewIcon');
         if (card) renderProjectIcon(card, S.project);
@@ -2257,20 +2263,17 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // GATE HELPER (Wave 2)
+  // GATE HELPER
   // ═══════════════════════════════════════════════════════════
 
   function gate(panel, { requiresAuth = true, requiresOnline = true, label }) {
-    // Local-only project → offer to sync
     if (S.isLocalOnly && (requiresAuth || requiresOnline)) {
       panel.innerHTML = `<div class="card"><div class="card-body">
         ${emptyState('upload', `${label} needs an account`,
           'This is a local project. Sync it to your Folio account to unlock this tab.',
           `<button class="btn btn-primary" id="btnSyncNow">${svg('upload', 12, 2.4)} Sync to account</button>`)}
       </div></div>`;
-      $('btnSyncNow')?.addEventListener('click', () => {
-        window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
-      });
+      $('btnSyncNow')?.addEventListener('click', () => promoteLocalProject());
       return false;
     }
     if (requiresAuth && !S.session) {
@@ -2297,7 +2300,6 @@ svg { display: block; }
     let localProject = null;
     try { localProject = await IDB.getProject(S.pid); } catch {}
 
-    // Local pid — always local
     if (/^local_/.test(S.pid)) {
       if (!localProject) { showFatal('Not found', 'This local project no longer exists.'); return false; }
       S.project = { ...localProject, myRole: 'owner', visibility: { profile: 'private' } };
@@ -2306,7 +2308,6 @@ svg { display: block; }
       return true;
     }
 
-    // Signed in + online → hydrate from server
     if (S.session && S.online) {
       const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
       if (res.ok && res.data?.success) {
@@ -2379,7 +2380,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // TOP TABS (Wave 1)
+  // TOP TABS
   // ═══════════════════════════════════════════════════════════
 
   function renderTopTabs() {
@@ -2445,11 +2446,9 @@ svg { display: block; }
     renderTopTabs();
     renderPanel();
 
-    // Auto-scroll active tab into view
     const activeBtn = document.querySelector(`[data-top-tab="${tabId}"]`);
     activeBtn?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 
-    // Scroll main content to top
     setTimeout(() => {
       const main = $('mainContent');
       if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2521,25 +2520,121 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // PANEL: OVERVIEW (IDB-driven stats)
+  // PROMOTE LOCAL → SERVER
+  // ═══════════════════════════════════════════════════════════
+
+  async function promoteLocalProject() {
+    if (!S.session) {
+      window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
+      return;
+    }
+    if (!S.isLocalOnly) { toast('Already on server', 'info'); return; }
+    if (!S.online) { toast('Requires internet', 'warning'); return; }
+
+    showLoading('Syncing project', 'Creating server project…');
+    try {
+      const createRes = await apiFetch(API_HOST + '?action=projects/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: S.project.name || 'Imported project',
+          description: S.project.description || '',
+        }),
+      });
+      if (!createRes.ok || !createRes.data?.success) {
+        throw new Error(createRes.data?.error || 'Create failed');
+      }
+      const newPid = createRes.data.pid;
+
+      const files = await IDB.listFiles(S.pid);
+      const versions = await IDB.listVersions(S.pid);
+      const fileMap = {};
+      for (const f of files) fileMap[f.path] = f.content || '';
+
+      setLoadingDesc(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`);
+      const syncRes = await apiFetch(API_HOST + '?action=project/sync-back', {
+        method: 'POST',
+        body: JSON.stringify({
+          pid: newPid,
+          files: fileMap,
+          versions: versions.length ? Object.fromEntries(
+            versions.map(v => [
+              v.vid,
+              { message: v.message || '', files: v.files || {}, createdAt: v.createdAt }
+            ])
+          ) : null,
+        }),
+      });
+      if (!syncRes.ok || !syncRes.data?.success) {
+        throw new Error(syncRes.data?.error || 'Sync failed');
+      }
+
+      const project = {
+        pid: newPid,
+        name: S.project.name || 'Imported project',
+        slug: createRes.data.project?.slug || S.project.slug || '',
+        description: S.project.description || '',
+        iconUrl: S.project.iconUrl || null,
+        createdAt: S.project.createdAt || Date.now(),
+        updatedAt: Date.now(),
+      };
+      await IDB.putProject(project);
+      for (const f of files) await IDB.putFile(newPid, f.path, f.content);
+      for (const v of versions) {
+        await dbWrap(dbTx('versions', 'readwrite').put({
+          vid: v.vid, pid: newPid, message: v.message,
+          files: v.files, createdAt: v.createdAt,
+        }));
+      }
+      await IDB.deleteProject(S.pid);
+
+      try {
+        if (localStorage.getItem(STORAGE.lastProject) === S.pid) {
+          localStorage.setItem(STORAGE.lastProject, newPid);
+        }
+      } catch {}
+
+      S.pid = newPid;
+      S.project = project;
+      S.isLocalOnly = false;
+      const url = new URL(location.href);
+      url.searchParams.set('pid', newPid);
+      history.replaceState(null, '', url.toString());
+
+      hideLoading();
+      toast('Project synced to your account', 'success');
+      await loadProject();
+      renderSidebar();
+      renderTopTabs();
+      renderPanel();
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Sync failed', 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL: OVERVIEW
   // ═══════════════════════════════════════════════════════════
 
   async function renderOverviewPanel(panel) {
     panel.innerHTML = skeletonCard(4);
     await new Promise(r => setTimeout(r, 60));
 
-    // Pull real numbers from IDB
-    let filesCount = 0, versionsCount = 0, storageBytes = 0;
+    let filesCount = 0, versionsCount = 0, storageBytes = 0, htmlFiles = [];
     try {
       const files = await IDB.listFiles(S.pid);
       filesCount = files.filter(f => !/\.(gitkeep|keep)$/i.test(f.path)).length;
       storageBytes = files.reduce((s, f) => s + (f.content?.length || 0), 0);
+      htmlFiles = files
+        .filter(f => /\.(html?|htm)$/i.test(f.path))
+        .map(f => f.path);
       const versions = await IDB.listVersions(S.pid);
       versionsCount = versions.length;
     } catch {}
 
     const p = S.project;
     const canEdit = S.isEditor && S.online && !S.isLocalOnly;
+    const isLocalEditable = S.isLocalOnly;
     const deployUrl = p.deployment?.url;
     const deployed = !!deployUrl;
 
@@ -2547,18 +2642,30 @@ svg { display: block; }
       <div class="card">
         <div class="card-header">
           <div class="card-title">${svg('info', 13, 2.2)} Details</div>
-          ${canEdit ? `<button class="btn btn-sm btn-secondary" id="btnSaveDetails">${svg('check', 10, 2.4)} Save</button>` : ''}
+          ${(canEdit || isLocalEditable) ? `<button class="btn btn-sm btn-secondary" id="btnSaveDetails">${svg('check', 10, 2.4)} Save</button>` : ''}
         </div>
         <div class="card-body">
           <div class="field"><label class="field-label">Project name</label>
-            <input class="input" id="fieldProjectName" value="${escapeAttr(p.name || '')}" ${canEdit ? '' : 'readonly'}></div>
+            <input class="input" id="fieldProjectName" value="${escapeAttr(p.name || '')}" ${(canEdit || isLocalEditable) ? '' : 'readonly'}></div>
           <div class="field"><label class="field-label">Slug</label>
             <div style="display:flex;gap:5px;">
               <input class="input mono" id="fieldProjectSlug" value="${escapeAttr(p.slug || '')}" readonly>
               <button class="btn btn-secondary btn-icon" id="btnCopySlug" aria-label="Copy" type="button">${svg('copy', 12, 2.2)}</button>
             </div><div class="field-hint">Immutable once set.</div></div>
           <div class="field"><label class="field-label">Description</label>
-            <textarea class="textarea" id="fieldProjectDesc" ${canEdit ? '' : 'readonly'}>${escapeHTML(p.description || '')}</textarea></div>
+            <textarea class="textarea" id="fieldProjectDesc" ${(canEdit || isLocalEditable) ? '' : 'readonly'}>${escapeHTML(p.description || '')}</textarea></div>
+          ${htmlFiles.length > 0 ? `
+            <div class="field">
+              <label class="field-label">Primary file <span style="text-transform:none;font-weight:500;">(previews)</span></label>
+              <select class="select" id="fieldPrimaryFile" ${(canEdit || isLocalEditable) ? '' : 'disabled'}>
+                <option value="">Auto-detect</option>
+                ${htmlFiles.map(f =>
+                  `<option value="${escapeAttr(f)}" ${S.project.primaryFile === f ? 'selected' : ''}>${escapeHTML(f)}</option>`
+                ).join('')}
+              </select>
+              <div class="field-hint">Which HTML file loads first in preview.</div>
+            </div>
+          ` : ''}
         </div>
       </div>
       <div class="stats-grid">
@@ -2572,6 +2679,7 @@ svg { display: block; }
         <div class="card-body">
           ${S.isLocalOnly ? `
             <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">Local projects can't be deployed. Sync to your account first.</div>
+            ${S.session ? `<button class="btn btn-primary btn-sm" id="btnQuickDeploy">${svg('upload', 10, 2.4)} Sync & deploy</button>` : ''}
           ` : deployed ? `
             <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--theme-success-soft);border-radius:8px;margin-bottom:8px;">
               ${svg('checkCircle', 14, 2.4)}
@@ -2602,12 +2710,17 @@ svg { display: block; }
     `;
 
     renderProjectIcon($('overviewIcon'), S.project);
-    if (canEdit) {
+    if (canEdit || isLocalEditable) {
       $('btnSaveDetails')?.addEventListener('click', saveProjectDetails);
+    }
+    if (canEdit) {
       $('btnChangeIcon')?.addEventListener('click', openIconPicker);
-      $('btnQuickDeploy')?.addEventListener('click', () => switchTab('deployments'));
       $('btnQuickRedeploy')?.addEventListener('click', () => switchTab('deployments'));
     }
+    $('btnQuickDeploy')?.addEventListener('click', () => {
+      if (S.isLocalOnly) promoteLocalProject();
+      else switchTab('deployments');
+    });
     $('btnCopySlug')?.addEventListener('click', () => {
       const slug = S.project?.slug || '';
       if (!slug) { toast('No slug', 'info'); return; }
@@ -2620,6 +2733,7 @@ svg { display: block; }
     if (!S.online) { toast('Requires internet', 'warning'); return; }
     const name = $('fieldProjectName')?.value?.trim();
     const description = $('fieldProjectDesc')?.value?.trim();
+    const primaryFile = $('fieldPrimaryFile')?.value || '';
     if (!name) { toast('Project name required', 'error'); return; }
     const btn = $('btnSaveDetails');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
@@ -2632,9 +2746,10 @@ svg { display: block; }
       }
       S.project.name = name;
       S.project.description = description;
+      S.project.primaryFile = primaryFile || null;
       await IDB.putProject({
         pid: S.pid, name, description, slug: S.project.slug || '',
-        iconUrl: S.project.iconUrl || null,
+        iconUrl: S.project.iconUrl || null, primaryFile: S.project.primaryFile,
         createdAt: S.project.createdAt || Date.now(), updatedAt: Date.now(),
       });
       cacheProject(S.project);
@@ -2645,7 +2760,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // PANEL: FILES (IDB-first, auto-pull from server)
+  // PANEL: FILES (with create / edit / upload / delete)
   // ═══════════════════════════════════════════════════════════
 
   async function renderFilesPanel(panel) {
@@ -2659,7 +2774,6 @@ svg { display: block; }
       return;
     }
 
-    // Auto-pull from server if empty and this is a server-backed project
     if (files.length === 0 && S.online && S.session && !S.isLocalOnly) {
       try {
         await pullFilesFromServer(false);
@@ -2673,41 +2787,53 @@ svg { display: block; }
     renderTopTabs();
     renderSidebar();
 
-    if (visibleFiles.length === 0) {
+    const canEdit = S.isEditor || S.isLocalOnly;
+
+    if (visibleFiles.length === 0 && !canEdit) {
       panel.innerHTML = `<div class="card"><div class="card-body">
         ${emptyState(
           'folder',
           'No files yet',
-          S.isLocalOnly
-            ? 'Open this project in the editor to add files.'
-            : 'This project has no saved files yet. Open the editor to create them.',
-          `<button class="btn btn-primary" id="btnOpenEditorEmpty">${svg('edit3', 12, 2.4)} Open in editor</button>
-           ${!S.isLocalOnly && S.online ? `<button class="btn btn-secondary" id="btnRefreshFiles" style="margin-left:6px;">${svg('refresh', 12, 2.2)} Pull from server</button>` : ''}`
+          'This project has no saved files yet.',
+          `<button class="btn btn-primary" id="btnOpenEditorEmpty">${svg('edit3', 12, 2.4)} Open in editor</button>`
         )}
       </div></div>`;
       $('btnOpenEditorEmpty')?.addEventListener('click', () => openInEditor());
-      $('btnRefreshFiles')?.addEventListener('click', () => refreshFilesPanel(panel));
       return;
     }
 
-    const tree = buildFileTree(visibleFiles.map(f => f.path));
-
     panel.innerHTML = `
       <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;">
-        <button class="btn btn-sm btn-primary" id="btnOpenEditor">${svg('edit3', 10, 2.4)} Open editor</button>
+        ${canEdit ? `
+          <button class="btn btn-sm btn-primary" id="btnNewFile">${svg('plus', 10, 2.4)} New file</button>
+          <button class="btn btn-sm btn-secondary" id="btnUploadFile">${svg('upload', 10, 2.2)} Upload</button>
+        ` : ''}
+        <button class="btn btn-sm btn-secondary" id="btnOpenEditor">${svg('edit3', 10, 2.4)} Editor</button>
         <button class="btn btn-sm btn-secondary" id="btnRefreshFiles">${svg('refresh', 10, 2.2)} Refresh</button>
-        <button class="btn btn-sm btn-secondary" id="btnExpandAll">${svg('expand', 10, 2.2)} Expand</button>
-        <button class="btn btn-sm btn-secondary" id="btnCollapseAll">${svg('collapse', 10, 2.2)} Collapse</button>
-        <input class="input" id="fileFilter" placeholder="Filter files…" style="flex:1;min-width:120px;height:26px;font-size:11px;">
+        <button class="btn btn-sm btn-secondary" id="btnExpandAll">${svg('expand', 10, 2.2)}</button>
+        <button class="btn btn-sm btn-secondary" id="btnCollapseAll">${svg('collapse', 10, 2.2)}</button>
+        <input class="input" id="fileFilter" placeholder="Filter…" style="flex:1;min-width:100px;height:26px;font-size:11px;">
       </div>
-      <div class="file-tree-wrap" id="fileTreeContainer"></div>
+      ${visibleFiles.length === 0 ? `
+        <div class="card"><div class="card-body">
+          <div class="empty-state" style="padding:24px 12px;">
+            <div class="empty-state-icon">${svg('folder', 18, 2)}</div>
+            <div class="empty-state-title">No files yet</div>
+            <div class="empty-state-desc">Create your first file or upload one.</div>
+          </div>
+        </div>
+      ` : `<div class="file-tree-wrap" id="fileTreeContainer"></div>`}
+      <input type="file" id="fileUploadInput" multiple style="display:none;">
     `;
 
     const treeContainer = $('fileTreeContainer');
     const filterInput = $('fileFilter');
-    filterInput.value = S.fileFilter;
+    if (filterInput) filterInput.value = S.fileFilter;
+
+    const tree = buildFileTree(visibleFiles.map(f => f.path));
 
     const render = () => {
+      if (!treeContainer) return;
       treeContainer.innerHTML = '';
       const filter = S.fileFilter.toLowerCase();
       const filtered = filter
@@ -2717,7 +2843,6 @@ svg { display: block; }
       if (filtered.length === 0) {
         treeContainer.innerHTML = `<div class="empty-state" style="padding:16px 8px;">
           <div class="empty-state-title" style="font-size:12px;">No matches</div>
-          <div class="empty-state-desc" style="font-size:10px;">Try a different filter.</div>
         </div>`;
         return;
       }
@@ -2725,11 +2850,14 @@ svg { display: block; }
       renderFileTreeNodes(treeContainer, filteredTree, 0, filter ? true : false, render);
     };
 
-    filterInput.addEventListener('input', debounce((e) => {
+    filterInput?.addEventListener('input', debounce((e) => {
       S.fileFilter = e.target.value;
       render();
     }, 150));
 
+    $('btnNewFile')?.addEventListener('click', () => createNewFile(panel));
+    $('btnUploadFile')?.addEventListener('click', () => $('fileUploadInput')?.click());
+    $('fileUploadInput')?.addEventListener('change', (e) => handleFileUpload(e, panel));
     $('btnOpenEditor')?.addEventListener('click', () => openInEditor());
     $('btnRefreshFiles')?.addEventListener('click', () => refreshFilesPanel(panel));
     $('btnExpandAll')?.addEventListener('click', () => {
@@ -2773,6 +2901,7 @@ svg { display: block; }
   }
 
   function renderFileTreeNodes(container, node, depth, forceExpand, rerender) {
+    const canEdit = S.isEditor || S.isLocalOnly;
     const folderNames = Object.keys(node.children).sort();
     for (const folderName of folderNames) {
       const folder = node.children[folderName];
@@ -2805,23 +2934,218 @@ svg { display: block; }
       row.innerHTML = `
         <span class="chevron" style="visibility:hidden;"></span>
         <span class="icon" style="color:var(--theme-text-tertiary);">${svg(fileIconName(file.path), 12, 2)}</span>
-        <span class="name">${escapeHTML(file.name)}</span>
-        <button class="open-btn" type="button" title="Open in editor">${svg('external', 10, 2.2)}</button>
+        <span class="name" title="${escapeAttr(file.path)}">${escapeHTML(file.name)}</span>
+        ${canEdit ? `
+          <button class="open-btn" data-file-edit title="Edit">${svg('edit', 10, 2.2)}</button>
+          <button class="open-btn" data-file-delete title="Delete" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>
+        ` : ''}
+        <button class="open-btn" data-file-open title="Open in editor">${svg('external', 10, 2.2)}</button>
       `;
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('.open-btn')) return;
-        openInEditor(file.path);
-      });
-      row.querySelector('.open-btn').addEventListener('click', (e) => {
+
+      row.querySelector('[data-file-open]')?.addEventListener('click', (e) => {
         e.stopPropagation();
         openInEditor(file.path);
       });
+      row.querySelector('[data-file-edit]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openFileEditor(file.path);
+      });
+      row.querySelector('[data-file-delete]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        confirmDeleteFile(file.path);
+      });
+
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        if (canEdit) openFileEditor(file.path);
+        else openInEditor(file.path);
+      });
+
       container.appendChild(row);
     }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // FILE OPS
+  // ═══════════════════════════════════════════════════════════
+
+  async function createNewFile(panel) {
+    if (!S.isEditor && !S.isLocalOnly) { toast('Read-only', 'warning'); return; }
+    openModal(`
+      <div class="modal-title">New file</div>
+      <div class="modal-desc">Use a path like <code style="font-family:var(--font-mono);font-size:11px;">src/app.js</code> for nested files.</div>
+      <div class="field">
+        <label class="field-label">File path</label>
+        <input class="input mono" id="newFilePath" placeholder="/" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="newFileCreate">Create</button>
+      </div>
+    `);
+    $('newFilePath').focus();
+    $('newFilePath').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $('newFileCreate').click();
+    });
+    $('newFileCreate').addEventListener('click', async () => {
+      const path = $('newFilePath').value.trim().replace(/^\/+/, '');
+      if (!path) { toast('Path required', 'error'); return; }
+      if (!/^[a-zA-Z0-9._\-\/]+$/.test(path)) {
+        toast('Use letters, numbers, dots, dashes, underscores, slashes', 'error');
+        return;
+      }
+      const existing = await IDB.getFile(S.pid, path);
+      if (existing) { toast('File already exists', 'warning'); return; }
+      try {
+        await IDB.putFile(S.pid, path, '');
+        if (S.online && S.session && !S.isLocalOnly) {
+          await apiFetch(API_HOST + '?action=project/sync-back', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid, files: { [path]: '' } }),
+          });
+        }
+        closeModal();
+        toast(`Created ${path}`, 'success');
+        renderFilesPanel(panel);
+        setTimeout(() => openFileEditor(path), 200);
+      } catch (err) {
+        toast(err.message || 'Create failed', 'error');
+      }
+    });
+  }
+
+  async function openFileEditor(path) {
+    let content = '';
+    try {
+      const file = await IDB.getFile(S.pid, path);
+      content = file?.content || '';
+    } catch {}
+    const ext = (path.split('.').pop() || '').toLowerCase();
+    const isMono = ['html','htm','css','js','mjs','cjs','jsx','ts','tsx','json','md','txt','svg','xml','yml','yaml'].includes(ext);
+    const isText = isTextFile(path) || isMono;
+
+    openModal(`
+      <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHTML(path)}</span>
+        <button class="btn btn-ghost btn-sm btn-icon" id="fileEditorClose" aria-label="Close">${svg('x', 12, 2.4)}</button>
+      </div>
+      <div class="field" style="margin-bottom:6px;">
+        ${isText
+          ? `<textarea class="textarea mono" id="fileEditorContent" style="min-height:45vh;font-family:var(--font-mono);font-size:12px;line-height:1.5;">${escapeHTML(content)}</textarea>`
+          : `<div style="font-size:11.5px;color:var(--theme-text-tertiary);padding:12px;background:var(--theme-glass-bg);border-radius:8px;text-align:center;">Binary file — use the editor to view or replace.</div>`}
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+        <span style="font-size:10.5px;color:var(--theme-text-tertiary);" id="fileEditorSize">${isText ? content.length + ' chars' : ''}</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-ghost btn-sm" id="fileEditorOpenEditor">${svg('external', 10, 2.2)} Open in editor</button>
+          ${isText ? `<button class="btn btn-primary btn-sm" id="fileEditorSave">${svg('check', 10, 2.4)} Save</button>` : ''}
+        </div>
+      </div>
+    `);
+
+    $('fileEditorClose').addEventListener('click', closeModal);
+    $('fileEditorOpenEditor').addEventListener('click', () => { closeModal(); openInEditor(path); });
+
+    const ta = $('fileEditorContent');
+    if (ta) {
+      ta.addEventListener('input', () => {
+        const el = $('fileEditorSize');
+        if (el) el.textContent = `${ta.value.length} chars`;
+      });
+    }
+
+    $('fileEditorSave')?.addEventListener('click', async () => {
+      const btn = $('fileEditorSave');
+      btn.disabled = true;
+      const prev = btn.innerHTML;
+      btn.innerHTML = 'Saving…';
+      try {
+        const text = ta.value;
+        await IDB.putFile(S.pid, path, text);
+        if (S.online && S.session && !S.isLocalOnly) {
+          const res = await apiFetch(API_HOST + '?action=project/sync-back', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid, files: { [path]: text } }),
+          });
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Server save failed');
+        }
+        toast('Saved', 'success');
+        if (S.activeTab === 'files') renderPanel();
+      } catch (err) {
+        toast(err.message || 'Save failed', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = prev;
+      }
+    });
+  }
+
+  function confirmDeleteFile(path) {
+    if (!S.isEditor && !S.isLocalOnly) { toast('Read-only', 'warning'); return; }
+    confirmModal(
+      `Delete ${path.split('/').pop()}?`,
+      'This removes the file locally. Server deletion requires the file/delete API endpoint.',
+      'Delete',
+      true,
+      async () => {
+        showLoading('Deleting', '');
+        try {
+          await dbWrap(dbTx('files', 'readwrite').delete([S.pid, path]));
+          if (S.online && S.session && !S.isLocalOnly) {
+            // Best effort — server may not support this action
+            try {
+              await apiFetch(API_HOST + '?action=file/delete', {
+                method: 'POST',
+                body: JSON.stringify({ pid: S.pid, path }),
+              });
+            } catch {}
+          }
+          hideLoading();
+          toast('File deleted', 'success');
+          renderPanel();
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Delete failed', 'error');
+        }
+      }
+    );
+  }
+
+  async function handleFileUpload(e, panel) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    if (!S.isEditor && !S.isLocalOnly) { toast('Read-only', 'warning'); return; }
+
+    showLoading('Uploading', `0 / ${files.length}`);
+    let uploaded = 0;
+    const fileMap = {};
+    for (const file of files) {
+      try {
+        const text = await file.text();
+        await IDB.putFile(S.pid, file.name, text);
+        fileMap[file.name] = text;
+        uploaded++;
+        setLoadingDesc(`${uploaded} / ${files.length}`);
+      } catch (err) {
+        console.warn('[Upload]', file.name, err);
+      }
+    }
+    if (S.online && S.session && !S.isLocalOnly && Object.keys(fileMap).length > 0) {
+      try {
+        await apiFetch(API_HOST + '?action=project/sync-back', {
+          method: 'POST',
+          body: JSON.stringify({ pid: S.pid, files: fileMap }),
+        });
+      } catch {}
+    }
+    hideLoading();
+    toast(`Uploaded ${uploaded} file${uploaded === 1 ? '' : 's'}`, 'success');
+    renderFilesPanel(panel);
+  }
+
   function openInEditor(filePath) {
-    const url = new URL('/index.html', location.origin);
+    const url = new URL('/', location.origin);
     url.searchParams.set('pid', S.pid);
     if (filePath) url.searchParams.set('file', filePath);
     window.location.href = url.toString();
@@ -2836,14 +3160,6 @@ svg { display: block; }
 
   async function pullFilesFromServer(showToast) {
     try {
-      const res = await fetch(
-        API_HOST + '?action=project/export&pid=' + encodeURIComponent(S.pid) + '&format=folio',
-        { headers: { Authorization: `Bearer ${S.session}` } }
-      );
-      if (!res.ok) throw new Error('Export failed');
-      // The export is a zip; we can't parse it client-side without unzip.
-      // Fall back: use files/list-like endpoint if present, or just keep IDB as truth.
-      // In this integration we prefer IDB (written by the editor) as the source of truth.
       if (showToast) toast('Files already in sync', 'info');
     } catch (err) {
       if (showToast) toast(err.message || 'Could not pull files', 'error');
@@ -2932,18 +3248,48 @@ svg { display: block; }
 
   async function deployNow() {
     if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
-    confirmModal('Deploy current files?', 'This will build and deploy your project to a live URL.', 'Deploy', false, async () => {
-      showLoading('Deploying', 'Building and deploying…');
-      try {
-        const res = await apiFetch(API_HOST + '?action=deploy', {
-          method: 'POST', body: JSON.stringify({ pid: S.pid }),
-        });
-        hideLoading();
-        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Deploy failed');
-        toast('Deploy started', 'success');
-        setTimeout(() => renderPanel(), 2000);
-      } catch (err) { hideLoading(); toast(err.message || 'Deploy failed', 'error'); }
-    });
+    if (S.isLocalOnly) {
+      confirmModal(
+        'Sync project first?',
+        'Local projects must be synced to your account before they can be deployed.',
+        'Sync now',
+        false,
+        () => promoteLocalProject()
+      );
+      return;
+    }
+
+    let files = [];
+    try { files = await IDB.listFiles(S.pid); } catch {}
+    const fileMap = {};
+    for (const f of files) {
+      if (/(^|\/)\.gitkeep$/i.test(f.path) || /(^|\/)\.keep$/i.test(f.path)) continue;
+      fileMap[f.path] = f.content || '';
+    }
+    if (Object.keys(fileMap).length === 0) {
+      toast('No files to deploy', 'warning');
+      return;
+    }
+
+    confirmModal(
+      `Deploy ${Object.keys(fileMap).length} file${Object.keys(fileMap).length === 1 ? '' : 's'}?`,
+      'This will build and deploy your project to a live URL.',
+      'Deploy',
+      false,
+      async () => {
+        showLoading('Deploying', 'Building and deploying…');
+        try {
+          const res = await apiFetch(API_HOST + '?action=deploy', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid, files: fileMap }),
+          });
+          hideLoading();
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Deploy failed');
+          toast('Deploy started', 'success');
+          setTimeout(() => renderPanel(), 2000);
+        } catch (err) { hideLoading(); toast(err.message || 'Deploy failed', 'error'); }
+      }
+    );
   }
 
   async function redeployVersion(versionId) {
@@ -3103,30 +3449,39 @@ svg { display: block; }
         </div>
       </div>
       ${S.isOwner ? `
-        <div class="card">
-          <div class="card-header"><div class="card-title">${svg('user', 13, 2.2)} Collaborators (${Object.keys(collaborators).length})</div>
-            <button class="btn btn-sm btn-secondary" id="btnInviteCollab">${svg('plus', 10, 2.4)} Invite</button></div>
-          <div class="card-body tight">
-            ${Object.keys(collaborators).length === 0
-              ? emptyState('user', 'No collaborators', 'Invite others to work on this project.')
-              : `<div class="row-list">${Object.entries(collaborators).map(([uid, role]) => `
-                <div class="row-item">
-                  <div class="collab-avatar">${escapeHTML(uid.slice(-2).toUpperCase())}</div>
-                  <div class="row-content"><div class="row-title mono" style="font-size:10px;">${escapeHTML(uid)}</div>
-                    <div class="row-sub">${escapeHTML(role)}</div></div>
-                  <button class="btn btn-ghost btn-sm btn-icon" data-remove-collab="${escapeAttr(uid)}" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>
-                </div>`).join('')}</div>`}
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><div class="card-title">${svg('key', 13, 2.2)} API key</div></div>
-          <div class="card-body">
-            <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">
-              ${S.project.apiKeyHash ? 'Active' : 'Not generated'}
-            </div>
-            <button class="btn btn-sm btn-secondary" id="btnGenApiKey">${svg('key', 10, 2.2)} ${S.project.apiKeyHash ? 'Regenerate' : 'Generate'} key</button>
-          </div>
-        </div>` : ''}
+  <div class="card">
+    <div class="card-header"><div class="card-title">${svg('user', 13, 2.2)} Collaborators (${Object.keys(collaborators).length})</div>
+      <button class="btn btn-sm btn-secondary" id="btnInviteCollab">${svg('plus', 10, 2.4)} Invite</button></div>
+    <div class="card-body tight">
+      ${Object.keys(collaborators).length === 0
+        ? emptyState('user', 'No collaborators', 'Invite others to work on this project.')
+        : `<div class="row-list">${Object.entries(collaborators).map(([uid, role]) => `
+          <div class="row-item">
+            <div class="collab-avatar">${escapeHTML(uid.slice(-2).toUpperCase())}</div>
+            <div class="row-content"><div class="row-title mono" style="font-size:10px;">${escapeHTML(uid)}</div>
+              <div class="row-sub">${escapeHTML(role)}</div></div>
+            <button class="btn btn-ghost btn-sm btn-icon" data-remove-collab="${escapeAttr(uid)}" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>
+          </div>`).join('')}</div>`}
+    </div>
+  </div>
+
+  <div class="card" id="pendingInvitesCard" style="display:none;">
+    <div class="card-header"><div class="card-title">${svg('clock', 13, 2.2)} Pending invites</div>
+      <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshInvites" aria-label="Refresh">${svg('refresh', 10, 2.2)}</button></div>
+    <div class="card-body tight" id="pendingInvitesBody">
+      <div style="padding:12px;text-align:center;font-size:11px;color:var(--theme-text-tertiary);">Loading…</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">${svg('key', 13, 2.2)} API key</div></div>
+    <div class="card-body">
+      <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">
+        ${S.project.apiKeyHash ? 'Active' : 'Not generated'}
+      </div>
+      <button class="btn btn-sm btn-secondary" id="btnGenApiKey">${svg('key', 10, 2.2)} ${S.project.apiKeyHash ? 'Regenerate' : 'Generate'} key</button>
+    </div>
+  </div>` : ''}
     `;
 
     document.querySelectorAll('[data-vis-axis]').forEach(btn => btn.addEventListener('click', () => toggleVisibility(btn.dataset.visAxis, btn)));
@@ -3137,8 +3492,96 @@ svg { display: block; }
     $('btnInviteCollab')?.addEventListener('click', openInviteModal);
     document.querySelectorAll('[data-remove-collab]').forEach(btn => btn.addEventListener('click', () => confirmRemoveCollab(btn.dataset.removeCollab)));
     $('btnGenApiKey')?.addEventListener('click', generateApiKey);
+    // Pending invites — fetch and render
+if (S.isOwner) {
+  loadPendingInvites();
+  $('btnRefreshInvites')?.addEventListener('click', loadPendingInvites);
+}
   }
 
+
+
+  async function loadPendingInvites() {
+  const card = $('pendingInvitesCard');
+  const body = $('pendingInvitesBody');
+  if (!card || !body) return;
+  try {
+    const res = await apiFetch(API_HOST + '?action=invite/list&pid=' + encodeURIComponent(S.pid));
+    if (!res.ok || !res.data?.success) {
+      body.innerHTML = `<div style="padding:12px;text-align:center;font-size:11px;color:var(--theme-text-tertiary);">Couldn't load invites.</div>`;
+      return;
+    }
+    const invites = (res.data.invites || []).filter(i => !i.used);
+    const now = Date.now();
+
+    if (invites.length === 0) {
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = '';
+    body.innerHTML = `<div class="row-list">
+      ${invites.map(i => {
+        const expired = i.expiresAt && i.expiresAt < now;
+        const daysLeft = i.expiresAt ? Math.max(0, Math.ceil((i.expiresAt - now) / (24 * 60 * 60 * 1000))) : null;
+        return `
+          <div class="row-item">
+            <div class="row-icon" style="${expired ? 'color:var(--theme-warning);' : ''}">
+              ${svg(expired ? 'alert' : 'clock', 13, 2.2)}
+            </div>
+            <div class="row-content">
+              <div class="row-title mono" style="font-size:10px;">${escapeHTML(i.invitedUid?.slice(0, 12) || 'invited user')}${i.invitedUid?.length > 12 ? '…' : ''}</div>
+              <div class="row-sub">
+                ${escapeHTML(i.role || 'viewer')} ·
+                ${expired
+                  ? '<span style="color:var(--theme-warning);">expired</span>'
+                  : `${daysLeft}d left`}
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="btn btn-ghost btn-sm btn-icon" data-copy-invite="${escapeAttr(i.token)}" title="Copy link">
+                ${svg('copy', 10, 2.2)}
+              </button>
+              <button class="btn btn-ghost btn-sm btn-icon" data-cancel-invite="${escapeAttr(i.token)}" title="Cancel" style="color:var(--theme-danger);">
+                ${svg('trash', 10, 2.2)}
+              </button>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
+
+    body.querySelectorAll('[data-copy-invite]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const token = btn.dataset.copyInvite;
+        const url = `${location.origin}/invite.html?token=${encodeURIComponent(token)}`;
+        if (copyToClipboard(url)) toast('Invite link copied', 'success', 1400);
+        else toast('Copy failed', 'error');
+      });
+    });
+
+    body.querySelectorAll('[data-cancel-invite]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const token = btn.dataset.cancelInvite;
+        confirmModal('Cancel this invite?', 'The recipient will no longer be able to use this link.', 'Cancel invite', true, async () => {
+          try {
+            const cancelRes = await apiFetch(API_HOST + '?action=invite/cancel', {
+              method: 'POST',
+              body: JSON.stringify({ token }),
+            });
+            if (!cancelRes.ok || !cancelRes.data?.success) {
+              throw new Error(cancelRes.data?.error || 'Failed');
+            }
+            toast('Invite cancelled', 'success');
+            loadPendingInvites();
+          } catch (err) {
+            toast(err.message || 'Could not cancel', 'error');
+          }
+        });
+      });
+    });
+  } catch {
+    body.innerHTML = `<div style="padding:12px;text-align:center;font-size:11px;color:var(--theme-text-tertiary);">Couldn't load invites.</div>`;
+  }
+}
   function axisLabel(axis) {
     return { profile: 'Show in profile', liveSite: 'Live site link', code: 'Code viewer', languages: 'Language breakdown', db: 'JSON database API' }[axis] || axis;
   }
@@ -3167,37 +3610,74 @@ svg { display: block; }
   }
 
   function openInviteModal() {
-    openModal(`
-      <div class="modal-title">Invite collaborator</div>
-      <div class="modal-desc">They must have a Folio account.</div>
-      <div class="field"><label class="field-label">Username</label>
-        <input class="input" id="inviteUsername" placeholder="alice"></div>
-      <div class="field"><label class="field-label">Role</label>
-        <select class="select" id="inviteRole">
-          <option value="viewer">Viewer — read only</option>
-          <option value="commenter">Commenter — read + comment</option>
-          <option value="editor">Editor — read/write</option>
-        </select></div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" id="inviteSubmit">${svg('plus', 12, 2.4)} Send invite</button>
-      </div>
-    `);
-    $('inviteSubmit').addEventListener('click', async () => {
-      const username = $('inviteUsername').value.trim();
-      const role = $('inviteRole').value;
-      if (!username) { toast('Username required', 'error'); return; }
-      $('inviteSubmit').disabled = true;
-      try {
-        const res = await apiFetch(API_HOST + '?action=invite/create', {
-          method: 'POST', body: JSON.stringify({ pid: S.pid, username, role }),
-        });
-        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
-        closeModal();
-        toast('Invite sent', 'success');
-      } catch (err) { toast(err.message || 'Invite failed', 'error'); $('inviteSubmit').disabled = false; }
-    });
-  }
+  openModal(`
+    <div class="modal-title">Invite collaborator</div>
+    <div class="modal-desc">They must have a Folio account.</div>
+    <div class="field"><label class="field-label">Username</label>
+      <input class="input" id="inviteUsername" placeholder="alice"></div>
+    <div class="field"><label class="field-label">Role</label>
+      <select class="select" id="inviteRole">
+        <option value="viewer">Viewer — read only</option>
+        <option value="commenter">Commenter — read + comment</option>
+        <option value="editor">Editor — read/write</option>
+      </select></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="inviteSubmit">${svg('plus', 12, 2.4)} Send invite</button>
+    </div>
+  `);
+
+  $('inviteSubmit').addEventListener('click', async () => {
+    const username = $('inviteUsername').value.trim();
+    const role = $('inviteRole').value;
+    if (!username) { toast('Username required', 'error'); return; }
+    $('inviteSubmit').disabled = true;
+    try {
+      const res = await apiFetch(API_HOST + '?action=invite/create', {
+        method: 'POST',
+        body: JSON.stringify({ pid: S.pid, username, role }),
+      });
+      if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+
+      // Success — show the link so the owner can share it manually
+      const inviteUrl = res.data.inviteUrl ||
+        `${location.origin}/invite.html?token=${encodeURIComponent(res.data.token)}`;
+
+      openModal(`
+        <div class="modal-title">Invite sent</div>
+        <div class="modal-desc">
+          <strong>${escapeHTML(username)}</strong> was invited as <strong>${escapeHTML(role)}</strong>.
+          They'll get a notification, but you can also share this link directly.
+        </div>
+        <div class="field">
+          <label class="field-label">Invite link</label>
+          <div style="display:flex;gap:5px;">
+            <input class="input mono" value="${escapeAttr(inviteUrl)}" readonly style="font-size:10.5px;"
+              onclick="this.select()">
+            <button class="btn btn-secondary btn-icon" id="copyInviteUrlBtn" aria-label="Copy">
+              ${svg('copy', 12, 2.2)}
+            </button>
+          </div>
+          <div class="field-hint">Expires in 7 days. Anyone with the link and the right account can accept it.</div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary btn-block" onclick="closeModal()">Done</button>
+        </div>
+      `);
+
+      $('copyInviteUrlBtn')?.addEventListener('click', () => {
+        if (copyToClipboard(inviteUrl)) toast('Invite link copied', 'success', 1400);
+        else toast('Copy failed', 'error');
+      });
+
+      // Refresh the pending invites list
+      loadPendingInvites();
+    } catch (err) {
+      toast(err.message || 'Invite failed', 'error');
+      $('inviteSubmit').disabled = false;
+    }
+  });
+}
 
   function confirmRemoveCollab(uid) {
     confirmModal('Remove collaborator?', 'They will lose access.', 'Remove', true, async () => {
@@ -3238,7 +3718,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // PANEL: DATA
+  // PANEL: DATA (editable)
   // ═══════════════════════════════════════════════════════════
 
   async function renderDataPanel(panel) {
@@ -3251,16 +3731,26 @@ svg { display: block; }
         return;
       }
       const { data, schema } = res.data;
+      const canEdit = S.isEditor;
       panel.innerHTML = `
         <div class="card">
-          <div class="card-header"><div class="card-title">${svg('database', 13, 2.2)} JSON database</div>
-            <button class="btn btn-sm btn-secondary" id="btnRefreshDb">${svg('refresh', 10, 2.2)}</button></div>
+          <div class="card-header">
+            <div class="card-title">${svg('database', 13, 2.2)} JSON database</div>
+            <div style="display:flex;gap:4px;">
+              <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshDb" aria-label="Refresh">${svg('refresh', 10, 2.2)}</button>
+              ${canEdit ? `<button class="btn btn-sm btn-primary" id="btnSaveDb">${svg('check', 10, 2.4)} Save</button>` : ''}
+            </div>
+          </div>
           <div class="card-body">
             <div class="db-tabs">
               <button class="db-tab active" data-db-view="raw">Raw</button>
               <button class="db-tab" data-db-view="schema">Schema</button>
             </div>
-            <div id="dbViewRaw" class="db-json">${renderJSONPretty(data)}</div>
+            <div id="dbViewRaw">
+              ${canEdit
+                ? `<textarea class="textarea mono" id="dbRawEditor" style="min-height:200px;font-family:var(--font-mono);font-size:11px;">${escapeHTML(JSON.stringify(data || {}, null, 2))}</textarea>`
+                : `<div class="db-json">${renderJSONPretty(data)}</div>`}
+            </div>
             <div id="dbViewSchema" class="db-json hidden">${schema ? renderJSONPretty(schema) : 'No schema defined'}</div>
           </div>
         </div>
@@ -3274,6 +3764,28 @@ svg { display: block; }
         });
       });
       $('btnRefreshDb')?.addEventListener('click', () => renderPanel());
+      $('btnSaveDb')?.addEventListener('click', async () => {
+        const raw = $('dbRawEditor')?.value || '';
+        let parsed;
+        try { parsed = JSON.parse(raw); }
+        catch { toast('Invalid JSON', 'error'); return; }
+        const btn = $('btnSaveDb');
+        btn.disabled = true;
+        const prev = btn.innerHTML;
+        btn.innerHTML = 'Saving…';
+        try {
+          const save = await apiFetch(API_HOST + '?action=db/set', {
+            method: 'POST', body: JSON.stringify({ pid: S.pid, data: parsed }),
+          });
+          if (!save.ok || !save.data?.success) throw new Error(save.data?.error || 'Save failed');
+          toast('Saved', 'success');
+        } catch (err) {
+          toast(err.message || 'Save failed', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = prev;
+        }
+      });
     } catch (err) {
       panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('database', 'Couldn\'t load data', err.message)}</div></div>`;
     }
@@ -3340,7 +3852,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // PANEL: DOWNLOADS (works locally too)
+  // PANEL: DOWNLOADS
   // ═══════════════════════════════════════════════════════════
 
   async function renderDownloadsPanel(panel) {
@@ -3371,18 +3883,12 @@ svg { display: block; }
     `;
 
     $('btnDownloadFolio')?.addEventListener('click', async () => {
-      if (S.isLocalOnly || !S.session) {
-        await exportLocalFolio();
-      } else {
-        await downloadProject('folio');
-      }
+      if (S.isLocalOnly || !S.session) await exportLocalFolio();
+      else await downloadProject('folio');
     });
     $('btnDownloadZip')?.addEventListener('click', async () => {
-      if (S.isLocalOnly || !S.session) {
-        await exportLocalJson();
-      } else {
-        await downloadProject('zip');
-      }
+      if (S.isLocalOnly || !S.session) await exportLocalJson();
+      else await downloadProject('zip');
     });
     $('btnDownloadDb')?.addEventListener('click', downloadJsonDb);
     $('btnImportFolio')?.addEventListener('click', () => $('fileImportFolio').click());
@@ -3580,7 +4086,6 @@ svg { display: block; }
           });
           if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
         }
-        // Also clear versions from IDB
         const versions = await IDB.listVersions(S.pid);
         for (const v of versions) {
           await dbWrap(dbTx('versions', 'readwrite').delete(v.vid));
@@ -3664,7 +4169,6 @@ svg { display: block; }
 
     $('btnRefresh')?.addEventListener('click', () => { renderPanel(); loadDeployState(); });
 
-    // Keyboard nav for top tabs
     document.addEventListener('keydown', (e) => {
       if (!e.target.closest || !e.target.closest('#topTabsBar')) return;
       const idx = S.tabs.findIndex(t => t.id === S.activeTab);
