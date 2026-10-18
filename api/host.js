@@ -12,11 +12,12 @@ import {
   getUserByUsername, getUser,
   cleanUsername,
   getClientIp, hashIp, sanitizeFirebasePath,
-  logUserEvent, logProjectEvent,
+  logUserEvent, logProjectEvent, logProjectApiCall,
+  listUserProjects, createProjectRecord, deleteProjectRecord,
 } from "../utils/users.js";
 
 // =========================================================================
-// RATE LIMITS (per-API, per Final Rule #16)
+// RATE LIMITS
 // =========================================================================
 
 const API_NAME = "host";
@@ -40,6 +41,10 @@ const RATE_LIMITS = {
   profilePublic:      { max: 60,   window: 60 * 1000 },
   view:               { max: 10,   window: 60 * 1000 },
   logs:               { max: 60,   window: 60 * 60 * 1000 },
+  projectsList:       { max: 60,   window: 60 * 60 * 1000 },
+  projectsGet:        { max: 120,  window: 60 * 60 * 1000 },
+  projectsCreate:     { max: 20,   window: 60 * 60 * 1000 },
+  projectsDelete:     { max: 10,   window: 60 * 60 * 1000 },
 };
 
 async function checkRateLimit(identifier, action) {
@@ -303,6 +308,84 @@ async function callNotify(type, uid, payload) {
 }
 
 // =========================================================================
+// PROJECTS CRUD (NEW)
+// =========================================================================
+
+async function handleProjectsList(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "projectsList", `uid_${user.uid}`))) return;
+
+  const projects = await listUserProjects(user.uid);
+  return res.status(200).json({ success: true, projects });
+}
+
+async function handleProjectsGet(req, res, reqId) {
+  const pid = String(req.query?.pid || "").trim();
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "projectsGet", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "viewer");
+  if (!access) return;
+
+  const snap = await db.ref(`projects/${pid}`).once("value");
+  if (!snap.exists()) return res.status(404).json({ success: false, error: "Not found" });
+
+  const p = snap.val();
+  const { apiKeyHash, ...safe } = p;
+
+  return res.status(200).json({
+    success: true,
+    project: { pid, ...safe, myRole: access.role },
+  });
+}
+
+async function handleProjectsCreate(req, res, reqId) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!(await enforceRate(req, res, "projectsCreate", `uid_${user.uid}`))) return;
+
+  const { name, description } = req.body || {};
+  if (!name || typeof name !== "string" || name.length < 1 || name.length > 100) {
+    return res.status(400).json({ success: false, error: "name must be 1–100 chars" });
+  }
+  if (description !== undefined && (typeof description !== "string" || description.length > 500)) {
+    return res.status(400).json({ success: false, error: "description must be ≤500 chars" });
+  }
+
+  try {
+    const project = await createProjectRecord(user.uid, {
+      name: name.trim(),
+      description: description?.trim() || "",
+      storageLimit: user.settings?.globalLimit || 10 * 1024 * 1024,
+    });
+    await logProjectEvent(project.pid, user.uid, "project", "project.created", { name: project.name });
+    const { apiKeyHash, ...safe } = project;
+    return res.status(200).json({ success: true, pid: project.pid, project: safe });
+  } catch (err) {
+    log("host.projects_create.failed", { reqId, uid: user.uid, message: err.message });
+    return res.status(500).json({ success: false, error: "Could not create project" });
+  }
+}
+
+async function handleProjectsDelete(req, res, reqId) {
+  const { pid } = req.body || {};
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "projectsDelete", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  try {
+    await deleteProjectRecord(pid, access.uid);
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    log("host.projects_delete.failed", { reqId, pid, message: err.message });
+    return res.status(500).json({ success: false, error: "Could not delete project" });
+  }
+}
+
+// =========================================================================
 // DEPLOY
 // =========================================================================
 
@@ -354,7 +437,7 @@ async function handleDeploy(req, res, reqId) {
   callNotify("project", project.ownerId, {
     title: "Deployment started",
     body: `Project "${project.name}" is deploying.`,
-    link: `${BASE_URL}/app?pid=${pid}`,
+    link: `${BASE_URL}/project?pid=${pid}`,
     extra: { pid },
   }).catch(() => {});
 
@@ -469,7 +552,7 @@ async function handleDbSet(req, res, reqId) {
         callNotify("storage", ownerSnap.val(), {
           title: "Storage nearly full",
           body: `Project is ${Math.round((totalSize / limit) * 100)}% full.`,
-          link: `${BASE_URL}/app?pid=${pid}`,
+          link: `${BASE_URL}/project?pid=${pid}`,
           extra: { pid },
         }).catch(() => {});
       }
@@ -868,7 +951,7 @@ async function handleShare(req, res, reqId) {
     ? `<a class="btn" href="${BASE_URL}/${escapeHtml(username)}/${escapeHtml(slug)}/${escapeHtml(fileParam)}">View code</a>`
     : "";
   const editorBtn = isOwnerViewer
-    ? `<a class="btn" href="${BASE_URL}/app?pid=${escapeHtml(pid)}">Open in editor</a>`
+    ? `<a class="btn" href="${BASE_URL}/?pid=${escapeHtml(pid)}">Open in editor</a>`
     : "";
 
   const langs = project.languages?.breakdown
@@ -887,7 +970,6 @@ async function handleShare(req, res, reqId) {
     ? `<div class="empty-note">This project hasn't been deployed to a live site yet.</div>`
     : "";
 
-  // ← NEW: inject window.__PROJECT__ for public.js
   const projectJson = {
     pid,
     name: project.name || slug,
@@ -966,7 +1048,7 @@ async function handleProfilePublic(req, res, reqId) {
   `).join("") || `<div class="empty-state"><h3>No public projects yet</h3><p>When ${escapeHtml(username)} publishes a project, it will appear here.</p></div>`;
 
   const ownerControls = isOwner
-    ? `<div class="owner-controls"><a class="btn primary" href="${BASE_URL}/app">Open editor</a></div>`
+    ? `<div class="owner-controls"><a class="btn primary" href="${BASE_URL}/">Open editor</a></div>`
     : "";
 
   const avatarHtml = user.profile?.avatarUrl
@@ -991,7 +1073,6 @@ async function handleProfilePublic(req, res, reqId) {
     ? `<meta name="twitter:image" content="${escapeHtml(user.profile.ogImageUrl)}">`
     : "";
 
-  // ← NEW: inject window.__PROFILE__ for public.js
   const profileJson = {
     username,
     displayName: user.profile?.displayName || username,
@@ -1125,13 +1206,27 @@ export default async function handler(req, res) {
   const action = String(req.query?.action || req.body?.action || "").trim();
   const method = req.method;
 
+  // Extract pid for API call logging (best effort)
+  const pidForLog = req.query?.pid || req.body?.pid || null;
+
   try {
+    // Projects CRUD
+    if (method === "GET"  && action === "projects/list")        return await handleProjectsList(req, res, reqId);
+    if (method === "GET"  && action === "projects/get")         return await handleProjectsGet(req, res, reqId);
+    if (method === "POST" && action === "projects/create")      return await handleProjectsCreate(req, res, reqId);
+    if (method === "POST" && action === "projects/delete")      return await handleProjectsDelete(req, res, reqId);
+
+    // Deploy
     if (method === "POST" && action === "deploy")               return await handleDeploy(req, res, reqId);
     if (method === "POST" && action === "redeploy")             return await handleRedeploy(req, res, reqId);
     if (method === "GET"  && action === "status")               return await handleStatus(req, res, reqId);
+
+    // JSON DB
     if (method === "POST" && action === "db/set")               return await handleDbSet(req, res, reqId);
     if (method === "GET"  && action === "db/get")               return await handleDbGet(req, res, reqId);
     if (method === "POST" && action === "db/schema")            return await handleDbSchema(req, res, reqId);
+
+    // Sharing / permissions
     if (method === "POST" && action === "apikey/generate")      return await handleApiKeyGenerate(req, res, reqId);
     if (method === "POST" && action === "visibility")           return await handleVisibility(req, res, reqId);
     if (method === "POST" && action === "file-visibility")      return await handleFileVisibility(req, res, reqId);
@@ -1140,15 +1235,26 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "invite/cancel")        return await handleInviteCancel(req, res, reqId);
     if (method === "POST" && action === "collaborator/remove")  return await handleCollaboratorRemove(req, res, reqId);
     if (method === "POST" && action === "metatags/save")        return await handleMetatagsSave(req, res, reqId);
+
+    // Public renders
     if (method === "GET"  && action === "share")                return await handleShare(req, res, reqId);
     if (method === "GET"  && action === "profile")              return await handleProfilePublic(req, res, reqId);
     if (method === "POST" && action === "view")                 return await handleView(req, res, reqId);
+
+    // Logs
     if (method === "GET"  && action === "logs")                 return await handleLogs(req, res, reqId);
 
     return res.status(404).json({ success: false, error: `Unknown action: ${action || "(none)"}` });
   } catch (err) {
     log("host.unhandled_error", { reqId, action, method, message: err.message, stack: err.stack });
+    if (pidForLog) {
+      logProjectApiCall(pidForLog, false).catch(() => {});
+    }
     return res.status(500).json({ success: false, error: "Internal error", reqId });
+  } finally {
+    if (pidForLog) {
+      logProjectApiCall(pidForLog, true).catch(() => {});
+    }
   }
 }
 
