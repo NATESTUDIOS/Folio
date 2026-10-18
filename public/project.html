@@ -1433,7 +1433,7 @@ svg { display: block; }
   'use strict';
 
   // ═══════════════════════════════════════════════════════════
-  // CONFIG
+  // CONFIG — must match index.html & projects.html
   // ═══════════════════════════════════════════════════════════
 
   const API_BASE = 'https://foliostudios.vercel.app/api';
@@ -1443,12 +1443,13 @@ svg { display: block; }
   const API_ANALYTICS = API_BASE + '/analytics';
 
   const STORAGE = {
-    session: 'folio.session',
-    user: 'folio.user',
-    lastTab: 'folio.project.lastTab',
-    rememberTab: 'folio.project.rememberTab',
-    cache: 'folio.project.cache',
+    session: 'folio.session', user: 'folio.user',
+    lastTab: 'folio.project.lastTab', rememberTab: 'folio.project.rememberTab',
+    cache: 'folio.project.cache', theme: 'folio.theme',
   };
+
+  const DB_NAME = 'folio';
+  const DB_VERSION = 2;
 
   const OWNER_TABS = [
     { id: 'overview', label: 'Overview', icon: 'info' },
@@ -1460,7 +1461,6 @@ svg { display: block; }
     { id: 'downloads', label: 'Downloads', icon: 'download' },
     { id: 'danger', label: 'Danger', icon: 'alert' },
   ];
-
   const SHARED_TABS = [
     { id: 'overview', label: 'Overview', icon: 'info' },
     { id: 'analytics', label: 'Analytics', icon: 'chart' },
@@ -1504,29 +1504,62 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
+  // SHARED IDB
+  // ═══════════════════════════════════════════════════════════
+
+  let dbConn = null;
+  function openDB() {
+    if (dbConn) return Promise.resolve(dbConn);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => { dbConn = req.result; resolve(dbConn); };
+      req.onupgradeneeded = (event) => {
+        const conn = event.target.result;
+        if (!conn.objectStoreNames.contains('projects')) conn.createObjectStore('projects', { keyPath: 'pid' });
+        if (!conn.objectStoreNames.contains('files')) {
+          const store = conn.createObjectStore('files', { keyPath: ['pid', 'path'] });
+          store.createIndex('pid', 'pid');
+        }
+        if (!conn.objectStoreNames.contains('versions')) {
+          const store = conn.createObjectStore('versions', { keyPath: 'vid' });
+          store.createIndex('pid', 'pid');
+        }
+        if (!conn.objectStoreNames.contains('projectMeta')) conn.createObjectStore('projectMeta', { keyPath: 'pid' });
+        if (!conn.objectStoreNames.contains('syncQueue')) conn.createObjectStore('syncQueue', { keyPath: 'id', autoIncrement: true });
+      };
+    });
+  }
+  function dbWrap(req) { return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  function dbTx(store, mode = 'readonly') { return dbConn.transaction(store, mode).objectStore(store); }
+
+  const IDB = {
+    async getProject(pid) { return dbWrap(dbTx('projects').get(pid)); },
+    async putProject(p) { return dbWrap(dbTx('projects', 'readwrite').put(p)); },
+    async listFiles(pid) { return dbWrap(dbTx('files').index('pid').getAll(pid)); },
+  };
+
+  function normalizeServerProject(p) {
+    return {
+      pid: p.pid, name: p.name || 'Untitled project', slug: p.slug || '',
+      description: p.description || '', iconUrl: p.iconUrl || null,
+      createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
+      updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
+      _server: true,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // STATE
   // ═══════════════════════════════════════════════════════════
 
   const S = {
-    session: null,
-    user: null,
-    uid: null,
-    pid: null,
-    project: null,
-    role: null,
-    isOwner: false,
-    isEditor: false,
-    isSharedMode: false,
-    activeTab: 'overview',
-    tabs: OWNER_TABS,
-    tabCounts: {},
-    deployState: null,
-    analyticsData: null,
-    logsData: null,
-    logsOffset: 0,
-    dbData: null,
-    iconVariants: [],
-    selectedIconUrl: null,
+    session: null, user: null, uid: null,
+    pid: null, project: null, role: null,
+    isOwner: false, isEditor: false, isSharedMode: false,
+    activeTab: 'overview', tabs: OWNER_TABS, tabCounts: {},
+    deployState: null, analyticsData: null, logsData: null, logsOffset: 0,
+    dbData: null, iconVariants: [], selectedIconUrl: null,
     online: navigator.onLine,
   };
 
@@ -1535,7 +1568,7 @@ svg { display: block; }
   const escapeAttr = s => String(s ?? '').replace(/"/g, '&quot;');
 
   // ═══════════════════════════════════════════════════════════
-  // HELPERS
+  // UTILS
   // ═══════════════════════════════════════════════════════════
 
   function timeAgo(ts) {
@@ -1550,21 +1583,17 @@ svg { display: block; }
     if (d < 30) return `${d}d ago`;
     return new Date(ts).toLocaleDateString();
   }
-
   function formatBytes(n) {
     if (!n || n < 0) return '0 B';
-    const u = ['B', 'KB', 'MB', 'GB'];
-    let i = 0;
+    const u = ['B', 'KB', 'MB', 'GB']; let i = 0;
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
     return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
   }
-
   function formatNumber(n) {
     if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
     if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
     return String(n || 0);
   }
-
   function getInitials(name) {
     const s = String(name || '').trim();
     if (!s) return '?';
@@ -1573,66 +1602,45 @@ svg { display: block; }
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // TOAST
-  // ═══════════════════════════════════════════════════════════
-
   function toast(msg, type = 'info', duration = 2500) {
     const container = $('toastContainer');
     const el = document.createElement('div');
     el.className = 'toast ' + type;
-    const icon = type === 'success' ? 'checkCircle' : type === 'error' ? 'alertCircle' : 'info';
-    el.innerHTML = svg(icon, 13, 2.4) + '<span></span>';
+    const ic = type === 'success' ? 'checkCircle' : type === 'error' ? 'alertCircle' : 'info';
+    el.innerHTML = svg(ic, 13, 2.4) + '<span></span>';
     el.querySelector('span').textContent = msg;
     container.appendChild(el);
     requestAnimationFrame(() => el.classList.add('show'));
-    setTimeout(() => {
-      el.classList.remove('show');
-      setTimeout(() => el.remove(), 300);
-    }, duration);
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, duration);
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // LOADING
-  // ═══════════════════════════════════════════════════════════
 
   function showLoading(title = 'Working…', desc = '') {
     $('loadingTitle').textContent = title;
     $('loadingDesc').textContent = desc;
     $('loadingOverlay').classList.add('active');
   }
-
-  function hideLoading() {
-    $('loadingOverlay').classList.remove('active');
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // MODAL
-  // ═══════════════════════════════════════════════════════════
+  function hideLoading() { $('loadingOverlay').classList.remove('active'); }
 
   function openModal(html) {
     $('modalBody').innerHTML = html;
     $('modalOverlay').classList.add('active');
   }
-
   function closeModal() {
     $('modalOverlay').classList.remove('active');
     setTimeout(() => { $('modalBody').innerHTML = ''; }, 250);
   }
+  window.closeModal = closeModal;
 
   function confirmModal(title, desc, confirmLabel, danger, onConfirm) {
     openModal(`
       <div class="modal-title">${escapeHTML(title)}</div>
       <div class="modal-desc">${escapeHTML(desc)}</div>
       <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="ProjectPage.closeModal()">Cancel</button>
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
         <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="modalConfirmBtn">${escapeHTML(confirmLabel)}</button>
       </div>
     `);
-    $('modalConfirmBtn').addEventListener('click', () => {
-      closeModal();
-      onConfirm();
-    });
+    $('modalConfirmBtn').addEventListener('click', () => { closeModal(); onConfirm(); });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1658,20 +1666,17 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // CACHE (offline)
+  // CACHE (offline fallback for non-IDB fields)
   // ═══════════════════════════════════════════════════════════
 
   function cacheProject(project) {
     try {
-      const key = STORAGE.cache + '.' + S.pid;
-      localStorage.setItem(key, JSON.stringify({ project, cachedAt: Date.now() }));
+      localStorage.setItem(STORAGE.cache + '.' + S.pid, JSON.stringify({ project, cachedAt: Date.now() }));
     } catch {}
   }
-
   function readCachedProject() {
     try {
-      const key = STORAGE.cache + '.' + S.pid;
-      const raw = localStorage.getItem(key);
+      const raw = localStorage.getItem(STORAGE.cache + '.' + S.pid);
       return raw ? JSON.parse(raw).project : null;
     } catch { return null; }
   }
@@ -1684,32 +1689,20 @@ svg { display: block; }
     const params = new URLSearchParams(location.search);
     return params.get('pid') || null;
   }
-
-  function getHashTab() {
-    const h = location.hash.replace(/^#\/?/, '');
-    return h || null;
-  }
-
+  function getHashTab() { return location.hash.replace(/^#\/?/, '') || null; }
   function setHashTab(tabId) {
     const newHash = `#/${tabId}`;
-    if (location.hash !== newHash) {
-      history.replaceState(null, '', newHash);
-    }
+    if (location.hash !== newHash) history.replaceState(null, '', newHash);
   }
-
   function getLastTab() {
     try { return localStorage.getItem(STORAGE.lastTab + '.' + S.pid) || null; } catch { return null; }
   }
-
   function saveLastTab(tabId) {
     try { localStorage.setItem(STORAGE.lastTab + '.' + S.pid, tabId); } catch {}
   }
-
   function shouldRememberTab() {
-    try {
-      const v = localStorage.getItem(STORAGE.rememberTab);
-      return v === null ? true : v === 'true';
-    } catch { return true; }
+    try { const v = localStorage.getItem(STORAGE.rememberTab); return v === null ? true : v === 'true'; }
+    catch { return true; }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1721,13 +1714,8 @@ svg { display: block; }
     const url = project?.iconUrl;
     const name = project?.name || '?';
     const initials = getInitials(name);
-
-    if (url) {
-      el.innerHTML = `<img src="${escapeAttr(url)}" alt="${escapeAttr(name)}">`;
-    } else {
-      el.textContent = initials;
-    }
-
+    if (url) el.innerHTML = `<img src="${escapeAttr(url)}" alt="${escapeAttr(name)}">`;
+    else el.textContent = initials;
     if (editable && !S.isSharedMode) {
       const btn = document.createElement('button');
       btn.className = 'edit-icon-hint';
@@ -1755,9 +1743,7 @@ svg { display: block; }
 
   async function openIconPicker() {
     if (S.isSharedMode) return;
-    S.iconVariants = [];
-    S.selectedIconUrl = null;
-
+    S.iconVariants = []; S.selectedIconUrl = null;
     openModal(`
       <div class="modal-title">Project icon</div>
       <div class="modal-desc">Generated from your project name using Flier. Pick one.</div>
@@ -1767,67 +1753,51 @@ svg { display: block; }
         <button class="btn btn-primary" id="iconSaveBtn" disabled>${svg('check', 12, 2.4)} Save</button>
       </div>
     `);
-
     $('iconSaveBtn').addEventListener('click', saveIcon);
     $('iconRegenerateBtn').addEventListener('click', generateIcons);
-
     await generateIcons();
   }
 
   async function generateIcons() {
-    const grid = $('iconPickerGrid');
-    if (!grid) return;
+    const grid = $('iconPickerGrid'); if (!grid) return;
     grid.innerHTML = '';
     for (let i = 0; i < 5; i++) {
       const sk = document.createElement('div');
       sk.className = 'icon-skeleton';
       grid.appendChild(sk);
     }
-
     const username = S.user?.username || 'folio';
     const displayName = S.project?.name || 'Project';
-
     try {
       const res = await fetch(API_FLIER + '?action=avatar/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, displayName }),
       });
       const data = await res.json();
-      if (!data.success || !Array.isArray(data.variants) || data.variants.length === 0) {
-        throw new Error(data.error || 'Generation failed');
-      }
+      if (!data.success || !Array.isArray(data.variants)) throw new Error(data.error || 'Failed');
       S.iconVariants = data.variants;
       renderIconOptions();
-    } catch (err) {
+    } catch {
       toast('Icon generation failed', 'error');
       grid.innerHTML = `<div class="icon-placeholder" style="grid-column: 1 / -1; aspect-ratio: auto; padding: 16px;">Could not generate</div>`;
     }
   }
 
   function renderIconOptions() {
-    const grid = $('iconPickerGrid');
-    if (!grid) return;
+    const grid = $('iconPickerGrid'); if (!grid) return;
     grid.innerHTML = '';
-    S.iconVariants.forEach((v) => {
+    S.iconVariants.forEach(v => {
       const btn = document.createElement('button');
-      btn.className = 'icon-option';
-      btn.type = 'button';
-      btn.dataset.avatarId = v.id;
-
+      btn.className = 'icon-option'; btn.type = 'button'; btn.dataset.avatarId = v.id;
       const img = document.createElement('img');
-      img.src = v.dataUrl;
-      img.alt = v.label || 'Icon';
+      img.src = v.dataUrl; img.alt = v.label || 'Icon';
       btn.appendChild(img);
-
       btn.addEventListener('click', () => {
         S.selectedIconUrl = v.dataUrl;
         grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
         btn.classList.add('selected');
-        const saveBtn = $('iconSaveBtn');
-        if (saveBtn) saveBtn.disabled = false;
+        const saveBtn = $('iconSaveBtn'); if (saveBtn) saveBtn.disabled = false;
       });
-
       grid.appendChild(btn);
     });
   }
@@ -1836,36 +1806,29 @@ svg { display: block; }
     if (!S.selectedIconUrl) return;
     const saveBtn = $('iconSaveBtn');
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Uploading…'; }
-
     showLoading('Uploading icon', '');
-
     try {
       const uploadRes = await fetch(API_FLIER + '?action=avatar/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dataUrl: S.selectedIconUrl,
-          username: S.project?.slug || 'project',
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataUrl: S.selectedIconUrl, username: S.project?.slug || 'project' }),
       });
       const uploadData = await uploadRes.json();
-      if (!uploadData.success || !uploadData.url) {
-        throw new Error(uploadData.error || 'Upload failed');
+      if (!uploadData.success || !uploadData.url) throw new Error(uploadData.error || 'Upload failed');
+
+      if (S.session && S.online) {
+        const updateRes = await apiFetch(API_HOST + '?action=projects/update', {
+          method: 'POST', body: JSON.stringify({ pid: S.pid, iconUrl: uploadData.url }),
+        });
+        if (!updateRes.ok || !updateRes.data?.success) throw new Error(updateRes.data?.error || 'Update failed');
       }
-
-      const updateRes = await apiFetch(API_HOST + '?action=projects/update', {
-        method: 'POST',
-        body: JSON.stringify({ pid: S.pid, iconUrl: uploadData.url }),
-      });
-
-      if (!updateRes.ok || !updateRes.data?.success) {
-        throw new Error(updateRes.data?.error || 'Update failed');
-      }
-
       S.project.iconUrl = uploadData.url;
+      await IDB.putProject({
+        pid: S.pid, name: S.project.name, slug: S.project.slug || '',
+        description: S.project.description || '', iconUrl: uploadData.url,
+        createdAt: S.project.createdAt || Date.now(), updatedAt: Date.now(),
+      });
       updateProjectIcons();
-      closeModal();
-      hideLoading();
+      closeModal(); hideLoading();
       toast('Icon saved', 'success');
     } catch (err) {
       hideLoading();
@@ -1875,73 +1838,67 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // LOAD PROJECT
+  // LOAD PROJECT — IDB first
   // ═══════════════════════════════════════════════════════════
 
   async function loadProject() {
-    const cached = readCachedProject();
+    let localProject = null;
+    try { localProject = await IDB.getProject(S.pid); } catch {}
 
-    // Offline → use cache
-    if (!S.online) {
-      if (cached) {
-        S.project = cached;
+    // Guest project — always local
+    if (/^local_/.test(S.pid)) {
+      if (!localProject) { showFatal('Not found', 'This local project no longer exists.'); return false; }
+      S.project = { ...localProject, myRole: 'owner', visibility: { profile: 'private' } };
+      applyProjectMeta();
+      return true;
+    }
+
+    // Signed in + online: hydrate from server
+    if (S.session && S.online) {
+      const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
+      if (res.ok && res.data?.success) {
+        const norm = normalizeServerProject(res.data.project);
+        await IDB.putProject(norm);
+        S.project = { ...res.data.project, ...norm };
+        cacheProject(S.project);
         applyProjectMeta();
         return true;
       }
-      showFatal('You\'re offline', 'No cached data for this project. Reconnect to load.');
-      return false;
-    }
-
-    const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
-    if (!res.ok) {
       if (res.status === 401) {
-        window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
+        window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
         return false;
       }
-      if (res.status === 404) {
-        showFatal('Project not found', 'This project may have been deleted or you don\'t have access.');
-        return false;
+      if (res.status === 404 || res.status === 403) {
+        if (localProject) { S.project = localProject; applyProjectMeta(); toast('Showing cached data', 'warning'); return true; }
+        showFatal('Project not found', 'This project may have been deleted.'); return false;
       }
-      if (res.status === 403) {
-        showFatal('Access denied', 'You don\'t have permission to view this project.');
-        return false;
-      }
-      // Fallback to cache on network failure
-      if (cached) {
-        S.project = cached;
-        applyProjectMeta();
-        toast('Showing cached data', 'warning');
-        return true;
-      }
-      showFatal('Couldn\'t load project', 'Check your connection and try again.');
-      return false;
     }
 
-    S.project = res.data.project;
-    cacheProject(S.project);
-    applyProjectMeta();
-    return true;
+    if (localProject) {
+      S.project = localProject;
+      applyProjectMeta();
+      if (!S.online) toast('Showing cached data', 'warning');
+      return true;
+    }
+    const cached = readCachedProject();
+    if (cached) { S.project = cached; applyProjectMeta(); toast('Showing cached data', 'warning'); return true; }
+
+    showFatal('Couldn\'t load project', 'Check your connection and try again.');
+    return false;
   }
 
   function applyProjectMeta() {
-    S.role = S.project.myRole;
+    S.role = S.project.myRole || 'owner';
     S.isOwner = S.role === 'owner';
     S.isEditor = S.role === 'owner' || S.role === 'editor';
     S.isSharedMode = !S.isOwner && !S.isEditor;
     S.tabs = S.isSharedMode ? SHARED_TABS : OWNER_TABS;
-
-    if (!S.tabs.some(t => t.id === S.activeTab)) {
-      S.activeTab = 'overview';
-    }
-
+    if (!S.tabs.some(t => t.id === S.activeTab)) S.activeTab = 'overview';
     updateHeader();
     renderSidebar();
     renderMobileTabs();
     updateProjectIcons();
-
-    if (S.isEditor || S.project.visibility?.liveSite === 'public') {
-      loadDeployState();
-    }
+    if (S.isEditor || S.project.visibility?.liveSite === 'public') loadDeployState();
   }
 
   function updateHeader() {
@@ -1959,70 +1916,47 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SIDEBAR
+  // SIDEBAR / MOBILE TABS
   // ═══════════════════════════════════════════════════════════
 
   function renderSidebar() {
-    const body = $('sidebarBody');
-    if (!body) return;
+    const body = $('sidebarBody'); if (!body) return;
     body.innerHTML = '';
-
     const section = document.createElement('div');
     section.className = 'sidebar-section';
-
     const title = document.createElement('div');
-    title.className = 'sidebar-section-title';
-    title.textContent = 'Sections';
+    title.className = 'sidebar-section-title'; title.textContent = 'Sections';
     section.appendChild(title);
-
     S.tabs.forEach(t => {
       const btn = document.createElement('button');
       btn.className = 'sidebar-tab' + (t.id === S.activeTab ? ' active' : '');
       btn.type = 'button';
       const badge = t.countKey && S.tabCounts[t.countKey] != null
-        ? `<span class="sidebar-tab-badge">${S.tabCounts[t.countKey]}</span>`
-        : '';
+        ? `<span class="sidebar-tab-badge">${S.tabCounts[t.countKey]}</span>` : '';
       btn.innerHTML = svg(t.icon, 13, 2.2) + `<span>${escapeHTML(t.label)}</span>` + badge;
-      btn.addEventListener('click', () => {
-        switchTab(t.id);
-        closeSidebar();
-      });
+      btn.addEventListener('click', () => { switchTab(t.id); closeSidebar(); });
       section.appendChild(btn);
     });
-
     body.appendChild(section);
   }
 
   function renderMobileTabs() {
-    const el = $('mobileTabs');
-    if (!el) return;
+    const el = $('mobileTabs'); if (!el) return;
     el.innerHTML = '';
     S.tabs.forEach(t => {
       const btn = document.createElement('button');
       btn.className = 'mobile-tab-pill' + (t.id === S.activeTab ? ' active' : '');
       btn.type = 'button';
       const badge = t.countKey && S.tabCounts[t.countKey] != null
-        ? `<span class="mobile-tab-pill-badge">${S.tabCounts[t.countKey]}</span>`
-        : '';
+        ? `<span class="mobile-tab-pill-badge">${S.tabCounts[t.countKey]}</span>` : '';
       btn.innerHTML = `<span>${escapeHTML(t.label)}</span>` + badge;
       btn.addEventListener('click', () => switchTab(t.id));
       el.appendChild(btn);
     });
   }
 
-  function openSidebar() {
-    $('sidebar').classList.add('open');
-    $('sidebarBackdrop').classList.add('open');
-  }
-
-  function closeSidebar() {
-    $('sidebar').classList.remove('open');
-    $('sidebarBackdrop').classList.remove('open');
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // TABS
-  // ═══════════════════════════════════════════════════════════
+  function openSidebar() { $('sidebar').classList.add('open'); $('sidebarBackdrop').classList.add('open'); }
+  function closeSidebar() { $('sidebar').classList.remove('open'); $('sidebarBackdrop').classList.remove('open'); }
 
   function switchTab(tabId) {
     if (!S.tabs.some(t => t.id === tabId)) return;
@@ -2043,58 +1977,38 @@ svg { display: block; }
     const tab = S.activeTab;
     inner.innerHTML = `<div class="panel active" id="panel-${tab}"></div>`;
     const panel = $('panel-' + tab);
-
     const loaders = {
-      overview: renderOverviewPanel,
-      deployments: renderDeploymentsPanel,
-      analytics: renderAnalyticsPanel,
-      sharing: renderSharingPanel,
-      data: renderDataPanel,
-      logs: renderLogsPanel,
-      downloads: renderDownloadsPanel,
-      download: renderDownloadSharedPanel,
-      danger: renderDangerPanel,
+      overview: renderOverviewPanel, deployments: renderDeploymentsPanel,
+      analytics: renderAnalyticsPanel, sharing: renderSharingPanel,
+      data: renderDataPanel, logs: renderLogsPanel, downloads: renderDownloadsPanel,
+      download: renderDownloadSharedPanel, danger: renderDangerPanel,
     };
     const loader = loaders[tab];
     if (loader) loader(panel);
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // HELPERS: SKELETON / EMPTY / FATAL
-  // ═══════════════════════════════════════════════════════════
-
   function skeletonCard(lines = 3) {
     let html = '<div class="card"><div class="card-body">';
     html += '<div class="skeleton sk-title"></div>';
-    for (let i = 0; i < lines; i++) {
-      html += `<div class="skeleton sk-line" style="width:${60 + Math.random() * 35}%;"></div>`;
-    }
+    for (let i = 0; i < lines; i++) html += `<div class="skeleton sk-line" style="width:${60 + Math.random() * 35}%;"></div>`;
     html += '</div></div>';
     return html;
   }
 
   function emptyState(icon, title, desc, actionHtml = '') {
-    return `
-      <div class="empty-state">
-        <div class="empty-state-icon">${svg(icon, 18, 2)}</div>
-        <div class="empty-state-title">${escapeHTML(title)}</div>
-        <div class="empty-state-desc">${escapeHTML(desc)}</div>
-        ${actionHtml}
-      </div>
-    `;
+    return `<div class="empty-state">
+      <div class="empty-state-icon">${svg(icon, 18, 2)}</div>
+      <div class="empty-state-title">${escapeHTML(title)}</div>
+      <div class="empty-state-desc">${escapeHTML(desc)}</div>
+      ${actionHtml}
+    </div>`;
   }
 
   function showFatal(title, desc) {
-    $('contentInner').innerHTML = `
-      <div class="panel active">
-        <div class="card"><div class="card-body">
-          ${emptyState('alertCircle', title, desc, `
-            <button class="btn btn-secondary" onclick="location.reload()">${svg('refresh', 12, 2.2)} Try again</button>
-            <a class="btn btn-ghost" href="/projects" style="margin-top:6px;">Back to projects</a>
-          `)}
-        </div></div>
-      </div>
-    `;
+    $('contentInner').innerHTML = `<div class="panel active"><div class="card"><div class="card-body">
+      ${emptyState('alertCircle', title, desc, `<button class="btn btn-secondary" onclick="location.reload()">${svg('refresh', 12, 2.2)} Try again</button>
+      <a class="btn btn-ghost" href="/projects.html" style="margin-top:6px;">Back to projects</a>`)}
+    </div></div></div>`;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2107,10 +2021,7 @@ svg { display: block; }
       const res = await apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.pid));
       if (res.ok && res.data?.success) {
         S.deployState = res.data.deployment;
-        if (S.deployState) {
-          S.project.deployment = S.deployState;
-          updateHeader();
-        }
+        if (S.deployState) { S.project.deployment = S.deployState; updateHeader(); }
       }
     } catch {}
   }
@@ -2122,7 +2033,6 @@ svg { display: block; }
   async function renderOverviewPanel(panel) {
     panel.innerHTML = skeletonCard(4);
     await new Promise(r => setTimeout(r, 60));
-
     const p = S.project;
     const canEdit = S.isEditor && S.online;
     const deployUrl = p.deployment?.url;
@@ -2135,52 +2045,29 @@ svg { display: block; }
           ${canEdit ? `<button class="btn btn-sm btn-secondary" id="btnSaveDetails">${svg('check', 10, 2.4)} Save</button>` : ''}
         </div>
         <div class="card-body">
-          <div class="field">
-            <label class="field-label">Project name</label>
-            <input class="input" id="fieldProjectName" value="${escapeAttr(p.name || '')}" ${canEdit ? '' : 'readonly'}>
-          </div>
-          <div class="field">
-            <label class="field-label">Slug</label>
+          <div class="field"><label class="field-label">Project name</label>
+            <input class="input" id="fieldProjectName" value="${escapeAttr(p.name || '')}" ${canEdit ? '' : 'readonly'}></div>
+          <div class="field"><label class="field-label">Slug</label>
             <div style="display:flex;gap:5px;">
               <input class="input mono" id="fieldProjectSlug" value="${escapeAttr(p.slug || '')}" readonly>
               <button class="btn btn-secondary btn-icon" id="btnCopySlug" aria-label="Copy" type="button">${svg('copy', 12, 2.2)}</button>
-            </div>
-            <div class="field-hint">Immutable once set.</div>
-          </div>
-          <div class="field">
-            <label class="field-label">Description</label>
-            <textarea class="textarea" id="fieldProjectDesc" ${canEdit ? '' : 'readonly'}>${escapeHTML(p.description || '')}</textarea>
-          </div>
+            </div><div class="field-hint">Immutable once set.</div></div>
+          <div class="field"><label class="field-label">Description</label>
+            <textarea class="textarea" id="fieldProjectDesc" ${canEdit ? '' : 'readonly'}>${escapeHTML(p.description || '')}</textarea></div>
         </div>
       </div>
-
       <div class="stats-grid">
-        <div class="stat-tile">
-          <div class="stat-label">Files</div>
-          <div class="stat-value" id="statFiles">${p.fileCount ?? '—'}</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-label">Versions</div>
-          <div class="stat-value" id="statVersions">${p.versionCount ?? '—'}</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-label">Storage</div>
-          <div class="stat-value" id="statStorage">${formatBytes(p.storageUsed || 0)}</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-label">Modified</div>
-          <div class="stat-value" id="statModified" style="font-size:12px;">${timeAgo(p.updatedAt)}</div>
-        </div>
+        <div class="stat-tile"><div class="stat-label">Files</div><div class="stat-value">${p.fileCount ?? '—'}</div></div>
+        <div class="stat-tile"><div class="stat-label">Versions</div><div class="stat-value">${p.versionCount ?? '—'}</div></div>
+        <div class="stat-tile"><div class="stat-label">Storage</div><div class="stat-value">${formatBytes(p.storageUsed || 0)}</div></div>
+        <div class="stat-tile"><div class="stat-label">Modified</div><div class="stat-value" style="font-size:12px;">${timeAgo(p.updatedAt)}</div></div>
       </div>
-
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('rocket', 13, 2.2)} Live deployment</div>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('rocket', 13, 2.2)} Live deployment</div></div>
         <div class="card-body">
           ${deployed ? `
             <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--theme-success-soft);border-radius:8px;margin-bottom:8px;">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--theme-success)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${TAB_ICONS.checkCircle}</svg>
+              ${svg('checkCircle', 14, 2.4)}
               <div style="flex:1;min-width:0;">
                 <div style="font-size:10.5px;font-weight:700;color:var(--theme-success);margin-bottom:1px;">Live</div>
                 <div style="font-size:10px;color:var(--theme-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(deployUrl)}</div>
@@ -2189,32 +2076,25 @@ svg { display: block; }
             <div style="display:flex;gap:5px;flex-wrap:wrap;">
               <a class="btn btn-secondary btn-sm" href="${escapeAttr(deployUrl)}" target="_blank" rel="noopener">${svg('external', 10, 2.2)} Visit</a>
               ${canEdit ? `<button class="btn btn-secondary btn-sm" id="btnQuickRedeploy">${svg('refresh', 10, 2.2)} Redeploy</button>` : ''}
-            </div>
-          ` : `
+            </div>` : `
             <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">Not deployed yet</div>
-            ${canEdit ? `<button class="btn btn-primary btn-sm" id="btnQuickDeploy">${svg('rocket', 10, 2.4)} Deploy now</button>` : ''}
-          `}
+            ${canEdit ? `<button class="btn btn-primary btn-sm" id="btnQuickDeploy">${svg('rocket', 10, 2.4)} Deploy now</button>` : ''}`}
         </div>
       </div>
-
       ${canEdit ? `
         <div class="card">
-          <div class="card-header">
-            <div class="card-title">${svg('image', 13, 2.2)} Icon</div>
-            <button class="btn btn-sm btn-secondary" id="btnChangeIcon">${svg('refresh', 10, 2.2)} Regenerate</button>
-          </div>
+          <div class="card-header"><div class="card-title">${svg('image', 13, 2.2)} Icon</div>
+            <button class="btn btn-sm btn-secondary" id="btnChangeIcon">${svg('refresh', 10, 2.2)} Regenerate</button></div>
           <div class="card-body">
             <div style="display:flex;align-items:center;gap:10px;">
               <div id="overviewIcon" style="width:44px;height:44px;border-radius:10px;background:var(--theme-surface-elevated);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:800;color:var(--theme-primary);font-size:16px;border:1px solid var(--theme-glass-border);"></div>
               <div style="flex:1;min-width:0;font-size:11px;color:var(--theme-text-secondary);line-height:1.4;">Generated by Flier from your project name.</div>
             </div>
           </div>
-        </div>
-      ` : ''}
+        </div>` : ''}
     `;
 
     renderProjectIcon($('overviewIcon'), S.project);
-
     if (canEdit) {
       $('btnSaveDetails')?.addEventListener('click', saveProjectDetails);
       $('btnChangeIcon')?.addEventListener('click', openIconPicker);
@@ -2229,34 +2109,33 @@ svg { display: block; }
     const name = $('fieldProjectName')?.value?.trim();
     const description = $('fieldProjectDesc')?.value?.trim();
     if (!name) { toast('Project name required', 'error'); return; }
-
     const btn = $('btnSaveDetails');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-
     try {
-      const res = await apiFetch(API_HOST + '?action=projects/update', {
-        method: 'POST',
-        body: JSON.stringify({ pid: S.pid, name, description }),
-      });
-      if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
-
+      if (S.session && !/^local_/.test(S.pid)) {
+        const res = await apiFetch(API_HOST + '?action=projects/update', {
+          method: 'POST', body: JSON.stringify({ pid: S.pid, name, description }),
+        });
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+      }
       S.project.name = name;
       S.project.description = description;
+      await IDB.putProject({
+        pid: S.pid, name, description, slug: S.project.slug || '',
+        iconUrl: S.project.iconUrl || null,
+        createdAt: S.project.createdAt || Date.now(), updatedAt: Date.now(),
+      });
       cacheProject(S.project);
       updateHeader();
       toast('Saved', 'success');
-    } catch (err) {
-      toast(err.message || 'Save failed', 'error');
-    } finally {
-      if (btn) { btn.disabled = false; btn.innerHTML = svg('check', 10, 2.4) + ' Save'; }
-    }
+    } catch (err) { toast(err.message || 'Save failed', 'error'); }
+    finally { if (btn) { btn.disabled = false; btn.innerHTML = svg('check', 10, 2.4) + ' Save'; } }
   }
 
   function copySlug() {
     const slug = S.project?.slug || '';
     if (!slug) return;
-    navigator.clipboard.writeText(slug).then(() => toast('Slug copied', 'success', 1200))
-      .catch(() => toast('Copy failed', 'error'));
+    navigator.clipboard.writeText(slug).then(() => toast('Slug copied', 'success', 1200)).catch(() => toast('Copy failed', 'error'));
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2269,30 +2148,25 @@ svg { display: block; }
       return;
     }
     panel.innerHTML = skeletonCard(3) + skeletonCard(6);
-
     const [statusRes, historyRes] = await Promise.all([
       apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.pid)),
       apiFetch(API_HOST + '?action=deployment/history&pid=' + encodeURIComponent(S.pid)),
     ]);
-
     const current = statusRes.ok ? statusRes.data?.deployment : null;
     const history = historyRes.ok ? (historyRes.data?.deployments || []) : [];
     const currentId = historyRes.ok ? historyRes.data?.currentDeploymentId : null;
 
     S.deployState = current;
     S.tabCounts.deployments = history.length;
-    renderSidebar();
-    renderMobileTabs();
+    renderSidebar(); renderMobileTabs();
 
     const isLive = current?.url && current.state !== 'OFFLINE';
     const isOffline = current?.state === 'OFFLINE';
 
     panel.innerHTML = `
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('rocket', 13, 2.2)} Current</div>
-          ${S.isEditor ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">${svg('rocket', 10, 2.4)} Deploy</button>` : ''}
-        </div>
+        <div class="card-header"><div class="card-title">${svg('rocket', 13, 2.2)} Current</div>
+          ${S.isEditor ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">${svg('rocket', 10, 2.4)} Deploy</button>` : ''}</div>
         <div class="card-body">
           ${isLive ? `
             <div style="display:flex;flex-direction:column;gap:8px;">
@@ -2302,8 +2176,7 @@ svg { display: block; }
               </div>
               <a href="${escapeAttr(current.url)}" target="_blank" rel="noopener" class="mono" style="font-size:10.5px;word-break:break-all;">${escapeHTML(current.url)}</a>
               ${S.isEditor ? `<button class="btn btn-secondary btn-sm" id="btnTakeOffline">${svg('eyeOff', 10, 2.2)} Take offline</button>` : ''}
-            </div>
-          ` : isOffline ? `
+            </div>` : isOffline ? `
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
               <span class="vis-badge private">${svg('eyeOff', 9, 2.2)} Offline</span>
               <span style="font-size:10px;color:var(--theme-text-tertiary);">${timeAgo(current.offlineAt)}</span>
@@ -2312,17 +2185,12 @@ svg { display: block; }
           ` : `<div style="font-size:11px;color:var(--theme-text-tertiary);">Never deployed</div>`}
         </div>
       </div>
-
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('clock', 13, 2.2)} History (${history.length})</div>
-          <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshHistory">${svg('refresh', 10, 2.2)}</button>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('clock', 13, 2.2)} History (${history.length})</div>
+          <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshHistory">${svg('refresh', 10, 2.2)}</button></div>
         <div class="card-body tight">
-          ${history.length === 0
-            ? emptyState('clock', 'No deployments', 'Deploy your project to start building history.')
-            : `<div class="row-list">${history.map(d => renderDeploymentRow(d, currentId)).join('')}</div>`
-          }
+          ${history.length === 0 ? emptyState('clock', 'No deployments', 'Deploy your project to start building history.')
+            : `<div class="row-list">${history.map(d => renderDeploymentRow(d, currentId)).join('')}</div>`}
         </div>
       </div>
     `;
@@ -2330,138 +2198,90 @@ svg { display: block; }
     $('btnDeployNow')?.addEventListener('click', deployNow);
     $('btnRefreshHistory')?.addEventListener('click', () => renderPanel());
     $('btnTakeOffline')?.addEventListener('click', takeOffline);
-    document.querySelectorAll('[data-redeploy]').forEach(btn => {
-      btn.addEventListener('click', () => redeployVersion(btn.dataset.redeploy));
-    });
-    document.querySelectorAll('[data-delete-deploy]').forEach(btn => {
-      btn.addEventListener('click', () => confirmDeleteDeployment(btn.dataset.deleteDeploy));
-    });
+    document.querySelectorAll('[data-redeploy]').forEach(btn => btn.addEventListener('click', () => redeployVersion(btn.dataset.redeploy)));
+    document.querySelectorAll('[data-delete-deploy]').forEach(btn => btn.addEventListener('click', () => confirmDeleteDeployment(btn.dataset.deleteDeploy)));
   }
 
   function renderDeploymentRow(d, currentId) {
     const isCurrent = d.id === currentId;
-    return `
-      <div class="row-item">
-        <div class="row-icon">${svg(isCurrent ? 'checkCircle' : 'rocket', 13, 2.2)}</div>
-        <div class="row-content">
-          <div class="row-title">
-            ${d.versionId ? `v${escapeHTML(d.versionId.slice(-6))}` : 'Current'}
-            ${isCurrent ? '<span class="vis-badge public" style="margin-left:5px;font-size:8px;">Current</span>' : ''}
-          </div>
-          <div class="row-sub">${timeAgo(d.deployedAt)} · ${d.state || 'READY'}</div>
-        </div>
-        <div class="row-actions">
-          ${d.url ? `<a class="btn btn-ghost btn-sm btn-icon" href="${escapeAttr(d.url)}" target="_blank" rel="noopener" aria-label="Open">${svg('external', 10, 2.2)}</a>` : ''}
-          ${S.isEditor && !isCurrent && d.versionId ? `<button class="btn btn-ghost btn-sm btn-icon" data-redeploy="${escapeAttr(d.versionId)}" aria-label="Backdate">${svg('refresh', 10, 2.2)}</button>` : ''}
-          ${S.isOwner ? `<button class="btn btn-ghost btn-sm btn-icon" data-delete-deploy="${escapeAttr(d.id)}" aria-label="Delete" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>` : ''}
-        </div>
+    return `<div class="row-item">
+      <div class="row-icon">${svg(isCurrent ? 'checkCircle' : 'rocket', 13, 2.2)}</div>
+      <div class="row-content">
+        <div class="row-title">${d.versionId ? `v${escapeHTML(d.versionId.slice(-6))}` : 'Current'}
+          ${isCurrent ? '<span class="vis-badge public" style="margin-left:5px;font-size:8px;">Current</span>' : ''}</div>
+        <div class="row-sub">${timeAgo(d.deployedAt)} · ${d.state || 'READY'}</div>
       </div>
-    `;
+      <div class="row-actions">
+        ${d.url ? `<a class="btn btn-ghost btn-sm btn-icon" href="${escapeAttr(d.url)}" target="_blank" rel="noopener" aria-label="Open">${svg('external', 10, 2.2)}</a>` : ''}
+        ${S.isEditor && !isCurrent && d.versionId ? `<button class="btn btn-ghost btn-sm btn-icon" data-redeploy="${escapeAttr(d.versionId)}" aria-label="Redeploy">${svg('refresh', 10, 2.2)}</button>` : ''}
+        ${S.isOwner ? `<button class="btn btn-ghost btn-sm btn-icon" data-delete-deploy="${escapeAttr(d.id)}" aria-label="Delete" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>` : ''}
+      </div>
+    </div>`;
   }
 
   async function deployNow() {
     if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
-    confirmModal(
-      'Deploy current files?',
-      'This will build and deploy your project to a live URL.',
-      'Deploy',
-      false,
-      async () => {
-        showLoading('Deploying', 'Building and deploying…');
-        try {
-          const res = await apiFetch(API_HOST + '?action=deploy', {
-            method: 'POST',
-            body: JSON.stringify({ pid: S.pid }),
-          });
-          hideLoading();
-          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Deploy failed');
-          toast('Deploy started', 'success');
-          setTimeout(() => renderPanel(), 2000);
-        } catch (err) {
-          hideLoading();
-          toast(err.message || 'Deploy failed', 'error');
-        }
-      }
-    );
+    confirmModal('Deploy current files?', 'This will build and deploy your project to a live URL.', 'Deploy', false, async () => {
+      showLoading('Deploying', 'Building and deploying…');
+      try {
+        const res = await apiFetch(API_HOST + '?action=deploy', {
+          method: 'POST', body: JSON.stringify({ pid: S.pid }),
+        });
+        hideLoading();
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Deploy failed');
+        toast('Deploy started', 'success');
+        setTimeout(() => renderPanel(), 2000);
+      } catch (err) { hideLoading(); toast(err.message || 'Deploy failed', 'error'); }
+    });
   }
 
   async function redeployVersion(versionId) {
     if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
-    confirmModal(
-      'Backdate to this deployment?',
-      'This will redeploy the files from that version.',
-      'Backdate',
-      false,
-      async () => {
-        showLoading('Redeploying', '');
-        try {
-          const res = await apiFetch(API_HOST + '?action=redeploy', {
-            method: 'POST',
-            body: JSON.stringify({ pid: S.pid, versionId }),
-          });
-          hideLoading();
-          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Redeploy failed');
-          toast('Redeploying', 'success');
-          setTimeout(() => renderPanel(), 2000);
-        } catch (err) {
-          hideLoading();
-          toast(err.message || 'Redeploy failed', 'error');
-        }
-      }
-    );
+    confirmModal('Redeploy this version?', 'This will redeploy the files from that version.', 'Redeploy', false, async () => {
+      showLoading('Redeploying', '');
+      try {
+        const res = await apiFetch(API_HOST + '?action=redeploy', {
+          method: 'POST', body: JSON.stringify({ pid: S.pid, versionId }),
+        });
+        hideLoading();
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Redeploy failed');
+        toast('Redeploying', 'success');
+        setTimeout(() => renderPanel(), 2000);
+      } catch (err) { hideLoading(); toast(err.message || 'Redeploy failed', 'error'); }
+    });
   }
 
   async function takeOffline() {
     if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
-    confirmModal(
-      'Take offline?',
-      'The live URL will stop working. Files stay intact.',
-      'Take offline',
-      true,
-      async () => {
-        showLoading('Taking offline', '');
-        try {
-          const res = await apiFetch(API_HOST + '?action=deployment/offline', {
-            method: 'POST',
-            body: JSON.stringify({ pid: S.pid }),
-          });
-          hideLoading();
-          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
-          toast('Offline', 'success');
-          renderPanel();
-          updateHeader();
-        } catch (err) {
-          hideLoading();
-          toast(err.message || 'Failed', 'error');
-        }
-      }
-    );
+    confirmModal('Take offline?', 'The live URL will stop working. Files stay intact.', 'Take offline', true, async () => {
+      showLoading('Taking offline', '');
+      try {
+        const res = await apiFetch(API_HOST + '?action=deployment/offline', {
+          method: 'POST', body: JSON.stringify({ pid: S.pid }),
+        });
+        hideLoading();
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        toast('Offline', 'success');
+        renderPanel();
+        updateHeader();
+      } catch (err) { hideLoading(); toast(err.message || 'Failed', 'error'); }
+    });
   }
 
   function confirmDeleteDeployment(deploymentId) {
     if (!S.isOwner || !S.online) return;
-    confirmModal(
-      'Delete deployment?',
-      'Removes it from history and attempts to delete from Vercel.',
-      'Delete',
-      true,
-      async () => {
-        showLoading('Deleting', '');
-        try {
-          const res = await apiFetch(API_HOST + '?action=deployment/delete', {
-            method: 'POST',
-            body: JSON.stringify({ pid: S.pid, deploymentId }),
-          });
-          hideLoading();
-          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
-          toast('Deleted', 'success');
-          renderPanel();
-        } catch (err) {
-          hideLoading();
-          toast(err.message || 'Delete failed', 'error');
-        }
-      }
-    );
+    confirmModal('Delete deployment?', 'Removes it from history and attempts to delete from Vercel.', 'Delete', true, async () => {
+      showLoading('Deleting', '');
+      try {
+        const res = await apiFetch(API_HOST + '?action=deployment/delete', {
+          method: 'POST', body: JSON.stringify({ pid: S.pid, deploymentId }),
+        });
+        hideLoading();
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        toast('Deleted', 'success');
+        renderPanel();
+      } catch (err) { hideLoading(); toast(err.message || 'Delete failed', 'error'); }
+    });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2474,17 +2294,14 @@ svg { display: block; }
       return;
     }
     panel.innerHTML = skeletonCard(4) + skeletonCard(6);
-
     const [analyticsRes, activityRes] = await Promise.all([
       apiFetch(API_ANALYTICS + '?action=project&pid=' + encodeURIComponent(S.pid)),
       apiFetch(API_ANALYTICS + '?action=activity&pid=' + encodeURIComponent(S.pid) + '&limit=10'),
     ]);
-
     if (!analyticsRes.ok || !analyticsRes.data?.success) {
       panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('chart', 'Couldn\'t load analytics', 'Try refreshing.')}</div></div>`;
       return;
     }
-
     const data = analyticsRes.data;
     const topPages = data.topPages || [];
     const trend = data.trend7 || [];
@@ -2492,85 +2309,48 @@ svg { display: block; }
 
     panel.innerHTML = `
       <div class="stats-grid">
-        <div class="stat-tile">
-          <div class="stat-label">Today</div>
-          <div class="stat-value">${formatNumber(data.today || 0)}</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-label">7-day</div>
-          <div class="stat-value">${formatNumber(trend.reduce((s, t) => s + t.count, 0))}</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-label">Total</div>
-          <div class="stat-value">${formatNumber(data.total || 0)}</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-label">DB ops</div>
-          <div class="stat-value">${formatNumber((data.db?.reads || 0) + (data.db?.writes || 0))}</div>
-        </div>
+        <div class="stat-tile"><div class="stat-label">Today</div><div class="stat-value">${formatNumber(data.today || 0)}</div></div>
+        <div class="stat-tile"><div class="stat-label">7-day</div><div class="stat-value">${formatNumber(trend.reduce((s, t) => s + t.count, 0))}</div></div>
+        <div class="stat-tile"><div class="stat-label">Total</div><div class="stat-value">${formatNumber(data.total || 0)}</div></div>
+        <div class="stat-tile"><div class="stat-label">DB ops</div><div class="stat-value">${formatNumber((data.db?.reads || 0) + (data.db?.writes || 0))}</div></div>
       </div>
-
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('chart', 13, 2.2)} 7-day trend</div>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('chart', 13, 2.2)} 7-day trend</div></div>
         <div class="card-body">
           <div style="display:flex;align-items:flex-end;gap:4px;height:60px;">
             ${trend.map(t => {
               const pct = (t.count / maxTrend) * 100;
-              return `
-                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;">
-                  <div style="width:100%;height:${Math.max(3, pct)}%;background:var(--theme-primary);border-radius:3px 3px 0 0;min-height:3px;opacity:0.8;"></div>
-                  <div style="font-size:8px;color:var(--theme-text-tertiary);font-weight:700;">${t.date?.slice(-5) || ''}</div>
-                </div>
-              `;
+              return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;">
+                <div style="width:100%;height:${Math.max(3, pct)}%;background:var(--theme-primary);border-radius:3px 3px 0 0;min-height:3px;opacity:0.8;"></div>
+                <div style="font-size:8px;color:var(--theme-text-tertiary);font-weight:700;">${t.date?.slice(-5) || ''}</div></div>`;
             }).join('')}
           </div>
         </div>
       </div>
-
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('eye', 13, 2.2)} Top pages</div>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('eye', 13, 2.2)} Top pages</div></div>
         <div class="card-body tight">
-          ${topPages.length === 0
-            ? emptyState('eye', 'No pages yet', 'Analytics will show once visitors land on your deployed site.')
-            : `<div class="row-list">
-                ${topPages.map(t => `
-                  <div class="row-item">
-                    <div class="row-icon">${svg('file', 13, 2.2)}</div>
-                    <div class="row-content">
-                      <div class="row-title mono" style="font-size:10.5px;">${escapeHTML(t.path || '/')}</div>
-                      <div class="row-sub">${formatNumber(t.count || 0)} views</div>
-                    </div>
-                  </div>
-                `).join('')}
-              </div>`
-          }
+          ${topPages.length === 0 ? emptyState('eye', 'No pages yet', 'Analytics will show once visitors land on your deployed site.')
+            : `<div class="row-list">${topPages.map(t => `
+              <div class="row-item">
+                <div class="row-icon">${svg('file', 13, 2.2)}</div>
+                <div class="row-content"><div class="row-title mono" style="font-size:10.5px;">${escapeHTML(t.path || '/')}</div>
+                  <div class="row-sub">${formatNumber(t.count || 0)} views</div></div>
+              </div>`).join('')}</div>`}
         </div>
       </div>
-
       ${activityRes.ok && activityRes.data?.activity?.length > 0 ? `
         <div class="card">
-          <div class="card-header">
-            <div class="card-title">${svg('clock', 13, 2.2)} Activity</div>
-          </div>
-          <div class="card-body tight">
-            <div class="row-list">
-              ${activityRes.data.activity.slice(0, 6).map(a => `
-                <div class="row-item">
-                  <div class="row-icon">${svg('clock', 12, 2.2)}</div>
-                  <div class="row-content">
-                    <div class="row-title">${escapeHTML(a.action || a.type || '')}</div>
-                    <div class="row-sub">${timeAgo(a.ts)}</div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-      ` : ''}
+          <div class="card-header"><div class="card-title">${svg('clock', 13, 2.2)} Activity</div></div>
+          <div class="card-body tight"><div class="row-list">
+            ${activityRes.data.activity.slice(0, 6).map(a => `
+              <div class="row-item">
+                <div class="row-icon">${svg('clock', 12, 2.2)}</div>
+                <div class="row-content"><div class="row-title">${escapeHTML(a.action || a.type || '')}</div>
+                  <div class="row-sub">${timeAgo(a.ts)}</div></div>
+              </div>`).join('')}
+          </div></div>
+        </div>` : ''}
     `;
   }
 
@@ -2585,9 +2365,7 @@ svg { display: block; }
 
     panel.innerHTML = `
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('eye', 13, 2.2)} Visibility</div>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('eye', 13, 2.2)} Visibility</div></div>
         <div class="card-body">
           ${['profile', 'liveSite', 'code', 'languages', 'db'].map(axis => `
             <div class="toggle-row">
@@ -2596,15 +2374,11 @@ svg { display: block; }
                 <div class="toggle-desc">${escapeHTML(axisDesc(axis))}</div>
               </div>
               <button class="switch ${vis[axis] === 'public' ? 'on' : ''}" data-vis-axis="${escapeAttr(axis)}" aria-label="Toggle"></button>
-            </div>
-          `).join('')}
+            </div>`).join('')}
         </div>
       </div>
-
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('share', 13, 2.2)} Share link</div>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('share', 13, 2.2)} Share link</div></div>
         <div class="card-body">
           <div style="display:flex;gap:5px;">
             <input class="input mono" value="${escapeAttr(publicUrl)}" readonly>
@@ -2613,58 +2387,39 @@ svg { display: block; }
           <div class="field-hint" style="margin-top:5px;">Requires profile visibility: public.</div>
         </div>
       </div>
-
       ${S.isOwner ? `
         <div class="card">
-          <div class="card-header">
-            <div class="card-title">${svg('user', 13, 2.2)} Collaborators (${Object.keys(collaborators).length})</div>
-            <button class="btn btn-sm btn-secondary" id="btnInviteCollab">${svg('plus', 10, 2.4)} Invite</button>
-          </div>
+          <div class="card-header"><div class="card-title">${svg('user', 13, 2.2)} Collaborators (${Object.keys(collaborators).length})</div>
+            <button class="btn btn-sm btn-secondary" id="btnInviteCollab">${svg('plus', 10, 2.4)} Invite</button></div>
           <div class="card-body tight">
             ${Object.keys(collaborators).length === 0
               ? emptyState('user', 'No collaborators', 'Invite others to work on this project.')
-              : `<div class="row-list">
-                  ${Object.entries(collaborators).map(([uid, role]) => `
-                    <div class="row-item">
-                      <div class="collab-avatar">${escapeHTML(uid.slice(-2).toUpperCase())}</div>
-                      <div class="row-content">
-                        <div class="row-title mono" style="font-size:10px;">${escapeHTML(uid)}</div>
-                        <div class="row-sub">${escapeHTML(role)}</div>
-                      </div>
-                      <button class="btn btn-ghost btn-sm btn-icon" data-remove-collab="${escapeAttr(uid)}" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>
-                    </div>
-                  `).join('')}
-                </div>`
-            }
+              : `<div class="row-list">${Object.entries(collaborators).map(([uid, role]) => `
+                <div class="row-item">
+                  <div class="collab-avatar">${escapeHTML(uid.slice(-2).toUpperCase())}</div>
+                  <div class="row-content"><div class="row-title mono" style="font-size:10px;">${escapeHTML(uid)}</div>
+                    <div class="row-sub">${escapeHTML(role)}</div></div>
+                  <button class="btn btn-ghost btn-sm btn-icon" data-remove-collab="${escapeAttr(uid)}" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>
+                </div>`).join('')}</div>`}
           </div>
         </div>
-
         <div class="card">
-          <div class="card-header">
-            <div class="card-title">${svg('key', 13, 2.2)} API key</div>
-          </div>
+          <div class="card-header"><div class="card-title">${svg('key', 13, 2.2)} API key</div></div>
           <div class="card-body">
             <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">
               ${S.project.apiKeyHash ? 'Active' : 'Not generated'}
             </div>
             <button class="btn btn-sm btn-secondary" id="btnGenApiKey">${svg('key', 10, 2.2)} ${S.project.apiKeyHash ? 'Regenerate' : 'Generate'} key</button>
           </div>
-        </div>
-      ` : ''}
+        </div>` : ''}
     `;
 
-    document.querySelectorAll('[data-vis-axis]').forEach(btn => {
-      btn.addEventListener('click', () => toggleVisibility(btn.dataset.visAxis, btn));
-    });
-
+    document.querySelectorAll('[data-vis-axis]').forEach(btn => btn.addEventListener('click', () => toggleVisibility(btn.dataset.visAxis, btn)));
     $('btnCopyShare')?.addEventListener('click', () => {
       navigator.clipboard.writeText(publicUrl).then(() => toast('Link copied', 'success', 1200)).catch(() => toast('Copy failed', 'error'));
     });
-
     $('btnInviteCollab')?.addEventListener('click', openInviteModal);
-    document.querySelectorAll('[data-remove-collab]').forEach(btn => {
-      btn.addEventListener('click', () => confirmRemoveCollab(btn.dataset.removeCollab));
-    });
+    document.querySelectorAll('[data-remove-collab]').forEach(btn => btn.addEventListener('click', () => confirmRemoveCollab(btn.dataset.removeCollab)));
     $('btnGenApiKey')?.addEventListener('click', generateApiKey);
   }
 
@@ -2683,13 +2438,12 @@ svg { display: block; }
     btn.classList.toggle('on', next === 'public');
     try {
       const res = await apiFetch(API_HOST + '?action=visibility', {
-        method: 'POST',
-        body: JSON.stringify({ pid: S.pid, visibility: { [axis]: next } }),
+        method: 'POST', body: JSON.stringify({ pid: S.pid, visibility: { [axis]: next } }),
       });
       if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
       S.project.visibility = { ...S.project.visibility, [axis]: next };
       cacheProject(S.project);
-      toast(`${next}`, 'success', 1200);
+      toast(next, 'success', 1200);
     } catch (err) {
       btn.classList.toggle('on', current === 'public');
       toast(err.message || 'Update failed', 'error');
@@ -2700,20 +2454,16 @@ svg { display: block; }
     openModal(`
       <div class="modal-title">Invite collaborator</div>
       <div class="modal-desc">They must have a Folio account.</div>
-      <div class="field">
-        <label class="field-label">Username</label>
-        <input class="input" id="inviteUsername" placeholder="alice">
-      </div>
-      <div class="field">
-        <label class="field-label">Role</label>
+      <div class="field"><label class="field-label">Username</label>
+        <input class="input" id="inviteUsername" placeholder="alice"></div>
+      <div class="field"><label class="field-label">Role</label>
         <select class="select" id="inviteRole">
           <option value="viewer">Viewer — read only</option>
           <option value="commenter">Commenter — read + comment</option>
           <option value="editor">Editor — read/write</option>
-        </select>
-      </div>
+        </select></div>
       <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="ProjectPage.closeModal()">Cancel</button>
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="inviteSubmit">${svg('plus', 12, 2.4)} Send invite</button>
       </div>
     `);
@@ -2724,16 +2474,12 @@ svg { display: block; }
       $('inviteSubmit').disabled = true;
       try {
         const res = await apiFetch(API_HOST + '?action=invite/create', {
-          method: 'POST',
-          body: JSON.stringify({ pid: S.pid, username, role }),
+          method: 'POST', body: JSON.stringify({ pid: S.pid, username, role }),
         });
         if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
         closeModal();
         toast('Invite sent', 'success');
-      } catch (err) {
-        toast(err.message || 'Invite failed', 'error');
-        $('inviteSubmit').disabled = false;
-      }
+      } catch (err) { toast(err.message || 'Invite failed', 'error'); $('inviteSubmit').disabled = false; }
     });
   }
 
@@ -2741,15 +2487,12 @@ svg { display: block; }
     confirmModal('Remove collaborator?', 'They will lose access.', 'Remove', true, async () => {
       try {
         const res = await apiFetch(API_HOST + '?action=collaborator/remove', {
-          method: 'POST',
-          body: JSON.stringify({ pid: S.pid, uid }),
+          method: 'POST', body: JSON.stringify({ pid: S.pid, uid }),
         });
         if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
         toast('Removed', 'success');
         renderPanel();
-      } catch (err) {
-        toast(err.message || 'Remove failed', 'error');
-      }
+      } catch (err) { toast(err.message || 'Remove failed', 'error'); }
     });
   }
 
@@ -2758,8 +2501,7 @@ svg { display: block; }
       showLoading('Generating', '');
       try {
         const res = await apiFetch(API_HOST + '?action=apikey/generate', {
-          method: 'POST',
-          body: JSON.stringify({ pid: S.pid }),
+          method: 'POST', body: JSON.stringify({ pid: S.pid }),
         });
         hideLoading();
         if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
@@ -2768,18 +2510,13 @@ svg { display: block; }
           <div class="modal-title">API key</div>
           <div class="modal-desc">Copy this now. Won't be shown again.</div>
           <input class="input mono" value="${escapeAttr(key)}" readonly style="margin-bottom:10px;">
-          <div class="modal-actions">
-            <button class="btn btn-primary" id="copyApiKeyBtn">${svg('copy', 12, 2.2)} Copy</button>
-          </div>
+          <div class="modal-actions"><button class="btn btn-primary" id="copyApiKeyBtn">${svg('copy', 12, 2.2)} Copy</button></div>
         `);
         $('copyApiKeyBtn').addEventListener('click', () => {
           navigator.clipboard.writeText(key).then(() => toast('Copied', 'success', 1000));
         });
         S.project.apiKeyHash = 'active';
-      } catch (err) {
-        hideLoading();
-        toast(err.message || 'Failed', 'error');
-      }
+      } catch (err) { hideLoading(); toast(err.message || 'Failed', 'error'); }
     });
   }
 
@@ -2802,10 +2539,8 @@ svg { display: block; }
       const { data, schema } = res.data;
       panel.innerHTML = `
         <div class="card">
-          <div class="card-header">
-            <div class="card-title">${svg('database', 13, 2.2)} JSON database</div>
-            <button class="btn btn-sm btn-secondary" id="btnRefreshDb">${svg('refresh', 10, 2.2)}</button>
-          </div>
+          <div class="card-header"><div class="card-title">${svg('database', 13, 2.2)} JSON database</div>
+            <button class="btn btn-sm btn-secondary" id="btnRefreshDb">${svg('refresh', 10, 2.2)}</button></div>
           <div class="card-body">
             <div class="db-tabs">
               <button class="db-tab active" data-db-view="raw">Raw</button>
@@ -2832,11 +2567,8 @@ svg { display: block; }
 
   function renderJSONPretty(obj) {
     if (!obj || typeof obj !== 'object') return escapeHTML(String(obj || ''));
-    try {
-      return escapeHTML(JSON.stringify(obj, null, 2));
-    } catch {
-      return escapeHTML(String(obj));
-    }
+    try { return escapeHTML(JSON.stringify(obj, null, 2)); }
+    catch { return escapeHTML(String(obj)); }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2857,24 +2589,17 @@ svg { display: block; }
     }
     S.logsData = res.data;
     S.tabCounts.logs = res.data.total || 0;
-    renderSidebar();
-    renderMobileTabs();
+    renderSidebar(); renderMobileTabs();
 
     panel.innerHTML = `
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('list', 13, 2.2)} Activity (${res.data.total || 0})</div>
-          <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshLogs">${svg('refresh', 10, 2.2)}</button>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('list', 13, 2.2)} Activity (${res.data.total || 0})</div>
+          <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshLogs">${svg('refresh', 10, 2.2)}</button></div>
         <div class="card-body tight">
           ${(res.data.logs || []).length === 0
             ? emptyState('list', 'No activity', 'Actions will appear here.')
-            : `<div class="row-list" id="logList">
-                ${res.data.logs.map(renderLogRow).join('')}
-              </div>
-              ${res.data.hasMore ? `<button class="btn btn-secondary btn-block" id="btnLoadMoreLogs" style="margin-top:8px;">Load more</button>` : ''}
-            `
-          }
+            : `<div class="row-list" id="logList">${res.data.logs.map(renderLogRow).join('')}</div>
+              ${res.data.hasMore ? `<button class="btn btn-secondary btn-block" id="btnLoadMoreLogs" style="margin-top:8px;">Load more</button>` : ''}`}
         </div>
       </div>
     `;
@@ -2883,15 +2608,13 @@ svg { display: block; }
   }
 
   function renderLogRow(l) {
-    return `
-      <div class="log-entry">
-        <div class="log-time">${timeAgo(l.ts)}</div>
-        <div class="log-body">
-          <div class="log-type">${escapeHTML(l.type || 'event')}</div>
-          <div class="log-action">${escapeHTML(l.action || '')}</div>
-        </div>
+    return `<div class="log-entry">
+      <div class="log-time">${timeAgo(l.ts)}</div>
+      <div class="log-body">
+        <div class="log-type">${escapeHTML(l.type || 'event')}</div>
+        <div class="log-action">${escapeHTML(l.action || '')}</div>
       </div>
-    `;
+    </div>`;
   }
 
   async function loadMoreLogs() {
@@ -2899,22 +2622,19 @@ svg { display: block; }
     const res = await apiFetch(API_HOST + '?action=logs&pid=' + encodeURIComponent(S.pid) + '&limit=50&offset=' + newOffset);
     if (!res.ok || !res.data?.success) return;
     S.logsOffset = newOffset;
-    const list = $('logList');
-    if (!list) return;
+    const list = $('logList'); if (!list) return;
     (res.data.logs || []).forEach(l => list.insertAdjacentHTML('beforeend', renderLogRow(l)));
     if (!res.data.hasMore) $('btnLoadMoreLogs')?.remove();
   }
 
   // ═══════════════════════════════════════════════════════════
-  // PANEL: DOWNLOADS (owner)
+  // PANEL: DOWNLOADS
   // ═══════════════════════════════════════════════════════════
 
   function renderDownloadsPanel(panel) {
     panel.innerHTML = `
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('download', 13, 2.2)} Export</div>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('download', 13, 2.2)} Export</div></div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
           <button class="btn btn-primary btn-block" id="btnDownloadFolio">${svg('download', 12, 2.4)} .folio backup</button>
           <div class="field-hint">Files, versions, JSON DB, schema.</div>
@@ -2924,11 +2644,8 @@ svg { display: block; }
           <div class="field-hint">The current DB as .json.</div>
         </div>
       </div>
-
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('upload', 13, 2.2)} Import</div>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('upload', 13, 2.2)} Import</div></div>
         <div class="card-body">
           <button class="btn btn-secondary btn-block" id="btnImportFolio">${svg('upload', 12, 2.4)} Import .folio</button>
           <div class="field-hint">Merge offline copy (last-write-wins).</div>
@@ -2952,10 +2669,8 @@ svg { display: block; }
       const blob = await res.blob();
       const filename = `${S.project.slug || 'project'}-${S.pid.slice(-6)}.${format === 'folio' ? 'folio' : 'zip'}`;
       triggerDownload(blob, filename);
-      toast(`Downloaded`, 'success');
-    } catch (err) {
-      toast(err.message || 'Download failed', 'error');
-    }
+      toast('Downloaded', 'success');
+    } catch (err) { toast(err.message || 'Download failed', 'error'); }
   }
 
   async function downloadJsonDb() {
@@ -2966,55 +2681,38 @@ svg { display: block; }
       const blob = new Blob([JSON.stringify(res.data.data || {}, null, 2)], { type: 'application/json' });
       triggerDownload(blob, `${S.project.slug || 'project'}-db.json`);
       toast('Downloaded', 'success');
-    } catch (err) {
-      toast(err.message || 'Download failed', 'error');
-    }
+    } catch (err) { toast(err.message || 'Download failed', 'error'); }
   }
 
   function triggerDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async function handleImportFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     e.target.value = '';
     confirmModal('Import backup?', 'Files and DB will merge into this project.', 'Import', false, async () => {
       showLoading('Importing', '');
       try {
         const text = await file.text();
         let data = null;
-        try { data = JSON.parse(text); } catch {
-          hideLoading();
-          toast('Only JSON backups supported here', 'info', 3000);
-          return;
-        }
+        try { data = JSON.parse(text); } catch { hideLoading(); toast('Only JSON backups supported', 'info', 3000); return; }
         const res = await apiFetch(API_HOST + '?action=project/sync-back', {
           method: 'POST',
           body: JSON.stringify({
-            pid: S.pid,
-            files: data.files || null,
-            versions: data.versions || null,
-            db: data.db || null,
-            schema: data.schema || null,
-            manifest: data.manifest || null,
+            pid: S.pid, files: data.files || null, versions: data.versions || null,
+            db: data.db || null, schema: data.schema || null, manifest: data.manifest || null,
           }),
         });
         hideLoading();
         if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
         toast('Imported', 'success');
         renderPanel();
-      } catch (err) {
-        hideLoading();
-        toast(err.message || 'Import failed', 'error');
-      }
+      } catch (err) { hideLoading(); toast(err.message || 'Import failed', 'error'); }
     });
   }
 
@@ -3025,28 +2723,19 @@ svg { display: block; }
   async function renderDownloadSharedPanel(panel) {
     panel.innerHTML = `
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('download', 13, 2.2)} Download</div>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('download', 13, 2.2)} Download</div></div>
         <div class="card-body">
-          <p style="font-size:11px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:12px;">
-            Download the public files from this project to work on them offline.
-          </p>
+          <p style="font-size:11px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:12px;">Download the public files from this project to work on them offline.</p>
           <button class="btn btn-primary btn-block" id="btnDownloadPublicFolio">${svg('download', 12, 2.4)} .folio</button>
           <div class="field-hint">Public files + metadata.</div>
           <button class="btn btn-secondary btn-block" id="btnDownloadPublicZip" style="margin-top:8px;">${svg('download', 12, 2.4)} .zip</button>
           <div class="field-hint">Raw files only.</div>
         </div>
       </div>
-
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('folder', 13, 2.2)} Save to your account</div>
-        </div>
+        <div class="card-header"><div class="card-title">${svg('folder', 13, 2.2)} Save to your account</div></div>
         <div class="card-body">
-          <p style="font-size:11px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:12px;">
-            Create your own copy of the public files.
-          </p>
+          <p style="font-size:11px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:12px;">Create your own copy of the public files.</p>
           <button class="btn btn-primary btn-block" id="btnCopyProject">${svg('copy', 12, 2.2)} Save as copy</button>
         </div>
       </div>
@@ -3066,9 +2755,7 @@ svg { display: block; }
       const filename = `${S.project.slug || 'project'}-public.${format === 'folio' ? 'folio' : 'zip'}`;
       triggerDownload(blob, filename);
       toast('Downloaded', 'success');
-    } catch (err) {
-      toast(err.message || 'Download failed', 'error');
-    }
+    } catch (err) { toast(err.message || 'Download failed', 'error'); }
   }
 
   async function saveAsCopy() {
@@ -3076,17 +2763,13 @@ svg { display: block; }
       showLoading('Creating copy', '');
       try {
         const res = await apiFetch(API_HOST + '?action=project/copy', {
-          method: 'POST',
-          body: JSON.stringify({ pid: S.pid, newName: `${S.project.name} (copy)` }),
+          method: 'POST', body: JSON.stringify({ pid: S.pid, newName: `${S.project.name} (copy)` }),
         });
         hideLoading();
         if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Copy failed');
         toast('Copy created', 'success');
-        setTimeout(() => { window.location.href = `/project?pid=${res.data.pid}`; }, 800);
-      } catch (err) {
-        hideLoading();
-        toast(err.message || 'Copy failed', 'error');
-      }
+        setTimeout(() => { window.location.href = '/project.html?pid=' + encodeURIComponent(res.data.pid); }, 800);
+      } catch (err) { hideLoading(); toast(err.message || 'Copy failed', 'error'); }
     });
   }
 
@@ -3103,29 +2786,21 @@ svg { display: block; }
       <div class="card card-danger">
         <div class="card-header"><div class="card-title">${svg('trash', 13, 2.2)} Clear versions</div></div>
         <div class="card-body">
-          <div style="font-size:11px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:10px;">
-            Delete all version snapshots. Files stay.
-          </div>
+          <div style="font-size:11px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:10px;">Delete all version snapshots. Files stay.</div>
           <button class="btn btn-outline-danger btn-block" id="btnClearVersions">${svg('trash', 12, 2.2)} Clear versions</button>
         </div>
       </div>
-
       <div class="card card-danger">
         <div class="card-header"><div class="card-title">${svg('refresh', 13, 2.2)} Clear cache</div></div>
         <div class="card-body">
-          <div style="font-size:11px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:10px;">
-            Clear local cache. No server data affected.
-          </div>
+          <div style="font-size:11px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:10px;">Clear local cache. No server data affected.</div>
           <button class="btn btn-outline-danger btn-block" id="btnClearCache">${svg('refresh', 12, 2.2)} Clear cache</button>
         </div>
       </div>
-
       <div class="card card-danger">
         <div class="card-header"><div class="card-title">${svg('alert', 13, 2.2)} Delete project</div></div>
         <div class="card-body">
-          <div style="font-size:11px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:10px;">
-            Permanently delete project, files, versions, data. Cannot be undone.
-          </div>
+          <div style="font-size:11px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:10px;">Permanently delete project, files, versions, data. Cannot be undone.</div>
           <button class="btn btn-danger btn-block" id="btnDeleteProject">${svg('trash', 12, 2.2)} Delete project</button>
         </div>
       </div>
@@ -3145,10 +2820,7 @@ svg { display: block; }
         hideLoading();
         if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
         toast(`${res.data.cleared} versions cleared`, 'success');
-      } catch (err) {
-        hideLoading();
-        toast(err.message || 'Failed', 'error');
-      }
+      } catch (err) { hideLoading(); toast(err.message || 'Failed', 'error'); }
     });
   }
 
@@ -3157,9 +2829,7 @@ svg { display: block; }
       localStorage.removeItem(STORAGE.cache + '.' + S.pid);
       localStorage.removeItem(STORAGE.lastTab + '.' + S.pid);
       toast('Local cache cleared', 'success');
-    } catch {
-      toast('Could not clear cache', 'error');
-    }
+    } catch { toast('Could not clear cache', 'error'); }
   }
 
   function confirmDeleteProject() {
@@ -3171,7 +2841,7 @@ svg { display: block; }
         <input class="input" id="deleteConfirmInput" placeholder="Project name">
       </div>
       <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="ProjectPage.closeModal()">Cancel</button>
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
         <button class="btn btn-danger" id="deleteConfirmBtn" disabled>Delete</button>
       </div>
     `);
@@ -3181,22 +2851,40 @@ svg { display: block; }
     $('deleteConfirmBtn').addEventListener('click', async () => {
       showLoading('Deleting', '');
       try {
-        const res = await apiFetch(API_HOST + '?action=projects/delete', {
-          method: 'POST', body: JSON.stringify({ pid: S.pid }),
-        });
+        if (S.session && !/^local_/.test(S.pid)) {
+          const res = await apiFetch(API_HOST + '?action=projects/delete', {
+            method: 'POST', body: JSON.stringify({ pid: S.pid }),
+          });
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        }
+        try {
+          await new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, DB_VERSION);
+            req.onsuccess = () => {
+              const conn = req.result;
+              const tx = conn.transaction(['projects', 'files', 'versions'], 'readwrite');
+              tx.objectStore('projects').delete(S.pid);
+              const fileStore = tx.objectStore('files');
+              const files = fileStore.index('pid').getAll(S.pid);
+              files.onsuccess = () => files.result.forEach(f => fileStore.delete([f.pid, f.path]));
+              const versionStore = tx.objectStore('versions');
+              const versions = versionStore.index('pid').getAll(S.pid);
+              versions.onsuccess = () => versions.result.forEach(v => versionStore.delete(v.vid));
+              tx.oncomplete = () => resolve();
+              tx.onerror = () => reject(tx.error);
+            };
+            req.onerror = () => reject(req.error);
+          });
+        } catch {}
         hideLoading();
-        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
         toast('Deleted', 'success');
-        setTimeout(() => { window.location.href = '/projects'; }, 800);
-      } catch (err) {
-        hideLoading();
-        toast(err.message || 'Delete failed', 'error');
-      }
+        setTimeout(() => { window.location.href = '/projects.html'; }, 800);
+      } catch (err) { hideLoading(); toast(err.message || 'Delete failed', 'error'); }
     });
   }
 
   // ═══════════════════════════════════════════════════════════
-  // EVENT WIRING
+  // WIRING
   // ═══════════════════════════════════════════════════════════
 
   function wireGlobal() {
@@ -3206,19 +2894,15 @@ svg { display: block; }
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && $('modalOverlay').classList.contains('active')) closeModal();
     });
-
     $('menuBtn')?.addEventListener('click', openSidebar);
     $('sidebarClose')?.addEventListener('click', closeSidebar);
     $('sidebarBackdrop')?.addEventListener('click', closeSidebar);
-
     $('btnShare')?.addEventListener('click', () => {
       const url = `${location.origin}/${S.user?.username || ''}/${S.project?.slug || ''}`;
       if (navigator.share) navigator.share({ title: S.project?.name, url }).catch(() => {});
       else navigator.clipboard.writeText(url).then(() => toast('Link copied', 'success', 1200)).catch(() => toast('Copy failed', 'error'));
     });
-
     $('btnRefresh')?.addEventListener('click', () => { renderPanel(); loadDeployState(); });
-
     const updateOnline = () => {
       S.online = navigator.onLine;
       $('offlineBanner').classList.toggle('visible', !S.online);
@@ -3234,17 +2918,9 @@ svg { display: block; }
 
   async function boot() {
     readSession();
-
     S.pid = getPid();
-    if (!S.pid) {
-      showFatal('Missing project', 'No project ID in URL.');
-      return;
-    }
-
-    if (!S.session) {
-      window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
-      return;
-    }
+    if (!S.pid) { showFatal('Missing project', 'No project ID in URL.'); return; }
+    try { await openDB(); } catch (err) { console.error('[Project] DB failed:', err); }
 
     const hashTab = getHashTab();
     const lastTab = shouldRememberTab() ? getLastTab() : null;
@@ -3254,18 +2930,13 @@ svg { display: block; }
     if (!ok) return;
 
     if (!S.tabs.some(t => t.id === S.activeTab)) S.activeTab = 'overview';
-
     renderSidebar();
     renderMobileTabs();
     renderPanel();
-
     wireGlobal();
   }
 
-  window.ProjectPage = { closeModal };
-
   document.addEventListener('DOMContentLoaded', boot);
-
 })();
 </script>
 

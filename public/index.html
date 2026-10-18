@@ -2201,12 +2201,12 @@ const DEFAULT_PREFS = {
 };
 
 const SETUP_PAGES = [
-  { id: 'projects', title: 'Projects', desc: 'All your projects', icon: 'i-folder', href: '/projects' },
-  { id: 'tools', title: 'Tools', desc: 'Web-dev utilities', icon: 'i-code', href: '/tools' },
-  { id: 'analytics', title: 'Analytics', desc: 'Usage across projects', icon: 'i-hash', href: '/analytics' },
-  { id: 'profile', title: 'Profile', desc: 'Your public profile', icon: 'i-edit', href: '/profile', requiresAuth: true },
-  { id: 'settings', title: 'Settings', desc: 'App configuration', icon: 'i-more', href: '/settings' },
-  { id: 'offline', title: 'Offline page', desc: 'Preview offline fallback', icon: 'i-file-text', href: '/offline' },
+  { id: 'projects', title: 'Projects', desc: 'All your projects', icon: 'i-folder', href: '/projects.html' },
+  { id: 'tools', title: 'Tools', desc: 'Web-dev utilities', icon: 'i-code', href: '/tools.html' },
+  { id: 'analytics', title: 'Analytics', desc: 'Usage across projects', icon: 'i-hash', href: '/analytics.html' },
+  { id: 'profile', title: 'Profile', desc: 'Your public profile', icon: 'i-edit', href: '/profile.html', requiresAuth: true },
+  { id: 'settings', title: 'Settings', desc: 'App configuration', icon: 'i-more', href: '/settings.html' },
+  { id: 'offline', title: 'Offline page', desc: 'Preview offline fallback', icon: 'i-file-text', href: '/offline.html' },
 ];
 
 const S = {
@@ -2510,6 +2510,254 @@ const db = {
   },
 };
 
+// ── Shared project helpers (used by editor + list + dashboard) ──
+const PID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
+
+function getPidFromUrl() {
+  try {
+    const pid = new URLSearchParams(location.search).get('pid');
+    return pid && PID_RE.test(pid) ? pid : null;
+  } catch { return null; }
+}
+
+function setPidInUrl(pid) {
+  try {
+    const url = new URL(location.href);
+    if (pid) url.searchParams.set('pid', pid);
+    else url.searchParams.delete('pid');
+    history.replaceState({ pid: pid || null }, '', url.toString());
+  } catch {}
+}
+
+function normalizeServerProject(p) {
+  return {
+    pid: p.pid,
+    name: p.name || 'Untitled project',
+    slug: p.slug || '',
+    description: p.description || '',
+    iconUrl: p.iconUrl || null,
+    createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
+    updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
+    _server: true,
+    _serverData: p,
+  };
+}
+
+async function hydrateProjectsFromServer(projects) {
+  if (!Array.isArray(projects)) return;
+  for (const p of projects) {
+    if (!p || !p.pid) continue;
+    const existing = await db.getProject(p.pid);
+    const localUpdated = existing?.updatedAt || 0;
+    const serverUpdated = p.updatedAt ? new Date(p.updatedAt).getTime() : 0;
+    if (existing && localUpdated > serverUpdated) continue;
+    await db.putProject(normalizeServerProject(p));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROJECT BOOT: overlay, deep-link, picker sheet, recents
+// ═══════════════════════════════════════════════════════════
+
+function getInitials(name) {
+  const s = String(name || '').trim();
+  if (!s) return '·';
+  return s.split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+}
+
+const AVATAR_GRADIENTS = [
+  'linear-gradient(135deg, #F59E0B, #f97316)',
+  'linear-gradient(135deg, #0284c7, #0369a1)',
+  'linear-gradient(135deg, #a855f7, #6d28d9)',
+  'linear-gradient(135deg, #10B981, #059669)',
+  'linear-gradient(135deg, #ec4899, #be185d)',
+  'linear-gradient(135deg, #06b6d4, #0891b2)',
+];
+function getAvatarColor(seed) {
+  const s = String(seed || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+}
+
+function showProjectLoader(title, desc) {
+  const node = $('projectLoader');
+  if (!node) return;
+  const t = $('projectLoaderTitle');
+  const d = $('projectLoaderDesc');
+  if (t) t.textContent = title || 'Loading project…';
+  if (d) d.textContent = desc || '';
+  node.classList.add('visible');
+  node.setAttribute('aria-hidden', 'false');
+}
+function setProjectLoaderText(title, desc) {
+  const t = $('projectLoaderTitle');
+  const d = $('projectLoaderDesc');
+  if (t) t.textContent = title;
+  if (d) d.textContent = desc || '';
+}
+function hideProjectLoader() {
+  const node = $('projectLoader');
+  if (!node) return;
+  node.classList.remove('visible');
+  node.setAttribute('aria-hidden', 'true');
+}
+
+async function loadProjectFromUrl(pid) {
+  showProjectLoader('Loading project…', '');
+
+  let project = null;
+  try { project = await db.getProject(pid); } catch {}
+
+  if (!project && S.session && navigator.onLine) {
+    try {
+      const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(pid));
+      if (res?.ok && res.data?.success && res.data.project) {
+        project = normalizeServerProject(res.data.project);
+        try { await db.putProject(project); } catch {}
+      }
+    } catch {}
+  }
+
+  if (!project) {
+    hideProjectLoader();
+    toast('Project not found', 'error');
+    return null;
+  }
+
+  setProjectLoaderText('Loading "' + (project.name || 'project') + '"…', 'Preparing editor…');
+  try {
+    await workspace.openProject(project);
+    setPidInUrl(project.pid);
+    hideProjectLoader();
+    renderEmptyRecent();
+    return project;
+  } catch (err) {
+    console.error('[ProjectBoot] open failed:', err);
+    hideProjectLoader();
+    toast('Could not open project', 'error');
+    return null;
+  }
+}
+
+async function renderEmptyRecent() {
+  const wrap = $('emptyRecent');
+  const list = $('emptyRecentList');
+  if (!wrap || !list) return;
+
+  let projects = [];
+  try { projects = await db.listProjects(); } catch {}
+
+  list.innerHTML = '';
+  if (!projects || projects.length === 0) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+
+  for (const p of projects.slice(0, 5)) {
+    list.appendChild(el('button', {
+      class: 'empty-recent-item',
+      type: 'button',
+      onclick: async () => {
+        try {
+          await workspace.openProject(p);
+          setPidInUrl(p.pid);
+          renderEmptyRecent();
+        } catch { toast('Could not open', 'error'); }
+      },
+    },
+      el('span', { class: 'empty-recent-name' }, p.name || 'Untitled'),
+      el('span', { class: 'empty-recent-time' }, relativeTime(p.updatedAt))
+    ));
+  }
+}
+
+async function openProjectsSheet() {
+  let projects = [];
+  try { projects = await db.listProjects(); } catch {}
+
+  const body = el('div', { class: 'projects-sheet' });
+
+  if (!projects || projects.length === 0) {
+    const emptyBox = el('div', { class: 'empty-state', style: 'padding:24px 8px' },
+      el('div', { class: 'empty-state-title', style: 'font-size:13px' }, 'No projects yet'),
+      el('div', { class: 'empty-state-desc', style: 'font-size:11px' }, 'Create a project to see it here.'),
+    );
+    const newBtn = el('button', {
+      class: 'btn btn-primary btn-sm', type: 'button', style: 'margin-top:8px',
+      onclick: () => { closeSheet(); setTimeout(createNewProject, 250); },
+    });
+    newBtn.appendChild(icon('plus', 12));
+    newBtn.appendChild(document.createTextNode(' New project'));
+    emptyBox.appendChild(newBtn);
+    body.appendChild(emptyBox);
+    openSheet({ title: 'Projects', body });
+    return;
+  }
+
+  const list = el('div', { class: 'projects-sheet-list' });
+  for (const p of projects) {
+    const hasIcon = !!p.iconUrl;
+    let iconNode;
+    if (hasIcon) {
+      const img = document.createElement('img');
+      img.src = p.iconUrl;
+      img.alt = '';
+      img.addEventListener('error', () => { img.style.display = 'none'; });
+      iconNode = img;
+    } else {
+      iconNode = document.createTextNode(getInitials(p.name));
+    }
+
+    const row = el('button', {
+      class: 'projects-sheet-item',
+      type: 'button',
+      onclick: async () => {
+        closeSheet();
+        showProjectLoader('Opening "' + (p.name || 'project') + '"…', '');
+        try {
+          await workspace.openProject(p);
+          setPidInUrl(p.pid);
+          renderEmptyRecent();
+        } catch {
+          toast('Could not open project', 'error');
+        } finally {
+          hideProjectLoader();
+        }
+      },
+    },
+      el('span', {
+        class: 'projects-sheet-icon',
+        style: hasIcon ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`,
+      }, iconNode),
+      el('span', { class: 'projects-sheet-info' },
+        el('span', { class: 'projects-sheet-name' }, p.name || 'Untitled'),
+        el('span', { class: 'projects-sheet-time' }, relativeTime(p.updatedAt))
+      ),
+      icon('chevron-right', 12)
+    );
+    list.appendChild(row);
+  }
+  body.appendChild(list);
+
+  const footer = el('div', { class: 'projects-sheet-footer' });
+  const newBtn = el('button', {
+    class: 'btn btn-primary btn-block', type: 'button',
+    onclick: () => { closeSheet(); setTimeout(createNewProject, 250); },
+  });
+  newBtn.appendChild(icon('plus', 12));
+  newBtn.appendChild(document.createTextNode(' New project'));
+  footer.appendChild(newBtn);
+  body.appendChild(footer);
+
+  openSheet({ title: 'Projects', body });
+}
+
+// ═══════════════════════════════════════════════════════════
+// CodeMirror
+// ═══════════════════════════════════════════════════════════
+
 const TAG_SCRIPT_OPEN  = '<' + 'script>';
 const TAG_SCRIPT_CLOSE = '<' + '/script>';
 const TAG_STYLE_OPEN   = '<' + 'style>';
@@ -2530,7 +2778,7 @@ const cm = {
     if (this._loading) return this._loading;
 
     this._loading = (async () => {
-      const [codemirrorPkg, oneDark, searchMod, commandsMod, viewMod, stateMod, lintMod, mergeMod, langMod] = await Promise.all([
+      const [codemirrorPkg, oneDark, searchMod, commandsMod, viewMod, stateMod, lintMod, mergeMod] = await Promise.all([
         import('codemirror/codemirror/dist/index.js'),
         import('codemirror/theme-one-dark/dist/index.js'),
         import('codemirror/search/dist/index.js'),
@@ -2539,7 +2787,6 @@ const cm = {
         import('codemirror/state/dist/index.js'),
         import('codemirror/lint/dist/index.js'),
         import('codemirror/merge/dist/index.js'),
-        import('codemirror/language/dist/index.js'),
       ]);
 
       this.modules = {
@@ -2964,230 +3211,6 @@ const workspace = {
   },
 };
 
-// ═══════════════════════════════════════════════════════════
-// PROJECTS: URL DEEP-LINK, PICKER SHEET, RECENTS
-// ═══════════════════════════════════════════════════════════
-
-const PID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
-
-function getPidFromUrl() {
-  try {
-    const pid = new URLSearchParams(location.search).get('pid');
-    return pid && PID_RE.test(pid) ? pid : null;
-  } catch { return null; }
-}
-
-function setPidInUrl(pid) {
-  try {
-    const url = new URL(location.href);
-    if (pid) url.searchParams.set('pid', pid);
-    else url.searchParams.delete('pid');
-    history.replaceState({ pid: pid || null }, '', url.toString());
-  } catch {}
-}
-
-function getInitials(name) {
-  const s = String(name || '').trim();
-  if (!s) return '·';
-  return s.split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
-}
-
-const AVATAR_GRADIENTS = [
-  'linear-gradient(135deg, #F59E0B, #f97316)',
-  'linear-gradient(135deg, #0284c7, #0369a1)',
-  'linear-gradient(135deg, #a855f7, #6d28d9)',
-  'linear-gradient(135deg, #10B981, #059669)',
-  'linear-gradient(135deg, #ec4899, #be185d)',
-  'linear-gradient(135deg, #06b6d4, #0891b2)',
-];
-function getAvatarColor(seed) {
-  const s = String(seed || '');
-  let hash = 0;
-  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
-}
-
-function showProjectLoader(title, desc) {
-  const node = $('projectLoader');
-  if (!node) return;
-  const t = $('projectLoaderTitle');
-  const d = $('projectLoaderDesc');
-  if (t) t.textContent = title || 'Loading project…';
-  if (d) d.textContent = desc || '';
-  node.classList.add('visible');
-  node.setAttribute('aria-hidden', 'false');
-}
-function setProjectLoaderText(title, desc) {
-  const t = $('projectLoaderTitle');
-  const d = $('projectLoaderDesc');
-  if (t) t.textContent = title;
-  if (d) d.textContent = desc || '';
-}
-function hideProjectLoader() {
-  const node = $('projectLoader');
-  if (!node) return;
-  node.classList.remove('visible');
-  node.setAttribute('aria-hidden', 'true');
-}
-
-async function loadProjectFromUrl(pid) {
-  showProjectLoader('Loading project…', '');
-
-  let project = null;
-  try { project = await db.getProject(pid); } catch {}
-
-  if (!project && S.session && navigator.onLine) {
-    try {
-      const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(pid));
-      if (res?.ok && res.data?.success && res.data.project) {
-        const p = res.data.project;
-        project = {
-          pid: p.pid,
-          name: p.name,
-          slug: p.slug,
-          createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
-          updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
-        };
-        try { await db.putProject(project); } catch {}
-      }
-    } catch {}
-  }
-
-  if (!project) {
-    hideProjectLoader();
-    toast('Project not found', 'error');
-    return null;
-  }
-
-  setProjectLoaderText('Loading "' + (project.name || 'project') + '"…', 'Preparing editor…');
-  try {
-    await workspace.openProject(project);
-    setPidInUrl(project.pid);
-    hideProjectLoader();
-    renderEmptyRecent();
-    return project;
-  } catch (err) {
-    console.error('[ProjectBoot] open failed:', err);
-    hideProjectLoader();
-    toast('Could not open project', 'error');
-    return null;
-  }
-}
-
-async function renderEmptyRecent() {
-  const wrap = $('emptyRecent');
-  const list = $('emptyRecentList');
-  if (!wrap || !list) return;
-
-  let projects = [];
-  try { projects = await db.listProjects(); } catch {}
-
-  list.innerHTML = '';
-  if (!projects || projects.length === 0) {
-    wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
-
-  for (const p of projects.slice(0, 5)) {
-    list.appendChild(el('button', {
-      class: 'empty-recent-item',
-      type: 'button',
-      onclick: async () => {
-        try {
-          await workspace.openProject(p);
-          setPidInUrl(p.pid);
-          renderEmptyRecent();
-        } catch { toast('Could not open', 'error'); }
-      },
-    },
-      el('span', { class: 'empty-recent-name' }, p.name || 'Untitled'),
-      el('span', { class: 'empty-recent-time' }, relativeTime(p.updatedAt))
-    ));
-  }
-}
-
-async function openProjectsSheet() {
-  let projects = [];
-  try { projects = await db.listProjects(); } catch {}
-
-  const body = el('div', { class: 'projects-sheet' });
-
-  if (!projects || projects.length === 0) {
-    const emptyBox = el('div', { class: 'empty-state', style: 'padding:24px 8px' },
-      el('div', { class: 'empty-state-title', style: 'font-size:13px' }, 'No projects yet'),
-      el('div', { class: 'empty-state-desc', style: 'font-size:11px' }, 'Create a project to see it here.'),
-    );
-    const newBtn = el('button', {
-      class: 'btn btn-primary btn-sm', type: 'button', style: 'margin-top:8px',
-      onclick: () => { closeSheet(); setTimeout(createNewProject, 250); },
-    });
-    newBtn.appendChild(icon('plus', 12));
-    newBtn.appendChild(document.createTextNode(' New project'));
-    emptyBox.appendChild(newBtn);
-    body.appendChild(emptyBox);
-    openSheet({ title: 'Projects', body });
-    return;
-  }
-
-  const list = el('div', { class: 'projects-sheet-list' });
-  for (const p of projects) {
-    const hasIcon = !!p.iconUrl;
-    let iconNode;
-    if (hasIcon) {
-      const img = document.createElement('img');
-      img.src = p.iconUrl;
-      img.alt = '';
-      img.addEventListener('error', () => { img.style.display = 'none'; });
-      iconNode = img;
-    } else {
-      iconNode = document.createTextNode(getInitials(p.name));
-    }
-
-    const row = el('button', {
-      class: 'projects-sheet-item',
-      type: 'button',
-      onclick: async () => {
-        closeSheet();
-        showProjectLoader('Opening "' + (p.name || 'project') + '"…', '');
-        try {
-          await workspace.openProject(p);
-          setPidInUrl(p.pid);
-          renderEmptyRecent();
-        } catch {
-          toast('Could not open project', 'error');
-        } finally {
-          hideProjectLoader();
-        }
-      },
-    },
-      el('span', {
-        class: 'projects-sheet-icon',
-        style: hasIcon ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`,
-      }, iconNode),
-      el('span', { class: 'projects-sheet-info' },
-        el('span', { class: 'projects-sheet-name' }, p.name || 'Untitled'),
-        el('span', { class: 'projects-sheet-time' }, relativeTime(p.updatedAt))
-      ),
-      icon('chevron-right', 12)
-    );
-    list.appendChild(row);
-  }
-  body.appendChild(list);
-
-  const footer = el('div', { class: 'projects-sheet-footer' });
-  const newBtn = el('button', {
-    class: 'btn btn-primary btn-block', type: 'button',
-    onclick: () => { closeSheet(); setTimeout(createNewProject, 250); },
-  });
-  newBtn.appendChild(icon('plus', 12));
-  newBtn.appendChild(document.createTextNode(' New project'));
-  footer.appendChild(newBtn);
-  body.appendChild(footer);
-
-  openSheet({ title: 'Projects', body });
-}
-
 function updateDirtyDot() {
   $('dirtyDot')?.classList.toggle('visible', S.dirtyFiles.size > 0);
   const saveBtn = $('saveBtn');
@@ -3283,6 +3306,10 @@ function showEditorError() {
   $('editorEmpty')?.classList.add('hidden');
 }
 
+// ═══════════════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════════════
+
 const SIDEBAR_PANELS = [
   { id: 'files', label: 'Files' },
   { id: 'search', label: 'Search' },
@@ -3360,7 +3387,7 @@ async function renderFilesPanel(container) {
       el('div', { class: 'empty-state-title' }, 'No project open'),
       el('div', { class: 'empty-state-desc' }, 'Create or open a project to see files.'),
       el('button', { class: 'btn btn-primary btn-sm', style: 'margin-top:6px', onclick: createNewProject }, icon('plus', 12), ' New project'),
-      el('button', { class: 'btn btn-secondary btn-sm', style: 'margin-top:3px', onclick: openProjectsDialog }, icon('folder', 12), ' Open project')
+      el('button', { class: 'btn btn-secondary btn-sm', style: 'margin-top:3px', onclick: openProjectsSheet }, icon('folder', 12), ' Open project')
     ));
     return;
   }
@@ -4127,6 +4154,10 @@ async function createNewProject() {
   renderEmptyRecent();
 }
 
+// ═══════════════════════════════════════════════════════════
+// Symbols, preview, setup, guest banner (unchanged behavior)
+// ═══════════════════════════════════════════════════════════
+
 const SYMBOLS = ['{', '}', '(', ')', '[', ']', '<', '>', '=', ';', ':', '.', ',', '"', "'", '`', '&', '|', '$', '#', '/', '\\', '!', '?', '%', '^', '~', '@', '+', '-', '*'];
 
 function openSymbolsSheet() {
@@ -4221,7 +4252,6 @@ async function buildPreviewHtml() {
     TAG_SCRIPT_CLOSE;
 
   html = html.replace(/<head[^>]*>/i, (match) => match + consoleBridge);
-
   return html;
 }
 
@@ -4297,11 +4327,11 @@ function applyGuestState() {
     const dismissed = (() => { try { return localStorage.getItem(STORAGE.guestBannerDismissed) === 'true'; } catch { return false; } })();
     if (!dismissed) guestBanner?.classList.add('visible');
     if (navProfile) {
-      navProfile.href = '/register?next=%2F';
+      navProfile.href = '/register.html?next=%2Findex.html';
       navProfile.querySelector('span').textContent = 'Sign in';
     }
     if (railProfile) {
-      railProfile.href = '/register?next=%2F';
+      railProfile.href = '/register.html?next=%2Findex.html';
       railProfile.classList.add('guest-signin');
       railProfile.innerHTML = iconHTML('lock', 12) + '<span>Sign in</span>';
     }
@@ -4309,11 +4339,11 @@ function applyGuestState() {
     guestBadge?.classList.remove('visible');
     guestBanner?.classList.remove('visible');
     if (navProfile) {
-      navProfile.href = '/profile';
+      navProfile.href = '/profile.html';
       navProfile.querySelector('span').textContent = 'Profile';
     }
     if (railProfile) {
-      railProfile.href = '/profile';
+      railProfile.href = '/profile.html';
       railProfile.classList.remove('guest-signin');
       railProfile.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
     }
@@ -4328,7 +4358,7 @@ async function hostProject() {
       confirmLabel: 'Sign in',
       danger: false,
     });
-    if (ok) window.location.href = '/register?next=' + encodeURIComponent('/');
+    if (ok) window.location.href = '/register.html?next=' + encodeURIComponent('/index.html');
     return;
   }
   if (!S.online) { toast('Requires internet', 'warning'); return; }
@@ -4363,6 +4393,10 @@ async function drainSyncQueue() {
   if (S.isGuest || !S.online) return;
   console.log('[Sync] Queue drain skipped (no endpoints wired yet)');
 }
+
+// ═══════════════════════════════════════════════════════════
+// Wire UI
+// ═══════════════════════════════════════════════════════════
 
 function wireUI() {
   $('menuBtn')?.addEventListener('click', () => openSidebar());
@@ -4604,7 +4638,7 @@ async function boot() {
   try { S.projects = await db.listProjects(); }
   catch (err) { console.error('[Boot] projects load:', err); }
 
-  // Prefer ?pid= from URL, then last-used project, then empty state
+  // Deep-link: prefer ?pid=, then last-used, then empty state
   try {
     const urlPid = getPidFromUrl();
     let project = null;

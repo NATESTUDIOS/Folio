@@ -1917,7 +1917,7 @@ svg { display: block; }
   'use strict';
 
   // ═══════════════════════════════════════════════════════════
-  // CONFIG
+  // CONFIG — must match index.html & project.html
   // ═══════════════════════════════════════════════════════════
 
   const API_BASE = 'https://foliostudios.vercel.app/api';
@@ -1929,11 +1929,14 @@ svg { display: block; }
   const STORAGE = {
     session: 'folio.session',
     user: 'folio.user',
+    lastProject: 'folio.lastProject',
     theme: 'folio.theme',
-    lastTab: 'folio.projects.lastTab',
     autoClean: 'folio.projects.autoClean',
-    recentSearches: 'folio.projects.recentSearches',
+    lastTab: 'folio.projects.lastTab',
   };
+
+  const DB_NAME = 'folio';
+  const DB_VERSION = 2;
 
   const TABS = [
     { id: 'all', label: 'All' },
@@ -1952,12 +1955,8 @@ svg { display: block; }
   };
 
   const FILTER_LABELS = {
-    deployed: 'Deployed',
-    notDeployed: 'Not deployed',
-    expired: 'Expired deploys',
-    editor: 'Editor',
-    viewer: 'Viewer',
-    commenter: 'Commenter',
+    deployed: 'Deployed', notDeployed: 'Not deployed', expired: 'Expired deploys',
+    editor: 'Editor', viewer: 'Viewer', commenter: 'Commenter',
   };
 
   const SORTS = [
@@ -1966,6 +1965,8 @@ svg { display: block; }
     { id: 'name', label: 'Name', fn: (a, b) => String(a.name || '').localeCompare(String(b.name || '')) },
     { id: 'storage', label: 'Storage', fn: (a, b) => (b.storageUsed || 0) - (a.storageUsed || 0) },
   ];
+
+  const OWNER_TABS = ['all', 'owned', 'shared', 'public', 'archived'];
 
   // ═══════════════════════════════════════════════════════════
   // SVG
@@ -2002,41 +2003,102 @@ svg { display: block; }
     users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
     edit3: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
-    archive: '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>',
-    wifiOff: '<line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>',
+    wifiOff: '<line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>',
   };
 
   const svg = (name, size = 14, sw = 2.2) =>
     `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${SVG[name] || ''}</svg>`;
 
   // ═══════════════════════════════════════════════════════════
+  // SHARED IDB (must match index.html & project.html)
+  // ═══════════════════════════════════════════════════════════
+
+  let dbConn = null;
+  function openDB() {
+    if (dbConn) return Promise.resolve(dbConn);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => { dbConn = req.result; resolve(dbConn); };
+      req.onupgradeneeded = (event) => {
+        const conn = event.target.result;
+        if (!conn.objectStoreNames.contains('projects')) conn.createObjectStore('projects', { keyPath: 'pid' });
+        if (!conn.objectStoreNames.contains('files')) {
+          const store = conn.createObjectStore('files', { keyPath: ['pid', 'path'] });
+          store.createIndex('pid', 'pid');
+        }
+        if (!conn.objectStoreNames.contains('versions')) {
+          const store = conn.createObjectStore('versions', { keyPath: 'vid' });
+          store.createIndex('pid', 'pid');
+        }
+        if (!conn.objectStoreNames.contains('projectMeta')) conn.createObjectStore('projectMeta', { keyPath: 'pid' });
+        if (!conn.objectStoreNames.contains('syncQueue')) conn.createObjectStore('syncQueue', { keyPath: 'id', autoIncrement: true });
+      };
+    });
+  }
+  function dbWrap(req) { return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  function dbTx(store, mode = 'readonly') { return dbConn.transaction(store, mode).objectStore(store); }
+
+  const IDB = {
+    async listProjects() {
+      const all = await dbWrap(dbTx('projects').getAll());
+      return all.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    },
+    async getProject(pid) { return dbWrap(dbTx('projects').get(pid)); },
+    async putProject(p) { return dbWrap(dbTx('projects', 'readwrite').put(p)); },
+    async deleteProject(pid) {
+      await dbWrap(dbTx('projects', 'readwrite').delete(pid));
+      const files = await dbWrap(dbTx('files').index('pid').getAll(pid));
+      for (const f of files) await dbWrap(dbTx('files', 'readwrite').delete([f.pid, f.path]));
+      const versions = await dbWrap(dbTx('versions').index('pid').getAll(pid));
+      for (const v of versions) await dbWrap(dbTx('versions', 'readwrite').delete(v.vid));
+    },
+    async putFile(pid, path, content) {
+      return dbWrap(dbTx('files', 'readwrite').put({ pid, path, content, updatedAt: Date.now() }));
+    },
+  };
+
+  function normalizeServerProject(p) {
+    return {
+      pid: p.pid,
+      name: p.name || 'Untitled project',
+      slug: p.slug || '',
+      description: p.description || '',
+      iconUrl: p.iconUrl || null,
+      createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
+      updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
+      _server: true,
+      _serverData: p,
+    };
+  }
+
+  async function hydrateProjectsFromServer(projects) {
+    if (!Array.isArray(projects)) return;
+    for (const p of projects) {
+      if (!p || !p.pid) continue;
+      const existing = await IDB.getProject(p.pid);
+      const localUpdated = existing?.updatedAt || 0;
+      const serverUpdated = p.updatedAt ? new Date(p.updatedAt).getTime() : 0;
+      if (existing && localUpdated > serverUpdated) continue;
+      await IDB.putProject(normalizeServerProject(p));
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // STATE
   // ═══════════════════════════════════════════════════════════
 
   const S = {
-    session: null,
-    user: null,
-    uid: null,
-    projects: [],
-    filtered: [],
-    activeTab: 'all',
-    activeFilters: new Set(),
-    searchQuery: '',
-    sortId: 'modified',
-    createStep: 1,
-    createName: '',
-    createDescription: '',
-    createIconMode: 'name',
-    createIconUrl: null,
-    createIconDataUrl: null,
-    createIconVariants: [],
-    createImageUrlInput: '',
-    storageEstimate: null,
-    storageLimit: 10 * 1024 * 1024,
-    deploymentCache: new Map(),
-    expiredDeployments: [],
-    autoCleanEnabled: true,
-    activeMenuProject: null,
+    session: null, user: null, uid: null,
+    projects: [], filtered: [],
+    activeTab: 'all', activeFilters: new Set(),
+    searchQuery: '', sortId: 'modified',
+    createStep: 1, createName: '', createDescription: '',
+    createIconMode: 'name', createIconUrl: null, createIconDataUrl: null,
+    createIconVariants: [], createImageUrlInput: '',
+    storageEstimate: null, storageLimit: 10 * 1024 * 1024,
+    deploymentCache: new Map(), expiredDeployments: [],
+    autoCleanEnabled: true, activeMenuProject: null,
     online: navigator.onLine,
   };
 
@@ -2060,21 +2122,17 @@ svg { display: block; }
     if (d < 30) return `${d}d`;
     return new Date(ts).toLocaleDateString();
   }
-
   function formatBytes(n) {
     if (!n || n < 0) return '0 B';
-    const u = ['B', 'KB', 'MB', 'GB'];
-    let i = 0;
+    const u = ['B', 'KB', 'MB', 'GB']; let i = 0;
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
     return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
   }
-
   function formatNumber(n) {
     if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
     if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
     return String(n || 0);
   }
-
   function getInitials(name) {
     const s = String(name || '').trim();
     if (!s) return '?';
@@ -2082,7 +2140,6 @@ svg { display: block; }
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
-
   function getAvatarColor(seed) {
     const colors = [
       'linear-gradient(135deg, #F59E0B, #f97316)',
@@ -2097,28 +2154,20 @@ svg { display: block; }
     for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
     return colors[Math.abs(hash) % colors.length];
   }
-
   function debounce(fn, ms) {
     let t;
     return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // TOAST / LOADING / MODAL
-  // ═══════════════════════════════════════════════════════════
-
   function toast(msg, type = 'info', duration = 2400) {
     const el = document.createElement('div');
     el.className = 'toast ' + type;
-    const icon = type === 'success' ? 'checkCircle' : type === 'error' ? 'alert' : type === 'warning' ? 'alertTriangle' : 'info';
-    el.innerHTML = svg(icon, 13, 2.4) + '<span></span>';
+    const ic = type === 'success' ? 'checkCircle' : type === 'error' ? 'alert' : type === 'warning' ? 'alertTriangle' : 'info';
+    el.innerHTML = svg(ic, 13, 2.4) + '<span></span>';
     el.querySelector('span').textContent = msg;
     $('toastContainer').appendChild(el);
     requestAnimationFrame(() => el.classList.add('show'));
-    setTimeout(() => {
-      el.classList.remove('show');
-      setTimeout(() => el.remove(), 300);
-    }, duration);
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, duration);
   }
 
   function showLoading(title, desc) {
@@ -2126,20 +2175,17 @@ svg { display: block; }
     $('loadingDesc').textContent = desc || '';
     $('loadingOverlay').classList.add('active');
   }
-
-  function hideLoading() {
-    $('loadingOverlay').classList.remove('active');
-  }
+  function hideLoading() { $('loadingOverlay').classList.remove('active'); }
 
   function openModal(html) {
     $('modalBody').innerHTML = html;
     $('modalOverlay').classList.add('active');
   }
-
   function closeModal() {
     $('modalOverlay').classList.remove('active');
     setTimeout(() => { $('modalBody').innerHTML = ''; }, 250);
   }
+  window.closeModal = closeModal;
 
   function confirmModal(title, desc, confirmLabel, danger, onConfirm) {
     openModal(`
@@ -2150,14 +2196,11 @@ svg { display: block; }
         <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="modalConfirmBtn">${escapeHTML(confirmLabel)}</button>
       </div>
     `);
-    $('modalConfirmBtn').addEventListener('click', () => {
-      closeModal();
-      onConfirm();
-    });
+    $('modalConfirmBtn').addEventListener('click', () => { closeModal(); onConfirm(); });
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SESSION
+  // SESSION / API
   // ═══════════════════════════════════════════════════════════
 
   function readSession() {
@@ -2177,9 +2220,7 @@ svg { display: block; }
       let data = {};
       try { data = await res.json(); } catch {}
       return { ok: res.ok, status: res.status, data };
-    } catch (err) {
-      return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
-    }
+    } catch { return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } }; }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2190,12 +2231,10 @@ svg { display: block; }
     const h = location.hash.replace(/^#\/?/, '');
     return TABS.some(t => t.id === h) ? h : null;
   }
-
   function setHashTab(id) {
     const newHash = `#/${id}`;
     if (location.hash !== newHash) history.replaceState(null, '', newHash);
   }
-
   function switchTab(id) {
     if (!TABS.some(t => t.id === id)) return;
     S.activeTab = id;
@@ -2206,43 +2245,63 @@ svg { display: block; }
     renderActiveFilters();
     applyFiltersAndRender();
   }
+  function goEditor(pid) { window.location.href = '/index.html?pid=' + encodeURIComponent(pid); }
+  function goDashboard(pid) { window.location.href = '/project.html?pid=' + encodeURIComponent(pid); }
 
   // ═══════════════════════════════════════════════════════════
-  // LOAD PROJECTS
+  // LOAD PROJECTS — IDB first, then server (hydrate into IDB)
   // ═══════════════════════════════════════════════════════════
 
   async function loadProjects() {
     renderSkeletons();
 
-    const res = await apiFetch(API_HOST + '?action=projects/list');
-    if (!res.ok || !res.data?.success) {
-      if (res.status === 401) {
-        window.location.href = '/register?next=' + encodeURIComponent(location.pathname);
-        return;
-      }
-      renderError();
-      return;
+    // 1. Local IDB
+    let local = [];
+    try { local = await IDB.listProjects(); } catch {}
+
+    // 2. Server (signed in + online) — merge server metadata into IDB
+    let serverMap = new Map();
+    if (S.session && S.online) {
+      try {
+        const res = await apiFetch(API_HOST + '?action=projects/list');
+        if (res.ok && res.data?.success) {
+          const serverProjects = res.data.projects || [];
+          serverMap = new Map(serverProjects.map(p => [p.pid, p]));
+          await hydrateProjectsFromServer(serverProjects);
+          local = await IDB.listProjects();
+        } else if (res.status === 401) {
+          S.session = null;
+          try { localStorage.removeItem(STORAGE.session); } catch {}
+        }
+      } catch {}
     }
 
-    S.projects = res.data.projects || [];
+    // Merge: local wins on timestamps, server adds deployment/role/etc.
+    S.projects = local.map(lp => {
+      const server = serverMap.get(lp.pid);
+      return {
+        ...(server || {}),
+        ...lp,
+        _serverData: server || null,
+      };
+    });
 
     if (S.user && S.user.settings && typeof S.user.settings.globalLimit === 'number') {
       S.storageLimit = S.user.settings.globalLimit;
     }
-
     if (navigator.storage && navigator.storage.estimate) {
-      try {
-        S.storageEstimate = await navigator.storage.estimate();
-      } catch {}
+      try { S.storageEstimate = await navigator.storage.estimate(); } catch {}
     }
-
     try {
       const ac = localStorage.getItem(STORAGE.autoClean);
       S.autoCleanEnabled = ac === null ? true : ac === 'true';
     } catch {}
 
-    await loadDeploymentHistories();
-    computeExpiredDeployments();
+    const serverBacked = S.projects.filter(p => p._serverData);
+    if (serverBacked.length > 0) {
+      await loadDeploymentHistoriesFor(serverBacked);
+      computeExpiredDeployments();
+    }
 
     if (S.autoCleanEnabled && S.expiredDeployments.length > 0 && S.online) {
       setTimeout(() => autoCleanExpired(), 1200);
@@ -2252,10 +2311,9 @@ svg { display: block; }
     applyFiltersAndRender();
   }
 
-  async function loadDeploymentHistories() {
-    const queue = S.projects.slice();
+  async function loadDeploymentHistoriesFor(projects) {
+    const queue = projects.slice();
     const workers = [];
-
     async function worker() {
       while (queue.length) {
         const p = queue.shift();
@@ -2270,7 +2328,6 @@ svg { display: block; }
         } catch {}
       }
     }
-
     for (let i = 0; i < 4; i++) workers.push(worker());
     await Promise.all(workers);
   }
@@ -2279,7 +2336,6 @@ svg { display: block; }
     S.expiredDeployments = [];
     const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
     const now = Date.now();
-
     for (const [pid, cache] of S.deploymentCache.entries()) {
       for (const d of cache.deployments) {
         if (d.id === cache.currentId) continue;
@@ -2296,8 +2352,7 @@ svg { display: block; }
     try {
       for (const d of S.expiredDeployments) {
         await apiFetch(API_HOST + '?action=deployment/delete', {
-          method: 'POST',
-          body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
+          method: 'POST', body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
         });
       }
       S.expiredDeployments = [];
@@ -2311,9 +2366,7 @@ svg { display: block; }
   // RENDER: TABS
   // ═══════════════════════════════════════════════════════════
 
-  function getCountForTab(tabId) {
-    return S.projects.filter(p => matchesTab(p, tabId)).length;
-  }
+  function getCountForTab(tabId) { return S.projects.filter(p => matchesTab(p, tabId)).length; }
 
   function renderTabs() {
     const tabsEl = $('tabsBar');
@@ -2331,7 +2384,6 @@ svg { display: block; }
   function updateHeaderCount() {
     const count = S.projects.length;
     $('pageCount').textContent = `${count} project${count === 1 ? '' : 's'}`;
-
     const badge = $('filterBadge');
     const badgeCount = S.activeFilters.size + (S.searchQuery ? 1 : 0) + (S.sortId !== 'modified' ? 1 : 0);
     if (badgeCount > 0) {
@@ -2342,12 +2394,11 @@ svg { display: block; }
       badge.classList.add('hidden');
       $('filterBtn').classList.remove('filter-active');
     }
-
     $('sortLabel').textContent = SORTS.find(s => s.id === S.sortId)?.label || 'Modified';
   }
 
   // ═══════════════════════════════════════════════════════════
-  // RENDER: ACTIVE FILTERS CHIPS
+  // RENDER: ACTIVE FILTERS
   // ═══════════════════════════════════════════════════════════
 
   function renderActiveFilters() {
@@ -2358,9 +2409,7 @@ svg { display: block; }
       chips.push(`
         <div class="filter-chip">
           <span>${escapeHTML(FILTER_LABELS[f] || f)}</span>
-          <button data-remove-filter="${escapeAttr(f)}" type="button" aria-label="Remove">
-            ${svg('x', 9, 2.4)}
-          </button>
+          <button data-remove-filter="${escapeAttr(f)}" type="button" aria-label="Remove">${svg('x', 9, 2.4)}</button>
         </div>
       `);
     });
@@ -2369,18 +2418,12 @@ svg { display: block; }
       chips.push(`
         <div class="filter-chip">
           <span>"${escapeHTML(S.searchQuery)}"</span>
-          <button data-remove-search type="button" aria-label="Remove search">
-            ${svg('x', 9, 2.4)}
-          </button>
+          <button data-remove-search type="button" aria-label="Remove search">${svg('x', 9, 2.4)}</button>
         </div>
       `);
     }
 
-    if (chips.length === 0) {
-      el.classList.remove('visible');
-      el.innerHTML = '';
-      return;
-    }
+    if (chips.length === 0) { el.classList.remove('visible'); el.innerHTML = ''; return; }
 
     el.innerHTML = chips.join('') + `<button class="clear-filters-btn" id="clearAllFilters" type="button">Clear all</button>`;
     el.classList.add('visible');
@@ -2410,7 +2453,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // FILTERING / MATCHING
+  // FILTERING
   // ═══════════════════════════════════════════════════════════
 
   function matchesTab(p, tabId) {
@@ -2421,10 +2464,8 @@ svg { display: block; }
     if (tabId === 'archived') return p.archived === true;
     return true;
   }
-
   function matchesFilters(p) {
     if (S.activeFilters.size === 0) return true;
-
     for (const f of S.activeFilters) {
       if (f === 'deployed' && !p.deployment?.url) return false;
       if (f === 'notDeployed' && p.deployment?.url) return false;
@@ -2436,26 +2477,20 @@ svg { display: block; }
       if (f === 'viewer' && p.myRole !== 'viewer') return false;
       if (f === 'commenter' && p.myRole !== 'commenter') return false;
     }
-
     return true;
   }
-
   function matchesSearch(p) {
     if (!S.searchQuery) return true;
     const q = S.searchQuery.toLowerCase();
-    const haystack = [
-      p.name, p.slug, p.description,
-      ...Object.keys(p.languages?.breakdown || {}),
-    ].filter(Boolean).join(' ').toLowerCase();
+    const haystack = [p.name, p.slug, p.description, ...Object.keys(p.languages?.breakdown || {})]
+      .filter(Boolean).join(' ').toLowerCase();
     return haystack.includes(q);
   }
 
   function applyFiltersAndRender() {
     let list = S.projects.filter(p => matchesTab(p, S.activeTab) && matchesFilters(p) && matchesSearch(p));
-
     const sorter = SORTS.find(s => s.id === S.sortId) || SORTS[0];
     list.sort(sorter.fn);
-
     S.filtered = list;
     renderProjects();
     updateHeaderCount();
@@ -2484,13 +2519,11 @@ svg { display: block; }
 
   function renderProjects() {
     const container = $('projectsContainer');
-
     if (S.filtered.length === 0) {
       container.innerHTML = renderEmptyState();
       bindEmptyStateActions();
       return;
     }
-
     container.innerHTML = S.filtered.map(p => renderProjectCard(p)).join('');
     bindProjectCardEvents();
   }
@@ -2501,70 +2534,42 @@ svg { display: block; }
         <div class="empty-state">
           <div class="empty-icon">${svg('folder', 22, 2)}</div>
           <div class="empty-title">No projects yet</div>
-          <div class="empty-desc">Create your first project or import an existing one.</div>
+          <div class="empty-desc">Create your first project to get started.</div>
           <div class="empty-actions">
             <button class="btn btn-primary" data-empty-new>${svg('plus', 12, 2.4)} New project</button>
-            <button class="btn btn-secondary" data-empty-import>${svg('upload', 12, 2.2)} Import .folio</button>
           </div>
         </div>
       `;
     }
-
     if (S.activeTab === 'shared') {
-      return `
-        <div class="empty-state">
-          <div class="empty-icon">${svg('users', 22, 2)}</div>
-          <div class="empty-title">No shared projects</div>
-          <div class="empty-desc">When someone invites you to a project, it will appear here.</div>
-        </div>
-      `;
+      return `<div class="empty-state"><div class="empty-icon">${svg('users', 22, 2)}</div>
+        <div class="empty-title">No shared projects</div>
+        <div class="empty-desc">When someone invites you, it will appear here.</div></div>`;
     }
-
     if (S.activeTab === 'owned') {
-      return `
-        <div class="empty-state">
-          <div class="empty-icon">${svg('folder', 22, 2)}</div>
-          <div class="empty-title">You don't own any projects</div>
-          <div class="empty-desc">Create a new project to get started.</div>
-          <div class="empty-actions">
-            <button class="btn btn-primary" data-empty-new>${svg('plus', 12, 2.4)} New project</button>
-          </div>
-        </div>
-      `;
-    }
-
-    if (S.activeTab === 'public') {
-      return `
-        <div class="empty-state">
-          <div class="empty-icon">${svg('eye', 22, 2)}</div>
-          <div class="empty-title">No public projects</div>
-          <div class="empty-desc">Make a project public in its sharing settings to list it here.</div>
-        </div>
-      `;
-    }
-
-    return `
-      <div class="empty-state">
-        <div class="empty-icon">${svg('search', 22, 2)}</div>
-        <div class="empty-title">No projects match</div>
-        <div class="empty-desc">Try clearing filters or search.</div>
+      return `<div class="empty-state"><div class="empty-icon">${svg('folder', 22, 2)}</div>
+        <div class="empty-title">You don't own any projects</div>
         <div class="empty-actions">
-          <button class="btn btn-secondary" data-empty-clear-filters>Clear filters</button>
-        </div>
-      </div>
-    `;
+          <button class="btn btn-primary" data-empty-new>${svg('plus', 12, 2.4)} New project</button>
+        </div></div>`;
+    }
+    if (S.activeTab === 'public') {
+      return `<div class="empty-state"><div class="empty-icon">${svg('eye', 22, 2)}</div>
+        <div class="empty-title">No public projects</div>
+        <div class="empty-desc">Make a project public to list it here.</div></div>`;
+    }
+    return `<div class="empty-state"><div class="empty-icon">${svg('search', 22, 2)}</div>
+      <div class="empty-title">No projects match</div>
+      <div class="empty-actions"><button class="btn btn-secondary" data-empty-clear-filters>Clear filters</button></div></div>`;
   }
 
   function bindEmptyStateActions() {
     document.querySelector('[data-empty-new]')?.addEventListener('click', openCreateFlow);
     document.querySelector('[data-empty-import]')?.addEventListener('click', openImportFlow);
     document.querySelector('[data-empty-clear-filters]')?.addEventListener('click', () => {
-      S.activeFilters.clear();
-      S.searchQuery = '';
-      $('searchInput').value = '';
-      $('searchClear').classList.remove('visible');
-      renderActiveFilters();
-      applyFiltersAndRender();
+      S.activeFilters.clear(); S.searchQuery = '';
+      $('searchInput').value = ''; $('searchClear').classList.remove('visible');
+      renderActiveFilters(); applyFiltersAndRender();
     });
   }
 
@@ -2572,38 +2577,28 @@ svg { display: block; }
     const iconHTML = p.iconUrl
       ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
       : `<span>${escapeHTML(getInitials(p.name))}</span>`;
-
     const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
-
     const roleBadge = p.myRole === 'owner'
       ? '<span class="role-badge owner">Owner</span>'
       : p.myRole === 'editor'
       ? '<span class="role-badge editor">Editor</span>'
-      : p.myRole
-      ? `<span class="role-badge">${escapeHTML(p.myRole)}</span>`
-      : '';
-
+      : p.myRole ? `<span class="role-badge">${escapeHTML(p.myRole)}</span>` : '';
     const liveBadge = p.deployment?.url
       ? '<span class="live-badge"><span class="dot"></span>Live</span>'
       : p.deployment?.state === 'OFFLINE'
       ? '<span class="live-badge offline"><span class="dot"></span>Offline</span>'
-      : '<span class="live-badge offline">Not deployed</span>';
-
+      : '<span class="live-badge offline">Local</span>';
     const langBadges = p.languages?.breakdown
       ? Object.entries(p.languages.breakdown).slice(0, 3)
-          .map(([name, pct]) => `<span class="lang-badge">${escapeHTML(name)} ${pct}%</span>`)
-          .join('')
+          .map(([name, pct]) => `<span class="lang-badge">${escapeHTML(name)} ${pct}%</span>`).join('')
       : '';
-
     const viewCount = p.viewCount || 0;
     const fileCount = p.fileCount;
-
     const statsHTML = [
       viewCount > 0 ? `<span class="stat-item">${svg('eye', 9, 2.2)}${formatNumber(viewCount)}</span>` : '',
       fileCount != null ? `<span class="stat-item">${svg('file', 9, 2.2)}${fileCount}</span>` : '',
       p.updatedAt ? `<span class="stat-item">${timeAgo(p.updatedAt)}</span>` : '',
     ].filter(Boolean).join('');
-
     const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
 
     return `
@@ -2613,14 +2608,11 @@ svg { display: block; }
           <div class="project-header-info">
             <div class="project-name">${escapeHTML(p.name || 'Untitled project')}</div>
             <div class="project-meta">
-              ${roleBadge}
-              ${liveBadge}
+              ${roleBadge}${liveBadge}
               ${hasExpired ? `<span style="color:var(--theme-warning);display:inline-flex;align-items:center;gap:2px;">${svg('alertTriangle', 9, 2.4)}</span>` : ''}
             </div>
           </div>
-          <button class="project-more-btn" data-more="${escapeAttr(p.pid)}" aria-label="More actions">
-            ${svg('more', 13, 2.4)}
-          </button>
+          <button class="project-more-btn" data-more="${escapeAttr(p.pid)}" aria-label="More actions">${svg('more', 13, 2.4)}</button>
         </div>
         ${p.description ? `<div class="project-desc">${escapeHTML(p.description)}</div>` : ''}
         ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
@@ -2633,8 +2625,7 @@ svg { display: block; }
     document.querySelectorAll('.project-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('[data-more]')) return;
-        const pid = card.dataset.pid;
-        window.location.href = '/index.html?pid=' + encodeURIComponent(pid);
+        goEditor(card.dataset.pid);
       });
     });
     document.querySelectorAll('[data-more]').forEach(btn => {
@@ -2647,37 +2638,16 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ERROR
-  // ═══════════════════════════════════════════════════════════
-
-  function renderError() {
-    $('projectsContainer').innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon" style="background:var(--theme-danger-soft);color:var(--theme-danger);">${svg('alert', 22, 2)}</div>
-        <div class="empty-title">Couldn't load projects</div>
-        <div class="empty-desc">Check your connection and try again.</div>
-        <div class="empty-actions">
-          <button class="btn btn-primary" onclick="location.reload()">${svg('refresh', 12, 2.2)} Retry</button>
-          <a class="btn btn-ghost" href="/">Back to editor</a>
-        </div>
-      </div>
-    `;
-  }
-
-  // ═══════════════════════════════════════════════════════════
   // ACTION MENU
   // ═══════════════════════════════════════════════════════════
 
   function openActionMenu(p) {
     S.activeMenuProject = p;
-
     const isOwner = p.myRole === 'owner';
     const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
     const expiredCount = S.expiredDeployments.filter(d => d.pid === p.pid).length;
     const shareUrl = p.visibility?.profile === 'public'
-      ? `${location.origin}/${S.user?.username || ''}/${p.slug || ''}`
-      : null;
-
+      ? `${location.origin}/${S.user?.username || ''}/${p.slug || ''}` : null;
     const iconHTML = p.iconUrl
       ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
       : `<span>${escapeHTML(getInitials(p.name))}</span>`;
@@ -2689,43 +2659,26 @@ svg { display: block; }
         <div class="action-sheet-icon" style="${iconBg}">${iconHTML}</div>
         <div class="action-sheet-title">
           <div class="action-sheet-name">${escapeHTML(p.name || 'Untitled project')}</div>
-          <div class="action-sheet-meta">${escapeHTML(p.myRole || '')} · ${p.deployment?.url ? 'Live' : 'Not deployed'}</div>
+          <div class="action-sheet-meta">${escapeHTML(p.myRole || 'local')} · ${p.deployment?.url ? 'Live' : 'Local'}</div>
         </div>
       </div>
       <div class="action-list">
-        <button class="action-item" data-action="editor">
-          ${svg('edit3', 14, 2.2)}<span>Open in editor</span>
-        </button>
-        <button class="action-item" data-action="dashboard">
-          ${svg('chart', 14, 2.2)}<span>Open dashboard</span>
-        </button>
-        ${shareUrl ? `<button class="action-item" data-action="share">
-          ${svg('share', 14, 2.2)}<span>Copy share link</span>
-        </button>` : ''}
+        <button class="action-item" data-action="editor">${svg('edit3', 14, 2.2)}<span>Open in editor</span></button>
+        <button class="action-item" data-action="dashboard">${svg('chart', 14, 2.2)}<span>Open dashboard</span></button>
+        ${shareUrl ? `<button class="action-item" data-action="share">${svg('share', 14, 2.2)}<span>Copy share link</span></button>` : ''}
         <div class="action-divider"></div>
-        <button class="action-item" data-action="download">
-          ${svg('download', 14, 2.2)}<span>Download .folio</span>
-        </button>
-        <button class="action-item" data-action="duplicate">
-          ${svg('copy', 14, 2.2)}<span>Duplicate</span>
-        </button>
-        ${isOwner ? `<button class="action-item" data-action="rename">
-          ${svg('edit', 14, 2.2)}<span>Rename</span>
-        </button>` : ''}
-        ${hasExpired ? `<button class="action-item" data-action="cleanExpired">
-          ${svg('alertTriangle', 14, 2.2)}<span>Clean ${expiredCount} expired deploy${expiredCount === 1 ? '' : 's'}</span>
-        </button>` : ''}
-        ${isOwner ? `<div class="action-divider"></div>
-        <button class="action-item danger" data-action="delete">
-          ${svg('trash', 14, 2.2)}<span>Delete project</span>
-        </button>` : ''}
+        <button class="action-item" data-action="download">${svg('download', 14, 2.2)}<span>Download .folio</span></button>
+        <button class="action-item" data-action="duplicate">${svg('copy', 14, 2.2)}<span>Duplicate</span></button>
+        ${isOwner ? `<button class="action-item" data-action="rename">${svg('edit', 14, 2.2)}<span>Rename</span></button>` : ''}
+        ${hasExpired ? `<button class="action-item" data-action="cleanExpired">${svg('alertTriangle', 14, 2.2)}<span>Clean ${expiredCount} expired deploy${expiredCount === 1 ? '' : 's'}</span></button>` : ''}
+        <div class="action-divider"></div>
+        <button class="action-item danger" data-action="delete">${svg('trash', 14, 2.2)}<span>Delete project</span></button>
       </div>
     `;
 
     sheet.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => handleAction(btn.dataset.action, p));
     });
-
     $('actionMenu').classList.add('active');
   }
 
@@ -2737,31 +2690,18 @@ svg { display: block; }
   function handleAction(action, p) {
     closeActionMenu();
     switch (action) {
-      case 'editor':
-        window.location.href = '/index.html?pid=' + encodeURIComponent(p.pid);
-        break;
-      case 'dashboard':
-        window.location.href = '/project?pid=' + encodeURIComponent(p.pid);
-        break;
-      case 'share':
+      case 'editor': goEditor(p.pid); break;
+      case 'dashboard': goDashboard(p.pid); break;
+      case 'share': {
         const shareUrl = `${location.origin}/${S.user?.username || ''}/${p.slug || ''}`;
         navigator.clipboard.writeText(shareUrl).then(() => toast('Link copied', 'success', 1200)).catch(() => toast('Copy failed', 'error'));
         break;
-      case 'download':
-        downloadProject(p);
-        break;
-      case 'duplicate':
-        duplicateProject(p);
-        break;
-      case 'rename':
-        openRenameModal(p);
-        break;
-      case 'cleanExpired':
-        cleanExpiredForProject(p);
-        break;
-      case 'delete':
-        confirmDeleteProject(p);
-        break;
+      }
+      case 'download': downloadProject(p); break;
+      case 'duplicate': duplicateProject(p); break;
+      case 'rename': openRenameModal(p); break;
+      case 'cleanExpired': cleanExpiredForProject(p); break;
+      case 'delete': confirmDeleteProject(p); break;
     }
   }
 
@@ -2779,39 +2719,25 @@ svg { display: block; }
       hideLoading();
       if (!res.ok) throw new Error('Download failed');
       const blob = await res.blob();
-      const filename = `${p.slug || 'project'}-${p.pid.slice(-6)}.folio`;
-      triggerDownload(blob, filename);
+      triggerDownload(blob, `${p.slug || 'project'}-${p.pid.slice(-6)}.folio`);
       toast('Downloaded', 'success');
-    } catch (err) {
-      hideLoading();
-      toast(err.message || 'Download failed', 'error');
-    }
+    } catch (err) { hideLoading(); toast(err.message || 'Download failed', 'error'); }
   }
 
   async function duplicateProject(p) {
     if (!S.online) { toast('Requires internet', 'warning'); return; }
-    confirmModal(
-      'Duplicate project?',
-      'A new project will be created with a copy of the files.',
-      'Duplicate',
-      false,
-      async () => {
-        showLoading('Duplicating', 'Copying files…');
-        try {
-          const res = await apiFetch(API_HOST + '?action=project/copy', {
-            method: 'POST',
-            body: JSON.stringify({ pid: p.pid, newName: `${p.name} (copy)` }),
-          });
-          hideLoading();
-          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
-          toast('Project duplicated', 'success');
-          await loadProjects();
-        } catch (err) {
-          hideLoading();
-          toast(err.message || 'Duplicate failed', 'error');
-        }
-      }
-    );
+    confirmModal('Duplicate project?', 'A new project will be created with a copy of the files.', 'Duplicate', false, async () => {
+      showLoading('Duplicating', 'Copying files…');
+      try {
+        const res = await apiFetch(API_HOST + '?action=project/copy', {
+          method: 'POST', body: JSON.stringify({ pid: p.pid, newName: `${p.name} (copy)` }),
+        });
+        hideLoading();
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        toast('Duplicated', 'success');
+        await loadProjects();
+      } catch (err) { hideLoading(); toast(err.message || 'Duplicate failed', 'error'); }
+    });
   }
 
   function openRenameModal(p) {
@@ -2826,23 +2752,25 @@ svg { display: block; }
         <button class="btn btn-primary" id="renameSubmit">Save</button>
       </div>
     `);
-
-    $('renameInput').focus();
-    $('renameInput').select();
-
+    $('renameInput').focus(); $('renameInput').select();
     $('renameSubmit').addEventListener('click', async () => {
       const name = $('renameInput').value.trim();
       if (!name) { toast('Name required', 'error'); return; }
       if (name === p.name) { closeModal(); return; }
-
       $('renameSubmit').disabled = true;
       try {
-        const res = await apiFetch(API_HOST + '?action=projects/update', {
-          method: 'POST',
-          body: JSON.stringify({ pid: p.pid, name }),
-        });
-        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        if (S.session && S.online && p._serverData) {
+          const res = await apiFetch(API_HOST + '?action=projects/update', {
+            method: 'POST', body: JSON.stringify({ pid: p.pid, name }),
+          });
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        }
         p.name = name;
+        p.updatedAt = Date.now();
+        await IDB.putProject({
+          pid: p.pid, name, slug: p.slug || '', description: p.description || '',
+          createdAt: p.createdAt, updatedAt: Date.now(), iconUrl: p.iconUrl || null,
+        });
         closeModal();
         toast('Renamed', 'success');
         renderProjects();
@@ -2851,10 +2779,7 @@ svg { display: block; }
         $('renameSubmit').disabled = false;
       }
     });
-
-    $('renameInput').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') $('renameSubmit').click();
-    });
+    $('renameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('renameSubmit').click(); });
   }
 
   function confirmDeleteProject(p) {
@@ -2870,60 +2795,47 @@ svg { display: block; }
         <button class="btn btn-danger" id="deleteConfirmBtn" disabled>Delete</button>
       </div>
     `);
-
     $('deleteConfirmInput').addEventListener('input', (e) => {
       $('deleteConfirmBtn').disabled = e.target.value !== p.name;
     });
-
     $('deleteConfirmBtn').addEventListener('click', async () => {
       showLoading('Deleting', 'Removing project and all data…');
       try {
-        const res = await apiFetch(API_HOST + '?action=projects/delete', {
-          method: 'POST',
-          body: JSON.stringify({ pid: p.pid }),
-        });
+        if (S.session && S.online && p._serverData) {
+          const res = await apiFetch(API_HOST + '?action=projects/delete', {
+            method: 'POST', body: JSON.stringify({ pid: p.pid }),
+          });
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        }
+        await IDB.deleteProject(p.pid);
         hideLoading();
-        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
         closeModal();
         toast('Project deleted', 'success');
         S.projects = S.projects.filter(proj => proj.pid !== p.pid);
         applyFiltersAndRender();
-      } catch (err) {
-        hideLoading();
-        toast(err.message || 'Delete failed', 'error');
-      }
+      } catch (err) { hideLoading(); toast(err.message || 'Delete failed', 'error'); }
     });
   }
 
   async function cleanExpiredForProject(p) {
     const expired = S.expiredDeployments.filter(d => d.pid === p.pid);
     if (expired.length === 0) { toast('No expired deployments', 'info'); return; }
-
     confirmModal(
       `Delete ${expired.length} expired deployment${expired.length === 1 ? '' : 's'}?`,
-      'Live URLs will stop working. This cannot be undone.',
-      'Delete',
-      true,
+      'Live URLs will stop working. Cannot be undone.', 'Delete', true,
       async () => {
         showLoading('Cleaning', `Deleting ${expired.length}…`);
-        let done = 0;
         try {
           for (const d of expired) {
             await apiFetch(API_HOST + '?action=deployment/delete', {
-              method: 'POST',
-              body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
+              method: 'POST', body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
             });
-            done++;
-            $('loadingDesc').textContent = `Deleting ${done} of ${expired.length}…`;
           }
           S.expiredDeployments = S.expiredDeployments.filter(d => d.pid !== p.pid);
           hideLoading();
-          toast(`Cleaned ${expired.length} deployment${expired.length === 1 ? '' : 's'}`, 'success');
+          toast(`Cleaned ${expired.length}`, 'success');
           applyFiltersAndRender();
-        } catch (err) {
-          hideLoading();
-          toast(err.message || 'Failed', 'error');
-        }
+        } catch (err) { hideLoading(); toast(err.message || 'Failed', 'error'); }
       }
     );
   }
@@ -2931,11 +2843,8 @@ svg { display: block; }
   function triggerDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
@@ -2944,21 +2853,15 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   function openCreateFlow() {
-    S.createStep = 1;
-    S.createName = '';
-    S.createDescription = '';
-    S.createIconMode = 'name';
-    S.createIconUrl = null;
-    S.createIconDataUrl = null;
-    S.createIconVariants = [];
-    S.createImageUrlInput = '';
+    S.createStep = 1; S.createName = ''; S.createDescription = '';
+    S.createIconMode = 'name'; S.createIconUrl = null; S.createIconDataUrl = null;
+    S.createIconVariants = []; S.createImageUrlInput = '';
     renderCreateStep();
   }
 
   function renderCreateStep() {
     const content = $('modalBody');
     $('modalOverlay').classList.add('active');
-
     const steps = ['Basics', 'Icon', 'Review'];
     const stepperHTML = steps.map((_, i) => `<div class="step ${i < S.createStep ? 'active' : ''}"></div>`).join('');
 
@@ -2988,8 +2891,7 @@ svg { display: block; }
         if (!name) { toast('Project name required', 'error'); return; }
         S.createName = name;
         S.createDescription = $('createDesc').value.trim();
-        S.createStep = 2;
-        renderCreateStep();
+        S.createStep = 2; renderCreateStep();
       });
     } else if (S.createStep === 2) {
       content.innerHTML = `
@@ -2998,46 +2900,29 @@ svg { display: block; }
         <div class="step-label">Step 2 of 3 · Icon (optional)</div>
         <div class="modal-title">Choose an icon</div>
         <div class="modal-desc">Generated by Flier from your project name.</div>
-
         <div class="icon-tabs">
           <button class="icon-tab ${S.createIconMode === 'name' ? 'active' : ''}" data-icon-mode="name">From name</button>
           <button class="icon-tab ${S.createIconMode === 'url' ? 'active' : ''}" data-icon-mode="url">From URL</button>
           <button class="icon-tab ${S.createIconMode === 'upload' ? 'active' : ''}" data-icon-mode="upload">Upload</button>
         </div>
-
         <div class="icon-mode-panel ${S.createIconMode === 'name' ? 'active' : ''}" data-panel="name">
-          <div class="icon-grid" id="iconGrid">
-            <div class="icon-placeholder" style="grid-column:1/-1;">Tap "Generate" below</div>
-          </div>
-          <button class="icon-generate-btn" id="iconGenName">
-            ${svg('refresh', 11, 2.2)} Generate from "${escapeHTML(S.createName)}"
-          </button>
+          <div class="icon-grid" id="iconGrid"><div class="icon-placeholder" style="grid-column:1/-1;">Tap "Generate" below</div></div>
+          <button class="icon-generate-btn" id="iconGenName">${svg('refresh', 11, 2.2)} Generate from "${escapeHTML(S.createName)}"</button>
         </div>
-
         <div class="icon-mode-panel ${S.createIconMode === 'url' ? 'active' : ''}" data-panel="url">
           <div class="field">
             <label class="field-label">Image URL</label>
             <input class="input" id="iconUrlInput" placeholder="https://example.com/image.jpg" value="${escapeAttr(S.createImageUrlInput)}">
             <div class="field-hint">HTTPS only.</div>
           </div>
-          <div class="icon-grid" id="iconGridUrl">
-            <div class="icon-placeholder" style="grid-column:1/-1;">Paste URL and tap Generate</div>
-          </div>
-          <button class="icon-generate-btn" id="iconGenUrl">
-            ${svg('image', 11, 2.2)} Generate from URL
-          </button>
+          <div class="icon-grid" id="iconGridUrl"><div class="icon-placeholder" style="grid-column:1/-1;">Paste URL and tap Generate</div></div>
+          <button class="icon-generate-btn" id="iconGenUrl">${svg('image', 11, 2.2)} Generate from URL</button>
         </div>
-
         <div class="icon-mode-panel ${S.createIconMode === 'upload' ? 'active' : ''}" data-panel="upload">
           <input type="file" id="iconUploadFile" accept="image/*" style="display:none;">
-          <div class="icon-upload-btn" id="iconUploadBtn">
-            ${svg('upload', 20, 2)}
-            <span>Upload image</span>
-            <span class="sub">JPG, PNG, WebP · max 5 MB</span>
-          </div>
+          <div class="icon-upload-btn" id="iconUploadBtn">${svg('upload', 20, 2)}<span>Upload image</span><span class="sub">JPG, PNG, WebP · max 5 MB</span></div>
           <div class="icon-grid" id="iconGridUpload" style="margin-top:10px;"></div>
         </div>
-
         <div class="modal-actions">
           <button class="btn btn-secondary" id="createBack">Back</button>
           <button class="btn btn-primary" id="createNext">Next</button>
@@ -3045,12 +2930,8 @@ svg { display: block; }
       `;
 
       content.querySelectorAll('[data-icon-mode]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          S.createIconMode = btn.dataset.iconMode;
-          renderCreateStep();
-        });
+        btn.addEventListener('click', () => { S.createIconMode = btn.dataset.iconMode; renderCreateStep(); });
       });
-
       $('iconGenName').addEventListener('click', generateIconFromName);
       $('iconGenUrl').addEventListener('click', generateIconFromUrl);
       $('iconUploadBtn').addEventListener('click', () => $('iconUploadFile').click());
@@ -3060,21 +2941,10 @@ svg { display: block; }
         const gridId = S.createIconMode === 'name' ? 'iconGrid' : S.createIconMode === 'url' ? 'iconGridUrl' : 'iconGridUpload';
         renderIconVariants(gridId);
       }
-
-      $('createBack').addEventListener('click', () => {
-        S.createStep = 1;
-        renderCreateStep();
-      });
-      $('createNext').addEventListener('click', () => {
-        if (S.createIconDataUrl) {
-          uploadSelectedIcon().then(() => {
-            S.createStep = 3;
-            renderCreateStep();
-          });
-        } else {
-          S.createStep = 3;
-          renderCreateStep();
-        }
+      $('createBack').addEventListener('click', () => { S.createStep = 1; renderCreateStep(); });
+      $('createNext').addEventListener('click', async () => {
+        if (S.createIconDataUrl) await uploadSelectedIcon();
+        S.createStep = 3; renderCreateStep();
       });
     } else if (S.createStep === 3) {
       const iconPreview = S.createIconUrl
@@ -3088,7 +2958,6 @@ svg { display: block; }
         <div class="step-label">Step 3 of 3 · Review</div>
         <div class="modal-title">Create project</div>
         <div class="modal-desc">Review and confirm.</div>
-
         <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--theme-glass-bg);border-radius:8px;margin-bottom:12px;">
           <div style="width:40px;height:40px;border-radius:9px;overflow:hidden;background:var(--theme-surface-elevated);display:flex;align-items:center;justify-content:center;flex-shrink:0;${iconBg}">${iconPreview}</div>
           <div style="flex:1;min-width:0;">
@@ -3096,112 +2965,84 @@ svg { display: block; }
             <div style="font-size:10.5px;color:var(--theme-text-tertiary);">${S.createDescription ? escapeHTML(S.createDescription) : 'No description'}</div>
           </div>
         </div>
-
         <div class="modal-actions">
           <button class="btn btn-secondary" id="createBack">Back</button>
           <button class="btn btn-primary" id="createSubmit">${svg('check', 12, 2.4)} Create project</button>
         </div>
       `;
-
-      $('createBack').addEventListener('click', () => {
-        S.createStep = 2;
-        renderCreateStep();
-      });
-
+      $('createBack').addEventListener('click', () => { S.createStep = 2; renderCreateStep(); });
       $('createSubmit').addEventListener('click', submitCreateProject);
     }
   }
 
   async function generateIconFromName() {
-    const grid = $('iconGrid');
-    if (!grid) return;
+    const grid = $('iconGrid'); if (!grid) return;
     grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
     $('iconGenName').disabled = true;
-
     try {
       const res = await fetch(API_FLIER + '?action=avatar/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: S.createName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
           displayName: S.createName,
         }),
       });
       const data = await res.json();
-      if (!data.success || !Array.isArray(data.variants) || data.variants.length === 0) {
-        throw new Error(data.error || 'Generation failed');
-      }
+      if (!data.success || !Array.isArray(data.variants)) throw new Error(data.error || 'Failed');
       S.createIconVariants = data.variants;
       renderIconVariants('iconGrid');
-    } catch (err) {
+    } catch {
       grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;aspect-ratio:auto;padding:14px;">Could not generate</div>';
       toast('Icon generation failed', 'error');
-    } finally {
-      $('iconGenName').disabled = false;
-    }
+    } finally { $('iconGenName').disabled = false; }
   }
 
   async function generateIconFromUrl() {
     const url = $('iconUrlInput').value.trim();
     if (!url) { toast('Paste an image URL', 'error'); return; }
     if (!url.startsWith('https://')) { toast('URL must start with https://', 'error'); return; }
-
     S.createImageUrlInput = url;
     const grid = $('iconGridUrl');
     grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
     $('iconGenUrl').disabled = true;
-
     try {
       const res = await fetch(API_FLIER + '?action=avatar/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: S.createName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
-          displayName: S.createName,
-          imageUrl: url,
+          displayName: S.createName, imageUrl: url,
         }),
       });
       const data = await res.json();
-      if (!data.success || !Array.isArray(data.variants) || data.variants.length === 0) {
-        throw new Error(data.error || 'Generation failed');
-      }
+      if (!data.success || !Array.isArray(data.variants)) throw new Error('Failed');
       S.createIconVariants = data.variants;
       renderIconVariants('iconGridUrl');
-    } catch (err) {
+    } catch {
       grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;aspect-ratio:auto;padding:14px;">Could not fetch image</div>';
-      toast('Could not fetch image URL', 'error');
-    } finally {
-      $('iconGenUrl').disabled = false;
-    }
+      toast('Could not fetch image', 'error');
+    } finally { $('iconGenUrl').disabled = false; }
   }
 
   async function handleIconUpload(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     if (!file.type.startsWith('image/')) { toast('Not an image', 'error'); return; }
     if (file.size > 5 * 1024 * 1024) { toast('Image too large', 'error'); return; }
-
     const dataUrl = await fileToDataUrl(file);
     S.createIconDataUrl = dataUrl;
-
     const grid = $('iconGridUpload');
     grid.innerHTML = `<button class="icon-option selected" data-selected="1" type="button"><img src="${escapeAttr(dataUrl)}" alt=""></button>`;
   }
 
   function renderIconVariants(gridId) {
-    const grid = document.getElementById(gridId);
-    if (!grid) return;
+    const grid = document.getElementById(gridId); if (!grid) return;
     grid.innerHTML = S.createIconVariants.map((v, idx) => `
-      <button class="icon-option ${S.createIconDataUrl === v.dataUrl ? 'selected' : ''}" data-icon-idx="${idx}" type="button" aria-label="${escapeAttr(v.label || 'Icon')}">
+      <button class="icon-option ${S.createIconDataUrl === v.dataUrl ? 'selected' : ''}" data-icon-idx="${idx}" type="button">
         <img src="${escapeAttr(v.dataUrl)}" alt="">
       </button>
     `).join('');
-
     grid.querySelectorAll('[data-icon-idx]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const idx = parseInt(btn.dataset.iconIdx, 10);
-        const v = S.createIconVariants[idx];
-        if (!v) return;
+        const v = S.createIconVariants[parseInt(btn.dataset.iconIdx, 10)]; if (!v) return;
         S.createIconDataUrl = v.dataUrl;
         grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
         btn.classList.add('selected');
@@ -3213,69 +3054,66 @@ svg { display: block; }
     if (!S.createIconDataUrl) return;
     try {
       const res = await fetch(API_FLIER + '?action=avatar/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           dataUrl: S.createIconDataUrl,
           username: S.createName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
         }),
       });
       const data = await res.json();
-      if (data.success && data.url) {
-        S.createIconUrl = data.url;
-      }
-    } catch (err) {
-      console.warn('Icon upload failed:', err);
-    }
+      if (data.success && data.url) S.createIconUrl = data.url;
+    } catch {}
   }
 
   async function submitCreateProject() {
     showLoading('Creating project', 'Setting up…');
-
     try {
-      const body = {
-        name: S.createName,
-        description: S.createDescription || '',
-      };
-      if (S.createIconUrl) body.iconUrl = S.createIconUrl;
+      const name = S.createName;
+      const description = S.createDescription || '';
+      const iconUrl = S.createIconUrl || null;
+      let pid;
 
-      const res = await apiFetch(API_HOST + '?action=projects/create', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-
-      hideLoading();
-
-      if (!res.ok || !res.data?.success) {
-        throw new Error(res.data?.error || 'Create failed');
+      if (S.session && S.online) {
+        const body = { name, description };
+        if (iconUrl) body.iconUrl = iconUrl;
+        const res = await apiFetch(API_HOST + '?action=projects/create', {
+          method: 'POST', body: JSON.stringify(body),
+        });
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Create failed');
+        pid = res.data.pid;
+      } else {
+        pid = `local_${Date.now()}`;
       }
 
-      closeModal();
-      showCelebration(res.data.pid, S.createName);
-    } catch (err) {
+      const slug = name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
+      await IDB.putProject({ pid, name, slug, description, iconUrl, createdAt: Date.now(), updatedAt: Date.now() });
+      await IDB.putFile(pid, 'index.html',
+        `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>${name}</title>\n</head>\n<body>\n  <h1>${name}</h1>\n  <p>Edit this file to get started.</p>\n</body>\n</html>`);
+      await IDB.putFile(pid, 'style.css', 'body { font-family: system-ui, sans-serif; margin: 2rem; }\n');
+      await IDB.putFile(pid, 'app.js', `console.log('Hello from ${name}');\n`);
+
       hideLoading();
-      toast(err.message || 'Create failed', 'error');
-    }
+      closeModal();
+      showCelebration(pid, name);
+    } catch (err) { hideLoading(); toast(err.message || 'Create failed', 'error'); }
   }
 
   function showCelebration(pid, name) {
     $('celeTitle').textContent = 'Project created';
     $('celeDesc').textContent = `"${name}" is ready to edit.`;
     $('celebration').classList.add('active');
-
     $('celeOpenEditor').onclick = () => {
       $('celebration').classList.remove('active');
-      window.location.href = '/index.html?pid=' + encodeURIComponent(pid);
+      goEditor(pid);
     };
     $('celeStay').onclick = () => {
       $('celebration').classList.remove('active');
       loadProjects();
     };
-
     setTimeout(() => {
       if ($('celebration').classList.contains('active')) {
         $('celebration').classList.remove('active');
-        window.location.href = '/index.html?pid=' + encodeURIComponent(pid);
+        goEditor(pid);
       }
     }, 4000);
   }
@@ -3286,81 +3124,52 @@ svg { display: block; }
       <div class="modal-desc">Load a .folio backup file to create a new project.</div>
       <input type="file" id="importFile" accept=".folio,.zip" style="display:none;">
       <div class="icon-upload-btn" id="importUploadBtn" style="margin-bottom:12px;">
-        ${svg('upload', 20, 2)}
-        <span>Choose .folio file</span>
-        <span class="sub">Or .zip archive</span>
+        ${svg('upload', 20, 2)}<span>Choose .folio file</span><span class="sub">Or .zip archive</span>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" data-modal-close>Cancel</button>
       </div>
     `);
-
     $('importUploadBtn').addEventListener('click', () => $('importFile').click());
     $('importFile').addEventListener('change', handleImportFile);
   }
 
   async function handleImportFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     closeModal();
-
     showLoading('Importing', 'Reading file…');
     try {
       const text = await file.text();
       let data = null;
-      try { data = JSON.parse(text); } catch {
-        hideLoading();
-        toast('Only JSON .folio files supported here.', 'info', 3500);
-        return;
-      }
+      try { data = JSON.parse(text); } catch { hideLoading(); toast('Only JSON .folio files supported', 'info'); return; }
+      if (!data.name) throw new Error('Invalid file');
 
-      if (!data.pid || !data.name) {
-        throw new Error('Invalid file');
+      const pid = S.session && S.online ? null : `local_${Date.now()}`;
+      let newPid = pid;
+      if (!newPid) {
+        const createRes = await apiFetch(API_HOST + '?action=projects/create', {
+          method: 'POST', body: JSON.stringify({ name: data.name || 'Imported project', description: data.description || '' }),
+        });
+        if (!createRes.ok || !createRes.data?.success) throw new Error(createRes.data?.error || 'Create failed');
+        newPid = createRes.data.pid;
       }
-
-      const createRes = await apiFetch(API_HOST + '?action=projects/create', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: data.name || 'Imported project',
-          description: data.description || '',
-        }),
+      await IDB.putProject({
+        pid: newPid, name: data.name || 'Imported project',
+        slug: (data.name || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project',
+        description: data.description || '', createdAt: Date.now(), updatedAt: Date.now(),
       });
-      if (!createRes.ok || !createRes.data?.success) {
-        throw new Error(createRes.data?.error || 'Create failed');
-      }
-
-      const newPid = createRes.data.pid;
-
-      $('loadingDesc').textContent = 'Syncing files…';
-      const syncRes = await apiFetch(API_HOST + '?action=project/sync-back', {
-        method: 'POST',
-        body: JSON.stringify({
-          pid: newPid,
-          files: data.files || null,
-          versions: data.versions || null,
-          db: data.db || null,
-          schema: data.schema || null,
-          manifest: data.manifest || null,
-        }),
-      });
-
       hideLoading();
-      if (!syncRes.ok || !syncRes.data?.success) throw new Error('Sync failed');
-
       toast('Project imported', 'success');
       await loadProjects();
-    } catch (err) {
-      hideLoading();
-      toast(err.message || 'Import failed', 'error');
-    }
+    } catch (err) { hideLoading(); toast(err.message || 'Import failed', 'error'); }
   }
 
   function fileToDataUrl(file) {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
     });
   }
 
@@ -3372,10 +3181,7 @@ svg { display: block; }
     renderFiltersBody();
     $('filtersOverlay').classList.add('active');
   }
-
-  function closeFiltersOverlay() {
-    $('filtersOverlay').classList.remove('active');
-  }
+  function closeFiltersOverlay() { $('filtersOverlay').classList.remove('active'); }
 
   function renderFiltersBody() {
     const body = $('filtersBody');
@@ -3385,77 +3191,45 @@ svg { display: block; }
 
     const stats = computeStats();
     const expiredCount = S.expiredDeployments.length;
-
     const filterPills = FILTERS_BY_TAB[S.activeTab] || [];
     const pillsHTML = filterPills.length > 0 ? `
       <div class="filter-section">
         <div class="filter-label">Filters</div>
         <div class="filter-pills">
-          ${filterPills.map(f => `
-            <button class="filter-pill ${S.activeFilters.has(f) ? 'active' : ''}" data-filter="${escapeAttr(f)}" type="button">
-              ${escapeHTML(FILTER_LABELS[f])}
-            </button>
-          `).join('')}
+          ${filterPills.map(f => `<button class="filter-pill ${S.activeFilters.has(f) ? 'active' : ''}" data-filter="${escapeAttr(f)}" type="button">${escapeHTML(FILTER_LABELS[f])}</button>`).join('')}
         </div>
       </div>
     ` : '';
 
-    const storagePct = S.storageLimit > 0
-      ? Math.min(100, (stats.totalStorage / S.storageLimit) * 100)
-      : 0;
+    const storagePct = S.storageLimit > 0 ? Math.min(100, (stats.totalStorage / S.storageLimit) * 100) : 0;
     const storageClass = storagePct > 90 ? 'danger' : storagePct > 70 ? 'warn' : '';
 
     body.innerHTML = `
       ${pillsHTML}
-
       <div class="filter-section">
         <div class="filter-label">Overview</div>
         <div class="stats-grid">
-          <div class="stat-tile">
-            <div class="stat-label">Total</div>
-            <div class="stat-value">${S.projects.length}</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-label">Public</div>
-            <div class="stat-value">${stats.publicCount}</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-label">Deployed</div>
-            <div class="stat-value">${stats.deployedCount}</div>
-          </div>
-          <div class="stat-tile">
-            <div class="stat-label">Expired deploys</div>
-            <div class="stat-value ${expiredCount > 0 ? 'warn' : ''}">${expiredCount}</div>
-          </div>
+          <div class="stat-tile"><div class="stat-label">Total</div><div class="stat-value">${S.projects.length}</div></div>
+          <div class="stat-tile"><div class="stat-label">Public</div><div class="stat-value">${stats.publicCount}</div></div>
+          <div class="stat-tile"><div class="stat-label">Deployed</div><div class="stat-value">${stats.deployedCount}</div></div>
+          <div class="stat-tile"><div class="stat-label">Expired deploys</div><div class="stat-value ${expiredCount > 0 ? 'warn' : ''}">${expiredCount}</div></div>
         </div>
       </div>
-
       <div class="storage-block">
         <div class="storage-header">
           <div class="storage-title">Storage</div>
           <div class="storage-amount">${formatBytes(stats.totalStorage)} / ${formatBytes(S.storageLimit)}</div>
         </div>
-        <div class="storage-bar">
-          <div class="storage-bar-fill ${storageClass}" style="width:${storagePct}%"></div>
-        </div>
-        <div class="storage-note">
-          ${storagePct > 90 ? '⚠ Storage nearly full — cleanup recommended.' : storagePct > 70 ? 'Storage is getting full.' : 'Plenty of space remaining.'}
-        </div>
+        <div class="storage-bar"><div class="storage-bar-fill ${storageClass}" style="width:${storagePct}%"></div></div>
+        <div class="storage-note">${storagePct > 90 ? '⚠ Storage nearly full.' : storagePct > 70 ? 'Storage is getting full.' : 'Plenty of space remaining.'}</div>
       </div>
-
       ${expiredCount > 0 ? `
         <div class="cleanup-block">
-          <div class="cleanup-header">
-            ${svg('alertTriangle', 13, 2.2)}
-            <div class="cleanup-title">${expiredCount} expired deploy${expiredCount === 1 ? '' : 's'}</div>
-          </div>
+          <div class="cleanup-header">${svg('alertTriangle', 13, 2.2)}<div class="cleanup-title">${expiredCount} expired deploy${expiredCount === 1 ? '' : 's'}</div></div>
           <div class="cleanup-desc">Older than 30 days. Safe to delete.</div>
-          <button class="btn btn-secondary btn-sm" id="btnCleanAll" type="button" style="width:100%;">
-            ${svg('trash', 10, 2.2)} Clean up all expired
-          </button>
+          <button class="btn btn-secondary btn-sm" id="btnCleanAll" type="button" style="width:100%;">${svg('trash', 10, 2.2)} Clean up all expired</button>
         </div>
       ` : ''}
-
       <div class="toggle-row">
         <div class="toggle-info">
           <div class="toggle-title">Auto-clean expired deployments</div>
@@ -3463,15 +3237,10 @@ svg { display: block; }
         </div>
         <button class="switch ${S.autoCleanEnabled ? 'on' : ''}" id="autoCleanSwitch" type="button" aria-label="Toggle auto-clean"></button>
       </div>
-
       <div class="filter-section">
         <div class="filter-label">Sort by</div>
         <div class="filter-pills">
-          ${SORTS.map(s => `
-            <button class="filter-pill ${S.sortId === s.id ? 'active' : ''}" data-sort="${escapeAttr(s.id)}" type="button">
-              ${escapeHTML(s.label)}
-            </button>
-          `).join('')}
+          ${SORTS.map(s => `<button class="filter-pill ${S.sortId === s.id ? 'active' : ''}" data-sort="${escapeAttr(s.id)}" type="button">${escapeHTML(s.label)}</button>`).join('')}
         </div>
       </div>
     `;
@@ -3486,7 +3255,6 @@ svg { display: block; }
         applyFiltersAndRender();
       });
     });
-
     body.querySelectorAll('[data-sort]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.sortId = btn.dataset.sort;
@@ -3494,21 +3262,17 @@ svg { display: block; }
         applyFiltersAndRender();
       });
     });
-
     $('autoCleanSwitch')?.addEventListener('click', () => {
       S.autoCleanEnabled = !S.autoCleanEnabled;
       try { localStorage.setItem(STORAGE.autoClean, String(S.autoCleanEnabled)); } catch {}
       $('autoCleanSwitch').classList.toggle('on', S.autoCleanEnabled);
       toast(S.autoCleanEnabled ? 'Auto-clean on' : 'Auto-clean off', 'info', 1200);
     });
-
     $('btnCleanAll')?.addEventListener('click', cleanAllExpired);
   }
 
   function computeStats() {
-    let publicCount = 0;
-    let deployedCount = 0;
-    let totalStorage = 0;
+    let publicCount = 0, deployedCount = 0, totalStorage = 0;
     for (const p of S.projects) {
       if (p.visibility?.profile === 'public') publicCount++;
       if (p.deployment?.url) deployedCount++;
@@ -3520,36 +3284,21 @@ svg { display: block; }
   function cleanAllExpired() {
     const count = S.expiredDeployments.length;
     if (count === 0) return;
-
-    confirmModal(
-      `Delete ${count} expired deployment${count === 1 ? '' : 's'}?`,
-      'Live URLs will stop working. This cannot be undone.',
-      'Delete all',
-      true,
-      async () => {
-        showLoading('Cleaning', `Deleting ${count}…`);
-        let done = 0;
-        try {
-          const list = [...S.expiredDeployments];
-          for (const d of list) {
-            await apiFetch(API_HOST + '?action=deployment/delete', {
-              method: 'POST',
-              body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
-            });
-            done++;
-            $('loadingDesc').textContent = `Deleting ${done} of ${count}…`;
-          }
-          S.expiredDeployments = [];
-          hideLoading();
-          closeFiltersOverlay();
-          toast(`Cleaned ${count} deployment${count === 1 ? '' : 's'}`, 'success');
-          applyFiltersAndRender();
-        } catch (err) {
-          hideLoading();
-          toast(err.message || 'Failed', 'error');
+    confirmModal(`Delete ${count} expired deployment${count === 1 ? '' : 's'}?`, 'Live URLs will stop working. Cannot be undone.', 'Delete all', true, async () => {
+      showLoading('Cleaning', `Deleting ${count}…`);
+      try {
+        for (const d of [...S.expiredDeployments]) {
+          await apiFetch(API_HOST + '?action=deployment/delete', {
+            method: 'POST', body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
+          });
         }
-      }
-    );
+        S.expiredDeployments = [];
+        hideLoading();
+        closeFiltersOverlay();
+        toast(`Cleaned ${count}`, 'success');
+        applyFiltersAndRender();
+      } catch (err) { hideLoading(); toast(err.message || 'Failed', 'error'); }
+    });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -3559,21 +3308,17 @@ svg { display: block; }
   function wireSearch() {
     const input = $('searchInput');
     const clear = $('searchClear');
-
     const doSearch = debounce(() => {
       S.searchQuery = input.value.trim();
       renderActiveFilters();
       applyFiltersAndRender();
     }, 300);
-
     input.addEventListener('input', () => {
       clear.classList.toggle('visible', input.value.length > 0);
       doSearch();
     });
-
     clear.addEventListener('click', () => {
-      input.value = '';
-      clear.classList.remove('visible');
+      input.value = ''; clear.classList.remove('visible');
       S.searchQuery = '';
       renderActiveFilters();
       applyFiltersAndRender();
@@ -3581,7 +3326,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // GLOBAL EVENT WIRING
+  // WIRING
   // ═══════════════════════════════════════════════════════════
 
   function wireGlobalEvents() {
@@ -3591,32 +3336,23 @@ svg { display: block; }
     document.addEventListener('click', (e) => {
       if (e.target.matches('[data-modal-close]')) closeModal();
     });
-
     $('actionMenu').addEventListener('click', (e) => {
       if (e.target === $('actionMenu')) closeActionMenu();
     });
-
     $('filterBtn').addEventListener('click', openFiltersOverlay);
     $('filtersClose').addEventListener('click', closeFiltersOverlay);
     $('filtersApply').addEventListener('click', closeFiltersOverlay);
     $('filtersClearAll').addEventListener('click', () => {
-      S.activeFilters.clear();
-      S.searchQuery = '';
-      $('searchInput').value = '';
-      $('searchClear').classList.remove('visible');
-      renderActiveFilters();
-      applyFiltersAndRender();
-      renderFiltersBody();
+      S.activeFilters.clear(); S.searchQuery = '';
+      $('searchInput').value = ''; $('searchClear').classList.remove('visible');
+      renderActiveFilters(); applyFiltersAndRender(); renderFiltersBody();
     });
     $('filtersOverlay').addEventListener('click', (e) => {
       if (e.target === $('filtersOverlay')) closeFiltersOverlay();
     });
-
     $('newBtn').addEventListener('click', openCreateFlow);
     $('sortBtn').addEventListener('click', openFiltersOverlay);
-
     wireSearch();
-
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if ($('celebration').classList.contains('active')) return;
@@ -3625,7 +3361,6 @@ svg { display: block; }
         if ($('filtersOverlay').classList.contains('active')) return closeFiltersOverlay();
       }
     });
-
     const updateOnline = () => {
       S.online = navigator.onLine;
       $('offlineBanner').classList.toggle('visible', !S.online);
@@ -3633,15 +3368,11 @@ svg { display: block; }
     window.addEventListener('online', () => { updateOnline(); loadProjects(); });
     window.addEventListener('offline', updateOnline);
     updateOnline();
-
     window.addEventListener('hashchange', () => {
       const t = getHashTab();
       if (t && t !== S.activeTab) {
-        S.activeTab = t;
-        S.activeFilters.clear();
-        renderTabs();
-        renderActiveFilters();
-        applyFiltersAndRender();
+        S.activeTab = t; S.activeFilters.clear();
+        renderTabs(); renderActiveFilters(); applyFiltersAndRender();
       }
     });
   }
@@ -3652,9 +3383,9 @@ svg { display: block; }
 
   async function boot() {
     readSession();
-
-    if (!S.session) {
-      window.location.href = '/register?next=' + encodeURIComponent(location.pathname);
+    try { await openDB(); } catch (err) {
+      console.error('[Projects] DB failed:', err);
+      toast('Storage failed', 'error');
       return;
     }
 
@@ -3674,6 +3405,8 @@ svg { display: block; }
 
   document.addEventListener('DOMContentLoaded', boot);
 
+  // Expose for inline modal handlers
+  window.closeModal = closeModal;
 })();
 </script>
 
