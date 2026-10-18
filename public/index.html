@@ -1564,6 +1564,255 @@ svg { display: block; }
   gap: 6px;
 }
 .info-banner svg { width: 12px; height: 12px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; flex-shrink: 0; margin-top: 1px; }
+  /* ═══════════════════════════════════════════════════════════
+   PROJECTS: loader overlay, picker sheet, recents strip
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Loading overlay ─────────────────────────────────────── */
+.project-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 16, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.22s var(--ease);
+}
+[data-theme="light"] .project-loader {
+  background: rgba(18, 19, 22, 0.42);
+}
+.project-loader.visible {
+  display: flex;
+  opacity: 1;
+}
+
+.project-loader-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 28px;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: var(--r-lg);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+  max-width: min(340px, calc(100vw - 32px));
+  text-align: center;
+  animation: projectLoaderIn 0.26s var(--ease-spring);
+}
+@keyframes projectLoaderIn {
+  from { opacity: 0; transform: scale(0.94) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.project-loader-card .spinner {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+}
+
+.project-loader-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.2px;
+  line-height: 1.35;
+}
+
+.project-loader-desc {
+  font-size: 11px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.45;
+  min-height: 14px;
+}
+
+/* ── Recents strip in empty state ───────────────────────── */
+.empty-recent {
+  width: 100%;
+  max-width: 340px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--theme-divider);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.empty-recent[hidden] { display: none; }
+
+.empty-recent-title {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--theme-text-tertiary);
+  padding: 0 2px;
+}
+
+.empty-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.empty-recent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text);
+  font-size: 11.5px;
+  font-weight: 500;
+  text-align: left;
+  transition: all 0.15s var(--ease);
+}
+.empty-recent-item:hover {
+  background: var(--theme-surface-elevated);
+  border-color: var(--theme-primary-glow);
+  color: var(--theme-text);
+  transform: translateY(-1px);
+}
+.empty-recent-item:active { transform: scale(0.99); }
+
+.empty-recent-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.empty-recent-time {
+  font-size: 9.5px;
+  color: var(--theme-text-tertiary);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+/* ── Projects picker sheet ───────────────────────────────── */
+.projects-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.projects-sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.projects-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: var(--r-md);
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text);
+  text-align: left;
+  transition: all 0.15s var(--ease);
+}
+.projects-sheet-item:hover {
+  background: var(--theme-surface-elevated);
+  border-color: var(--theme-primary-glow);
+  transform: translateY(-1px);
+}
+.projects-sheet-item:active { transform: scale(0.99); }
+
+.projects-sheet-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  overflow: hidden;
+  background: var(--theme-surface-elevated);
+  color: var(--theme-text);
+}
+.projects-sheet-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.projects-sheet-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.projects-sheet-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--theme-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projects-sheet-time {
+  font-size: 10px;
+  color: var(--theme-text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.projects-sheet-item > svg {
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+}
+
+.projects-sheet-footer {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--theme-divider);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Sheet-mode header/footer tweak for the projects sheet specifically */
+.sheet .sheet-body .projects-sheet + .projects-sheet-footer {
+  /* handled inline; this rule is a safety net */
+}
+
+/* ── Mobile tweaks ──────────────────────────────────────── */
+@media (max-width: 639px) {
+  .projects-sheet-item { padding: 8px 9px; gap: 9px; }
+  .projects-sheet-icon { width: 32px; height: 32px; font-size: 11.5px; border-radius: 8px; }
+  .projects-sheet-name { font-size: 12px; }
+  .empty-recent { max-width: 100%; }
+  .project-loader-card { padding: 20px 22px; gap: 10px; }
+  .project-loader-title { font-size: 12.5px; }
+  .project-loader-desc { font-size: 10.5px; }
+}
+
+/* Reduced motion — inherit global rule but ensure loader doesn't animate */
+@media (prefers-reduced-motion: reduce) {
+  .project-loader-card { animation: none; }
+  .empty-recent-item,
+  .projects-sheet-item { transition: none; }
+}
 </style>
 </head>
 <body>
@@ -1578,9 +1827,9 @@ svg { display: block; }
       <button class="rail-item active" data-rail="editor" aria-label="Editor">
         <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
       </button>
-      <a class="rail-item" href="/projects" aria-label="Projects">
+      <button class="rail-item" id="railProjects" aria-label="All projects" title="All projects">
         <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-      </a>
+      </button>
       <a class="rail-item" href="/tools" aria-label="Tools">
         <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       </a>
@@ -1614,6 +1863,9 @@ svg { display: block; }
       <span class="header-guest-badge" id="guestBadge">Guest</span>
     </div>
     <div class="header-right">
+      <button class="header-btn" id="openProjectsBtn" aria-label="Projects" title="Projects">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </button>
       <button class="header-btn" id="saveBtn" aria-label="Save" disabled>
         <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         <span class="lbl">Save</span>
@@ -1668,6 +1920,10 @@ svg { display: block; }
             <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
             Open project
           </button>
+        </div>
+        <div class="empty-recent" id="emptyRecent" hidden>
+          <div class="empty-recent-title">Recent</div>
+          <div class="empty-recent-list" id="emptyRecentList"></div>
         </div>
       </div>
     </main>
@@ -1827,6 +2083,14 @@ svg { display: block; }
       </button>
     </div>
     <div class="symbols-grid" id="symbolsGrid"></div>
+  </div>
+</div>
+
+<div class="project-loader" id="projectLoader" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="projectLoaderTitle">
+  <div class="project-loader-card">
+    <div class="spinner"></div>
+    <div class="project-loader-title" id="projectLoaderTitle">Loading project…</div>
+    <div class="project-loader-desc" id="projectLoaderDesc"></div>
   </div>
 </div>
 
@@ -2552,6 +2816,7 @@ const workspace = {
     const project = await db.getProject(pid);
     if (!project) return null;
     await this.openProject(project);
+    setPidInUrl(project.pid);
     return project;
   },
 
@@ -2667,6 +2932,7 @@ const workspace = {
       const project = await db.getProject(S.currentProject.pid);
       if (project) { project.updatedAt = Date.now(); await db.putProject(project); }
       S.dirtyFiles.delete(S.activeFile);
+      if (S.currentProject?.pid) setPidInUrl(S.currentProject.pid);
       updateDirtyDot();
       updateTabs();
       if (!S.isGuest) {
@@ -2697,6 +2963,230 @@ const workspace = {
     toast(`Saved ${dirty.length} file${dirty.length === 1 ? '' : 's'}`, 'success');
   },
 };
+
+// ═══════════════════════════════════════════════════════════
+// PROJECTS: URL DEEP-LINK, PICKER SHEET, RECENTS
+// ═══════════════════════════════════════════════════════════
+
+const PID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
+
+function getPidFromUrl() {
+  try {
+    const pid = new URLSearchParams(location.search).get('pid');
+    return pid && PID_RE.test(pid) ? pid : null;
+  } catch { return null; }
+}
+
+function setPidInUrl(pid) {
+  try {
+    const url = new URL(location.href);
+    if (pid) url.searchParams.set('pid', pid);
+    else url.searchParams.delete('pid');
+    history.replaceState({ pid: pid || null }, '', url.toString());
+  } catch {}
+}
+
+function getInitials(name) {
+  const s = String(name || '').trim();
+  if (!s) return '·';
+  return s.split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+}
+
+const AVATAR_GRADIENTS = [
+  'linear-gradient(135deg, #F59E0B, #f97316)',
+  'linear-gradient(135deg, #0284c7, #0369a1)',
+  'linear-gradient(135deg, #a855f7, #6d28d9)',
+  'linear-gradient(135deg, #10B981, #059669)',
+  'linear-gradient(135deg, #ec4899, #be185d)',
+  'linear-gradient(135deg, #06b6d4, #0891b2)',
+];
+function getAvatarColor(seed) {
+  const s = String(seed || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+}
+
+function showProjectLoader(title, desc) {
+  const node = $('projectLoader');
+  if (!node) return;
+  const t = $('projectLoaderTitle');
+  const d = $('projectLoaderDesc');
+  if (t) t.textContent = title || 'Loading project…';
+  if (d) d.textContent = desc || '';
+  node.classList.add('visible');
+  node.setAttribute('aria-hidden', 'false');
+}
+function setProjectLoaderText(title, desc) {
+  const t = $('projectLoaderTitle');
+  const d = $('projectLoaderDesc');
+  if (t) t.textContent = title;
+  if (d) d.textContent = desc || '';
+}
+function hideProjectLoader() {
+  const node = $('projectLoader');
+  if (!node) return;
+  node.classList.remove('visible');
+  node.setAttribute('aria-hidden', 'true');
+}
+
+async function loadProjectFromUrl(pid) {
+  showProjectLoader('Loading project…', '');
+
+  let project = null;
+  try { project = await db.getProject(pid); } catch {}
+
+  if (!project && S.session && navigator.onLine) {
+    try {
+      const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(pid));
+      if (res?.ok && res.data?.success && res.data.project) {
+        const p = res.data.project;
+        project = {
+          pid: p.pid,
+          name: p.name,
+          slug: p.slug,
+          createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
+          updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
+        };
+        try { await db.putProject(project); } catch {}
+      }
+    } catch {}
+  }
+
+  if (!project) {
+    hideProjectLoader();
+    toast('Project not found', 'error');
+    return null;
+  }
+
+  setProjectLoaderText('Loading "' + (project.name || 'project') + '"…', 'Preparing editor…');
+  try {
+    await workspace.openProject(project);
+    setPidInUrl(project.pid);
+    hideProjectLoader();
+    renderEmptyRecent();
+    return project;
+  } catch (err) {
+    console.error('[ProjectBoot] open failed:', err);
+    hideProjectLoader();
+    toast('Could not open project', 'error');
+    return null;
+  }
+}
+
+async function renderEmptyRecent() {
+  const wrap = $('emptyRecent');
+  const list = $('emptyRecentList');
+  if (!wrap || !list) return;
+
+  let projects = [];
+  try { projects = await db.listProjects(); } catch {}
+
+  list.innerHTML = '';
+  if (!projects || projects.length === 0) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+
+  for (const p of projects.slice(0, 5)) {
+    list.appendChild(el('button', {
+      class: 'empty-recent-item',
+      type: 'button',
+      onclick: async () => {
+        try {
+          await workspace.openProject(p);
+          setPidInUrl(p.pid);
+          renderEmptyRecent();
+        } catch { toast('Could not open', 'error'); }
+      },
+    },
+      el('span', { class: 'empty-recent-name' }, p.name || 'Untitled'),
+      el('span', { class: 'empty-recent-time' }, relativeTime(p.updatedAt))
+    ));
+  }
+}
+
+async function openProjectsSheet() {
+  let projects = [];
+  try { projects = await db.listProjects(); } catch {}
+
+  const body = el('div', { class: 'projects-sheet' });
+
+  if (!projects || projects.length === 0) {
+    const emptyBox = el('div', { class: 'empty-state', style: 'padding:24px 8px' },
+      el('div', { class: 'empty-state-title', style: 'font-size:13px' }, 'No projects yet'),
+      el('div', { class: 'empty-state-desc', style: 'font-size:11px' }, 'Create a project to see it here.'),
+    );
+    const newBtn = el('button', {
+      class: 'btn btn-primary btn-sm', type: 'button', style: 'margin-top:8px',
+      onclick: () => { closeSheet(); setTimeout(createNewProject, 250); },
+    });
+    newBtn.appendChild(icon('plus', 12));
+    newBtn.appendChild(document.createTextNode(' New project'));
+    emptyBox.appendChild(newBtn);
+    body.appendChild(emptyBox);
+    openSheet({ title: 'Projects', body });
+    return;
+  }
+
+  const list = el('div', { class: 'projects-sheet-list' });
+  for (const p of projects) {
+    const hasIcon = !!p.iconUrl;
+    let iconNode;
+    if (hasIcon) {
+      const img = document.createElement('img');
+      img.src = p.iconUrl;
+      img.alt = '';
+      img.addEventListener('error', () => { img.style.display = 'none'; });
+      iconNode = img;
+    } else {
+      iconNode = document.createTextNode(getInitials(p.name));
+    }
+
+    const row = el('button', {
+      class: 'projects-sheet-item',
+      type: 'button',
+      onclick: async () => {
+        closeSheet();
+        showProjectLoader('Opening "' + (p.name || 'project') + '"…', '');
+        try {
+          await workspace.openProject(p);
+          setPidInUrl(p.pid);
+          renderEmptyRecent();
+        } catch {
+          toast('Could not open project', 'error');
+        } finally {
+          hideProjectLoader();
+        }
+      },
+    },
+      el('span', {
+        class: 'projects-sheet-icon',
+        style: hasIcon ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`,
+      }, iconNode),
+      el('span', { class: 'projects-sheet-info' },
+        el('span', { class: 'projects-sheet-name' }, p.name || 'Untitled'),
+        el('span', { class: 'projects-sheet-time' }, relativeTime(p.updatedAt))
+      ),
+      icon('chevron-right', 12)
+    );
+    list.appendChild(row);
+  }
+  body.appendChild(list);
+
+  const footer = el('div', { class: 'projects-sheet-footer' });
+  const newBtn = el('button', {
+    class: 'btn btn-primary btn-block', type: 'button',
+    onclick: () => { closeSheet(); setTimeout(createNewProject, 250); },
+  });
+  newBtn.appendChild(icon('plus', 12));
+  newBtn.appendChild(document.createTextNode(' New project'));
+  footer.appendChild(newBtn);
+  body.appendChild(footer);
+
+  openSheet({ title: 'Projects', body });
+}
 
 function updateDirtyDot() {
   $('dirtyDot')?.classList.toggle('visible', S.dirtyFiles.size > 0);
@@ -2759,6 +3249,7 @@ function showEmpty(message) {
     const t = $('emptyTitle');
     if (t) t.textContent = message;
   }
+  renderEmptyRecent();
 }
 
 function showEditorError() {
@@ -3577,7 +4068,12 @@ async function openProjectsDialog() {
   } else {
     for (const p of projects) {
       body.appendChild(el('div', { class: 'list-row', style: 'cursor:pointer;padding:8px;',
-        onclick: async () => { closeSheet(); await workspace.openProject(p); } },
+        onclick: async () => {
+          closeSheet();
+          await workspace.openProject(p);
+          setPidInUrl(p.pid);
+          renderEmptyRecent();
+        } },
         el('span', { class: 'icon' }, icon('folder', 12)),
         el('div', { style: 'flex:1;min-width:0;' },
           el('div', { style: 'font-weight:600;font-size:12px;' }, p.name),
@@ -3594,6 +4090,7 @@ async function openProjectsDialog() {
               S.currentProject = null;
               S.activeFile = null;
               showEmpty('No project open');
+              setPidInUrl(null);
               try { localStorage.removeItem(STORAGE.lastProject); } catch {}
             }
             toast('Project deleted', 'info');
@@ -3625,7 +4122,9 @@ async function createNewProject() {
 
   toast(S.isGuest ? `Created ${cleaned} (local)` : `Created ${cleaned}`, 'success');
   await workspace.openProject(project);
+  setPidInUrl(project.pid);
   renderSidebar();
+  renderEmptyRecent();
 }
 
 const SYMBOLS = ['{', '}', '(', ')', '[', ']', '<', '>', '=', ';', ':', '.', ',', '"', "'", '`', '&', '|', '$', '#', '/', '\\', '!', '?', '%', '^', '~', '@', '+', '-', '*'];
@@ -3871,6 +4370,16 @@ function wireUI() {
   $('setupHeaderBtn')?.addEventListener('click', openSetupDialog);
   $('railSetup')?.addEventListener('click', openSetupDialog);
 
+  $('railProjects')?.addEventListener('click', openProjectsSheet);
+  $('openProjectsBtn')?.addEventListener('click', openProjectsSheet);
+
+  window.addEventListener('popstate', () => {
+    const urlPid = getPidFromUrl();
+    if (urlPid && urlPid !== S.currentProject?.pid) {
+      loadProjectFromUrl(urlPid);
+    }
+  });
+
   $('previewMain')?.addEventListener('click', launchPreview);
   $('previewCaret')?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -3905,7 +4414,7 @@ function wireUI() {
   $('sidebarBackdrop')?.addEventListener('click', closeSidebar);
 
   $('emptyNewProject')?.addEventListener('click', createNewProject);
-  $('emptyOpenProject')?.addEventListener('click', openProjectsDialog);
+  $('emptyOpenProject')?.addEventListener('click', openProjectsSheet);
 
   $('sheetClose')?.addEventListener('click', closeSheet);
   $('backdrop')?.addEventListener('click', () => {
@@ -4095,10 +4604,23 @@ async function boot() {
   try { S.projects = await db.listProjects(); }
   catch (err) { console.error('[Boot] projects load:', err); }
 
+  // Prefer ?pid= from URL, then last-used project, then empty state
   try {
-    const project = await workspace.loadLastProject();
+    const urlPid = getPidFromUrl();
+    let project = null;
+
+    if (urlPid) project = await loadProjectFromUrl(urlPid);
+    if (!project) {
+      project = await workspace.loadLastProject();
+      if (project) setPidInUrl(project.pid);
+    }
     if (!project) $('editorEmpty')?.classList.remove('hidden');
-  } catch (err) { console.error('[Boot] load failed:', err); }
+    renderEmptyRecent();
+  } catch (err) {
+    console.error('[Boot] load failed:', err);
+    $('editorEmpty')?.classList.remove('hidden');
+    renderEmptyRecent();
+  }
 
   if (S.session) {
     apiFetch(API_AUTH + '?action=me').then(res => {
