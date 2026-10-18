@@ -1698,15 +1698,19 @@ svg { display: block; }
   };
 
   function normalizeServerProject(p) {
-    return {
-      pid: p.pid, name: p.name || 'Untitled project', slug: p.slug || '',
-      description: p.description || '', iconUrl: p.iconUrl || null,
-      primaryFile: p.primaryFile || null,
-      createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
-      updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
-      _server: true,
-    };
-  }
+  return {
+    pid: p.pid,
+    name: p.name || 'Untitled project',
+    slug: p.slug || '',
+    description: p.description || '',
+    iconUrl: p.iconUrl || null,
+    primaryFile: p.primaryFile || null,
+    createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
+    updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
+    myRole: p.myRole || 'viewer',
+    _server: true,
+  };
+}
 
   // ═══════════════════════════════════════════════════════════
   // STATE
@@ -2300,7 +2304,6 @@ svg { display: block; }
   let localProject = null;
   try { localProject = await IDB.getProject(S.pid); } catch {}
 
-  // ── Local project (guest-created) ──
   if (/^local_/.test(S.pid)) {
     if (!localProject) {
       showFatal('Not found', 'This local project no longer exists.');
@@ -2316,14 +2319,19 @@ svg { display: block; }
     return true;
   }
 
-  // ── Server project — try the server first ──
   if (S.session && S.online) {
-    const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
+    let res;
+    try {
+      res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
+    } catch (err) {
+      console.warn('[loadProject] projects/get network error:', err);
+      res = { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
+    }
 
     if (res.ok && res.data?.success) {
       const norm = normalizeServerProject(res.data.project);
-      try { await IDB.putProject({ ...norm, myRole: norm.myRole || res.data.project.myRole }); } catch {}
-      S.project = { ...res.data.project, ...norm, myRole: res.data.project.myRole || 'viewer' };
+      try { await IDB.putProject(norm); } catch {}
+      S.project = { ...res.data.project, ...norm };
       S.isLocalOnly = false;
       cacheProject(S.project);
       applyProjectMeta();
@@ -2339,9 +2347,6 @@ svg { display: block; }
     }
 
     if (res.status === 404 || res.status === 403) {
-      // Server doesn't have it (or we can't access it). If we have a local
-      // record with an owner role, trust it — this is the case where a
-      // project was created locally but not yet synced to the server.
       if (localProject) {
         const inferredRole = localProject.myRole
           || (localProject._server ? 'viewer' : 'owner');
@@ -2365,11 +2370,9 @@ svg { display: block; }
       return false;
     }
 
-    // Other server errors — fall through to cache
     console.warn('[loadProject] projects/get returned', res.status, res.data);
   }
 
-  // ── Offline or no session — use local cache if we have it ──
   if (localProject) {
     const inferredRole = localProject.myRole
       || (localProject._server ? 'viewer' : 'owner');
@@ -2384,7 +2387,6 @@ svg { display: block; }
     return true;
   }
 
-  // ── Last resort: localStorage cache ──
   const cached = readCachedProject();
   if (cached) {
     S.project = { ...cached, myRole: cached.myRole || 'viewer' };

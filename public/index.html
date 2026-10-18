@@ -2384,7 +2384,9 @@ async function createNewProject() {
     }
     serverProject = res.data.project || null;
     pid = res.data.pid;
-    slug = serverProject?.slug || cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
+    slug = serverProject?.slug
+  || cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+  || 'project';
     createdAt = serverProject?.createdAt
       ? (typeof serverProject.createdAt === 'number' ? serverProject.createdAt : new Date(serverProject.createdAt).getTime())
       : Date.now();
