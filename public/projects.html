@@ -1,0 +1,3678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Folio — Projects</title>
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --theme-primary: #F59E0B;
+  --theme-primary-hover: #fbbf24;
+  --theme-primary-glow: rgba(245, 158, 11, 0.40);
+  --theme-primary-soft: rgba(245, 158, 11, 0.14);
+
+  --theme-bg: #0a0c10;
+  --theme-surface: #0f1218;
+  --theme-surface-card: rgba(21, 25, 34, 0.72);
+  --theme-surface-card-solid: #151922;
+  --theme-surface-elevated: #1a1f2a;
+  --theme-text: #e8ecf1;
+  --theme-text-secondary: rgba(232, 236, 241, 0.72);
+  --theme-text-tertiary: rgba(232, 236, 241, 0.44);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.05);
+  --theme-glass-border: rgba(255, 255, 255, 0.09);
+  --theme-overlay: rgba(10, 12, 16, 0.85);
+  --theme-card-border: rgba(255, 255, 255, 0.08);
+  --theme-divider: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(26, 31, 42, 0.88);
+
+  --theme-success: #10B981;
+  --theme-success-soft: rgba(16, 185, 129, 0.14);
+  --theme-danger: #EF4444;
+  --theme-danger-soft: rgba(239, 68, 68, 0.12);
+  --theme-warning: #D97706;
+  --theme-warning-soft: rgba(217, 119, 6, 0.14);
+  --theme-info: #3B82F6;
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.10) 0%, transparent 55%);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --rail-w: 60px;
+  --content-max: 1200px;
+
+  --r-xs: 6px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', Consolas, Monaco, monospace;
+}
+
+[data-theme="light"] {
+  --theme-primary: #D97706;
+  --theme-primary-hover: #B45309;
+  --theme-primary-glow: rgba(217, 119, 6, 0.28);
+  --theme-primary-soft: rgba(217, 119, 6, 0.10);
+  --theme-bg: #f7f8fa;
+  --theme-surface: #ffffff;
+  --theme-surface-card: rgba(255, 255, 255, 0.85);
+  --theme-surface-card-solid: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-text: #121316;
+  --theme-text-secondary: rgba(18, 19, 22, 0.72);
+  --theme-text-tertiary: rgba(18, 19, 22, 0.48);
+  --theme-glass-bg: rgba(255, 255, 255, 0.75);
+  --theme-glass-border: rgba(0, 0, 0, 0.08);
+  --theme-overlay: rgba(18, 19, 22, 0.55);
+  --theme-card-border: rgba(0, 0, 0, 0.07);
+  --theme-divider: rgba(0, 0, 0, 0.06);
+  --input-bg: #ffffff;
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(217, 119, 6, 0.08) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: var(--theme-bg);
+  font-family: var(--font);
+  color: var(--theme-text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
+  background-attachment: fixed;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border: none; background: none; padding: 0; }
+a { color: var(--theme-primary); text-decoration: none; }
+svg { display: block; }
+.hidden { display: none !important; }
+.mono { font-family: var(--font-mono); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SHELL
+   ═══════════════════════════════════════════════════════════ */
+.app {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.rail {
+  display: none;
+  width: var(--rail-w);
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-glass-border);
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(16px + var(--safe-top)) 0 calc(16px + var(--safe-bottom));
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  flex-shrink: 0;
+  z-index: 90;
+}
+@media (min-width: 1024px) { .rail { display: flex; } }
+
+.rail-top, .rail-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.rail-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-primary);
+  text-decoration: none;
+}
+.rail-logo img { width: 100%; height: 100%; object-fit: cover; }
+.rail-logo svg { width: 20px; height: 20px; stroke-width: 2; }
+
+.rail-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  color: var(--theme-text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s var(--ease);
+  position: relative;
+}
+.rail-btn svg { width: 20px; height: 20px; stroke-width: 2; stroke: currentColor; fill: none; }
+.rail-btn:hover { color: var(--theme-text-secondary); background: var(--theme-glass-bg); }
+.rail-btn.active {
+  color: var(--theme-primary);
+  background: var(--theme-primary-soft);
+}
+.rail-btn.active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 22px;
+  border-radius: 0 3px 3px 0;
+  background: var(--theme-primary);
+}
+
+.rail-divider {
+  width: 24px;
+  height: 1px;
+  background: var(--theme-divider);
+  margin: 6px 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN
+   ═══════════════════════════════════════════════════════════ */
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(80px + var(--safe-bottom));
+}
+@media (min-width: 1024px) {
+  .main { padding-bottom: calc(24px + var(--safe-bottom)); }
+}
+
+.main-inner {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: calc(16px + var(--safe-top)) 16px 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (min-width: 1024px) {
+  .main-inner { padding: 24px 24px 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════════════════════════ */
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.header-logo {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--theme-text);
+  margin-right: 4px;
+}
+@media (max-width: 1023px) {
+  .header-logo { display: flex; }
+}
+
+.header-logo-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-primary);
+}
+.header-logo-badge img { width: 100%; height: 100%; object-fit: cover; }
+.header-logo-badge svg { width: 16px; height: 16px; stroke-width: 2; }
+
+.page-title {
+  font-size: clamp(20px, 3vw, 24px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--theme-text);
+  margin: 0;
+}
+.page-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text-tertiary);
+  padding: 3px 9px;
+  background: var(--theme-glass-bg);
+  border-radius: 8px;
+  margin-left: 4px;
+}
+
+.header-spacer { flex: 1; }
+
+.search-wrap {
+  display: none;
+  flex: 1;
+  max-width: 340px;
+  min-width: 200px;
+  position: relative;
+  align-items: center;
+}
+@media (min-width: 900px) {
+  .search-wrap { display: flex; }
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  width: 15px;
+  height: 15px;
+  stroke: var(--theme-text-tertiary);
+  fill: none;
+  stroke-width: 2.2;
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 32px 0 36px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  color: var(--theme-text);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s var(--ease);
+}
+.search-input:focus {
+  border-color: var(--theme-primary);
+  background: var(--input-bg);
+}
+.search-input::placeholder { color: var(--theme-text-tertiary); }
+
+.search-clear {
+  position: absolute;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+}
+.search-clear.visible { display: flex; }
+.search-clear:hover { color: var(--theme-text); background: var(--theme-divider); }
+.search-clear svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s var(--ease);
+  flex-shrink: 0;
+  position: relative;
+}
+.icon-btn:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.icon-btn:active { transform: scale(0.94); }
+.icon-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.icon-btn.filter-active {
+  color: var(--theme-primary);
+  border-color: var(--theme-primary);
+  background: var(--theme-primary-soft);
+}
+.icon-btn .filter-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  font-size: 9px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.btn-new {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.2s var(--ease);
+  flex-shrink: 0;
+}
+.btn-new svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+.btn-new:hover { background: var(--theme-primary-hover); }
+.btn-new:active { transform: scale(0.97); }
+.btn-new .label { display: none; }
+@media (min-width: 640px) { .btn-new .label { display: inline; } }
+
+/* ═══════════════════════════════════════════════════════════
+   TABS
+   ═══════════════════════════════════════════════════════════ */
+.tabs-bar {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--theme-divider);
+  padding-bottom: 0;
+  margin-bottom: -4px;
+}
+.tabs-bar::-webkit-scrollbar { display: none; }
+
+.tab {
+  padding: 10px 14px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+  transition: color 0.2s var(--ease);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab:hover { color: var(--theme-text); }
+.tab.active { color: var(--theme-primary); }
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  background: var(--theme-primary);
+  border-radius: 2px 2px 0 0;
+}
+.tab-count {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--theme-glass-bg);
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--theme-text-tertiary);
+}
+.tab.active .tab-count {
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ACTIVE FILTERS ROW
+   ═══════════════════════════════════════════════════════════ */
+.active-filters {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+.active-filters.visible { display: flex; }
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  color: var(--theme-primary);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.filter-chip button {
+  color: currentColor;
+  display: flex;
+  align-items: center;
+}
+.filter-chip svg { width: 11px; height: 11px; stroke-width: 2.4; }
+
+.clear-filters-btn {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.clear-filters-btn:hover { color: var(--theme-text); background: var(--theme-glass-bg); }
+
+/* ═══════════════════════════════════════════════════════════
+   PROJECT GRID / LIST
+   ═══════════════════════════════════════════════════════════ */
+.projects-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding-bottom: 20px;
+}
+@media (min-width: 640px) {
+  .projects-container { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+}
+@media (min-width: 1024px) {
+  .projects-container { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+}
+
+.project-card {
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  min-width: 0;
+}
+.project-card:hover {
+  border-color: var(--theme-primary-glow);
+  transform: translateY(-2px);
+}
+.project-card:active { transform: scale(0.99); }
+
+.project-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.project-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--theme-surface-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-primary);
+  font-weight: 800;
+  font-size: 14px;
+  border: 1px solid var(--theme-glass-border);
+}
+.project-icon img { width: 100%; height: 100%; object-fit: cover; }
+
+.project-header-info { flex: 1; min-width: 0; }
+
+.project-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--theme-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 3px;
+  line-height: 1.3;
+}
+
+.project-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  font-size: 10.5px;
+  color: var(--theme-text-tertiary);
+  font-weight: 600;
+}
+.project-meta .sep { opacity: 0.5; }
+
+.role-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: var(--theme-glass-bg);
+  color: var(--theme-text-tertiary);
+}
+.role-badge.owner { background: var(--theme-primary-soft); color: var(--theme-primary); }
+.role-badge.editor { background: var(--theme-info-soft, rgba(59,130,246,0.14)); color: var(--theme-info); }
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 800;
+}
+.live-badge .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--theme-success);
+}
+.live-badge.offline { color: var(--theme-text-tertiary); }
+.live-badge.offline .dot { background: var(--theme-text-tertiary); }
+
+.project-more-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+  transition: all 0.2s var(--ease);
+  margin-top: -2px;
+  margin-right: -4px;
+}
+.project-more-btn:hover { color: var(--theme-text); background: var(--theme-glass-bg); }
+.project-more-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+.project-desc {
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.lang-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.lang-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--theme-glass-bg);
+  color: var(--theme-text-tertiary);
+}
+
+.project-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--theme-text-tertiary);
+  font-weight: 600;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+.project-stats .stat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.project-stats svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+
+/* Mobile list mode */
+@media (max-width: 639px) {
+  .project-card {
+    padding: 14px;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .project-card-header {
+    flex: 1;
+    min-width: 0;
+  }
+  .project-desc, .lang-badges, .project-stats { display: none; }
+  .project-name { margin-bottom: 2px; }
+  .project-meta { font-size: 10px; }
+  .project-more-btn { margin-top: 0; margin-right: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SKELETON
+   ═══════════════════════════════════════════════════════════ */
+.skeleton {
+  background: linear-gradient(90deg, var(--theme-divider) 0%, var(--theme-glass-border) 50%, var(--theme-divider) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 6px;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.skeleton-card {
+  background: var(--theme-surface-card);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.skeleton-card-row { display: flex; align-items: flex-start; gap: 10px; }
+.skeleton-icon { width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; }
+.skeleton-title { width: 60%; height: 14px; }
+.skeleton-sub { width: 40%; height: 10px; margin-top: 4px; }
+.skeleton-line { height: 11px; }
+.skeleton-line.short { width: 50%; }
+
+/* ═══════════════════════════════════════════════════════════
+   EMPTY STATE
+   ═══════════════════════════════════════════════════════════ */
+.empty-state {
+  padding: 60px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+.empty-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  background: var(--theme-primary-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-primary);
+  margin-bottom: 6px;
+}
+.empty-icon svg { width: 28px; height: 28px; stroke-width: 2; }
+.empty-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--theme-text);
+}
+.empty-desc {
+  font-size: 13px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.5;
+  max-width: 340px;
+  margin-bottom: 6px;
+}
+.empty-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* ═══════════════════════════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════════════════════════ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  transition: all 0.2s var(--ease);
+  white-space: nowrap;
+  min-height: 38px;
+  font-family: inherit;
+}
+.btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary { background: var(--theme-primary); color: #0a0c10; }
+[data-theme="light"] .btn-primary { color: #ffffff; }
+.btn-primary:hover:not(:disabled) { background: var(--theme-primary-hover); }
+
+.btn-secondary { background: var(--theme-glass-bg); color: var(--theme-text); border-color: var(--theme-card-border); }
+.btn-secondary:hover:not(:disabled) { background: var(--theme-surface-elevated); border-color: var(--theme-primary-glow); }
+
+.btn-ghost { background: transparent; color: var(--theme-text-secondary); border-color: transparent; }
+.btn-ghost:hover:not(:disabled) { color: var(--theme-text); background: var(--theme-glass-bg); }
+
+.btn-danger { background: var(--theme-danger); color: #ffffff; }
+.btn-danger:hover:not(:disabled) { background: #dc2626; }
+
+.btn-outline-danger { background: transparent; color: var(--theme-danger); border-color: rgba(239, 68, 68, 0.3); }
+.btn-outline-danger:hover:not(:disabled) { background: var(--theme-danger-soft); }
+
+.btn-sm { padding: 6px 12px; font-size: 12px; min-height: 30px; border-radius: 8px; }
+.btn-sm svg { width: 12px; height: 12px; }
+.btn-block { width: 100%; }
+
+/* ═══════════════════════════════════════════════════════════
+   FULLSCREEN OVERLAY (filters / stats / storage)
+   ═══════════════════════════════════════════════════════════ */
+.fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: var(--theme-bg);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s var(--ease), opacity 0.25s var(--ease);
+  overflow: hidden;
+}
+.fullscreen-overlay.active {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: all;
+}
+@media (min-width: 640px) {
+  .fullscreen-overlay {
+    transform: scale(0.97);
+    background: var(--theme-overlay);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 24px;
+    align-items: center;
+    justify-content: center;
+  }
+  .fullscreen-overlay.active { transform: scale(1); }
+}
+
+.overlay-inner {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--theme-bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  height: 100%;
+}
+@media (min-width: 640px) {
+  .overlay-inner {
+    background: var(--theme-surface-card-solid);
+    border: 1px solid var(--theme-glass-border);
+    border-radius: 20px;
+    max-height: 90vh;
+    height: auto;
+  }
+}
+
+.overlay-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(14px + var(--safe-top)) 16px 14px;
+  border-bottom: 1px solid var(--theme-divider);
+  flex-shrink: 0;
+  background: var(--theme-bg);
+}
+@media (min-width: 640px) {
+  .overlay-header { padding: 16px 20px; background: transparent; }
+}
+
+.overlay-title {
+  flex: 1;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.3px;
+}
+.overlay-sub {
+  font-size: 11.5px;
+  color: var(--theme-text-tertiary);
+  font-weight: 600;
+  margin-top: 1px;
+}
+.overlay-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.overlay-close:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.overlay-close svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+.overlay-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+@media (min-width: 640px) { .overlay-body { padding: 20px; } }
+
+.overlay-footer {
+  padding: 14px 16px calc(14px + var(--safe-bottom));
+  border-top: 1px solid var(--theme-divider);
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  background: var(--theme-bg);
+}
+@media (min-width: 640px) {
+  .overlay-footer { padding: 14px 20px; background: transparent; }
+}
+.overlay-footer .btn { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════
+   FILTER / STATS BLOCKS
+   ═══════════════════════════════════════════════════════════ */
+.filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.filter-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filter-pill {
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 12.5px;
+  font-weight: 700;
+  transition: all 0.2s var(--ease);
+}
+.filter-pill:hover { border-color: var(--theme-primary-glow); color: var(--theme-text); }
+.filter-pill.active {
+  background: var(--theme-primary);
+  color: #0a0c10;
+  border-color: var(--theme-primary);
+}
+[data-theme="light"] .filter-pill.active { color: #ffffff; }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.stat-tile {
+  padding: 12px 14px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+}
+.stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 3px;
+}
+.stat-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.4px;
+  line-height: 1.1;
+}
+.stat-value.warn { color: var(--theme-warning); }
+.stat-value.danger { color: var(--theme-danger); }
+.stat-value.success { color: var(--theme-success); }
+
+.storage-block {
+  padding: 14px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+}
+.storage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.storage-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+.storage-amount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  font-family: var(--font-mono);
+}
+.storage-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--theme-divider);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.storage-bar-fill {
+  height: 100%;
+  background: var(--theme-success);
+  transition: width 0.3s var(--ease), background 0.3s var(--ease);
+}
+.storage-bar-fill.warn { background: var(--theme-warning); }
+.storage-bar-fill.danger { background: var(--theme-danger); }
+.storage-note {
+  font-size: 11px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.4;
+}
+
+.cleanup-block {
+  padding: 14px;
+  background: var(--theme-warning-soft);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: 12px;
+}
+.cleanup-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cleanup-header svg { width: 16px; height: 16px; stroke: var(--theme-warning); fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.cleanup-title {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--theme-warning);
+}
+.cleanup-desc {
+  font-size: 11.5px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+}
+.toggle-info { flex: 1; min-width: 0; }
+.toggle-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--theme-text);
+  margin-bottom: 2px;
+}
+.toggle-desc {
+  font-size: 11px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.4;
+}
+.switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--theme-divider);
+  cursor: pointer;
+  transition: background 0.2s var(--ease);
+  flex-shrink: 0;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.22s var(--ease);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.switch.on { background: var(--theme-primary); }
+.switch.on::after { transform: translateX(18px); }
+
+/* ═══════════════════════════════════════════════════════════
+   MODAL (dialogs)
+   ═══════════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 700;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s var(--ease);
+  padding: 0;
+}
+.modal-overlay.active { opacity: 1; pointer-events: all; }
+@media (min-width: 640px) {
+  .modal-overlay { align-items: center; padding: 20px; }
+}
+
+.modal {
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 24px 24px 0 0;
+  padding: 20px 20px calc(20px + var(--safe-bottom));
+  max-width: 100%;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform 0.32s var(--ease);
+}
+.modal-overlay.active .modal { transform: translateY(0); }
+
+@media (min-width: 640px) {
+  .modal {
+    border-radius: 20px;
+    max-width: 480px;
+    padding: 24px;
+    transform: scale(0.94);
+  }
+  .modal-overlay.active .modal { transform: scale(1); }
+}
+
+.modal-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--theme-glass-border);
+  margin: 0 auto 16px;
+}
+@media (min-width: 640px) { .modal-handle { display: none; } }
+
+.modal-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+.modal-desc {
+  font-size: 13px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+.modal-actions .btn { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════
+   FIELDS
+   ═══════════════════════════════════════════════════════════ */
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.field-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.field-hint { font-size: 11px; color: var(--theme-text-tertiary); line-height: 1.4; }
+
+.input, .textarea {
+  width: 100%;
+  padding: 11px 13px;
+  background: var(--input-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  color: var(--theme-text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s var(--ease);
+}
+.input:focus, .textarea:focus { border-color: var(--theme-primary); }
+.input::placeholder, .textarea::placeholder { color: var(--theme-text-tertiary); }
+.textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
+@media (min-width: 640px) { .input, .textarea { font-size: 13.5px; padding: 10px 12px; } }
+
+/* ═══════════════════════════════════════════════════════════
+   STEPPER / CREATE FLOW
+   ═══════════════════════════════════════════════════════════ */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.step {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--theme-divider);
+  transition: background 0.25s var(--ease);
+}
+.step.active { background: var(--theme-primary); }
+.step.done { background: var(--theme-primary); }
+
+.step-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  margin-bottom: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ICON PICKER
+   ═══════════════════════════════════════════════════════════ */
+.icon-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--theme-glass-bg);
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.icon-tab {
+  flex: 1;
+  padding: 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  transition: all 0.2s var(--ease);
+}
+.icon-tab.active {
+  background: var(--theme-surface-elevated);
+  color: var(--theme-text);
+}
+
+.icon-mode-panel { display: none; }
+.icon-mode-panel.active { display: block; }
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+  min-height: 60px;
+}
+@media (max-width: 480px) {
+  .icon-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.icon-option {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: var(--theme-surface-elevated);
+  border: 2px solid transparent;
+  overflow: hidden;
+  transition: border-color 0.2s var(--ease), transform 0.15s var(--ease);
+  cursor: pointer;
+  padding: 0;
+}
+.icon-option:hover { transform: scale(1.04); }
+.icon-option.selected {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 3px var(--theme-primary-soft);
+}
+.icon-option img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.icon-skeleton {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--theme-divider) 0%, var(--theme-glass-border) 50%, var(--theme-divider) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+.icon-placeholder {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1px dashed var(--theme-card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  font-size: 10px;
+  text-align: center;
+  padding: 4px;
+  line-height: 1.2;
+}
+
+.icon-generate-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 12.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s var(--ease);
+}
+.icon-generate-btn:hover { border-color: var(--theme-primary-glow); color: var(--theme-primary); }
+.icon-generate-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.icon-generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.icon-upload-btn {
+  width: 100%;
+  padding: 20px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1.5px dashed var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 12.5px;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+.icon-upload-btn:hover { border-color: var(--theme-primary); color: var(--theme-primary); }
+.icon-upload-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; }
+.icon-upload-btn .sub { font-size: 10.5px; font-weight: 500; color: var(--theme-text-tertiary); }
+
+/* ═══════════════════════════════════════════════════════════
+   ACTION MENU (dropdown / bottom sheet)
+   ═══════════════════════════════════════════════════════════ */
+.action-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 800;
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.25s var(--ease);
+}
+.action-menu.active { display: flex; opacity: 1; }
+@media (min-width: 640px) {
+  .action-menu { align-items: center; padding: 20px; }
+}
+
+.action-sheet {
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 440px;
+  transform: translateY(100%);
+  transition: transform 0.3s var(--ease);
+  overflow: hidden;
+}
+.action-menu.active .action-sheet { transform: translateY(0); }
+
+@media (min-width: 640px) {
+  .action-sheet { border-radius: 18px; transform: scale(0.94); }
+  .action-menu.active .action-sheet { transform: scale(1); }
+}
+
+.action-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--theme-divider);
+  background: var(--theme-glass-bg);
+}
+.action-sheet-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--theme-surface-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-primary);
+  font-weight: 800;
+  font-size: 14px;
+  border: 1px solid var(--theme-glass-border);
+}
+.action-sheet-icon img { width: 100%; height: 100%; object-fit: cover; }
+.action-sheet-title { flex: 1; min-width: 0; }
+.action-sheet-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--theme-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.action-sheet-meta {
+  font-size: 11px;
+  color: var(--theme-text-tertiary);
+  font-weight: 600;
+}
+
+.action-list { padding: 6px; }
+.action-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 8px;
+  color: var(--theme-text);
+  font-size: 13px;
+  font-weight: 600;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s var(--ease);
+}
+.action-item:hover { background: var(--theme-glass-bg); }
+.action-item svg { width: 16px; height: 16px; stroke: var(--theme-text-tertiary); fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.action-item:hover svg { stroke: var(--theme-primary); }
+.action-item.danger { color: var(--theme-danger); }
+.action-item.danger svg { stroke: var(--theme-danger); }
+.action-item.danger:hover { background: var(--theme-danger-soft); }
+
+.action-divider {
+  height: 1px;
+  background: var(--theme-divider);
+  margin: 6px 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LOADING / TOAST
+   ═══════════════════════════════════════════════════════════ */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+}
+.loading-overlay.active { display: flex; }
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--theme-primary-soft);
+  border-top-color: var(--theme-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--theme-text);
+  text-align: center;
+}
+.loading-desc {
+  font-size: 12.5px;
+  color: var(--theme-text-secondary);
+  text-align: center;
+  line-height: 1.5;
+  max-width: 320px;
+}
+
+.toast-container {
+  position: fixed;
+  bottom: calc(16px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 950;
+  width: 92%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+@media (min-width: 1024px) {
+  .toast-container {
+    left: auto;
+    right: 20px;
+    transform: none;
+    bottom: 20px;
+  }
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text);
+  transform: translateY(20px);
+  opacity: 0;
+  transition: all 0.3s var(--ease-spring);
+  pointer-events: all;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast svg { width: 15px; height: 15px; flex-shrink: 0; }
+.toast.success svg { stroke: var(--theme-success); }
+.toast.error svg { stroke: var(--theme-danger); }
+.toast.info svg { stroke: var(--theme-primary); }
+.toast.warning svg { stroke: var(--theme-warning); }
+
+/* ═══════════════════════════════════════════════════════════
+   CELEBRATION
+   ═══════════════════════════════════════════════════════════ */
+.celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+}
+.celebration.active { display: flex; opacity: 1; }
+
+.celebration-card {
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 22px;
+  padding: 32px 24px;
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+  transform: scale(0.92);
+  transition: transform 0.4s var(--ease-spring);
+  position: relative;
+}
+.celebration.active .celebration-card { transform: scale(1); }
+
+.celebration-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  margin: 0 auto 16px;
+  background: var(--theme-primary-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-primary);
+  animation: popIn 0.6s var(--ease-spring);
+}
+@keyframes popIn {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.celebration-icon svg { width: 32px; height: 32px; stroke-width: 2.4; }
+
+.celebration-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.4px;
+  margin-bottom: 6px;
+}
+.celebration-desc {
+  font-size: 13px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.celebration-actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* ═══════════════════════════════════════════════════════════
+   BOTTOM NAV (mobile)
+   ═══════════════════════════════════════════════════════════ */
+.bottom-nav {
+  position: fixed;
+  bottom: calc(8px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  max-width: 400px;
+  background: var(--theme-surface-card-solid);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 18px;
+  padding: 6px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 100;
+}
+@media (min-width: 1024px) { .bottom-nav { display: none; } }
+
+.nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  color: var(--theme-text-tertiary);
+  text-decoration: none;
+  transition: all 0.2s var(--ease);
+  font-size: 10px;
+  font-weight: 700;
+}
+.nav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2.1; }
+.nav-btn.active {
+  color: var(--theme-primary);
+  background: var(--theme-primary-soft);
+}
+.nav-btn:active { transform: scale(0.94); }
+
+/* ═══════════════════════════════════════════════════════════
+   OFFLINE BANNER
+   ═══════════════════════════════════════════════════════════ */
+.offline-banner {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--theme-warning-soft);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: 10px;
+  color: var(--theme-warning);
+  font-size: 11.5px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.offline-banner.visible { display: flex; }
+.offline-banner svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════════
+   SORT DROPDOWN
+   ═══════════════════════════════════════════════════════════ */
+.sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 12px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  color: var(--theme-text-secondary);
+  font-size: 12.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all 0.2s var(--ease);
+}
+.sort-btn:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.sort-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.sort-btn .label { display: none; }
+@media (min-width: 640px) { .sort-btn .label { display: inline; } }
+
+/* Fallback safety */
+.lang-badge.lang-badge { text-transform: none; }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ═══════════ RAIL ═══════════ -->
+  <aside class="rail" aria-label="Main navigation">
+    <div class="rail-top">
+      <a class="rail-logo" href="/" aria-label="Folio">
+        <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
+      </a>
+
+      <a class="rail-btn" href="/" data-rail="editor" aria-label="Editor">
+        <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </a>
+      <a class="rail-btn active" href="/projects" data-rail="projects" aria-label="Projects">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </a>
+      <a class="rail-btn" href="/analytics" data-rail="analytics" aria-label="Analytics">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+      </a>
+      <a class="rail-btn" href="/settings" data-rail="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </a>
+    </div>
+    <div class="rail-bottom">
+      <div class="rail-divider"></div>
+      <a class="rail-btn" href="/profile" data-rail="profile" aria-label="Profile">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </a>
+    </div>
+  </aside>
+
+  <!-- ═══════════ MAIN ═══════════ -->
+  <main class="main">
+    <div class="main-inner" id="mainInner">
+
+      <header class="page-header">
+        <a class="header-logo" href="/">
+          <div class="header-logo-badge">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+        </a>
+        <h1 class="page-title">Projects</h1>
+        <span class="page-count" id="pageCount">—</span>
+        <div class="header-spacer"></div>
+
+        <div class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search-input" id="searchInput" type="text" placeholder="Search projects…" autocomplete="off" spellcheck="false">
+          <button class="search-clear" id="searchClear" type="button" aria-label="Clear search">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <button class="sort-btn" id="sortBtn" type="button">
+          <svg viewBox="0 0 24 24"><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="15" y2="18"/></svg>
+          <span class="label" id="sortLabel">Modified</span>
+        </button>
+
+        <button class="icon-btn" id="filterBtn" type="button" aria-label="Filters">
+          <svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          <span class="filter-badge hidden" id="filterBadge">0</span>
+        </button>
+
+        <button class="btn-new" id="newBtn" type="button">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span class="label">New</span>
+        </button>
+      </header>
+
+      <div class="offline-banner" id="offlineBanner">
+        <svg viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/></svg>
+        <span>Offline — showing cached projects</span>
+      </div>
+
+      <nav class="tabs-bar" id="tabsBar"></nav>
+
+      <div class="active-filters" id="activeFilters"></div>
+
+      <div class="projects-container" id="projectsContainer"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════ BOTTOM NAV ═══════════ -->
+<nav class="bottom-nav" aria-label="Main navigation">
+  <a class="nav-btn" href="/">
+    <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    <span>Editor</span>
+  </a>
+  <a class="nav-btn active" href="/projects">
+    <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    <span>Projects</span>
+  </a>
+  <a class="nav-btn" href="/profile">
+    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    <span>Profile</span>
+  </a>
+  <a class="nav-btn" href="/settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <span>Settings</span>
+  </a>
+</nav>
+
+<!-- ═══════════ FULLSCREEN OVERLAY (filters / stats / storage) ═══════════ -->
+<div class="fullscreen-overlay" id="filtersOverlay" role="dialog" aria-modal="true">
+  <div class="overlay-inner">
+    <div class="overlay-header">
+      <div style="flex:1;min-width:0;">
+        <div class="overlay-title">Filters & Overview</div>
+        <div class="overlay-sub" id="filtersSubtitle"></div>
+      </div>
+      <button class="overlay-close" id="filtersClose" aria-label="Close">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="overlay-body" id="filtersBody"></div>
+    <div class="overlay-footer">
+      <button class="btn btn-secondary" id="filtersClearAll">Clear all</button>
+      <button class="btn btn-primary" id="filtersApply">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ ACTION MENU ═══════════ -->
+<div class="action-menu" id="actionMenu" role="dialog" aria-modal="true">
+  <div class="action-sheet" id="actionSheet"></div>
+</div>
+
+<!-- ═══════════ MODAL ═══════════ -->
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
+  <div class="modal" id="modalContent">
+    <div class="modal-handle"></div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ═══════════ LOADING ═══════════ -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-title" id="loadingTitle">Loading…</div>
+  <div class="loading-desc" id="loadingDesc"></div>
+</div>
+
+<!-- ═══════════ CELEBRATION ═══════════ -->
+<div class="celebration" id="celebration" role="dialog" aria-modal="true">
+  <div class="celebration-card">
+    <div class="celebration-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </div>
+    <div class="celebration-title" id="celeTitle">Project created</div>
+    <div class="celebration-desc" id="celeDesc"></div>
+    <div class="celebration-actions">
+      <button class="btn btn-primary btn-block" id="celeOpenEditor">Open in editor</button>
+      <button class="btn btn-ghost btn-block" id="celeStay">Stay here</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TOASTS ═══════════ -->
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════════════════════
+
+  const API_BASE = 'https://foliostudios.vercel.app/api';
+  const API_HOST = API_BASE + '/host';
+  const API_AUTH = API_BASE + '/auth';
+  const API_FLIER = API_BASE + '/flier';
+  const API_ANALYTICS = API_BASE + '/analytics';
+
+  const STORAGE = {
+    session: 'folio.session',
+    user: 'folio.user',
+    theme: 'folio.theme',
+    lastTab: 'folio.projects.lastTab',
+    autoClean: 'folio.projects.autoClean',
+    recentSearches: 'folio.projects.recentSearches',
+  };
+
+  const TABS = [
+    { id: 'all', label: 'All' },
+    { id: 'owned', label: 'Owned' },
+    { id: 'shared', label: 'Shared' },
+    { id: 'public', label: 'Public' },
+    { id: 'archived', label: 'Archived' },
+  ];
+
+  const FILTERS_BY_TAB = {
+    all: ['deployed', 'notDeployed', 'expired'],
+    owned: ['deployed', 'notDeployed', 'expired'],
+    shared: ['editor', 'viewer', 'commenter'],
+    public: ['deployed'],
+    archived: [],
+  };
+
+  const FILTER_LABELS = {
+    deployed: 'Deployed',
+    notDeployed: 'Not deployed',
+    expired: 'Expired deploys',
+    editor: 'Editor',
+    viewer: 'Viewer',
+    commenter: 'Commenter',
+  };
+
+  const SORTS = [
+    { id: 'modified', label: 'Modified', fn: (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) },
+    { id: 'created', label: 'Created', fn: (a, b) => (b.createdAt || 0) - (a.createdAt || 0) },
+    { id: 'name', label: 'Name', fn: (a, b) => String(a.name || '').localeCompare(String(b.name || '')) },
+    { id: 'storage', label: 'Storage', fn: (a, b) => (b.storageUsed || 0) - (a.storageUsed || 0) },
+  ];
+
+  // ═══════════════════════════════════════════════════════════
+  // SVG
+  // ═══════════════════════════════════════════════════════════
+
+  const SVG = {
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    alertTriangle: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+    search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    rocket: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>',
+    chart: '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+    database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+    eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+    filter: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+    sort: '<line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="15" y2="18"/>',
+    external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    checkCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    edit3: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+    archive: '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>',
+    wifiOff: '<line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>',
+  };
+
+  const svg = (name, size = 16, sw = 2.2) =>
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${SVG[name] || ''}</svg>`;
+
+  // ═══════════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════════
+
+  const S = {
+    session: null,
+    user: null,
+    uid: null,
+    projects: [],
+    filtered: [],
+    activeTab: 'all',
+    activeFilters: new Set(),
+    searchQuery: '',
+    sortId: 'modified',
+    // Create flow
+    createStep: 1,
+    createName: '',
+    createDescription: '',
+    createIconMode: 'name',
+    createIconUrl: null,
+    createIconDataUrl: null,
+    createIconVariants: [],
+    createImageUrlInput: '',
+    // Storage / cleanup
+    storageEstimate: null,
+    storageLimit: 10 * 1024 * 1024,
+    deploymentCache: new Map(), // pid -> { deployments, currentId }
+    expiredDeployments: [],
+    autoCleanEnabled: true,
+    // Menus
+    activeMenuProject: null,
+  };
+
+  const $ = id => document.getElementById(id);
+  const escapeHTML = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escapeAttr = s => String(s ?? '').replace(/"/g, '&quot;');
+
+  // ═══════════════════════════════════════════════════════════
+  // UTILITIES
+  // ═══════════════════════════════════════════════════════════
+
+  function timeAgo(ts) {
+    if (!ts) return '—';
+    const diff = Date.now() - ts;
+    if (diff < 60000) return 'now';
+    const m = Math.floor(diff / 60000);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `${d}d`;
+    return new Date(ts).toLocaleDateString();
+  }
+
+  function formatBytes(n) {
+    if (!n || n < 0) return '0 B';
+    const u = ['B', 'KB', 'MB', 'GB'];
+    let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+  }
+
+  function formatNumber(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return String(n || 0);
+  }
+
+  function getInitials(name) {
+    const s = String(name || '').trim();
+    if (!s) return '?';
+    const parts = s.split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  function getAvatarColor(seed) {
+    const colors = [
+      'linear-gradient(135deg, #F59E0B, #f97316)',
+      'linear-gradient(135deg, #0284c7, #0369a1)',
+      'linear-gradient(135deg, #a855f7, #6d28d9)',
+      'linear-gradient(135deg, #10B981, #059669)',
+      'linear-gradient(135deg, #ec4899, #be185d)',
+      'linear-gradient(135deg, #06b6d4, #0891b2)',
+    ];
+    let hash = 0;
+    const s = String(seed || '');
+    for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+  }
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TOAST / LOADING / MODAL
+  // ═══════════════════════════════════════════════════════════
+
+  function toast(msg, type = 'info', duration = 2800) {
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    const icon = type === 'success' ? 'checkCircle' : type === 'error' ? 'alert' : type === 'warning' ? 'alertTriangle' : 'info';
+    el.innerHTML = svg(icon, 15, 2.4) + '<span></span>';
+    el.querySelector('span').textContent = msg;
+    $('toastContainer').appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  function showLoading(title, desc) {
+    $('loadingTitle').textContent = title || 'Loading…';
+    $('loadingDesc').textContent = desc || '';
+    $('loadingOverlay').classList.add('active');
+  }
+
+  function hideLoading() {
+    $('loadingOverlay').classList.remove('active');
+  }
+
+  function openModal(html) {
+    $('modalBody').innerHTML = html;
+    $('modalOverlay').classList.add('active');
+  }
+
+  function closeModal() {
+    $('modalOverlay').classList.remove('active');
+    setTimeout(() => { $('modalBody').innerHTML = ''; }, 250);
+  }
+
+  function confirmModal(title, desc, confirmLabel, danger, onConfirm) {
+    openModal(`
+      <div class="modal-title">${escapeHTML(title)}</div>
+      <div class="modal-desc">${escapeHTML(desc)}</div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="modalConfirmBtn">${escapeHTML(confirmLabel)}</button>
+      </div>
+    `);
+    $('modalConfirmBtn').addEventListener('click', () => {
+      closeModal();
+      onConfirm();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SESSION
+  // ═══════════════════════════════════════════════════════════
+
+  function readSession() {
+    try { S.session = localStorage.getItem(STORAGE.session); } catch {}
+    try {
+      const raw = localStorage.getItem(STORAGE.user);
+      S.user = raw ? JSON.parse(raw) : null;
+    } catch {}
+    if (S.user) S.uid = S.user.uid || null;
+  }
+
+  async function apiFetch(url, opts = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (S.session) headers['Authorization'] = `Bearer ${S.session}`;
+    try {
+      const res = await fetch(url, { ...opts, headers });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      return { ok: res.ok, status: res.status, data };
+    } catch (err) {
+      return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ROUTING
+  // ═══════════════════════════════════════════════════════════
+
+  function getHashTab() {
+    const h = location.hash.replace(/^#\/?/, '');
+    return TABS.some(t => t.id === h) ? h : null;
+  }
+
+  function setHashTab(id) {
+    const newHash = `#/${id}`;
+    if (location.hash !== newHash) history.replaceState(null, '', newHash);
+  }
+
+  function switchTab(id) {
+    if (!TABS.some(t => t.id === id)) return;
+    S.activeTab = id;
+    S.activeFilters.clear();
+    setHashTab(id);
+    try { localStorage.setItem(STORAGE.lastTab, id); } catch {}
+    renderTabs();
+    renderActiveFilters();
+    applyFiltersAndRender();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOAD PROJECTS
+  // ═══════════════════════════════════════════════════════════
+
+  async function loadProjects() {
+    renderSkeletons();
+
+    const res = await apiFetch(API_HOST + '?action=projects/list');
+    if (!res.ok || !res.data?.success) {
+      if (res.status === 401) {
+        window.location.href = '/register?next=' + encodeURIComponent(location.pathname);
+        return;
+      }
+      renderError();
+      return;
+    }
+
+    S.projects = res.data.projects || [];
+
+    // Try to read fileCount/versionCount/storageUsed if available on each project
+    // Also read user globalLimit
+    if (S.user && S.user.settings && typeof S.user.settings.globalLimit === 'number') {
+      S.storageLimit = S.user.settings.globalLimit;
+    }
+
+    // Load storage estimate
+    if (navigator.storage && navigator.storage.estimate) {
+      try {
+        S.storageEstimate = await navigator.storage.estimate();
+      } catch {}
+    }
+
+    // Read autoClean
+    try {
+      const ac = localStorage.getItem(STORAGE.autoClean);
+      S.autoCleanEnabled = ac === null ? true : ac === 'true';
+    } catch {}
+
+    // Load deployment histories (parallel)
+    await loadDeploymentHistories();
+
+    // Detect expired
+    computeExpiredDeployments();
+
+    // Auto-clean if enabled (offline-safe — only acts on cached data)
+    if (S.autoCleanEnabled && S.expiredDeployments.length > 0 && navigator.onLine) {
+      setTimeout(() => autoCleanExpired(), 1200);
+    }
+
+    updateHeaderCount();
+    applyFiltersAndRender();
+  }
+
+  async function loadDeploymentHistories() {
+    // Load in parallel with limit 4 concurrency
+    const queue = S.projects.slice();
+    const workers = [];
+
+    async function worker() {
+      while (queue.length) {
+        const p = queue.shift();
+        try {
+          const res = await apiFetch(API_HOST + '?action=deployment/history&pid=' + encodeURIComponent(p.pid));
+          if (res.ok && res.data?.success) {
+            S.deploymentCache.set(p.pid, {
+              deployments: res.data.deployments || [],
+              currentId: res.data.currentDeploymentId || null,
+            });
+          }
+        } catch {}
+      }
+    }
+
+    for (let i = 0; i < 4; i++) workers.push(worker());
+    await Promise.all(workers);
+  }
+
+  function computeExpiredDeployments() {
+    S.expiredDeployments = [];
+    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    for (const [pid, cache] of S.deploymentCache.entries()) {
+      for (const d of cache.deployments) {
+        if (d.id === cache.currentId) continue; // skip current
+        if (!d.deployedAt) continue;
+        if (now - d.deployedAt < THIRTY_DAYS) continue;
+        S.expiredDeployments.push({ pid, deploymentId: d.id, deployedAt: d.deployedAt });
+      }
+    }
+  }
+
+  async function autoCleanExpired() {
+    if (S.expiredDeployments.length === 0) return;
+    const count = S.expiredDeployments.length;
+    try {
+      for (const d of S.expiredDeployments) {
+        await apiFetch(API_HOST + '?action=deployment/delete', {
+          method: 'POST',
+          body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
+        });
+      }
+      S.expiredDeployments = [];
+      toast(`Cleaned ${count} expired deployment${count === 1 ? '' : 's'}`, 'success', 2200);
+      updateHeaderCount();
+      applyFiltersAndRender();
+    } catch {}
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER: TABS
+  // ═══════════════════════════════════════════════════════════
+
+  function getCountForTab(tabId) {
+    return S.projects.filter(p => matchesTab(p, tabId)).length;
+  }
+
+  function renderTabs() {
+    const tabsEl = $('tabsBar');
+    tabsEl.innerHTML = TABS.map(t => `
+      <button class="tab ${t.id === S.activeTab ? 'active' : ''}" data-tab="${escapeAttr(t.id)}" type="button">
+        <span>${escapeHTML(t.label)}</span>
+        <span class="tab-count">${getCountForTab(t.id)}</span>
+      </button>
+    `).join('');
+    tabsEl.querySelectorAll('[data-tab]').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+  }
+
+  function updateHeaderCount() {
+    const count = S.projects.length;
+    $('pageCount').textContent = `${count} project${count === 1 ? '' : 's'}`;
+
+    // Filter badge
+    const badge = $('filterBadge');
+    const badgeCount = S.activeFilters.size + (S.searchQuery ? 1 : 0) + (S.sortId !== 'modified' ? 1 : 0);
+    if (badgeCount > 0) {
+      badge.textContent = String(badgeCount);
+      badge.classList.remove('hidden');
+      $('filterBtn').classList.add('filter-active');
+    } else {
+      badge.classList.add('hidden');
+      $('filterBtn').classList.remove('filter-active');
+    }
+
+    $('sortLabel').textContent = SORTS.find(s => s.id === S.sortId)?.label || 'Modified';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER: ACTIVE FILTERS CHIPS
+  // ═══════════════════════════════════════════════════════════
+
+  function renderActiveFilters() {
+    const el = $('activeFilters');
+    const chips = [];
+
+    S.activeFilters.forEach(f => {
+      chips.push(`
+        <div class="filter-chip">
+          <span>${escapeHTML(FILTER_LABELS[f] || f)}</span>
+          <button data-remove-filter="${escapeAttr(f)}" type="button" aria-label="Remove">
+            ${svg('x', 11, 2.4)}
+          </button>
+        </div>
+      `);
+    });
+
+    if (S.searchQuery) {
+      chips.push(`
+        <div class="filter-chip">
+          <span>"${escapeHTML(S.searchQuery)}"</span>
+          <button data-remove-search type="button" aria-label="Remove search">
+            ${svg('x', 11, 2.4)}
+          </button>
+        </div>
+      `);
+    }
+
+    if (chips.length === 0) {
+      el.classList.remove('visible');
+      el.innerHTML = '';
+      return;
+    }
+
+    el.innerHTML = chips.join('') + `<button class="clear-filters-btn" id="clearAllFilters" type="button">Clear all</button>`;
+    el.classList.add('visible');
+
+    el.querySelectorAll('[data-remove-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.activeFilters.delete(btn.dataset.removeFilter);
+        renderActiveFilters();
+        applyFiltersAndRender();
+      });
+    });
+    el.querySelector('[data-remove-search]')?.addEventListener('click', () => {
+      S.searchQuery = '';
+      $('searchInput').value = '';
+      $('searchClear').classList.remove('visible');
+      renderActiveFilters();
+      applyFiltersAndRender();
+    });
+    $('clearAllFilters')?.addEventListener('click', () => {
+      S.activeFilters.clear();
+      S.searchQuery = '';
+      $('searchInput').value = '';
+      $('searchClear').classList.remove('visible');
+      renderActiveFilters();
+      applyFiltersAndRender();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // FILTERING / MATCHING
+  // ═══════════════════════════════════════════════════════════
+
+  function matchesTab(p, tabId) {
+    if (tabId === 'all') return !p.archived;
+    if (tabId === 'owned') return p.myRole === 'owner' && !p.archived;
+    if (tabId === 'shared') return p.myRole && p.myRole !== 'owner' && !p.archived;
+    if (tabId === 'public') return p.visibility?.profile === 'public' && !p.archived;
+    if (tabId === 'archived') return p.archived === true;
+    return true;
+  }
+
+  function matchesFilters(p) {
+    if (S.activeFilters.size === 0) return true;
+
+    for (const f of S.activeFilters) {
+      if (f === 'deployed' && !p.deployment?.url) return false;
+      if (f === 'notDeployed' && p.deployment?.url) return false;
+      if (f === 'expired') {
+        const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
+        if (!hasExpired) return false;
+      }
+      if (f === 'editor' && p.myRole !== 'editor') return false;
+      if (f === 'viewer' && p.myRole !== 'viewer') return false;
+      if (f === 'commenter' && p.myRole !== 'commenter') return false;
+    }
+
+    return true;
+  }
+
+  function matchesSearch(p) {
+    if (!S.searchQuery) return true;
+    const q = S.searchQuery.toLowerCase();
+    const haystack = [
+      p.name, p.slug, p.description,
+      ...Object.keys(p.languages?.breakdown || {}),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(q);
+  }
+
+  function applyFiltersAndRender() {
+    let list = S.projects.filter(p => matchesTab(p, S.activeTab) && matchesFilters(p) && matchesSearch(p));
+
+    const sorter = SORTS.find(s => s.id === S.sortId) || SORTS[0];
+    list.sort(sorter.fn);
+
+    S.filtered = list;
+    renderProjects();
+    updateHeaderCount();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER: PROJECT CARDS
+  // ═══════════════════════════════════════════════════════════
+
+  function renderSkeletons() {
+    const container = $('projectsContainer');
+    container.innerHTML = Array.from({ length: 6 }, () => `
+      <div class="skeleton-card">
+        <div class="skeleton-card-row">
+          <div class="skeleton skeleton-icon"></div>
+          <div style="flex:1;">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-sub"></div>
+          </div>
+        </div>
+        <div class="skeleton skeleton-line"></div>
+        <div class="skeleton skeleton-line short"></div>
+      </div>
+    `).join('');
+  }
+
+  function renderProjects() {
+    const container = $('projectsContainer');
+
+    if (S.filtered.length === 0) {
+      container.innerHTML = renderEmptyState();
+      bindEmptyStateActions();
+      return;
+    }
+
+    container.innerHTML = S.filtered.map(p => renderProjectCard(p)).join('');
+    bindProjectCardEvents();
+  }
+
+  function renderEmptyState() {
+    if (S.projects.length === 0) {
+      return `
+        <div class="empty-state">
+          <div class="empty-icon">${svg('folder', 28, 2)}</div>
+          <div class="empty-title">No projects yet</div>
+          <div class="empty-desc">Create your first project or import an existing one.</div>
+          <div class="empty-actions">
+            <button class="btn btn-primary" data-empty-new>${svg('plus', 14, 2.4)} New project</button>
+            <button class="btn btn-secondary" data-empty-import>${svg('upload', 14, 2.2)} Import .folio</button>
+          </div>
+        </div>
+      `;
+    }
+
+    if (S.activeTab === 'shared') {
+      return `
+        <div class="empty-state">
+          <div class="empty-icon">${svg('users', 28, 2)}</div>
+          <div class="empty-title">No shared projects</div>
+          <div class="empty-desc">When someone invites you to a project, it will appear here.</div>
+        </div>
+      `;
+    }
+
+    if (S.activeTab === 'owned') {
+      return `
+        <div class="empty-state">
+          <div class="empty-icon">${svg('folder', 28, 2)}</div>
+          <div class="empty-title">You don't own any projects</div>
+          <div class="empty-desc">Create a new project to get started.</div>
+          <div class="empty-actions">
+            <button class="btn btn-primary" data-empty-new>${svg('plus', 14, 2.4)} New project</button>
+          </div>
+        </div>
+      `;
+    }
+
+    if (S.activeTab === 'public') {
+      return `
+        <div class="empty-state">
+          <div class="empty-icon">${svg('eye', 28, 2)}</div>
+          <div class="empty-title">No public projects</div>
+          <div class="empty-desc">Make a project public in its sharing settings to list it here.</div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="empty-state">
+        <div class="empty-icon">${svg('search', 28, 2)}</div>
+        <div class="empty-title">No projects match</div>
+        <div class="empty-desc">Try clearing filters or search.</div>
+        <div class="empty-actions">
+          <button class="btn btn-secondary" data-empty-clear-filters>Clear filters</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindEmptyStateActions() {
+    document.querySelector('[data-empty-new]')?.addEventListener('click', openCreateFlow);
+    document.querySelector('[data-empty-import]')?.addEventListener('click', openImportFlow);
+    document.querySelector('[data-empty-clear-filters]')?.addEventListener('click', () => {
+      S.activeFilters.clear();
+      S.searchQuery = '';
+      $('searchInput').value = '';
+      $('searchClear').classList.remove('visible');
+      renderActiveFilters();
+      applyFiltersAndRender();
+    });
+  }
+
+  function renderProjectCard(p) {
+    const iconHTML = p.iconUrl
+      ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
+      : `<span>${escapeHTML(getInitials(p.name))}</span>`;
+
+    const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+
+    const roleBadge = p.myRole === 'owner'
+      ? '<span class="role-badge owner">Owner</span>'
+      : p.myRole === 'editor'
+      ? '<span class="role-badge editor">Editor</span>'
+      : p.myRole
+      ? `<span class="role-badge">${escapeHTML(p.myRole)}</span>`
+      : '';
+
+    const liveBadge = p.deployment?.url
+      ? '<span class="live-badge"><span class="dot"></span>Live</span>'
+      : p.deployment?.state === 'OFFLINE'
+      ? '<span class="live-badge offline"><span class="dot"></span>Offline</span>'
+      : '<span class="live-badge offline">Not deployed</span>';
+
+    const langBadges = p.languages?.breakdown
+      ? Object.entries(p.languages.breakdown).slice(0, 3)
+          .map(([name, pct]) => `<span class="lang-badge">${escapeHTML(name)} ${pct}%</span>`)
+          .join('')
+      : '';
+
+    const viewCount = p.viewCount || 0;
+    const fileCount = p.fileCount;
+
+    const statsHTML = [
+      viewCount > 0 ? `<span class="stat-item">${svg('eye', 11, 2.2)}${formatNumber(viewCount)}</span>` : '',
+      fileCount != null ? `<span class="stat-item">${svg('file', 11, 2.2)}${fileCount}</span>` : '',
+      p.updatedAt ? `<span class="stat-item">${timeAgo(p.updatedAt)}</span>` : '',
+    ].filter(Boolean).join('');
+
+    const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
+
+    return `
+      <div class="project-card" data-pid="${escapeAttr(p.pid)}">
+        <div class="project-card-header">
+          <div class="project-icon" style="${iconBg}">${iconHTML}</div>
+          <div class="project-header-info">
+            <div class="project-name">${escapeHTML(p.name || 'Untitled project')}</div>
+            <div class="project-meta">
+              ${roleBadge}
+              ${liveBadge}
+              ${hasExpired ? `<span style="color:var(--theme-warning);display:inline-flex;align-items:center;gap:2px;">${svg('alertTriangle', 10, 2.4)}</span>` : ''}
+            </div>
+          </div>
+          <button class="project-more-btn" data-more="${escapeAttr(p.pid)}" aria-label="More actions">
+            ${svg('more', 15, 2.4)}
+          </button>
+        </div>
+        ${p.description ? `<div class="project-desc">${escapeHTML(p.description)}</div>` : ''}
+        ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
+        ${statsHTML ? `<div class="project-stats">${statsHTML}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function bindProjectCardEvents() {
+    document.querySelectorAll('.project-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('[data-more]')) return;
+        const pid = card.dataset.pid;
+        window.location.href = '/index.html?pid=' + encodeURIComponent(pid);
+      });
+    });
+    document.querySelectorAll('[data-more]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const p = S.projects.find(proj => proj.pid === btn.dataset.more);
+        if (p) openActionMenu(p);
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ERROR
+  // ═══════════════════════════════════════════════════════════
+
+  function renderError() {
+    $('projectsContainer').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon" style="background:var(--theme-danger-soft);color:var(--theme-danger);">${svg('alert', 28, 2)}</div>
+        <div class="empty-title">Couldn't load projects</div>
+        <div class="empty-desc">Check your connection and try again.</div>
+        <div class="empty-actions">
+          <button class="btn btn-primary" onclick="location.reload()">${svg('refresh', 14, 2.2)} Retry</button>
+          <a class="btn btn-ghost" href="/">Back to editor</a>
+        </div>
+      </div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ACTION MENU
+  // ═══════════════════════════════════════════════════════════
+
+  function openActionMenu(p) {
+    S.activeMenuProject = p;
+
+    const isOwner = p.myRole === 'owner';
+    const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
+    const expiredCount = S.expiredDeployments.filter(d => d.pid === p.pid).length;
+    const shareUrl = p.visibility?.profile === 'public'
+      ? `${location.origin}/${S.user?.username || ''}/${p.slug || ''}`
+      : null;
+
+    const iconHTML = p.iconUrl
+      ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
+      : `<span>${escapeHTML(getInitials(p.name))}</span>`;
+    const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+
+    const sheet = $('actionSheet');
+    sheet.innerHTML = `
+      <div class="action-sheet-header">
+        <div class="action-sheet-icon" style="${iconBg}">${iconHTML}</div>
+        <div class="action-sheet-title">
+          <div class="action-sheet-name">${escapeHTML(p.name || 'Untitled project')}</div>
+          <div class="action-sheet-meta">${escapeHTML(p.myRole || '')} · ${p.deployment?.url ? 'Live' : 'Not deployed'}</div>
+        </div>
+      </div>
+      <div class="action-list">
+        <button class="action-item" data-action="editor">
+          ${svg('edit3', 16, 2.2)}<span>Open in editor</span>
+        </button>
+        <button class="action-item" data-action="dashboard">
+          ${svg('chart', 16, 2.2)}<span>Open dashboard</span>
+        </button>
+        ${shareUrl ? `<button class="action-item" data-action="share">
+          ${svg('share', 16, 2.2)}<span>Copy share link</span>
+        </button>` : ''}
+        <div class="action-divider"></div>
+        <button class="action-item" data-action="download">
+          ${svg('download', 16, 2.2)}<span>Download .folio</span>
+        </button>
+        <button class="action-item" data-action="duplicate">
+          ${svg('copy', 16, 2.2)}<span>Duplicate</span>
+        </button>
+        ${isOwner ? `<button class="action-item" data-action="rename">
+          ${svg('edit', 16, 2.2)}<span>Rename</span>
+        </button>` : ''}
+        ${hasExpired ? `<button class="action-item" data-action="cleanExpired">
+          ${svg('alertTriangle', 16, 2.2)}<span>Clean ${expiredCount} expired deploy${expiredCount === 1 ? '' : 's'}</span>
+        </button>` : ''}
+        ${isOwner ? `<div class="action-divider"></div>
+        <button class="action-item danger" data-action="delete">
+          ${svg('trash', 16, 2.2)}<span>Delete project</span>
+        </button>` : ''}
+      </div>
+    `;
+
+    sheet.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => handleAction(btn.dataset.action, p));
+    });
+
+    $('actionMenu').classList.add('active');
+  }
+
+  function closeActionMenu() {
+    $('actionMenu').classList.remove('active');
+    S.activeMenuProject = null;
+  }
+
+  function handleAction(action, p) {
+    closeActionMenu();
+    switch (action) {
+      case 'editor':
+        window.location.href = '/index.html?pid=' + encodeURIComponent(p.pid);
+        break;
+      case 'dashboard':
+        window.location.href = '/project?pid=' + encodeURIComponent(p.pid);
+        break;
+      case 'share':
+        const shareUrl = `${location.origin}/${S.user?.username || ''}/${p.slug || ''}`;
+        navigator.clipboard.writeText(shareUrl).then(() => toast('Link copied', 'success', 1400)).catch(() => toast('Copy failed', 'error'));
+        break;
+      case 'download':
+        downloadProject(p);
+        break;
+      case 'duplicate':
+        duplicateProject(p);
+        break;
+      case 'rename':
+        openRenameModal(p);
+        break;
+      case 'cleanExpired':
+        cleanExpiredForProject(p);
+        break;
+      case 'delete':
+        confirmDeleteProject(p);
+        break;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ACTIONS
+  // ═══════════════════════════════════════════════════════════
+
+  async function downloadProject(p) {
+    try {
+      showLoading('Preparing download', 'Building .folio backup…');
+      const res = await fetch(`${API_HOST}?action=project/export&pid=${encodeURIComponent(p.pid)}&format=folio`, {
+        headers: { Authorization: `Bearer ${S.session}` },
+      });
+      hideLoading();
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const filename = `${p.slug || 'project'}-${p.pid.slice(-6)}.folio`;
+      triggerDownload(blob, filename);
+      toast('Downloaded', 'success');
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Download failed', 'error');
+    }
+  }
+
+  async function duplicateProject(p) {
+    confirmModal(
+      'Duplicate project?',
+      'A new project will be created with a copy of the files.',
+      'Duplicate',
+      false,
+      async () => {
+        showLoading('Duplicating', 'Copying files…');
+        try {
+          const res = await apiFetch(API_HOST + '?action=project/copy', {
+            method: 'POST',
+            body: JSON.stringify({ pid: p.pid, newName: `${p.name} (copy)` }),
+          });
+          hideLoading();
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+          toast('Project duplicated', 'success');
+          await loadProjects();
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Duplicate failed', 'error');
+        }
+      }
+    );
+  }
+
+  function openRenameModal(p) {
+    openModal(`
+      <div class="modal-title">Rename project</div>
+      <div class="field">
+        <label class="field-label">Project name</label>
+        <input class="input" id="renameInput" value="${escapeAttr(p.name || '')}" maxlength="100" autofocus>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn btn-primary" id="renameSubmit">Save</button>
+      </div>
+    `);
+
+    $('renameInput').focus();
+    $('renameInput').select();
+
+    $('renameSubmit').addEventListener('click', async () => {
+      const name = $('renameInput').value.trim();
+      if (!name) { toast('Name required', 'error'); return; }
+      if (name === p.name) { closeModal(); return; }
+
+      $('renameSubmit').disabled = true;
+      try {
+        const res = await apiFetch(API_HOST + '?action=projects/update', {
+          method: 'POST',
+          body: JSON.stringify({ pid: p.pid, name }),
+        });
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        p.name = name;
+        closeModal();
+        toast('Renamed', 'success');
+        renderProjects();
+      } catch (err) {
+        toast(err.message || 'Rename failed', 'error');
+        $('renameSubmit').disabled = false;
+      }
+    });
+
+    $('renameInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $('renameSubmit').click();
+    });
+  }
+
+  function confirmDeleteProject(p) {
+    openModal(`
+      <div class="modal-title">Delete project?</div>
+      <div class="modal-desc">This deletes all files, versions, and data. Cannot be undone.</div>
+      <div class="field">
+        <label class="field-label">Type "${escapeHTML(p.name || 'Untitled project')}" to confirm</label>
+        <input class="input" id="deleteConfirmInput" placeholder="Project name">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn btn-danger" id="deleteConfirmBtn" disabled>Delete</button>
+      </div>
+    `);
+
+    $('deleteConfirmInput').addEventListener('input', (e) => {
+      $('deleteConfirmBtn').disabled = e.target.value !== p.name;
+    });
+
+    $('deleteConfirmBtn').addEventListener('click', async () => {
+      showLoading('Deleting', 'Removing project and all data…');
+      try {
+        const res = await apiFetch(API_HOST + '?action=projects/delete', {
+          method: 'POST',
+          body: JSON.stringify({ pid: p.pid }),
+        });
+        hideLoading();
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        closeModal();
+        toast('Project deleted', 'success');
+        S.projects = S.projects.filter(proj => proj.pid !== p.pid);
+        applyFiltersAndRender();
+      } catch (err) {
+        hideLoading();
+        toast(err.message || 'Delete failed', 'error');
+      }
+    });
+  }
+
+  async function cleanExpiredForProject(p) {
+    const expired = S.expiredDeployments.filter(d => d.pid === p.pid);
+    if (expired.length === 0) { toast('No expired deployments', 'info'); return; }
+
+    confirmModal(
+      `Delete ${expired.length} expired deployment${expired.length === 1 ? '' : 's'}?`,
+      'Live URLs will stop working. This cannot be undone.',
+      'Delete',
+      true,
+      async () => {
+        showLoading('Cleaning', `Deleting ${expired.length}…`);
+        let done = 0;
+        try {
+          for (const d of expired) {
+            await apiFetch(API_HOST + '?action=deployment/delete', {
+              method: 'POST',
+              body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
+            });
+            done++;
+            $('loadingDesc').textContent = `Deleting ${done} of ${expired.length}…`;
+          }
+          S.expiredDeployments = S.expiredDeployments.filter(d => d.pid !== p.pid);
+          hideLoading();
+          toast(`Cleaned ${expired.length} deployment${expired.length === 1 ? '' : 's'}`, 'success');
+          applyFiltersAndRender();
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Failed', 'error');
+        }
+      }
+    );
+  }
+
+  function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // CREATE FLOW (3 steps)
+  // ═══════════════════════════════════════════════════════════
+
+  function openCreateFlow() {
+    S.createStep = 1;
+    S.createName = '';
+    S.createDescription = '';
+    S.createIconMode = 'name';
+    S.createIconUrl = null;
+    S.createIconDataUrl = null;
+    S.createIconVariants = [];
+    S.createImageUrlInput = '';
+    renderCreateStep();
+  }
+
+  function renderCreateStep() {
+    const content = $('modalBody');
+    $('modalOverlay').classList.add('active');
+
+    const steps = ['Basics', 'Icon', 'Review'];
+    const stepperHTML = steps.map((_, i) => `<div class="step ${i < S.createStep ? 'active' : ''}"></div>`).join('');
+
+    if (S.createStep === 1) {
+      content.innerHTML = `
+        <div class="modal-handle"></div>
+        <div class="stepper">${stepperHTML}</div>
+        <div class="step-label">Step 1 of 3 · Basics</div>
+        <div class="modal-title">New project</div>
+        <div class="modal-desc">Give it a name and short description.</div>
+        <div class="field">
+          <label class="field-label">Name *</label>
+          <input class="input" id="createName" value="${escapeAttr(S.createName)}" placeholder="My project" maxlength="100" autofocus>
+        </div>
+        <div class="field">
+          <label class="field-label">Description (optional)</label>
+          <textarea class="textarea" id="createDesc" placeholder="What's this project about?" maxlength="500">${escapeHTML(S.createDescription)}</textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button class="btn btn-primary" id="createNext">Next</button>
+        </div>
+      `;
+      $('createName').focus();
+      $('createNext').addEventListener('click', () => {
+        const name = $('createName').value.trim();
+        if (!name) { toast('Project name required', 'error'); return; }
+        S.createName = name;
+        S.createDescription = $('createDesc').value.trim();
+        S.createStep = 2;
+        renderCreateStep();
+      });
+    } else if (S.createStep === 2) {
+      content.innerHTML = `
+        <div class="modal-handle"></div>
+        <div class="stepper">${stepperHTML}</div>
+        <div class="step-label">Step 2 of 3 · Icon (optional)</div>
+        <div class="modal-title">Choose an icon</div>
+        <div class="modal-desc">Generated by Flier from your project name.</div>
+
+        <div class="icon-tabs">
+          <button class="icon-tab ${S.createIconMode === 'name' ? 'active' : ''}" data-icon-mode="name">From name</button>
+          <button class="icon-tab ${S.createIconMode === 'url' ? 'active' : ''}" data-icon-mode="url">From URL</button>
+          <button class="icon-tab ${S.createIconMode === 'upload' ? 'active' : ''}" data-icon-mode="upload">Upload</button>
+        </div>
+
+        <div class="icon-mode-panel ${S.createIconMode === 'name' ? 'active' : ''}" data-panel="name">
+          <div class="icon-grid" id="iconGrid">
+            <div class="icon-placeholder" style="grid-column:1/-1;">Tap "Generate" below</div>
+          </div>
+          <button class="icon-generate-btn" id="iconGenName">
+            ${svg('refresh', 13, 2.2)} Generate icons from "${escapeHTML(S.createName)}"
+          </button>
+        </div>
+
+        <div class="icon-mode-panel ${S.createIconMode === 'url' ? 'active' : ''}" data-panel="url">
+          <div class="field">
+            <label class="field-label">Image URL</label>
+            <input class="input" id="iconUrlInput" placeholder="https://example.com/image.jpg" value="${escapeAttr(S.createImageUrlInput)}">
+            <div class="field-hint">HTTPS only. Image will be framed by Flier.</div>
+          </div>
+          <div class="icon-grid" id="iconGridUrl">
+            <div class="icon-placeholder" style="grid-column:1/-1;">Paste URL and tap Generate</div>
+          </div>
+          <button class="icon-generate-btn" id="iconGenUrl">
+            ${svg('image', 13, 2.2)} Generate from URL
+          </button>
+        </div>
+
+        <div class="icon-mode-panel ${S.createIconMode === 'upload' ? 'active' : ''}" data-panel="upload">
+          <input type="file" id="iconUploadFile" accept="image/*" style="display:none;">
+          <div class="icon-upload-btn" id="iconUploadBtn">
+            ${svg('upload', 22, 2)}
+            <span>Upload image</span>
+            <span class="sub">JPG, PNG, WebP · max 5 MB</span>
+          </div>
+          <div class="icon-grid" id="iconGridUpload" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="createBack">Back</button>
+          <button class="btn btn-primary" id="createNext">Next</button>
+        </div>
+      `;
+
+      content.querySelectorAll('[data-icon-mode]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          S.createIconMode = btn.dataset.iconMode;
+          renderCreateStep();
+        });
+      });
+
+      $('iconGenName').addEventListener('click', generateIconFromName);
+      $('iconGenUrl').addEventListener('click', generateIconFromUrl);
+      $('iconUploadBtn').addEventListener('click', () => $('iconUploadFile').click());
+      $('iconUploadFile').addEventListener('change', handleIconUpload);
+
+      // Render existing variants if any
+      if (S.createIconVariants.length > 0) {
+        const gridId = S.createIconMode === 'name' ? 'iconGrid' : S.createIconMode === 'url' ? 'iconGridUrl' : 'iconGridUpload';
+        renderIconVariants(gridId);
+      }
+
+      $('createBack').addEventListener('click', () => {
+        S.createStep = 1;
+        renderCreateStep();
+      });
+      $('createNext').addEventListener('click', () => {
+        // If a variant is selected, upload it
+        if (S.createIconDataUrl) {
+          uploadSelectedIcon().then(() => {
+            S.createStep = 3;
+            renderCreateStep();
+          });
+        } else {
+          S.createStep = 3;
+          renderCreateStep();
+        }
+      });
+    } else if (S.createStep === 3) {
+      const iconPreview = S.createIconUrl
+        ? `<img src="${escapeAttr(S.createIconUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;">`
+        : `<span style="color:var(--theme-primary);font-weight:800;">${escapeHTML(getInitials(S.createName))}</span>`;
+      const iconBg = S.createIconUrl ? '' : `background:${getAvatarColor(S.createName)};`;
+
+      content.innerHTML = `
+        <div class="modal-handle"></div>
+        <div class="stepper">${stepperHTML}</div>
+        <div class="step-label">Step 3 of 3 · Review</div>
+        <div class="modal-title">Create project</div>
+        <div class="modal-desc">Review and confirm.</div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--theme-glass-bg);border-radius:12px;margin-bottom:16px;">
+          <div style="width:48px;height:48px;border-radius:12px;overflow:hidden;background:var(--theme-surface-elevated);display:flex;align-items:center;justify-content:center;flex-shrink:0;${iconBg}">${iconPreview}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:700;color:var(--theme-text);">${escapeHTML(S.createName)}</div>
+            <div style="font-size:11.5px;color:var(--theme-text-tertiary);">${S.createDescription ? escapeHTML(S.createDescription) : 'No description'}</div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="createBack">Back</button>
+          <button class="btn btn-primary" id="createSubmit">${svg('check', 14, 2.4)} Create project</button>
+        </div>
+      `;
+
+      $('createBack').addEventListener('click', () => {
+        S.createStep = 2;
+        renderCreateStep();
+      });
+
+      $('createSubmit').addEventListener('click', submitCreateProject);
+    }
+  }
+
+  async function generateIconFromName() {
+    const grid = $('iconGrid');
+    if (!grid) return;
+    grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
+    $('iconGenName').disabled = true;
+
+    try {
+      const res = await fetch(API_FLIER + '?action=avatar/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: S.createName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
+          displayName: S.createName,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success || !Array.isArray(data.variants) || data.variants.length === 0) {
+        throw new Error(data.error || 'Generation failed');
+      }
+      S.createIconVariants = data.variants;
+      renderIconVariants('iconGrid');
+    } catch (err) {
+      grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;aspect-ratio:auto;padding:20px;">Could not generate</div>';
+      toast('Icon generation failed', 'error');
+    } finally {
+      $('iconGenName').disabled = false;
+    }
+  }
+
+  async function generateIconFromUrl() {
+    const url = $('iconUrlInput').value.trim();
+    if (!url) { toast('Paste an image URL', 'error'); return; }
+    if (!url.startsWith('https://')) { toast('URL must start with https://', 'error'); return; }
+
+    S.createImageUrlInput = url;
+    const grid = $('iconGridUrl');
+    grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
+    $('iconGenUrl').disabled = true;
+
+    try {
+      const res = await fetch(API_FLIER + '?action=avatar/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: S.createName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
+          displayName: S.createName,
+          imageUrl: url,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success || !Array.isArray(data.variants) || data.variants.length === 0) {
+        throw new Error(data.error || 'Generation failed');
+      }
+      S.createIconVariants = data.variants;
+      renderIconVariants('iconGridUrl');
+    } catch (err) {
+      grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;aspect-ratio:auto;padding:20px;">Could not fetch image</div>';
+      toast('Could not fetch image URL', 'error');
+    } finally {
+      $('iconGenUrl').disabled = false;
+    }
+  }
+
+  async function handleIconUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('Not an image', 'error'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast('Image too large', 'error'); return; }
+
+    const dataUrl = await fileToDataUrl(file);
+    S.createIconDataUrl = dataUrl;
+
+    const grid = $('iconGridUpload');
+    grid.innerHTML = `<button class="icon-option selected" data-selected="1" type="button"><img src="${escapeAttr(dataUrl)}" alt=""></button>`;
+  }
+
+  function renderIconVariants(gridId) {
+    const grid = document.getElementById(gridId);
+    if (!grid) return;
+    grid.innerHTML = S.createIconVariants.map((v, idx) => `
+      <button class="icon-option ${S.createIconDataUrl === v.dataUrl ? 'selected' : ''}" data-icon-idx="${idx}" type="button" aria-label="${escapeAttr(v.label || 'Icon')}">
+        <img src="${escapeAttr(v.dataUrl)}" alt="">
+      </button>
+    `).join('');
+
+    grid.querySelectorAll('[data-icon-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.iconIdx, 10);
+        const v = S.createIconVariants[idx];
+        if (!v) return;
+        S.createIconDataUrl = v.dataUrl;
+        grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+    });
+  }
+
+  async function uploadSelectedIcon() {
+    if (!S.createIconDataUrl) return;
+    try {
+      const res = await fetch(API_FLIER + '?action=avatar/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dataUrl: S.createIconDataUrl,
+          username: S.createName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.url) {
+        S.createIconUrl = data.url;
+      }
+    } catch (err) {
+      console.warn('Icon upload failed:', err);
+    }
+  }
+
+  async function submitCreateProject() {
+    showLoading('Creating project', 'Setting up…');
+
+    try {
+      const body = {
+        name: S.createName,
+        description: S.createDescription || '',
+      };
+      if (S.createIconUrl) body.iconUrl = S.createIconUrl;
+
+      const res = await apiFetch(API_HOST + '?action=projects/create', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+
+      hideLoading();
+
+      if (!res.ok || !res.data?.success) {
+        throw new Error(res.data?.error || 'Create failed');
+      }
+
+      closeModal();
+      showCelebration(res.data.pid, S.createName);
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Create failed', 'error');
+    }
+  }
+
+  function showCelebration(pid, name) {
+    $('celeTitle').textContent = 'Project created';
+    $('celeDesc').textContent = `"${name}" is ready to edit.`;
+    $('celebration').classList.add('active');
+
+    $('celeOpenEditor').onclick = () => {
+      $('celebration').classList.remove('active');
+      window.location.href = '/index.html?pid=' + encodeURIComponent(pid);
+    };
+    $('celeStay').onclick = () => {
+      $('celebration').classList.remove('active');
+      // Reload list
+      loadProjects();
+    };
+
+    // Auto-redirect after 4s if untouched
+    setTimeout(() => {
+      if ($('celebration').classList.contains('active')) {
+        $('celebration').classList.remove('active');
+        window.location.href = '/index.html?pid=' + encodeURIComponent(pid);
+      }
+    }, 4000);
+  }
+
+  function openImportFlow() {
+    openModal(`
+      <div class="modal-title">Import project</div>
+      <div class="modal-desc">Load a .folio backup file to create a new project.</div>
+      <input type="file" id="importFile" accept=".folio,.zip" style="display:none;">
+      <div class="icon-upload-btn" id="importUploadBtn" style="margin-bottom:16px;">
+        ${svg('upload', 22, 2)}
+        <span>Choose .folio file</span>
+        <span class="sub">Or .zip archive</span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+      </div>
+    `);
+
+    $('importUploadBtn').addEventListener('click', () => $('importFile').click());
+    $('importFile').addEventListener('change', handleImportFile);
+  }
+
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    closeModal();
+
+    showLoading('Importing', 'Reading file…');
+    try {
+      const text = await file.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch {
+        hideLoading();
+        toast('Only JSON .folio files supported here. Use the editor to import full zips.', 'info', 4000);
+        return;
+      }
+
+      if (!data.pid || !data.name) {
+        throw new Error('Invalid file');
+      }
+
+      // Create project first
+      const createRes = await apiFetch(API_HOST + '?action=projects/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: data.name || 'Imported project',
+          description: data.description || '',
+        }),
+      });
+      if (!createRes.ok || !createRes.data?.success) {
+        throw new Error(createRes.data?.error || 'Create failed');
+      }
+
+      const newPid = createRes.data.pid;
+
+      // Sync back files
+      $('loadingDesc').textContent = 'Syncing files…';
+      const syncRes = await apiFetch(API_HOST + '?action=project/sync-back', {
+        method: 'POST',
+        body: JSON.stringify({
+          pid: newPid,
+          files: data.files || null,
+          versions: data.versions || null,
+          db: data.db || null,
+          schema: data.schema || null,
+          manifest: data.manifest || null,
+        }),
+      });
+
+      hideLoading();
+      if (!syncRes.ok || !syncRes.data?.success) throw new Error('Sync failed');
+
+      toast('Project imported', 'success');
+      await loadProjects();
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Import failed', 'error');
+    }
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // FILTERS OVERLAY
+  // ═══════════════════════════════════════════════════════════
+
+  function openFiltersOverlay() {
+    renderFiltersBody();
+    $('filtersOverlay').classList.add('active');
+  }
+
+  function closeFiltersOverlay() {
+    $('filtersOverlay').classList.remove('active');
+  }
+
+  function renderFiltersBody() {
+    const body = $('filtersBody');
+    const subtitle = $('filtersSubtitle');
+    const tab = TABS.find(t => t.id === S.activeTab);
+    if (subtitle) subtitle.textContent = `${tab?.label || 'All'} · ${S.filtered.length} visible`;
+
+    const stats = computeStats();
+    const expiredCount = S.expiredDeployments.length;
+
+    const filterPills = FILTERS_BY_TAB[S.activeTab] || [];
+    const pillsHTML = filterPills.length > 0 ? `
+      <div class="filter-section">
+        <div class="filter-label">Filters</div>
+        <div class="filter-pills">
+          ${filterPills.map(f => `
+            <button class="filter-pill ${S.activeFilters.has(f) ? 'active' : ''}" data-filter="${escapeAttr(f)}" type="button">
+              ${escapeHTML(FILTER_LABELS[f])}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
+
+    const storagePct = S.storageLimit > 0
+      ? Math.min(100, (stats.totalStorage / S.storageLimit) * 100)
+      : 0;
+    const storageClass = storagePct > 90 ? 'danger' : storagePct > 70 ? 'warn' : '';
+
+    body.innerHTML = `
+      ${pillsHTML}
+
+      <div class="filter-section">
+        <div class="filter-label">Overview</div>
+        <div class="stats-grid">
+          <div class="stat-tile">
+            <div class="stat-label">Total</div>
+            <div class="stat-value">${S.projects.length}</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Public</div>
+            <div class="stat-value">${stats.publicCount}</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Deployed</div>
+            <div class="stat-value">${stats.deployedCount}</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Expired deploys</div>
+            <div class="stat-value ${expiredCount > 0 ? 'warn' : ''}">${expiredCount}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="storage-block">
+        <div class="storage-header">
+          <div class="storage-title">Storage</div>
+          <div class="storage-amount">${formatBytes(stats.totalStorage)} / ${formatBytes(S.storageLimit)}</div>
+        </div>
+        <div class="storage-bar">
+          <div class="storage-bar-fill ${storageClass}" style="width:${storagePct}%"></div>
+        </div>
+        <div class="storage-note">
+          ${storagePct > 90 ? '⚠ Storage nearly full — cleanup recommended.' : storagePct > 70 ? 'Storage is getting full.' : 'Plenty of space remaining.'}
+        </div>
+      </div>
+
+      ${expiredCount > 0 ? `
+        <div class="cleanup-block">
+          <div class="cleanup-header">
+            ${svg('alertTriangle', 16, 2.2)}
+            <div class="cleanup-title">${expiredCount} expired deployment${expiredCount === 1 ? '' : 's'}</div>
+          </div>
+          <div class="cleanup-desc">Older than 30 days and not current. Safe to delete.</div>
+          <button class="btn btn-secondary btn-sm" id="btnCleanAll" type="button" style="width:100%;">
+            ${svg('trash', 12, 2.2)} Clean up all expired
+          </button>
+        </div>
+      ` : ''}
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="toggle-title">Auto-clean expired deployments</div>
+          <div class="toggle-desc">Silently remove deployments older than 30 days when you visit this page.</div>
+        </div>
+        <button class="switch ${S.autoCleanEnabled ? 'on' : ''}" id="autoCleanSwitch" type="button" aria-label="Toggle auto-clean"></button>
+      </div>
+
+      <div class="filter-section">
+        <div class="filter-label">Sort by</div>
+        <div class="filter-pills">
+          ${SORTS.map(s => `
+            <button class="filter-pill ${S.sortId === s.id ? 'active' : ''}" data-sort="${escapeAttr(s.id)}" type="button">
+              ${escapeHTML(s.label)}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    body.querySelectorAll('[data-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const f = btn.dataset.filter;
+        if (S.activeFilters.has(f)) S.activeFilters.delete(f);
+        else S.activeFilters.add(f);
+        renderFiltersBody();
+        renderActiveFilters();
+        applyFiltersAndRender();
+      });
+    });
+
+    body.querySelectorAll('[data-sort]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        S.sortId = btn.dataset.sort;
+        renderFiltersBody();
+        applyFiltersAndRender();
+      });
+    });
+
+    $('autoCleanSwitch')?.addEventListener('click', () => {
+      S.autoCleanEnabled = !S.autoCleanEnabled;
+      try { localStorage.setItem(STORAGE.autoClean, String(S.autoCleanEnabled)); } catch {}
+      $('autoCleanSwitch').classList.toggle('on', S.autoCleanEnabled);
+      toast(S.autoCleanEnabled ? 'Auto-clean on' : 'Auto-clean off', 'info', 1400);
+    });
+
+    $('btnCleanAll')?.addEventListener('click', cleanAllExpired);
+  }
+
+  function computeStats() {
+    let publicCount = 0;
+    let deployedCount = 0;
+    let totalStorage = 0;
+    for (const p of S.projects) {
+      if (p.visibility?.profile === 'public') publicCount++;
+      if (p.deployment?.url) deployedCount++;
+      totalStorage += p.storageUsed || 0;
+    }
+    return { publicCount, deployedCount, totalStorage };
+  }
+
+  function cleanAllExpired() {
+    const count = S.expiredDeployments.length;
+    if (count === 0) return;
+
+    confirmModal(
+      `Delete ${count} expired deployment${count === 1 ? '' : 's'}?`,
+      'Live URLs will stop working. This cannot be undone.',
+      'Delete all',
+      true,
+      async () => {
+        showLoading('Cleaning', `Deleting ${count}…`);
+        let done = 0;
+        try {
+          const list = [...S.expiredDeployments];
+          for (const d of list) {
+            await apiFetch(API_HOST + '?action=deployment/delete', {
+              method: 'POST',
+              body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
+            });
+            done++;
+            $('loadingDesc').textContent = `Deleting ${done} of ${count}…`;
+          }
+          S.expiredDeployments = [];
+          hideLoading();
+          closeFiltersOverlay();
+          toast(`Cleaned ${count} deployment${count === 1 ? '' : 's'}`, 'success');
+          applyFiltersAndRender();
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Failed', 'error');
+        }
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SEARCH
+  // ═══════════════════════════════════════════════════════════
+
+  function wireSearch() {
+    const input = $('searchInput');
+    const clear = $('searchClear');
+
+    const doSearch = debounce(() => {
+      S.searchQuery = input.value.trim();
+      renderActiveFilters();
+      applyFiltersAndRender();
+    }, 300);
+
+    input.addEventListener('input', () => {
+      clear.classList.toggle('visible', input.value.length > 0);
+      doSearch();
+    });
+
+    clear.addEventListener('click', () => {
+      input.value = '';
+      clear.classList.remove('visible');
+      S.searchQuery = '';
+      renderActiveFilters();
+      applyFiltersAndRender();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // GLOBAL EVENT WIRING
+  // ═══════════════════════════════════════════════════════════
+
+  function wireGlobalEvents() {
+    // Modal close
+    $('modalOverlay').addEventListener('click', (e) => {
+      if (e.target === $('modalOverlay')) closeModal();
+    });
+    document.addEventListener('click', (e) => {
+      if (e.target.matches('[data-modal-close]')) closeModal();
+    });
+
+    // Action menu close
+    $('actionMenu').addEventListener('click', (e) => {
+      if (e.target === $('actionMenu')) closeActionMenu();
+    });
+
+    // Filters overlay
+    $('filterBtn').addEventListener('click', openFiltersOverlay);
+    $('filtersClose').addEventListener('click', closeFiltersOverlay);
+    $('filtersApply').addEventListener('click', closeFiltersOverlay);
+    $('filtersClearAll').addEventListener('click', () => {
+      S.activeFilters.clear();
+      S.searchQuery = '';
+      $('searchInput').value = '';
+      $('searchClear').classList.remove('visible');
+      renderActiveFilters();
+      applyFiltersAndRender();
+      renderFiltersBody();
+    });
+    $('filtersOverlay').addEventListener('click', (e) => {
+      if (e.target === $('filtersOverlay')) closeFiltersOverlay();
+    });
+
+    // New project button
+    $('newBtn').addEventListener('click', openCreateFlow);
+
+    // Sort button
+    $('sortBtn').addEventListener('click', openFiltersOverlay);
+
+    // Search
+    wireSearch();
+
+    // Keyboard
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if ($('celebration').classList.contains('active')) return;
+        if ($('actionMenu').classList.contains('active')) return closeActionMenu();
+        if ($('modalOverlay').classList.contains('active')) return closeModal();
+        if ($('filtersOverlay').classList.contains('active')) return closeFiltersOverlay();
+      }
+    });
+
+    // Online/offline
+    const updateOnline = () => {
+      $('offlineBanner').classList.toggle('visible', !navigator.onLine);
+    };
+    window.addEventListener('online', () => { updateOnline(); loadProjects(); });
+    window.addEventListener('offline', updateOnline);
+    updateOnline();
+
+    // Hash change
+    window.addEventListener('hashchange', () => {
+      const t = getHashTab();
+      if (t && t !== S.activeTab) {
+        S.activeTab = t;
+        S.activeFilters.clear();
+        renderTabs();
+        renderActiveFilters();
+        applyFiltersAndRender();
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BOOT
+  // ═══════════════════════════════════════════════════════════
+
+  async function boot() {
+    readSession();
+
+    if (!S.session) {
+      window.location.href = '/register?next=' + encodeURIComponent(location.pathname);
+      return;
+    }
+
+    // Initial tab from hash or last
+    const hashTab = getHashTab();
+    if (hashTab) S.activeTab = hashTab;
+    else {
+      try {
+        const last = localStorage.getItem(STORAGE.lastTab);
+        if (TABS.some(t => t.id === last)) S.activeTab = last;
+      } catch {}
+    }
+
+    wireGlobalEvents();
+    renderTabs();
+    await loadProjects();
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+
+})();
+</script>
+
+</body>
+</html>
