@@ -2297,55 +2297,105 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   async function loadProject() {
-    let localProject = null;
-    try { localProject = await IDB.getProject(S.pid); } catch {}
+  let localProject = null;
+  try { localProject = await IDB.getProject(S.pid); } catch {}
 
-    if (/^local_/.test(S.pid)) {
-      if (!localProject) { showFatal('Not found', 'This local project no longer exists.'); return false; }
-      S.project = { ...localProject, myRole: 'owner', visibility: { profile: 'private' } };
-      S.isLocalOnly = true;
+  // ── Local project (guest-created) ──
+  if (/^local_/.test(S.pid)) {
+    if (!localProject) {
+      showFatal('Not found', 'This local project no longer exists.');
+      return false;
+    }
+    S.project = {
+      ...localProject,
+      myRole: 'owner',
+      visibility: localProject.visibility || { profile: 'private' },
+    };
+    S.isLocalOnly = true;
+    applyProjectMeta();
+    return true;
+  }
+
+  // ── Server project — try the server first ──
+  if (S.session && S.online) {
+    const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
+
+    if (res.ok && res.data?.success) {
+      const norm = normalizeServerProject(res.data.project);
+      try { await IDB.putProject({ ...norm, myRole: norm.myRole || res.data.project.myRole }); } catch {}
+      S.project = { ...res.data.project, ...norm, myRole: res.data.project.myRole || 'viewer' };
+      S.isLocalOnly = false;
+      cacheProject(S.project);
       applyProjectMeta();
       return true;
     }
 
-    if (S.session && S.online) {
-      const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
-      if (res.ok && res.data?.success) {
-        const norm = normalizeServerProject(res.data.project);
-        await IDB.putProject(norm);
-        S.project = { ...res.data.project, ...norm };
+    if (res.status === 401) {
+      toast('Session expired — signing in again', 'warning', 3200);
+      setTimeout(() => {
+        window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
+      }, 1200);
+      return false;
+    }
+
+    if (res.status === 404 || res.status === 403) {
+      // Server doesn't have it (or we can't access it). If we have a local
+      // record with an owner role, trust it — this is the case where a
+      // project was created locally but not yet synced to the server.
+      if (localProject) {
+        const inferredRole = localProject.myRole
+          || (localProject._server ? 'viewer' : 'owner');
+        S.project = {
+          ...localProject,
+          myRole: inferredRole,
+          visibility: localProject.visibility || { profile: 'private' },
+        };
         S.isLocalOnly = false;
-        cacheProject(S.project);
         applyProjectMeta();
+        toast(
+          res.status === 404
+            ? 'Showing local copy — project not yet on server'
+            : 'Showing cached data',
+          'warning',
+          3000
+        );
         return true;
       }
-      if (res.status === 401) {
-        toast('Session expired — signing in again', 'warning', 3200);
-        setTimeout(() => {
-          window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
-        }, 1200);
-        return false;
-      }
-      if (res.status === 404 || res.status === 403) {
-        if (localProject) { S.project = localProject; applyProjectMeta(); toast('Showing cached data', 'warning'); return true; }
-        showFatal('Project not found', 'This project may have been deleted or you don\'t have access.');
-        return false;
-      }
+      showFatal('Project not found', 'This project may have been deleted or you don\'t have access.');
+      return false;
     }
 
-    if (localProject) {
-      S.project = localProject;
-      S.isLocalOnly = true;
-      applyProjectMeta();
-      if (!S.online) toast('Showing cached data', 'warning');
-      return true;
-    }
-    const cached = readCachedProject();
-    if (cached) { S.project = cached; applyProjectMeta(); toast('Showing cached data', 'warning'); return true; }
-
-    showFatal('Couldn\'t load project', 'Check your connection and try again.');
-    return false;
+    // Other server errors — fall through to cache
+    console.warn('[loadProject] projects/get returned', res.status, res.data);
   }
+
+  // ── Offline or no session — use local cache if we have it ──
+  if (localProject) {
+    const inferredRole = localProject.myRole
+      || (localProject._server ? 'viewer' : 'owner');
+    S.project = {
+      ...localProject,
+      myRole: inferredRole,
+      visibility: localProject.visibility || { profile: 'private' },
+    };
+    S.isLocalOnly = false;
+    applyProjectMeta();
+    if (!S.online) toast('Showing cached data', 'warning');
+    return true;
+  }
+
+  // ── Last resort: localStorage cache ──
+  const cached = readCachedProject();
+  if (cached) {
+    S.project = { ...cached, myRole: cached.myRole || 'viewer' };
+    applyProjectMeta();
+    toast('Showing cached data', 'warning');
+    return true;
+  }
+
+  showFatal('Couldn\'t load project', 'Check your connection and try again.');
+  return false;
+}
 
   function applyProjectMeta() {
     S.role = S.project.myRole || (S.isLocalOnly ? 'owner' : 'viewer');

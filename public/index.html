@@ -2363,20 +2363,99 @@ async function createNewProject() {
   const cleaned = name.trim();
   if (!cleaned) return;
 
-  const pid = S.isGuest ? `local_${Date.now()}` : `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const slug = cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
-  const project = { pid, name: cleaned, slug, createdAt: Date.now(), updatedAt: Date.now() };
-  await db.putProject(project);
+  let pid;
+  let slug;
+  let createdAt = Date.now();
+  let serverProject = null;
 
-  await db.putFile(pid, 'index.html', '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>' + cleaned + '</title>\n</head>\n<body>\n  <h1>' + cleaned + '</h1>\n  <p>Edit this file to get started.</p>\n</body>\n</html>');
-  await db.putFile(pid, 'style.css', 'body {\n  font-family: system-ui, sans-serif;\n  margin: 2rem;\n  background: #0a0c10;\n  color: #e8ecf1;\n}\n');
-  await db.putFile(pid, 'app.js', "console.log('Hello from " + cleaned + "');\n");
+  if (S.isGuest) {
+    // Guest path — local-only, no server call
+    pid = `local_${Date.now()}`;
+    slug = cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
+  } else {
+    // Signed in — create on the server first
+    const res = await apiFetch(API_HOST + '?action=projects/create', {
+      method: 'POST',
+      body: JSON.stringify({ name: cleaned, description: '' }),
+    });
+    if (!res.ok || !res.data?.success) {
+      toast(res.data?.error || 'Could not create project', 'error');
+      return;
+    }
+    serverProject = res.data.project || null;
+    pid = res.data.pid;
+    slug = serverProject?.slug || cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
+    createdAt = serverProject?.createdAt
+      ? (typeof serverProject.createdAt === 'number' ? serverProject.createdAt : new Date(serverProject.createdAt).getTime())
+      : Date.now();
+  }
+
+  const project = {
+    pid,
+    name: cleaned,
+    slug,
+    description: '',
+    iconUrl: null,
+    createdAt,
+    updatedAt: Date.now(),
+    myRole: 'owner',
+    _server: !S.isGuest,
+  };
+
+  try {
+    await db.putProject(project);
+  } catch (err) {
+    console.error('[CreateProject] putProject failed:', err);
+    toast('Could not save project locally', 'error');
+    return;
+  }
+
+  const indexHtml = '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>' + cleaned + '</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>' + cleaned + '</h1>\n  <p>Edit this file to get started.</p>\n  <script src="app.js"><' + '/script>\n</body>\n</html>';
+  const styleCss = 'body {\n  font-family: system-ui, sans-serif;\n  margin: 2rem;\n  background: #0a0c10;\n  color: #e8ecf1;\n}\n';
+  const appJs = "console.log('Hello from " + cleaned.replace(/'/g, "\\'") + "');\n";
+
+  try {
+    await db.putFile(pid, 'index.html', indexHtml);
+    await db.putFile(pid, 'style.css', styleCss);
+    await db.putFile(pid, 'app.js', appJs);
+  } catch (err) {
+    console.error('[CreateProject] putFile failed:', err);
+  }
+
+  // Push seed files to server (signed-in path only)
+  if (!S.isGuest && S.online) {
+    try {
+      const sync = await apiFetch(API_HOST + '?action=project/sync-back', {
+        method: 'POST',
+        body: JSON.stringify({
+          pid,
+          files: {
+            'index.html': indexHtml,
+            'style.css': styleCss,
+            'app.js': appJs,
+          },
+        }),
+      });
+      if (!sync.ok || !sync.data?.success) {
+        console.warn('[CreateProject] sync-back responded with error:', sync.status, sync.data);
+        toast('Project created, but files not synced to server', 'warning', 4000);
+      }
+    } catch (err) {
+      console.warn('[CreateProject] sync-back network error:', err);
+      toast('Project created, but files not synced to server', 'warning', 4000);
+    }
+  }
 
   toast(S.isGuest ? `Created ${cleaned} (local)` : `Created ${cleaned}`, 'success');
-  await workspace.openProject(project);
-  setPidInUrl(project.pid);
-  renderSidebar();
-  renderEmptyRecent();
+  try {
+    await workspace.openProject(project);
+    setPidInUrl(project.pid);
+    renderSidebar();
+    renderEmptyRecent();
+  } catch (err) {
+    console.error('[CreateProject] openProject failed:', err);
+    toast('Project created, but could not open editor', 'warning');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
