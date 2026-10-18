@@ -869,7 +869,21 @@ async function handleProjectsDelete(req, res, reqId) {
     return res.status(500).json({ success: false, error: "Could not delete project" });
   }
 }
-
+async function callNotify(type, uid, payload) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/notify?action=create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ADMIN_API_KEY || "",
+      },
+      body: JSON.stringify({ type, uid, ...payload }),
+    });
+    if (!res.ok) log("host.notify_failed", { type, uid, status: res.status });
+  } catch (err) {
+    log("host.notify_error", { type, uid, message: err.message });
+  }
+}
 // =========================================================================
 // DEPLOY (DB-only — no external host)
 // =========================================================================
