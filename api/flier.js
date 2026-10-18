@@ -67,7 +67,7 @@ const IMAGE_UPLOAD_API =
 
 const ALLOWED_DOMAINS = [
   "folios",
-  "folios.vercel.app",
+  "foliostudios.vercel.app",
   "folio.vercel.app",
   "folios.app",
   "folio.app",
