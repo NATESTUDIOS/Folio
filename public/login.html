@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Sign in — Folio</title>
+<meta name="description" content="Sign in to Folio to deploy projects, share your work, and sync across devices. Your local projects stay on this device either way.">
+<meta name="theme-color" content="#0a0c10" id="metaThemeColor">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+<meta name="application-name" content="Folio">
+
+<meta name="folio-base-url" content="https://foliostudios.vercel.app">
+
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<script>
+(function() {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    var resolved = pref;
+    if (pref === "auto") {
+      resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+    }
+    if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   TOKENS
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #0a0c10;
+  --bg-soft: #0f1218;
+  --bg-card: #151922;
+  --bg-input: #1a1f2a;
+  --border-faint: #1a1f27;
+  --border: #222831;
+  --border-strong: #2d3440;
+  --text: #e8ecf1;
+  --text-soft: #a8b0bc;
+  --text-muted: #6b7280;
+  --text-faint: #4a5060;
+  --accent: #F59E0B;
+  --accent-hover: #D97706;
+  --accent-soft: rgba(245, 158, 11, 0.14);
+  --accent-glow: rgba(245, 158, 11, 0.30);
+  --success: #10B981;
+  --success-soft: rgba(16, 185, 129, 0.14);
+  --danger: #EF4444;
+  --danger-soft: rgba(239, 68, 68, 0.14);
+  --warning: #D97706;
+  --warning-soft: rgba(217, 119, 6, 0.14);
+  --info: #3B82F6;
+  --info-soft: rgba(59, 130, 246, 0.14);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+[data-theme="light"] {
+  --bg: #f7f8fa;
+  --bg-soft: #eef0f4;
+  --bg-card: #ffffff;
+  --bg-input: #f0f2f6;
+  --border-faint: #e8ebf0;
+  --border: #dce0e7;
+  --border-strong: #b9c0cc;
+  --text: #0f1218;
+  --text-soft: #3d4654;
+  --text-muted: #6b7280;
+  --text-faint: #9aa2ae;
+  --accent: #D97706;
+  --accent-hover: #B45309;
+  --accent-soft: rgba(217, 119, 6, 0.12);
+  --accent-glow: rgba(217, 119, 6, 0.25);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESET
+   ═══════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  min-height: 100%;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+button, input {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+button {
+  cursor: pointer;
+  user-select: none;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PAGE
+   ═══════════════════════════════════════════════════════════════════ */
+
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  padding-top: calc(var(--space-4) + var(--safe-top));
+  padding-bottom: calc(var(--space-4) + var(--safe-bottom));
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(245, 158, 11, 0.06) 0%, transparent 50%),
+    var(--bg);
+}
+
+[data-theme="light"] .page {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(217, 119, 6, 0.05) 0%, transparent 50%),
+    var(--bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+@media (min-width: 640px) {
+  .card {
+    padding: var(--space-6);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BRAND
+   ═══════════════════════════════════════════════════════════════════ */
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+.brand-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bg);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+}
+
+.brand-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--text);
+}
+
+.brand-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  max-width: 320px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TABS
+   ═══════════════════════════════════════════════════════════════════ */
+
+.tabs {
+  display: flex;
+  padding: 4px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  gap: 4px;
+}
+
+.tab {
+  flex: 1;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
+  background: transparent;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FORM
+   ═══════════════════════════════════════════════════════════════════ */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.form[hidden] {
+  display: none;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-soft);
+  letter-spacing: 0.2px;
+}
+
+.label-optional {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  width: 100%;
+  height: 44px;
+  padding: 0 var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 16px;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+@media (min-width: 1024px) {
+  .input {
+    height: 40px;
+    font-size: 14px;
+  }
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+.input::placeholder {
+  color: var(--text-faint);
+}
+
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.input.invalid {
+  border-color: var(--danger);
+}
+
+.input-wrap .input {
+  padding-right: 44px;
+}
+
+.input-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+
+.input-toggle:hover {
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.input-toggle svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.error {
+  font-size: 12px;
+  color: var(--danger);
+  line-height: 1.4;
+  display: none;
+}
+
+.error.visible {
+  display: block;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BUTTON
+   ═══════════════════════════════════════════════════════════════════ */
+
+.btn {
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  transition: background var(--duration-fast) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out);
+  position: relative;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn.loading {
+  color: transparent;
+  pointer-events: none;
+}
+
+.btn.loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 2px solid var(--bg);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ALERT
+   ═══════════════════════════════════════════════════════════════════ */
+
+.alert {
+  display: none;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.45;
+  border: 1px solid transparent;
+}
+
+.alert.visible {
+  display: flex;
+}
+
+.alert svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.alert-error {
+  background: var(--danger-soft);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: var(--danger);
+}
+
+.alert-warning {
+  background: var(--warning-soft);
+  border-color: rgba(217, 119, 6, 0.3);
+  color: var(--warning);
+}
+
+.alert-success {
+  background: var(--success-soft);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: var(--success);
+}
+
+.alert-info {
+  background: var(--info-soft);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--info);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════════════════════════════ */
+
+.footer {
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.footer a {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════════════════════════ */
+
+.toast-container {
+  position: fixed;
+  bottom: calc(var(--space-5) + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  pointer-events: none;
+  width: calc(100% - 32px);
+  max-width: 420px;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: auto;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: transform var(--duration-base) var(--ease-out),
+              opacity var(--duration-base) var(--ease-out);
+}
+
+.toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.toast-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+
+.toast-info .toast-dot { background: var(--info); }
+.toast-success .toast-dot { background: var(--accent); }
+.toast-warning .toast-dot { background: var(--warning); }
+.toast-error .toast-dot { background: var(--danger); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   HIDDEN
+   ═══════════════════════════════════════════════════════════════════ */
+
+[hidden] {
+  display: none !important;
+}
+</style>
+</head>
+<body>
+
+<main class="page">
+  <div class="card">
+    <div class="brand">
+      <div class="brand-logo">F</div>
+      <h1 class="brand-title">Welcome to Folio</h1>
+      <p class="brand-desc">Code in your pocket. Sign in to deploy projects, share your work, and sync across devices.</p>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" id="tabLogin" role="tab" aria-selected="true" data-tab="login" type="button">Sign in</button>
+      <button class="tab" id="tabRegister" role="tab" aria-selected="false" data-tab="register" type="button">Create account</button>
+    </div>
+
+    <div class="alert alert-error" id="globalError" role="alert">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span id="globalErrorText"></span>
+    </div>
+
+    <div class="alert alert-warning" id="rateLimitError" role="alert">
+      <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span id="rateLimitErrorText"></span>
+    </div>
+
+    <!-- ══ LOGIN FORM ══ -->
+    <form class="form" id="formLogin" novalidate>
+      <div class="field">
+        <label class="label" for="loginIdentifier">Email or username</label>
+        <input class="input" type="text" id="loginIdentifier" name="identifier" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="you@example.com or yourhandle" required>
+        <div class="error" id="loginIdentifierError"></div>
+      </div>
+
+      <div class="field">
+        <label class="label" for="loginPassword">Password</label>
+        <div class="input-wrap">
+          <input class="input" type="password" id="loginPassword" name="password" autocomplete="current-password" placeholder="Your password" required>
+          <button class="input-toggle" type="button" data-toggle-password="loginPassword" aria-label="Show password">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="error" id="loginPasswordError"></div>
+      </div>
+
+      <button class="btn btn-primary" type="submit" id="loginSubmit">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        Sign in
+      </button>
+
+      <p class="footer">
+        New to Folio? <a href="#" id="switchToRegister">Create an account</a>
+      </p>
+    </form>
+
+    <!-- ══ REGISTER FORM ══ -->
+    <form class="form" id="formRegister" novalidate hidden>
+      <div class="field">
+        <label class="label" for="registerEmail">Email</label>
+        <input class="input" type="email" id="registerEmail" name="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="you@example.com" inputmode="email" required>
+        <div class="error" id="registerEmailError"></div>
+      </div>
+
+      <div class="field">
+        <label class="label" for="registerUsername">Username <span class="label-optional">(optional)</span></label>
+        <input class="input" type="text" id="registerUsername" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="yourhandle" pattern="[a-z0-9_-]{3,30}" maxlength="30">
+        <p class="hint">3–30 characters. Letters, numbers, hyphens, underscores. If your pick is taken, we'll add a number.</p>
+        <div class="error" id="registerUsernameError"></div>
+      </div>
+
+      <div class="field">
+        <label class="label" for="registerPassword">Password</label>
+        <div class="input-wrap">
+          <input class="input" type="password" id="registerPassword" name="password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required>
+          <button class="input-toggle" type="button" data-toggle-password="registerPassword" aria-label="Show password">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <p class="hint">Must be 8–128 characters and include at least one letter and one number.</p>
+        <div class="error" id="registerPasswordError"></div>
+      </div>
+
+      <button class="btn btn-primary" type="submit" id="registerSubmit">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+        Create account
+      </button>
+
+      <p class="footer">
+        Already have an account? <a href="#" id="switchToLogin">Sign in</a>
+      </p>
+    </form>
+  </div>
+</main>
+
+<div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ═══════════════════════════════════════════════════════════════════
+     CONFIG
+     ═══════════════════════════════════════════════════════════════════ */
+
+  var BASE_URL =
+    window.__FOLIO_BASE_URL__ ||
+    (document.querySelector('meta[name="folio-base-url"]') || {}).content ||
+    "https://foliostudios.vercel.app";
+
+  var STORAGE_KEY_JWT = "folio.sessionToken";
+  var STORAGE_KEY_DEVICE = "folio.deviceId";
+
+  /* ═══════════════════════════════════════════════════════════════════
+     DOM
+     ═══════════════════════════════════════════════════════════════════ */
+
+  function $(id) { return document.getElementById(id); }
+  function $$(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     HELPERS
+     ═══════════════════════════════════════════════════════════════════ */
+
+  function api(path) {
+    if (path.charAt(0) !== "/") path = "/" + path;
+    return BASE_URL + path;
+  }
+
+  async function apiFetch(path, options) {
+    options = options || {};
+    var headers = options.headers || {};
+    var body = options.body;
+    var finalBody;
+
+    if (body !== undefined) {
+      if (typeof body === "string") {
+        finalBody = body;
+      } else {
+        finalBody = JSON.stringify(body);
+        if (!headers["content-type"]) headers["content-type"] = "application/json";
+      }
+    }
+
+    var res;
+    try {
+      res = await fetch(api(path), {
+        method: options.method || "GET",
+        headers: headers,
+        body: finalBody,
+      });
+    } catch (err) {
+      var netErr = new Error("Network problem. Check your connection.");
+      netErr.status = 0;
+      throw netErr;
+    }
+
+    var data = {};
+    var ct = res.headers.get("content-type") || "";
+    if (ct.indexOf("application/json") !== -1) {
+      data = await res.json().catch(function () { return {}; });
+    } else {
+      var text = await res.text().catch(function () { return ""; });
+      data = { error: text || ("HTTP " + res.status) };
+    }
+
+    if (!res.ok) {
+      var e = new Error(data.error || ("HTTP " + res.status));
+      e.status = res.status;
+      e.data = data;
+      throw e;
+    }
+
+    return data;
+  }
+
+  function rateLimitMessage(err) {
+    if (!err || err.status !== 429) return null;
+    var s = (err.data && err.data.retryAfter) || 60;
+    if (s < 60) return "Too many attempts. Wait " + s + " seconds.";
+    var m = Math.ceil(s / 60);
+    return "Too many attempts. Wait " + m + (m === 1 ? " minute." : " minutes.");
+  }
+
+  function getDeviceId() {
+    try {
+      var id = localStorage.getItem(STORAGE_KEY_DEVICE);
+      if (!id) {
+        id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ("dev_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10));
+        localStorage.setItem(STORAGE_KEY_DEVICE, id);
+      }
+      return id;
+    } catch (e) {
+      return "dev_" + Date.now();
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     TOAST
+     ═══════════════════════════════════════════════════════════════════ */
+
+  var toastQueue = [];
+  var toastActive = false;
+
+  function toast(message, type, duration) {
+    toastQueue.push({ message: message, type: type || "info", duration: duration || 3000 });
+    if (!toastActive) drainToast();
+  }
+
+  function drainToast() {
+    if (toastQueue.length === 0) { toastActive = false; return; }
+    toastActive = true;
+    var next = toastQueue.shift();
+
+    var container = $("toastContainer");
+    var node = document.createElement("div");
+    node.className = "toast toast-" + next.type;
+    node.setAttribute("role", "status");
+    node.innerHTML = '<span class="toast-dot"></span><span class="toast-message"></span>';
+    node.querySelector(".toast-message").textContent = next.message;
+    container.appendChild(node);
+
+    requestAnimationFrame(function () { node.classList.add("show"); });
+
+    setTimeout(function () {
+      node.classList.remove("show");
+      setTimeout(function () {
+        if (node.parentNode) node.parentNode.removeChild(node);
+        drainToast();
+      }, 250);
+    }, next.duration);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     ALERTS
+     ═══════════════════════════════════════════════════════════════════ */
+
+  function showGlobalError(message) {
+    var el = $("globalError");
+    $("globalErrorText").textContent = message;
+    el.classList.add("visible");
+  }
+
+  function hideGlobalError() {
+    $("globalError").classList.remove("visible");
+  }
+
+  function showRateLimit(message) {
+    $("rateLimitErrorText").textContent = message;
+    $("rateLimitError").classList.add("visible");
+  }
+
+  function hideRateLimit() {
+    $("rateLimitError").classList.remove("visible");
+  }
+
+  function showFieldError(fieldId, message) {
+    var errorEl = $(fieldId + "Error");
+    var inputEl = $(fieldId);
+    if (errorEl) {
+      errorEl.textContent = message;
+      errorEl.classList.add("visible");
+    }
+    if (inputEl) {
+      inputEl.classList.add("invalid");
+    }
+  }
+
+  function clearFieldError(fieldId) {
+    var errorEl = $(fieldId + "Error");
+    var inputEl = $(fieldId);
+    if (errorEl) {
+      errorEl.textContent = "";
+      errorEl.classList.remove("visible");
+    }
+    if (inputEl) {
+      inputEl.classList.remove("invalid");
+    }
+  }
+
+  function clearAllErrors() {
+    hideGlobalError();
+    hideRateLimit();
+    ["loginIdentifier", "loginPassword", "registerEmail", "registerUsername", "registerPassword"].forEach(clearFieldError);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     VALIDATION — matches backend rules
+     ═══════════════════════════════════════════════════════════════════ */
+
+  function validateEmail(email) {
+    if (!email || email.length > 254) return "Enter a valid email address";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address";
+    return null;
+  }
+
+  function validatePassword(password) {
+    if (typeof password !== "string") return "Password must be a string";
+    if (password.length < 8) return "Password must be at least 8 characters";
+    if (password.length > 128) return "Password must be at most 128 characters";
+    if (!/\p{L}/u.test(password)) return "Password must contain a letter";
+    if (!/\p{N}/u.test(password)) return "Password must contain a number";
+    return null;
+  }
+
+  function validateUsername(username) {
+    if (!username) return null;
+    if (!/^[a-z0-9_-]{3,30}$/.test(username)) {
+      return "Use 3–30 characters: a-z, 0-9, hyphen, underscore";
+    }
+    return null;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     TAB SWITCHING
+     ═══════════════════════════════════════════════════════════════════ */
+
+  function switchTab(tab) {
+    var isLogin = tab === "login";
+    $("tabLogin").classList.toggle("active", isLogin);
+    $("tabLogin").setAttribute("aria-selected", String(isLogin));
+    $("tabRegister").classList.toggle("active", !isLogin);
+    $("tabRegister").setAttribute("aria-selected", String(!isLogin));
+    $("formLogin").hidden = !isLogin;
+    $("formRegister").hidden = isLogin;
+    clearAllErrors();
+
+    // Update URL without reload
+    try {
+      var url = new URL(window.location.href);
+      if (isLogin) url.searchParams.delete("mode");
+      else url.searchParams.set("mode", "register");
+      history.replaceState({}, "", url.toString());
+    } catch (e) {}
+
+    // Focus first input
+    setTimeout(function () {
+      var firstInput = isLogin ? $("loginIdentifier") : $("registerEmail");
+      if (firstInput) firstInput.focus();
+    }, 50);
+  }
+
+  $("tabLogin").addEventListener("click", function () { switchTab("login"); });
+  $("tabRegister").addEventListener("click", function () { switchTab("register"); });
+
+  var switchToRegister = $("switchToRegister");
+  if (switchToRegister) {
+    switchToRegister.addEventListener("click", function (e) {
+      e.preventDefault();
+      switchTab("register");
+    });
+  }
+
+  var switchToLogin = $("switchToLogin");
+  if (switchToLogin) {
+    switchToLogin.addEventListener("click", function (e) {
+      e.preventDefault();
+      switchTab("login");
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     PASSWORD TOGGLE
+     ═══════════════════════════════════════════════════════════════════ */
+
+  $$("[data-toggle-password]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var inputId = btn.getAttribute("data-toggle-password");
+      var input = $(inputId);
+      if (!input) return;
+      var isPassword = input.type === "password";
+      input.type = isPassword ? "text" : "password";
+      btn.setAttribute("aria-label", isPassword ? "Hide password" : "Show password");
+      btn.innerHTML = isPassword
+        ? '<svg viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+        : '<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    });
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════
+     LOGIN SUBMIT
+     ═══════════════════════════════════════════════════════════════════ */
+
+  $("formLogin").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    clearAllErrors();
+
+    var identifier = $("loginIdentifier").value.trim();
+    var password = $("loginPassword").value;
+
+    var hasError = false;
+    if (!identifier) {
+      showFieldError("loginIdentifier", "Enter your email or username");
+      hasError = true;
+    }
+    if (!password) {
+      showFieldError("loginPassword", "Enter your password");
+      hasError = true;
+    }
+    if (hasError) return;
+
+    var btn = $("loginSubmit");
+    btn.disabled = true;
+    btn.classList.add("loading");
+
+    try {
+      var data = await apiFetch("/api/auth?action=login", {
+        method: "POST",
+        body: {
+          identifier: identifier,
+          password: password,
+          deviceId: getDeviceId(),
+        },
+      });
+
+      if (!data.sessionToken) {
+        throw new Error("Sign-in didn't return a session. Please try again.");
+      }
+
+      try {
+        localStorage.setItem(STORAGE_KEY_JWT, data.sessionToken);
+      } catch (e) {
+        throw new Error("Your browser blocked local storage. Enable it to sign in.");
+      }
+
+      toast("Signed in. Welcome back!", "success", 2000);
+
+      var next = getNextPath();
+      setTimeout(function () { window.location.href = next; }, 400);
+    } catch (err) {
+      btn.disabled = false;
+      btn.classList.remove("loading");
+
+      if (err.status === 429) {
+        var limit = rateLimitMessage(err);
+        showRateLimit(limit || "Too many attempts. Try again later.");
+        return;
+      }
+
+      if (err.status === 403) {
+        showGlobalError("This account is suspended. Contact support if you think this is a mistake.");
+        return;
+      }
+
+      if (err.status === 401) {
+        showGlobalError("That email/username or password doesn't match. Try again.");
+        return;
+      }
+
+      if (err.status === 0) {
+        showGlobalError("Network problem. Check your connection and try again.");
+        return;
+      }
+
+      showGlobalError(err.message || "Couldn't sign in. Please try again.");
+    }
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════
+     REGISTER SUBMIT
+     ═══════════════════════════════════════════════════════════════════ */
+
+  $("formRegister").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    clearAllErrors();
+
+    var email = $("registerEmail").value.trim().toLowerCase();
+    var username = $("registerUsername").value.trim().toLowerCase();
+    var password = $("registerPassword").value;
+
+    var hasError = false;
+
+    var emailErr = validateEmail(email);
+    if (emailErr) {
+      showFieldError("registerEmail", emailErr);
+      hasError = true;
+    }
+
+    var usernameErr = validateUsername(username);
+    if (usernameErr) {
+      showFieldError("registerUsername", usernameErr);
+      hasError = true;
+    }
+
+    var passwordErr = validatePassword(password);
+    if (passwordErr) {
+      showFieldError("registerPassword", passwordErr);
+      hasError = true;
+    }
+
+    if (hasError) return;
+
+    var btn = $("registerSubmit");
+    btn.disabled = true;
+    btn.classList.add("loading");
+
+    try {
+      var body = {
+        email: email,
+        password: password,
+        deviceId: getDeviceId(),
+      };
+      if (username) body.username = username;
+
+      var data = await apiFetch("/api/auth?action=register", {
+        method: "POST",
+        body: body,
+      });
+
+      if (!data.sessionToken) {
+        throw new Error("Account created but sign-in failed. Please sign in manually.");
+      }
+
+      try {
+        localStorage.setItem(STORAGE_KEY_JWT, data.sessionToken);
+      } catch (e) {
+        throw new Error("Your browser blocked local storage. Enable it to sign in.");
+      }
+
+      if (data.usernameModified && data.requestedUsername !== data.username) {
+        toast("Welcome! Your username is @" + data.username + " (" + data.requestedUsername + " was taken)", "success", 4500);
+      } else {
+        toast("Welcome to Folio!", "success", 2000);
+      }
+
+      var next = getNextPath();
+      setTimeout(function () { window.location.href = next; }, 500);
+    } catch (err) {
+      btn.disabled = false;
+      btn.classList.remove("loading");
+
+      if (err.status === 429) {
+        var limit = rateLimitMessage(err);
+        showRateLimit(limit || "Too many attempts. Try again later.");
+        return;
+      }
+
+      if (err.status === 409) {
+        var msg = err.message || "";
+        if (/email/i.test(msg)) {
+          showFieldError("registerEmail", "This email is already registered. Sign in instead.");
+        } else if (/username/i.test(msg)) {
+          showFieldError("registerUsername", "That username is taken. Try another.");
+        } else {
+          showGlobalError(msg || "This account already exists.");
+        }
+        return;
+      }
+
+      if (err.status === 400) {
+        var message = err.message || "Please check your details.";
+        if (/email/i.test(message)) {
+          showFieldError("registerEmail", message);
+        } else if (/password/i.test(message)) {
+          showFieldError("registerPassword", message);
+        } else if (/username/i.test(message)) {
+          showFieldError("registerUsername", message);
+        } else {
+          showGlobalError(message);
+        }
+        return;
+      }
+
+      if (err.status === 0) {
+        showGlobalError("Network problem. Check your connection and try again.");
+        return;
+      }
+
+      showGlobalError(err.message || "Couldn't create your account. Please try again.");
+    }
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════
+     NEXT PATH
+     ═══════════════════════════════════════════════════════════════════ */
+
+  function getNextPath() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var next = params.get("next");
+      if (!next) return "/app";
+      // Only allow internal paths to prevent open redirect
+      if (next.charAt(0) !== "/" || next.charAt(1) === "/") return "/app";
+      return next;
+    } catch (e) {
+      return "/app";
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     LIVE INPUT CLEARING
+     ═══════════════════════════════════════════════════════════════════ */
+
+  ["loginIdentifier", "loginPassword", "registerEmail", "registerUsername", "registerPassword"].forEach(function (id) {
+    var input = $(id);
+    if (!input) return;
+    input.addEventListener("input", function () {
+      clearFieldError(id);
+      hideGlobalError();
+      hideRateLimit();
+    });
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════
+     INITIAL STATE FROM URL
+     ═══════════════════════════════════════════════════════════════════ */
+
+  try {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "register") {
+      switchTab("register");
+    } else {
+      // Auto-focus identifier
+      setTimeout(function () {
+        var el = $("loginIdentifier");
+        if (el) el.focus();
+      }, 100);
+    }
+  } catch (e) {}
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Folio</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0a0c10" id="metaThemeColor">
+
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/pages.css">
+
+<script>
+(function() {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    var resolved = pref;
+    if (pref === "auto") {
+      resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+    }
+    if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<noscript>
+  <meta http-equiv="refresh" content="0;url=/projects">
+</noscript>
+
+<script>
+  window.location.replace("/projects");
+</script>
+</head>
+<body>
+
+<div class="redirect-container">
+  <div class="redirect-content">
+    <div class="redirect-spinner" aria-hidden="true"></div>
+    <p class="redirect-message">Redirecting to projects…</p>
+    <a href="/projects" class="btn btn-primary" style="margin-top:8px">Go to projects</a>
+  </div>
+</div>
+
+</body>
+</html>
