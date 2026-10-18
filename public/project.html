@@ -1,0 +1,3370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Folio — Project</title>
+<meta name="description" content="Manage your Folio project.">
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png" id="pageFavicon">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === "light") document.documentElement.setAttribute("data-theme", "light");
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --theme-primary: #F59E0B;
+  --theme-primary-hover: #fbbf24;
+  --theme-primary-glow: rgba(245, 158, 11, 0.40);
+  --theme-primary-soft: rgba(245, 158, 11, 0.14);
+
+  --theme-bg: #0a0c10;
+  --theme-surface: #0f1218;
+  --theme-surface-card: rgba(21, 25, 34, 0.72);
+  --theme-surface-card-solid: #151922;
+  --theme-surface-elevated: #1a1f2a;
+  --theme-text: #e8ecf1;
+  --theme-text-secondary: rgba(232, 236, 241, 0.72);
+  --theme-text-tertiary: rgba(232, 236, 241, 0.44);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.05);
+  --theme-glass-border: rgba(255, 255, 255, 0.09);
+  --theme-overlay: rgba(10, 12, 16, 0.82);
+  --theme-card-border: rgba(255, 255, 255, 0.08);
+  --theme-divider: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(26, 31, 42, 0.88);
+
+  --theme-success: #10B981;
+  --theme-success-soft: rgba(16, 185, 129, 0.14);
+  --theme-danger: #EF4444;
+  --theme-danger-soft: rgba(239, 68, 68, 0.12);
+  --theme-warning: #D97706;
+  --theme-warning-soft: rgba(217, 119, 6, 0.14);
+  --theme-info: #3B82F6;
+  --theme-info-soft: rgba(59, 130, 246, 0.14);
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.10) 0%, transparent 55%);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --sidebar-width: 260px;
+  --content-max: 1080px;
+
+  --r-xs: 6px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', Consolas, Monaco, monospace;
+}
+
+[data-theme="light"] {
+  --theme-primary: #D97706;
+  --theme-primary-hover: #B45309;
+  --theme-primary-glow: rgba(217, 119, 6, 0.28);
+  --theme-primary-soft: rgba(217, 119, 6, 0.10);
+
+  --theme-bg: #f7f8fa;
+  --theme-surface: #ffffff;
+  --theme-surface-card: rgba(255, 255, 255, 0.85);
+  --theme-surface-card-solid: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-text: #121316;
+  --theme-text-secondary: rgba(18, 19, 22, 0.72);
+  --theme-text-tertiary: rgba(18, 19, 22, 0.48);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.75);
+  --theme-glass-border: rgba(0, 0, 0, 0.08);
+  --theme-overlay: rgba(18, 19, 22, 0.48);
+  --theme-card-border: rgba(0, 0, 0, 0.07);
+  --theme-divider: rgba(0, 0, 0, 0.06);
+  --input-bg: #ffffff;
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(217, 119, 6, 0.08) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: var(--theme-bg);
+  font-family: var(--font);
+  color: var(--theme-text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
+  background-attachment: fixed;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border: none; background: none; padding: 0; }
+a { color: var(--theme-primary); text-decoration: none; }
+svg { display: block; }
+.hidden { display: none !important; }
+.mono { font-family: var(--font-mono); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   APP SHELL
+   ═══════════════════════════════════════════════════════════ */
+.app {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.sidebar {
+  display: none;
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-glass-border);
+  padding: calc(20px + var(--safe-top)) 16px calc(20px + var(--safe-bottom));
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+}
+@media (min-width: 1024px) { .sidebar { display: flex; } }
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 20px;
+  border-bottom: 1px solid var(--theme-divider);
+  margin-bottom: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.sidebar-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-primary);
+}
+.sidebar-logo img { width: 100%; height: 100%; object-fit: cover; }
+.sidebar-logo svg { width: 20px; height: 20px; stroke-width: 2; }
+
+.sidebar-brand-text {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  line-height: 1.1;
+}
+.sidebar-brand-text .sub {
+  display: block;
+  font-size: 10px;
+  color: var(--theme-primary);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.sidebar-project {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--theme-surface-card);
+  border: 1px solid var(--theme-card-border);
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+.sidebar-project-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--theme-surface-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-primary);
+  font-weight: 800;
+  font-size: 14px;
+  border: 1px solid var(--theme-glass-border);
+}
+.sidebar-project-icon img { width: 100%; height: 100%; object-fit: cover; }
+
+.sidebar-project-info { min-width: 0; flex: 1; }
+.sidebar-project-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--theme-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-project-role {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--theme-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 1px;
+}
+
+.sidebar-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+  padding-top: 4px;
+}
+
+.sidebar-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  color: var(--theme-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  transition: all 0.2s var(--ease);
+  text-align: left;
+  width: 100%;
+}
+.sidebar-tab svg { width: 16px; height: 16px; stroke-width: 2.2; stroke: currentColor; fill: none; flex-shrink: 0; }
+.sidebar-tab:hover {
+  background: var(--theme-glass-bg);
+  color: var(--theme-text);
+}
+.sidebar-tab.active {
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  border-color: var(--theme-primary-glow);
+}
+.sidebar-tab-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--theme-divider);
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+}
+.sidebar-tab.active .sidebar-tab-badge {
+  background: var(--theme-primary);
+  color: #0a0c10;
+}
+
+.sidebar-footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--theme-divider);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-footer-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--theme-text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s var(--ease);
+}
+.sidebar-footer-link:hover { color: var(--theme-text); background: var(--theme-glass-bg); }
+.sidebar-footer-link svg { width: 14px; height: 14px; stroke-width: 2.2; fill: none; stroke: currentColor; }
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN
+   ═══════════════════════════════════════════════════════════ */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-bottom: calc(var(--safe-bottom) + 24px);
+}
+
+.main-header {
+  padding: calc(16px + var(--safe-top)) 16px 12px;
+  border-bottom: 1px solid var(--theme-divider);
+  background: var(--theme-surface);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+@media (min-width: 1024px) {
+  .main-header { padding: 20px 24px 16px; }
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.header-back-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s var(--ease);
+}
+.header-back-btn:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.header-back-btn svg { width: 16px; height: 16px; stroke-width: 2.4; }
+
+.header-project-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--theme-surface-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-primary);
+  font-weight: 800;
+  font-size: 16px;
+  border: 1px solid var(--theme-glass-border);
+  position: relative;
+}
+.header-project-icon img { width: 100%; height: 100%; object-fit: cover; }
+.header-project-icon .edit-icon-hint {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  cursor: pointer;
+  border-radius: inherit;
+}
+.header-project-icon:hover .edit-icon-hint { opacity: 1; }
+.header-project-icon .edit-icon-hint svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+.header-title-wrap { flex: 1; min-width: 0; }
+.header-title {
+  font-size: clamp(17px, 3vw, 20px);
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  color: var(--theme-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  margin-bottom: 3px;
+}
+.header-sub {
+  font-size: 11.5px;
+  color: var(--theme-text-tertiary);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.header-role-badge {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.header-deploy-badge {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--theme-success-soft);
+  color: var(--theme-success);
+  font-size: 10px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.header-deploy-badge .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.header-deploy-badge.offline {
+  background: var(--theme-divider);
+  color: var(--theme-text-tertiary);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s var(--ease);
+  flex-shrink: 0;
+}
+.icon-btn:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.icon-btn:active { transform: scale(0.94); }
+.icon-btn svg { width: 16px; height: 16px; stroke-width: 2.2; stroke: currentColor; fill: none; }
+
+/* Mobile tabs — horizontal scroll */
+.mobile-tabs-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px 0 0;
+  margin: 0 -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.mobile-tabs-scroll::-webkit-scrollbar { display: none; }
+@media (min-width: 1024px) { .mobile-tabs-scroll { display: none; } }
+
+.mobile-tab-pill {
+  padding: 7px 14px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s var(--ease);
+}
+.mobile-tab-pill:hover { border-color: var(--theme-primary-glow); color: var(--theme-text); }
+.mobile-tab-pill.active {
+  background: var(--theme-primary);
+  color: #0a0c10;
+  border-color: var(--theme-primary);
+}
+.mobile-tab-pill-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.15);
+}
+.mobile-tab-pill.active .mobile-tab-pill-badge {
+  background: rgba(0,0,0,0.2);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PANEL CONTAINER
+   ═══════════════════════════════════════════════════════════ */
+.panel-wrap {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 16px;
+}
+@media (min-width: 1024px) { .panel-wrap { padding: 24px; } }
+
+.panel {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+  animation: panelIn 0.28s var(--ease);
+}
+.panel.active { display: flex; }
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARDS
+   ═══════════════════════════════════════════════════════════ */
+.card {
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+}
+.card-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--theme-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-title svg { width: 15px; height: 15px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; }
+.card-body { padding: 16px; }
+.card-body.tight { padding: 12px 16px; }
+
+.card-danger {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.card-danger .card-header {
+  border-bottom-color: rgba(239, 68, 68, 0.2);
+}
+.card-danger .card-title svg { stroke: var(--theme-danger); }
+
+/* Stats grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 640px) { .stats-grid { grid-template-columns: repeat(4, 1fr); } }
+
+.stat-tile {
+  padding: 14px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+.stat-value.warn { color: var(--theme-warning); }
+.stat-value.danger { color: var(--theme-danger); }
+.stat-value.success { color: var(--theme-success); }
+.stat-hint {
+  font-size: 11px;
+  color: var(--theme-text-tertiary);
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FORMS & INPUTS
+   ═══════════════════════════════════════════════════════════ */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.field-hint {
+  font-size: 11px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.4;
+}
+.field-error {
+  font-size: 11.5px;
+  color: var(--theme-danger);
+  line-height: 1.4;
+}
+
+.input, .textarea, .select {
+  width: 100%;
+  padding: 11px 13px;
+  background: var(--input-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  color: var(--theme-text);
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.input:focus, .textarea:focus, .select:focus {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 3px var(--theme-primary-soft);
+}
+.input::placeholder, .textarea::placeholder { color: var(--theme-text-tertiary); }
+.textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
+.select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px; }
+.input.mono { font-family: var(--font-mono); font-size: 12px; }
+.input[readonly] { opacity: 0.7; cursor: not-allowed; }
+.input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════════════════════════ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  transition: all 0.2s var(--ease);
+  white-space: nowrap;
+  min-height: 38px;
+  font-family: inherit;
+}
+.btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: var(--theme-primary);
+  color: #0a0c10;
+}
+[data-theme="light"] .btn-primary { color: #ffffff; }
+.btn-primary:hover:not(:disabled) { background: var(--theme-primary-hover); }
+
+.btn-secondary {
+  background: var(--theme-glass-bg);
+  color: var(--theme-text);
+  border-color: var(--theme-card-border);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--theme-surface-elevated); border-color: var(--theme-primary-glow); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--theme-text-secondary);
+  border-color: transparent;
+}
+.btn-ghost:hover:not(:disabled) { color: var(--theme-text); background: var(--theme-glass-bg); }
+
+.btn-danger {
+  background: var(--theme-danger);
+  color: #ffffff;
+}
+.btn-danger:hover:not(:disabled) { background: #dc2626; }
+
+.btn-outline-danger {
+  background: transparent;
+  color: var(--theme-danger);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.btn-outline-danger:hover:not(:disabled) {
+  background: var(--theme-danger-soft);
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+  min-height: 30px;
+  border-radius: 8px;
+}
+.btn-sm svg { width: 12px; height: 12px; }
+
+.btn-block { width: 100%; }
+
+.btn-icon { padding: 8px; min-width: 34px; }
+
+/* ═══════════════════════════════════════════════════════════
+   ROW / LIST
+   ═══════════════════════════════════════════════════════════ */
+.row-list {
+  display: flex;
+  flex-direction: column;
+}
+.row-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--theme-divider);
+  transition: background 0.15s var(--ease);
+}
+.row-item:last-child { border-bottom: none; }
+.row-item:hover { background: var(--theme-glass-bg); }
+
+.row-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--theme-glass-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-secondary);
+  flex-shrink: 0;
+}
+.row-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+
+.row-content { flex: 1; min-width: 0; }
+.row-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--theme-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+.row-sub {
+  font-size: 11px;
+  color: var(--theme-text-tertiary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOGGLE SWITCH
+   ═══════════════════════════════════════════════════════════ */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--theme-divider);
+}
+.toggle-row:last-child { border-bottom: none; }
+
+.toggle-info { min-width: 0; flex: 1; }
+.toggle-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--theme-text);
+  margin-bottom: 2px;
+}
+.toggle-desc {
+  font-size: 11px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.4;
+}
+
+.switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--theme-divider);
+  cursor: pointer;
+  transition: background 0.2s var(--ease);
+  flex-shrink: 0;
+  border: none;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.22s var(--ease);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.switch.on {
+  background: var(--theme-primary);
+}
+.switch.on::after {
+  transform: translateX(18px);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MODAL
+   ═══════════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s var(--ease);
+  padding: 0;
+}
+.modal-overlay.active { opacity: 1; pointer-events: all; }
+@media (min-width: 640px) {
+  .modal-overlay { align-items: center; padding: 20px; }
+}
+
+.modal {
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 24px 24px 0 0;
+  padding: 24px 20px calc(24px + var(--safe-bottom));
+  max-width: 100%;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform 0.3s var(--ease);
+}
+.modal-overlay.active .modal { transform: translateY(0); }
+
+@media (min-width: 640px) {
+  .modal {
+    border-radius: 20px;
+    max-width: 440px;
+    padding: 24px;
+    transform: scale(0.94);
+  }
+  .modal-overlay.active .modal { transform: scale(1); }
+}
+
+.modal-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--theme-glass-border);
+  margin: 0 auto 16px;
+}
+@media (min-width: 640px) { .modal-handle { display: none; } }
+
+.modal-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+.modal-desc {
+  font-size: 13px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+.modal-actions .btn { flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════
+   SKELETONS
+   ═══════════════════════════════════════════════════════════ */
+.skeleton {
+  background: linear-gradient(90deg, var(--theme-divider) 0%, var(--theme-glass-border) 50%, var(--theme-divider) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 8px;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.sk-line { height: 12px; margin-bottom: 6px; }
+.sk-title { height: 18px; width: 60%; margin-bottom: 10px; }
+
+/* ═══════════════════════════════════════════════════════════
+   EMPTY STATE
+   ═══════════════════════════════════════════════════════════ */
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.empty-state-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--theme-glass-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  margin-bottom: 4px;
+}
+.empty-state-icon svg { width: 22px; height: 22px; stroke-width: 2; }
+.empty-state-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+.empty-state-desc {
+  font-size: 12px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.45;
+  max-width: 320px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LOADING OVERLAY
+   ═══════════════════════════════════════════════════════════ */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 800;
+  background: var(--theme-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+}
+.loading-overlay.active { display: flex; }
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--theme-primary-soft);
+  border-top-color: var(--theme-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+.loading-desc {
+  font-size: 12.5px;
+  color: var(--theme-text-secondary);
+  text-align: center;
+  line-height: 1.5;
+  max-width: 320px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: calc(16px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: 92%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+@media (min-width: 1024px) {
+  .toast-container {
+    left: auto;
+    right: 20px;
+    transform: none;
+    bottom: 20px;
+  }
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text);
+  transform: translateY(20px);
+  opacity: 0;
+  transition: all 0.3s var(--ease-spring);
+  pointer-events: all;
+  overflow-wrap: break-word;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast svg { width: 15px; height: 15px; flex-shrink: 0; }
+.toast.success svg { stroke: var(--theme-success); }
+.toast.error svg { stroke: var(--theme-danger); }
+.toast.info svg { stroke: var(--theme-primary); }
+.toast.warning svg { stroke: var(--theme-warning); }
+
+/* ═══════════════════════════════════════════════════════════
+   AVATAR PICKER
+   ═══════════════════════════════════════════════════════════ */
+.icon-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.icon-option {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: var(--theme-surface-elevated);
+  border: 2px solid transparent;
+  overflow: hidden;
+  transition: border-color 0.2s var(--ease), transform 0.15s var(--ease);
+  cursor: pointer;
+  padding: 0;
+}
+.icon-option:hover { transform: scale(1.04); }
+.icon-option.selected {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 3px var(--theme-primary-soft);
+}
+.icon-option img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.icon-skeleton {
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--theme-divider) 0%, var(--theme-glass-border) 50%, var(--theme-divider) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+.icon-placeholder {
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: var(--theme-glass-bg);
+  border: 1px dashed var(--theme-card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  font-size: 10px;
+  text-align: center;
+  padding: 4px;
+  line-height: 1.2;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LOG ENTRIES
+   ═══════════════════════════════════════════════════════════ */
+.log-entry {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--theme-divider);
+  font-size: 12px;
+}
+.log-entry:last-child { border-bottom: none; }
+.log-time {
+  flex-shrink: 0;
+  width: 60px;
+  font-size: 10px;
+  color: var(--theme-text-tertiary);
+  font-family: var(--font-mono);
+  padding-top: 2px;
+}
+.log-body { flex: 1; min-width: 0; }
+.log-type {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--theme-primary);
+  margin-bottom: 2px;
+}
+.log-action {
+  font-size: 12px;
+  color: var(--theme-text);
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   JSON DB VIEWER
+   ═══════════════════════════════════════════════════════════ */
+.db-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--theme-glass-bg);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.db-tab {
+  flex: 1;
+  padding: 7px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  transition: all 0.2s var(--ease);
+}
+.db-tab.active {
+  background: var(--theme-surface-elevated);
+  color: var(--theme-text);
+}
+.db-json {
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--theme-text-secondary);
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre;
+}
+.db-json .key { color: var(--theme-primary); }
+.db-json .str { color: var(--theme-success); }
+.db-json .num { color: var(--theme-info); }
+.db-json .bool { color: var(--theme-warning); }
+.db-json .null { color: var(--theme-text-tertiary); }
+
+/* ═══════════════════════════════════════════════════════════
+   COLLABORATOR ROW
+   ═══════════════════════════════════════════════════════════ */
+.collab-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--theme-primary), #f97316);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0a0c10;
+  flex-shrink: 0;
+}
+[data-theme="light"] .collab-avatar { color: #ffffff; }
+.collab-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+
+/* ═══════════════════════════════════════════════════════════
+   VISIBILITY BADGE
+   ═══════════════════════════════════════════════════════════ */
+.vis-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.vis-badge.public {
+  background: var(--theme-success-soft);
+  color: var(--theme-success);
+}
+.vis-badge.private {
+  background: var(--theme-divider);
+  color: var(--theme-text-tertiary);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .header-actions .icon-btn:not(.always-show) { display: none; }
+  .header-actions .icon-btn.always-show { display: flex; }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .panel { animation: none; }
+  .skeleton, .icon-skeleton { animation: none; opacity: 0.6; }
+  .switch::after { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <aside class="sidebar" aria-label="Project navigation">
+    <a class="sidebar-brand" href="/">
+      <div class="sidebar-logo" id="sidebarLogo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+      </div>
+      <div class="sidebar-brand-text">Folio<span class="sub">Project</span></div>
+    </a>
+
+    <div class="sidebar-project" id="sidebarProject">
+      <div class="sidebar-project-icon" id="sidebarProjectIcon">—</div>
+      <div class="sidebar-project-info">
+        <div class="sidebar-project-name" id="sidebarProjectName">Loading…</div>
+        <div class="sidebar-project-role" id="sidebarProjectRole">—</div>
+      </div>
+    </div>
+
+    <div class="sidebar-tabs" id="sidebarTabs"></div>
+
+    <div class="sidebar-footer">
+      <a class="sidebar-footer-link" href="/">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Back to editor</span>
+      </a>
+      <a class="sidebar-footer-link" href="/projects">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span>All projects</span>
+      </a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="main-header">
+      <div class="header-row">
+        <a class="header-back-btn" href="/projects" aria-label="Back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </a>
+
+        <div class="header-project-icon" id="headerProjectIcon">
+          —
+          <button class="edit-icon-hint" id="btnEditIcon" aria-label="Change project icon" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="header-title-wrap">
+          <h1 class="header-title" id="headerProjectName">Loading…</h1>
+          <div class="header-sub" id="headerProjectSub"></div>
+        </div>
+
+        <div class="header-actions">
+          <button class="icon-btn always-show" id="btnShare" aria-label="Share project" type="button">
+            <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          </button>
+          <button class="icon-btn always-show" id="btnRefresh" aria-label="Refresh" type="button">
+            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="mobile-tabs-scroll" id="mobileTabs"></div>
+    </header>
+
+    <div class="panel-wrap" id="panelWrap"></div>
+  </main>
+</div>
+
+<!-- Modals -->
+<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
+  <div class="modal" id="modalContent">
+    <div class="modal-handle"></div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-title" id="loadingTitle">Working…</div>
+  <div class="loading-desc" id="loadingDesc"></div>
+</div>
+
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════════════════════
+
+  const API_BASE = 'https://foliostudios.vercel.app/api';
+  const API_HOST = API_BASE + '/host';
+  const API_AUTH = API_BASE + '/auth';
+  const API_FLIER = API_BASE + '/flier';
+  const API_ANALYTICS = API_BASE + '/analytics';
+
+  const STORAGE = {
+    session: 'folio.session',
+    user: 'folio.user',
+    theme: 'folio.theme',
+    lastTab: 'folio.project.lastTab',
+    rememberTab: 'folio.project.rememberTab',
+  };
+
+  const OWNER_TABS = [
+    { id: 'overview', label: 'Overview', icon: 'info' },
+    { id: 'deployments', label: 'Deployments', icon: 'rocket', countKey: 'deployments' },
+    { id: 'analytics', label: 'Analytics', icon: 'chart' },
+    { id: 'sharing', label: 'Sharing', icon: 'share' },
+    { id: 'data', label: 'Data', icon: 'database' },
+    { id: 'logs', label: 'Logs', icon: 'list', countKey: 'logs' },
+    { id: 'downloads', label: 'Downloads', icon: 'download' },
+    { id: 'danger', label: 'Danger', icon: 'alert' },
+  ];
+
+  const SHARED_TABS = [
+    { id: 'overview', label: 'Overview', icon: 'info' },
+    { id: 'analytics', label: 'Analytics', icon: 'chart' },
+    { id: 'data', label: 'Data', icon: 'database' },
+    { id: 'download', label: 'Download', icon: 'download' },
+  ];
+
+  // ═══════════════════════════════════════════════════════════
+  // SVG
+  // ═══════════════════════════════════════════════════════════
+
+  const SVG = {
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    rocket: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>',
+    chart: '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+    share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
+    database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+    list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    alert: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+    eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+    user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    key: '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    checkCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    alertCircle: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  };
+
+  function svg(name, size = 16, sw = 2.2) {
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${SVG[name] || ''}</svg>`;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════════
+
+  const S = {
+    session: null,
+    user: null,
+    uid: null,
+    pid: null,
+    project: null,
+    role: null,           // owner | editor | viewer | commenter | null
+    isOwner: false,
+    isEditor: false,
+    isSharedMode: false,
+    activeTab: 'overview',
+    tabs: OWNER_TABS,
+    tabLoaded: new Set(),
+    tabCounts: {},
+    loading: false,
+    deployState: null,
+    analyticsData: null,
+    logsData: null,
+    logsOffset: 0,
+    deploymentsData: null,
+    dbData: null,
+    iconPickerOpen: false,
+    iconVariants: [],
+    selectedIconUrl: null,
+    pendingDeleteDeploy: null,
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // HELPERS
+  // ═══════════════════════════════════════════════════════════
+
+  const $ = id => document.getElementById(id);
+  const escapeHTML = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escapeAttr = s => String(s ?? '').replace(/"/g, '&quot;');
+
+  function timeAgo(ts) {
+    if (!ts) return '—';
+    const diff = Date.now() - ts;
+    if (diff < 60000) return 'just now';
+    const m = Math.floor(diff / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `${d}d ago`;
+    return new Date(ts).toLocaleDateString();
+  }
+
+  function formatBytes(n) {
+    if (!n || n < 0) return '0 B';
+    const u = ['B', 'KB', 'MB', 'GB'];
+    let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+  }
+
+  function formatNumber(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return String(n || 0);
+  }
+
+  function getInitials(name) {
+    const s = String(name || '').trim();
+    if (!s) return '?';
+    const parts = s.split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TOAST
+  // ═══════════════════════════════════════════════════════════
+
+  function toast(msg, type = 'info', duration = 2800) {
+    const container = $('toastContainer');
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    const icon = type === 'success' ? 'checkCircle' : type === 'error' ? 'alertCircle' : 'info';
+    el.innerHTML = svg(icon, 15, 2.4) + '<span></span>';
+    el.querySelector('span').textContent = msg;
+    container.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOADING
+  // ═══════════════════════════════════════════════════════════
+
+  function showLoading(title = 'Working…', desc = '') {
+    $('loadingTitle').textContent = title;
+    $('loadingDesc').textContent = desc;
+    $('loadingOverlay').classList.add('active');
+  }
+
+  function hideLoading() {
+    $('loadingOverlay').classList.remove('active');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // MODAL
+  // ═══════════════════════════════════════════════════════════
+
+  let modalOnClose = null;
+
+  function openModal(html, onClose) {
+    $('modalBody').innerHTML = html;
+    $('modalOverlay').classList.add('active');
+    modalOnClose = onClose || null;
+  }
+
+  function closeModal() {
+    $('modalOverlay').classList.remove('active');
+    if (modalOnClose) { try { modalOnClose(); } catch {} modalOnClose = null; }
+    setTimeout(() => { $('modalBody').innerHTML = ''; }, 250);
+  }
+
+  function confirmModal(title, desc, confirmLabel, danger, onConfirm) {
+    openModal(`
+      <div class="modal-title">${escapeHTML(title)}</div>
+      <div class="modal-desc">${escapeHTML(desc)}</div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="ProjectPage.closeModal()">Cancel</button>
+        <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="modalConfirmBtn">${escapeHTML(confirmLabel)}</button>
+      </div>
+    `);
+    $('modalConfirmBtn').addEventListener('click', () => {
+      closeModal();
+      onConfirm();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SESSION
+  // ═══════════════════════════════════════════════════════════
+
+  function readSession() {
+    try { S.session = localStorage.getItem(STORAGE.session); } catch {}
+    try {
+      const raw = localStorage.getItem(STORAGE.user);
+      S.user = raw ? JSON.parse(raw) : null;
+    } catch {}
+    if (S.user) S.uid = S.user.uid || null;
+  }
+
+  async function apiFetch(url, opts = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (S.session) headers['Authorization'] = `Bearer ${S.session}`;
+    const res = await fetch(url, { ...opts, headers });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, data };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ROUTING
+  // ═══════════════════════════════════════════════════════════
+
+  function getPid() {
+    const params = new URLSearchParams(location.search);
+    return params.get('pid') || null;
+  }
+
+  function getHashTab() {
+    const h = location.hash.replace(/^#\/?/, '');
+    return h || null;
+  }
+
+  function setHashTab(tabId) {
+    const newHash = `#/${tabId}`;
+    if (location.hash !== newHash) {
+      history.replaceState(null, '', newHash);
+    }
+  }
+
+  function getLastTab() {
+    try { return localStorage.getItem(STORAGE.lastTab + '.' + S.pid) || null; } catch { return null; }
+  }
+
+  function saveLastTab(tabId) {
+    try { localStorage.setItem(STORAGE.lastTab + '.' + S.pid, tabId); } catch {}
+  }
+
+  function shouldRememberTab() {
+    try {
+      const v = localStorage.getItem(STORAGE.rememberTab);
+      return v === null ? true : v === 'true';
+    } catch { return true; }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ICON
+  // ═══════════════════════════════════════════════════════════
+
+  function renderProjectIcon(el, project, { editable = false } = {}) {
+    if (!el) return;
+    const url = project?.iconUrl;
+    const name = project?.name || '?';
+    const initials = getInitials(name);
+
+    if (url) {
+      el.innerHTML = `<img src="${escapeAttr(url)}" alt="${escapeAttr(name)}">`;
+    } else {
+      el.textContent = initials;
+    }
+
+    if (editable && !S.isSharedMode) {
+      const btn = document.createElement('button');
+      btn.className = 'edit-icon-hint';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'Change project icon');
+      btn.innerHTML = svg('edit', 16, 2.4);
+      btn.addEventListener('click', openIconPicker);
+      el.appendChild(btn);
+    }
+  }
+
+  function updateFavicon(project) {
+    const fav = $('pageFavicon');
+    if (fav && project?.iconUrl) fav.href = project.iconUrl;
+  }
+
+  function updateProjectIcons() {
+    renderProjectIcon($('sidebarProjectIcon'), S.project);
+    renderProjectIcon($('headerProjectIcon'), S.project, { editable: true });
+    updateFavicon(S.project);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ICON PICKER (Flier integration)
+  // ═══════════════════════════════════════════════════════════
+
+  async function openIconPicker() {
+    if (S.isSharedMode) return;
+    S.iconPickerOpen = true;
+    S.iconVariants = [];
+    S.selectedIconUrl = null;
+
+    openModal(`
+      <div class="modal-title">Project icon</div>
+      <div class="modal-desc">Generated from your project name using Flier. Pick one.</div>
+      <div id="iconPickerGrid" class="icon-picker-grid"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="iconRegenerateBtn">${svg('refresh', 14, 2.2)} Regenerate</button>
+        <button class="btn btn-primary" id="iconSaveBtn" disabled>${svg('check', 14, 2.4)} Save</button>
+      </div>
+    `);
+
+    $('iconSaveBtn').addEventListener('click', saveIcon);
+    $('iconRegenerateBtn').addEventListener('click', generateIcons);
+
+    await generateIcons();
+  }
+
+  async function generateIcons() {
+    const grid = $('iconPickerGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    for (let i = 0; i < 5; i++) {
+      const sk = document.createElement('div');
+      sk.className = 'icon-skeleton';
+      grid.appendChild(sk);
+    }
+
+    const username = S.user?.username || 'folio';
+    const displayName = S.project?.name || 'Project';
+
+    try {
+      const res = await fetch(API_FLIER + '?action=avatar/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, displayName }),
+      });
+      const data = await res.json();
+      if (!data.success || !Array.isArray(data.variants) || data.variants.length === 0) {
+        throw new Error(data.error || 'Generation failed');
+      }
+      S.iconVariants = data.variants;
+      renderIconOptions();
+    } catch (err) {
+      toast('Icon generation failed', 'error');
+      grid.innerHTML = `<div class="icon-placeholder" style="grid-column: 1 / -1; aspect-ratio: auto; padding: 20px;">Could not generate icons</div>`;
+    }
+  }
+
+  function renderIconOptions() {
+    const grid = $('iconPickerGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    S.iconVariants.forEach((v, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'icon-option';
+      btn.type = 'button';
+      btn.dataset.avatarId = v.id;
+      btn.style.animationDelay = (idx * 60) + 'ms';
+
+      const img = document.createElement('img');
+      img.src = v.dataUrl;
+      img.alt = v.label || 'Icon';
+      btn.appendChild(img);
+
+      btn.addEventListener('click', () => {
+        S.selectedIconUrl = v.dataUrl;
+        grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
+        btn.classList.add('selected');
+        const saveBtn = $('iconSaveBtn');
+        if (saveBtn) saveBtn.disabled = false;
+      });
+
+      grid.appendChild(btn);
+    });
+  }
+
+  async function saveIcon() {
+    if (!S.selectedIconUrl) return;
+    const saveBtn = $('iconSaveBtn');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Uploading…'; }
+
+    showLoading('Uploading icon', 'Saving your chosen icon…');
+
+    try {
+      const uploadRes = await fetch(API_FLIER + '?action=avatar/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dataUrl: S.selectedIconUrl,
+          username: S.project?.slug || 'project',
+        }),
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadData.success || !uploadData.url) {
+        throw new Error(uploadData.error || 'Upload failed');
+      }
+
+      const updateRes = await apiFetch(API_HOST + '?action=projects/update', {
+        method: 'POST',
+        body: JSON.stringify({
+          pid: S.pid,
+          iconUrl: uploadData.url,
+        }),
+      });
+
+      if (!updateRes.ok || !updateRes.data?.success) {
+        throw new Error(updateRes.data?.error || 'Update failed');
+      }
+
+      S.project.iconUrl = uploadData.url;
+      updateProjectIcons();
+      closeModal();
+      hideLoading();
+      toast('Icon saved', 'success');
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Could not save icon', 'error');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOAD PROJECT
+  // ═══════════════════════════════════════════════════════════
+
+  async function loadProject() {
+    const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
+    if (!res.ok) {
+      if (res.status === 401) {
+        window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
+        return false;
+      }
+      if (res.status === 404) {
+        showFatal('Project not found', 'This project may have been deleted or you don\'t have access.');
+        return false;
+      }
+      if (res.status === 403) {
+        showFatal('Access denied', 'You don\'t have permission to view this project.');
+        return false;
+      }
+      showFatal('Couldn\'t load project', 'Check your connection and try again.');
+      return false;
+    }
+
+    S.project = res.data.project;
+    S.role = S.project.myRole;
+    S.isOwner = S.role === 'owner';
+    S.isEditor = S.role === 'owner' || S.role === 'editor';
+    S.isSharedMode = !S.isOwner && !S.isEditor;
+
+    // Set tabs based on mode
+    S.tabs = S.isSharedMode ? SHARED_TABS : OWNER_TABS;
+
+    // Ensure current tab is valid for mode
+    if (!S.tabs.some(t => t.id === S.activeTab)) {
+      S.activeTab = 'overview';
+    }
+
+    // Update UI
+    updateHeader();
+    updateSidebarProject();
+    renderTabs();
+    updateProjectIcons();
+
+    // Load deployment state (owner/editor only or if public)
+    if (S.isEditor || S.project.visibility?.liveSite === 'public') {
+      loadDeployState();
+    }
+
+    return true;
+  }
+
+  function updateHeader() {
+    $('headerProjectName').textContent = S.project.name || 'Untitled project';
+    const sub = [];
+    if (S.project.slug) sub.push(`@${S.project.slug}`);
+    const roleBadge = `<span class="header-role-badge">${S.isOwner ? 'Owner' : S.role || 'Viewer'}</span>`;
+    const deployBadge = S.project.deployment?.url
+      ? `<span class="header-deploy-badge"><span class="dot"></span>Live</span>`
+      : S.project.deployment?.state === 'OFFLINE'
+      ? `<span class="header-deploy-badge offline">Offline</span>`
+      : '';
+    $('headerProjectSub').innerHTML = sub.map(escapeHTML).join('') + roleBadge + deployBadge;
+    document.title = `${S.project.name || 'Project'} — Folio`;
+  }
+
+  function updateSidebarProject() {
+    $('sidebarProjectName').textContent = S.project.name || 'Untitled project';
+    $('sidebarProjectRole').textContent = S.isSharedMode ? 'Shared · ' + S.role : (S.isOwner ? 'Owner' : 'Editor');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TABS
+  // ═══════════════════════════════════════════════════════════
+
+  function renderTabs() {
+    // Sidebar tabs
+    const sidebarTabsEl = $('sidebarTabs');
+    if (sidebarTabsEl) {
+      sidebarTabsEl.innerHTML = '';
+      S.tabs.forEach(t => {
+        const btn = document.createElement('button');
+        btn.className = 'sidebar-tab' + (t.id === S.activeTab ? ' active' : '');
+        btn.type = 'button';
+        const badge = t.countKey && S.tabCounts[t.countKey] != null
+          ? `<span class="sidebar-tab-badge">${S.tabCounts[t.countKey]}</span>`
+          : '';
+        btn.innerHTML = svg(t.icon, 16, 2.2) + `<span>${escapeHTML(t.label)}</span>` + badge;
+        btn.addEventListener('click', () => switchTab(t.id));
+        sidebarTabsEl.appendChild(btn);
+      });
+    }
+
+    // Mobile tabs
+    const mobileTabsEl = $('mobileTabs');
+    if (mobileTabsEl) {
+      mobileTabsEl.innerHTML = '';
+      S.tabs.forEach(t => {
+        const btn = document.createElement('button');
+        btn.className = 'mobile-tab-pill' + (t.id === S.activeTab ? ' active' : '');
+        btn.type = 'button';
+        const badge = t.countKey && S.tabCounts[t.countKey] != null
+          ? `<span class="mobile-tab-pill-badge">${S.tabCounts[t.countKey]}</span>`
+          : '';
+        btn.innerHTML = `<span>${escapeHTML(t.label)}</span>` + badge;
+        btn.addEventListener('click', () => switchTab(t.id));
+        mobileTabsEl.appendChild(btn);
+      });
+    }
+  }
+
+  function switchTab(tabId) {
+    if (!S.tabs.some(t => t.id === tabId)) return;
+    S.activeTab = tabId;
+    setHashTab(tabId);
+    saveLastTab(tabId);
+    renderTabs();
+    renderPanel();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL ROUTER
+  // ═══════════════════════════════════════════════════════════
+
+  function renderPanel() {
+    const wrap = $('panelWrap');
+    const tab = S.activeTab;
+
+    // Create panel container
+    wrap.innerHTML = `<div class="panel active" id="panel-${tab}"></div>`;
+    const panel = $('panel-' + tab);
+
+    // Route
+    const loaders = {
+      overview: renderOverviewPanel,
+      deployments: renderDeploymentsPanel,
+      analytics: renderAnalyticsPanel,
+      sharing: renderSharingPanel,
+      data: renderDataPanel,
+      logs: renderLogsPanel,
+      downloads: renderDownloadsPanel,
+      download: renderDownloadSharedPanel,
+      danger: renderDangerPanel,
+    };
+
+    const loader = loaders[tab];
+    if (loader) loader(panel);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SKELETON HELPERS
+  // ═══════════════════════════════════════════════════════════
+
+  function skeletonCard(lines = 3) {
+    let html = '<div class="card"><div class="card-body">';
+    html += '<div class="skeleton sk-title"></div>';
+    for (let i = 0; i < lines; i++) {
+      html += `<div class="skeleton sk-line" style="width:${60 + Math.random() * 35}%;"></div>`;
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function emptyState(icon, title, desc, actionHtml = '') {
+    return `
+      <div class="empty-state">
+        <div class="empty-state-icon">${svg(icon, 22, 2)}</div>
+        <div class="empty-state-title">${escapeHTML(title)}</div>
+        <div class="empty-state-desc">${escapeHTML(desc)}</div>
+        ${actionHtml}
+      </div>
+    `;
+  }
+
+  function fatalState(title, desc) {
+    $('panelWrap').innerHTML = `
+      <div class="panel active">
+        <div class="card"><div class="card-body">
+          ${emptyState('alertCircle', title, desc, `
+            <button class="btn btn-secondary" onclick="location.reload()">${svg('refresh', 14, 2.2)} Try again</button>
+            <a class="btn btn-ghost" href="/projects" style="margin-top:8px;">Back to projects</a>
+          `)}
+        </div></div>
+      </div>
+    `;
+  }
+
+  function showFatal(title, desc) {
+    $('panelWrap').innerHTML = `
+      <div class="panel active">
+        <div class="card"><div class="card-body">
+          ${emptyState('alertCircle', title, desc, `
+            <button class="btn btn-secondary" onclick="location.reload()">${svg('refresh', 14, 2.2)} Try again</button>
+            <a class="btn btn-ghost" href="/projects" style="margin-top:8px;">Back to projects</a>
+          `)}
+        </div></div>
+      </div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // DEPLOY STATE
+  // ═══════════════════════════════════════════════════════════
+
+  async function loadDeployState() {
+    try {
+      const res = await apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.pid));
+      if (res.ok && res.data?.success) {
+        S.deployState = res.data.deployment;
+        if (S.deployState) {
+          S.project.deployment = S.deployState;
+          updateHeader();
+        }
+      }
+    } catch {}
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL: OVERVIEW
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderOverviewPanel(panel) {
+    panel.innerHTML = skeletonCard(4);
+    await new Promise(r => setTimeout(r, 100));
+    renderOverviewContent(panel);
+  }
+
+  function renderOverviewContent(panel) {
+    const p = S.project;
+    const canEdit = S.isEditor;
+    const deployUrl = p.deployment?.url;
+    const deployed = !!deployUrl;
+
+    panel.innerHTML = `
+      <!-- Identity -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('info', 15, 2.2)} Details</div>
+          ${canEdit ? `<button class="btn btn-sm btn-secondary" id="btnSaveDetails">${svg('check', 12, 2.4)} Save</button>` : ''}
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:14px;">
+          <div class="field">
+            <label class="field-label">Project name</label>
+            <input class="input" id="fieldProjectName" value="${escapeAttr(p.name || '')}" ${canEdit ? '' : 'readonly'}>
+          </div>
+          <div class="field">
+            <label class="field-label">Slug (URL identifier)</label>
+            <div style="display:flex;gap:6px;">
+              <input class="input mono" id="fieldProjectSlug" value="${escapeAttr(p.slug || '')}" readonly>
+              <button class="btn btn-secondary btn-icon" id="btnCopySlug" aria-label="Copy slug" type="button">${svg('copy', 14, 2.2)}</button>
+            </div>
+            <div class="field-hint">Used in share URLs. Cannot be changed.</div>
+          </div>
+          <div class="field">
+            <label class="field-label">Description</label>
+            <textarea class="textarea" id="fieldProjectDesc" ${canEdit ? '' : 'readonly'}>${escapeHTML(p.description || '')}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-tile">
+          <div class="stat-label">Files</div>
+          <div class="stat-value" id="statFiles">—</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Versions</div>
+          <div class="stat-value" id="statVersions">—</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Storage</div>
+          <div class="stat-value" id="statStorage">—</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Last modified</div>
+          <div class="stat-value" id="statModified" style="font-size:13px;">—</div>
+        </div>
+      </div>
+
+      <!-- Deployment quick card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('rocket', 15, 2.2)} Live deployment</div>
+        </div>
+        <div class="card-body">
+          ${deployed ? `
+            <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--theme-success-soft);border-radius:10px;margin-bottom:10px;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--theme-success)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${SVG.checkCircle}</svg>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:700;color:var(--theme-success);margin-bottom:2px;">Live</div>
+                <div style="font-size:11px;color:var(--theme-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(deployUrl)}</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <a class="btn btn-secondary btn-sm" href="${escapeAttr(deployUrl)}" target="_blank" rel="noopener">${svg('external', 12, 2.2)} Visit</a>
+              ${S.isEditor ? `<button class="btn btn-secondary btn-sm" id="btnQuickRedeploy">${svg('refresh', 12, 2.2)} Redeploy</button>` : ''}
+            </div>
+          ` : `
+            <div style="font-size:12.5px;color:var(--theme-text-tertiary);margin-bottom:10px;">Not deployed yet</div>
+            ${S.isEditor ? `<button class="btn btn-primary btn-sm" id="btnQuickDeploy">${svg('rocket', 12, 2.4)} Deploy now</button>` : ''}
+          `}
+        </div>
+      </div>
+
+      ${canEdit ? `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('image', 15, 2.2)} Icon</div>
+            <button class="btn btn-sm btn-secondary" id="btnChangeIcon">${svg('refresh', 12, 2.2)} Regenerate</button>
+          </div>
+          <div class="card-body">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div id="overviewIcon" style="width:56px;height:56px;border-radius:14px;background:var(--theme-surface-elevated);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:800;color:var(--theme-primary);font-size:20px;border:1px solid var(--theme-glass-border);"></div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;color:var(--theme-text-secondary);">Generated by Flier from your project name.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    `;
+
+    // Populate icon
+    renderProjectIcon($('overviewIcon'), S.project);
+
+    // Wire
+    if (canEdit) {
+      $('btnSaveDetails')?.addEventListener('click', saveProjectDetails);
+      $('btnChangeIcon')?.addEventListener('click', openIconPicker);
+      $('btnQuickDeploy')?.addEventListener('click', () => switchTab('deployments'));
+      $('btnQuickRedeploy')?.addEventListener('click', () => switchTab('deployments'));
+    }
+    $('btnCopySlug')?.addEventListener('click', copySlug);
+
+    // Load stats
+    loadOverviewStats();
+  }
+
+  async function loadOverviewStats() {
+    try {
+      const filesRes = await apiFetch(API_HOST + '?action=db/get&pid=' + encodeURIComponent(S.pid));
+      // Fallback stats from project metadata (may not be available)
+      const versions = S.project.versionCount || 0;
+      const files = S.project.fileCount || '—';
+      const storage = S.project.storageUsed || 0;
+      const modified = S.project.updatedAt;
+
+      if ($('statFiles')) $('statFiles').textContent = String(files);
+      if ($('statVersions')) $('statVersions').textContent = String(versions);
+      if ($('statStorage')) $('statStorage').textContent = formatBytes(storage);
+      if ($('statModified')) $('statModified').textContent = modified ? timeAgo(modified) : '—';
+    } catch {}
+  }
+
+  async function saveProjectDetails() {
+    const name = $('fieldProjectName')?.value?.trim();
+    const description = $('fieldProjectDesc')?.value?.trim();
+    if (!name) { toast('Project name required', 'error'); return; }
+
+    const btn = $('btnSaveDetails');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    try {
+      const res = await apiFetch(API_HOST + '?action=projects/update', {
+        method: 'POST',
+        body: JSON.stringify({ pid: S.pid, name, description }),
+      });
+      if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+
+      S.project.name = name;
+      S.project.description = description;
+      updateHeader();
+      updateSidebarProject();
+      toast('Saved', 'success');
+    } catch (err) {
+      toast(err.message || 'Save failed', 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = svg('check', 12, 2.4) + ' Save'; }
+    }
+  }
+
+  function copySlug() {
+    const slug = S.project?.slug || '';
+    if (!slug) return;
+    navigator.clipboard.writeText(slug).then(() => toast('Slug copied', 'success', 1400))
+      .catch(() => toast('Copy failed', 'error'));
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL: DEPLOYMENTS
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderDeploymentsPanel(panel) {
+    panel.innerHTML = skeletonCard(3) + skeletonCard(6);
+
+    const [statusRes, historyRes] = await Promise.all([
+      apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.pid)),
+      apiFetch(API_HOST + '?action=deployment/history&pid=' + encodeURIComponent(S.pid)),
+    ]);
+
+    const current = statusRes.ok ? statusRes.data?.deployment : null;
+    const history = historyRes.ok ? (historyRes.data?.deployments || []) : [];
+    const currentId = historyRes.ok ? historyRes.data?.currentDeploymentId : null;
+
+    S.deployState = current;
+    S.deploymentsData = history;
+    S.tabCounts.deployments = history.length;
+    renderTabs();
+
+    const isLive = current?.url && current.state !== 'OFFLINE';
+    const isOffline = current?.state === 'OFFLINE';
+
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('rocket', 15, 2.2)} Current deployment</div>
+          ${S.isEditor ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">${svg('rocket', 12, 2.4)} Deploy</button>` : ''}
+        </div>
+        <div class="card-body">
+          ${isLive ? `
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span class="vis-badge public">${svg('checkCircle', 11, 2.4)} Live</span>
+                <span style="font-size:11px;color:var(--theme-text-tertiary);">${timeAgo(current.deployedAt)}</span>
+              </div>
+              <a href="${escapeAttr(current.url)}" target="_blank" rel="noopener" class="mono" style="font-size:12px;word-break:break-all;">${escapeHTML(current.url)}</a>
+              ${S.isEditor ? `
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button class="btn btn-secondary btn-sm" id="btnTakeOffline">${svg('eyeOff', 12, 2.2)} Take offline</button>
+                </div>
+              ` : ''}
+            </div>
+          ` : isOffline ? `
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span class="vis-badge private">${svg('eyeOff', 11, 2.2)} Offline</span>
+              <span style="font-size:11px;color:var(--theme-text-tertiary);">${timeAgo(current.offlineAt)}</span>
+            </div>
+            ${S.isEditor ? `
+              <div style="margin-top:12px;">
+                <button class="btn btn-primary btn-sm" id="btnDeployNow">${svg('rocket', 12, 2.4)} Deploy to go live</button>
+              </div>
+            ` : ''}
+          ` : `
+            <div style="font-size:12.5px;color:var(--theme-text-tertiary);">Never deployed</div>
+          `}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('clock', 15, 2.2)} Deployment history (${history.length})</div>
+          <button class="btn btn-sm btn-ghost" id="btnRefreshHistory">${svg('refresh', 12, 2.2)}</button>
+        </div>
+        <div class="card-body tight" id="historyBody">
+          ${history.length === 0
+            ? emptyState('clock', 'No deployments yet', 'Deploy your project to start building history.')
+            : `<div class="row-list">${history.map(d => renderDeploymentRow(d, currentId)).join('')}</div>`
+          }
+        </div>
+      </div>
+    `;
+
+    $('btnDeployNow')?.addEventListener('click', deployNow);
+    $('btnRefreshHistory')?.addEventListener('click', () => renderPanel());
+    $('btnTakeOffline')?.addEventListener('click', takeOffline);
+
+    // Wire per-row actions
+    document.querySelectorAll('[data-redeploy]').forEach(btn => {
+      btn.addEventListener('click', () => redeployVersion(btn.dataset.redeploy));
+    });
+    document.querySelectorAll('[data-delete-deploy]').forEach(btn => {
+      btn.addEventListener('click', () => confirmDeleteDeployment(btn.dataset.deleteDeploy));
+    });
+  }
+
+  function renderDeploymentRow(d, currentId) {
+    const isCurrent = d.id === currentId;
+    return `
+      <div class="row-item">
+        <div class="row-icon">${svg(isCurrent ? 'checkCircle' : 'rocket', 16, 2.2)}</div>
+        <div class="row-content">
+          <div class="row-title">
+            ${d.versionId ? `Version ${escapeHTML(d.versionId.slice(-6))}` : 'Current files'}
+            ${isCurrent ? '<span class="vis-badge public" style="margin-left:6px;font-size:9px;">Current</span>' : ''}
+          </div>
+          <div class="row-sub">${timeAgo(d.deployedAt)} · ${d.state || 'READY'}</div>
+        </div>
+        <div class="row-actions">
+          ${d.url ? `<a class="btn btn-ghost btn-sm btn-icon" href="${escapeAttr(d.url)}" target="_blank" rel="noopener" aria-label="Open">${svg('external', 12, 2.2)}</a>` : ''}
+          ${S.isEditor && !isCurrent && d.versionId ? `<button class="btn btn-ghost btn-sm btn-icon" data-redeploy="${escapeAttr(d.versionId)}" aria-label="Backdate to this">${svg('refresh', 12, 2.2)}</button>` : ''}
+          ${S.isOwner ? `<button class="btn btn-ghost btn-sm btn-icon" data-delete-deploy="${escapeAttr(d.id)}" aria-label="Delete" style="color:var(--theme-danger);">${svg('trash', 12, 2.2)}</button>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  async function deployNow() {
+    if (!S.isEditor) return;
+    confirmModal(
+      'Deploy current files?',
+      'This will build and deploy your project to a live URL.',
+      'Deploy',
+      false,
+      async () => {
+        showLoading('Deploying', 'Building and deploying your project…');
+        try {
+          const files = await fetchCurrentFiles();
+          if (!files) throw new Error('No files to deploy');
+
+          const res = await apiFetch(API_HOST + '?action=deploy', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid, files }),
+          });
+          hideLoading();
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Deploy failed');
+
+          toast('Deploy started', 'success');
+          setTimeout(() => renderPanel(), 2000);
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Deploy failed', 'error');
+        }
+      }
+    );
+  }
+
+  async function fetchCurrentFiles() {
+    try {
+      const res = await apiFetch(API_HOST + '?action=db/get&pid=' + encodeURIComponent(S.pid));
+      if (res.ok && res.data?.success) {
+        // DB doesn't give files; use project export
+        // For now: return project.publicFiles as placeholder
+        return null;
+      }
+    } catch {}
+    return null;
+  }
+
+  async function redeployVersion(versionId) {
+    if (!S.isEditor) return;
+    confirmModal(
+      'Backdate to this deployment?',
+      'This will redeploy the files from that version to the live URL.',
+      'Backdate',
+      false,
+      async () => {
+        showLoading('Redeploying', 'Restoring and deploying version…');
+        try {
+          const res = await apiFetch(API_HOST + '?action=redeploy', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid, versionId }),
+          });
+          hideLoading();
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Redeploy failed');
+          toast('Redeploying version', 'success');
+          setTimeout(() => renderPanel(), 2000);
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Redeploy failed', 'error');
+        }
+      }
+    );
+  }
+
+  async function takeOffline() {
+    if (!S.isEditor) return;
+    confirmModal(
+      'Take offline?',
+      'The live URL will stop working. Your project files stay intact.',
+      'Take offline',
+      true,
+      async () => {
+        showLoading('Taking offline', '');
+        try {
+          const res = await apiFetch(API_HOST + '?action=deployment/offline', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid }),
+          });
+          hideLoading();
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+          toast('Deployment offline', 'success');
+          renderPanel();
+          updateHeader();
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Failed', 'error');
+        }
+      }
+    );
+  }
+
+  function confirmDeleteDeployment(deploymentId) {
+    if (!S.isOwner) return;
+    confirmModal(
+      'Delete this deployment?',
+      'This removes it from history and attempts to delete it from Vercel.',
+      'Delete',
+      true,
+      async () => {
+        showLoading('Deleting', '');
+        try {
+          const res = await apiFetch(API_HOST + '?action=deployment/delete', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid, deploymentId }),
+          });
+          hideLoading();
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+          toast('Deployment deleted', 'success');
+          renderPanel();
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Delete failed', 'error');
+        }
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL: ANALYTICS
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderAnalyticsPanel(panel) {
+    panel.innerHTML = skeletonCard(4) + skeletonCard(6);
+
+    const [analyticsRes, activityRes] = await Promise.all([
+      apiFetch(API_ANALYTICS + '?action=project&pid=' + encodeURIComponent(S.pid)),
+      apiFetch(API_ANALYTICS + '?action=activity&pid=' + encodeURIComponent(S.pid) + '&limit=10'),
+    ]);
+
+    if (!analyticsRes.ok || !analyticsRes.data?.success) {
+      panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('chart', 'Couldn\'t load analytics', 'Try refreshing.')}</div></div>`;
+      return;
+    }
+
+    const data = analyticsRes.data;
+    const topPages = data.topPages || [];
+    const trend = data.trend7 || [];
+
+    S.analyticsData = data;
+
+    const maxTrend = Math.max(1, ...trend.map(t => t.count));
+
+    panel.innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-tile">
+          <div class="stat-label">Today</div>
+          <div class="stat-value">${formatNumber(data.today || 0)}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">7-day views</div>
+          <div class="stat-value">${formatNumber(trend.reduce((s, t) => s + t.count, 0))}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Total views</div>
+          <div class="stat-value">${formatNumber(data.total || 0)}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">DB operations</div>
+          <div class="stat-value">${formatNumber((data.db?.reads || 0) + (data.db?.writes || 0))}</div>
+          <div class="stat-hint">${formatNumber(data.db?.reads || 0)} reads · ${formatNumber(data.db?.writes || 0)} writes</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('chart', 15, 2.2)} 7-day trend</div>
+        </div>
+        <div class="card-body">
+          <div style="display:flex;align-items:flex-end;gap:6px;height:80px;">
+            ${trend.map(t => {
+              const pct = (t.count / maxTrend) * 100;
+              return `
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+                  <div style="width:100%;height:${Math.max(4, pct)}%;background:var(--theme-primary);border-radius:4px 4px 0 0;min-height:4px;opacity:0.8;"></div>
+                  <div style="font-size:9px;color:var(--theme-text-tertiary);font-weight:700;">${t.date?.slice(-5) || ''}</div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('eye', 15, 2.2)} Top pages</div>
+        </div>
+        <div class="card-body tight">
+          ${topPages.length === 0
+            ? emptyState('eye', 'No pages yet', 'Analytics data will show once visitors start landing on your deployed site.')
+            : `<div class="row-list">
+                ${topPages.map(t => `
+                  <div class="row-item">
+                    <div class="row-icon">${svg('file', 16, 2.2)}</div>
+                    <div class="row-content">
+                      <div class="row-title mono" style="font-size:12px;">${escapeHTML(t.path || '/')}</div>
+                      <div class="row-sub">${formatNumber(t.count || 0)} views</div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>`
+          }
+        </div>
+      </div>
+
+      ${activityRes.ok && activityRes.data?.activity?.length > 0 ? `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('clock', 15, 2.2)} Recent activity</div>
+          </div>
+          <div class="card-body tight">
+            <div class="row-list">
+              ${activityRes.data.activity.slice(0, 8).map(a => `
+                <div class="row-item">
+                  <div class="row-icon">${svg('clock', 14, 2.2)}</div>
+                  <div class="row-content">
+                    <div class="row-title">${escapeHTML(a.action || a.type || '')}</div>
+                    <div class="row-sub">${timeAgo(a.ts)}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL: SHARING
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderSharingPanel(panel) {
+    panel.innerHTML = skeletonCard(4) + skeletonCard(4);
+
+    const vis = S.project.visibility || {};
+    const collaborators = S.project.roles || {};
+    const publicUrl = `${location.origin}/${S.user?.username || ''}/${S.project.slug || ''}`;
+
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('eye', 15, 2.2)} Visibility</div>
+        </div>
+        <div class="card-body">
+          ${['profile', 'liveSite', 'code', 'languages', 'db'].map(axis => `
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-title">${escapeHTML(axisLabel(axis))}</div>
+                <div class="toggle-desc">${escapeHTML(axisDesc(axis))}</div>
+              </div>
+              <button class="switch ${vis[axis] === 'public' ? 'on' : ''}" data-vis-axis="${escapeAttr(axis)}" aria-label="Toggle ${axis}"></button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('share', 15, 2.2)} Share link</div>
+        </div>
+        <div class="card-body">
+          <div style="display:flex;gap:6px;">
+            <input class="input mono" value="${escapeAttr(publicUrl)}" readonly id="shareUrlInput">
+            <button class="btn btn-secondary btn-icon" id="btnCopyShare" aria-label="Copy">${svg('copy', 14, 2.2)}</button>
+          </div>
+          <div class="field-hint" style="margin-top:6px;">Only works if profile visibility is public.</div>
+        </div>
+      </div>
+
+      ${S.isOwner ? `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('user', 15, 2.2)} Collaborators (${Object.keys(collaborators).length})</div>
+            <button class="btn btn-sm btn-secondary" id="btnInviteCollab">${svg('plus', 12, 2.4)} Invite</button>
+          </div>
+          <div class="card-body tight">
+            ${Object.keys(collaborators).length === 0
+              ? emptyState('user', 'No collaborators', 'Invite others to work on this project.')
+              : `<div class="row-list">
+                  ${Object.entries(collaborators).map(([uid, role]) => `
+                    <div class="row-item">
+                      <div class="collab-avatar">${escapeHTML(uid.slice(-2).toUpperCase())}</div>
+                      <div class="row-content">
+                        <div class="row-title mono" style="font-size:11px;">${escapeHTML(uid)}</div>
+                        <div class="row-sub">${escapeHTML(role)}</div>
+                      </div>
+                      <button class="btn btn-ghost btn-sm btn-icon" data-remove-collab="${escapeAttr(uid)}" style="color:var(--theme-danger);">${svg('trash', 12, 2.2)}</button>
+                    </div>
+                  `).join('')}
+                </div>`
+            }
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('key', 15, 2.2)} API key</div>
+          </div>
+          <div class="card-body">
+            <div style="font-size:12px;color:var(--theme-text-tertiary);margin-bottom:10px;">
+              ${S.project.apiKeyHash ? 'Active' : 'Not generated'}
+            </div>
+            <button class="btn btn-sm btn-secondary" id="btnGenApiKey">${svg('key', 12, 2.2)} ${S.project.apiKeyHash ? 'Regenerate' : 'Generate'} key</button>
+          </div>
+        </div>
+      ` : ''}
+    `;
+
+    // Wire
+    document.querySelectorAll('[data-vis-axis]').forEach(btn => {
+      btn.addEventListener('click', () => toggleVisibility(btn.dataset.visAxis, btn));
+    });
+
+    $('btnCopyShare')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(publicUrl).then(() => toast('Link copied', 'success', 1400)).catch(() => toast('Copy failed', 'error'));
+    });
+
+    $('btnInviteCollab')?.addEventListener('click', openInviteModal);
+    document.querySelectorAll('[data-remove-collab]').forEach(btn => {
+      btn.addEventListener('click', () => confirmRemoveCollab(btn.dataset.removeCollab));
+    });
+
+    $('btnGenApiKey')?.addEventListener('click', generateApiKey);
+  }
+
+  function axisLabel(axis) {
+    return {
+      profile: 'Show in profile',
+      liveSite: 'Live site link',
+      code: 'Code viewer',
+      languages: 'Language breakdown',
+      db: 'JSON database API',
+    }[axis] || axis;
+  }
+
+  function axisDesc(axis) {
+    return {
+      profile: 'Public profile page lists this project',
+      liveSite: 'Show "Visit live site" button',
+      code: 'Allow viewing source code files',
+      languages: 'Show language percentages',
+      db: 'Allow external reads of the JSON database',
+    }[axis] || '';
+  }
+
+  async function toggleVisibility(axis, btn) {
+    if (!S.isOwner) { toast('Only owner can change visibility', 'warning'); return; }
+    const current = S.project.visibility?.[axis];
+    const next = current === 'public' ? 'private' : 'public';
+
+    btn.classList.toggle('on', next === 'public');
+
+    try {
+      const res = await apiFetch(API_HOST + '?action=visibility', {
+        method: 'POST',
+        body: JSON.stringify({ pid: S.pid, visibility: { [axis]: next } }),
+      });
+      if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+      S.project.visibility = { ...S.project.visibility, [axis]: next };
+      toast(`Visibility: ${next}`, 'success', 1200);
+    } catch (err) {
+      btn.classList.toggle('on', current === 'public');
+      toast(err.message || 'Update failed', 'error');
+    }
+  }
+
+  function openInviteModal() {
+    openModal(`
+      <div class="modal-title">Invite collaborator</div>
+      <div class="modal-desc">They must have a Folio account.</div>
+      <div class="field" style="margin-bottom:12px;">
+        <label class="field-label">Username</label>
+        <input class="input" id="inviteUsername" placeholder="alice">
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label class="field-label">Role</label>
+        <select class="select" id="inviteRole">
+          <option value="viewer">Viewer — read only</option>
+          <option value="commenter">Commenter — read + comment</option>
+          <option value="editor">Editor — read/write files</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="ProjectPage.closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="inviteSubmit">${svg('plus', 14, 2.4)} Send invite</button>
+      </div>
+    `);
+
+    $('inviteSubmit').addEventListener('click', async () => {
+      const username = $('inviteUsername').value.trim();
+      const role = $('inviteRole').value;
+      if (!username) { toast('Username required', 'error'); return; }
+
+      $('inviteSubmit').disabled = true;
+      try {
+        const res = await apiFetch(API_HOST + '?action=invite/create', {
+          method: 'POST',
+          body: JSON.stringify({ pid: S.pid, username, role }),
+        });
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        closeModal();
+        toast('Invite sent', 'success');
+      } catch (err) {
+        toast(err.message || 'Invite failed', 'error');
+        $('inviteSubmit').disabled = false;
+      }
+    });
+  }
+
+  function confirmRemoveCollab(uid) {
+    confirmModal(
+      'Remove collaborator?',
+      'They will lose access to this project.',
+      'Remove',
+      true,
+      async () => {
+        try {
+          const res = await apiFetch(API_HOST + '?action=collaborator/remove', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid, uid }),
+          });
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+          toast('Collaborator removed', 'success');
+          renderPanel();
+        } catch (err) {
+          toast(err.message || 'Remove failed', 'error');
+        }
+      }
+    );
+  }
+
+  async function generateApiKey() {
+    confirmModal(
+      'Generate API key?',
+      'The new key is shown once. Save it somewhere safe.',
+      'Generate',
+      false,
+      async () => {
+        showLoading('Generating', '');
+        try {
+          const res = await apiFetch(API_HOST + '?action=apikey/generate', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid }),
+          });
+          hideLoading();
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+          const key = res.data.key;
+          openModal(`
+            <div class="modal-title">API key generated</div>
+            <div class="modal-desc">Copy this now. You won't see it again.</div>
+            <input class="input mono" value="${escapeAttr(key)}" readonly style="margin-bottom:12px;">
+            <div class="modal-actions">
+              <button class="btn btn-primary" id="copyApiKeyBtn">${svg('copy', 14, 2.2)} Copy</button>
+            </div>
+          `);
+          $('copyApiKeyBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(key).then(() => toast('Copied', 'success', 1200));
+          });
+          S.project.apiKeyHash = 'active';
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Failed', 'error');
+        }
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL: DATA
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderDataPanel(panel) {
+    panel.innerHTML = skeletonCard(4);
+
+    try {
+      const res = await apiFetch(API_HOST + '?action=db/get&pid=' + encodeURIComponent(S.pid));
+      if (!res.ok || !res.data?.success) {
+        panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('database', 'Couldn\'t load data', res.data?.error || 'Try refreshing.')}</div></div>`;
+        return;
+      }
+
+      S.dbData = res.data;
+      const { data, schema } = res.data;
+
+      panel.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('database', 15, 2.2)} JSON database</div>
+            <button class="btn btn-sm btn-secondary" id="btnRefreshDb">${svg('refresh', 12, 2.2)}</button>
+          </div>
+          <div class="card-body">
+            <div class="db-tabs">
+              <button class="db-tab active" data-db-view="raw">Raw</button>
+              <button class="db-tab" data-db-view="schema">Schema</button>
+            </div>
+            <div id="dbViewRaw" class="db-json">${renderJSONPretty(data)}</div>
+            <div id="dbViewSchema" class="db-json hidden">${schema ? renderJSONPretty(schema) : 'No schema defined'}</div>
+          </div>
+        </div>
+      `;
+
+      document.querySelectorAll('[data-db-view]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('[data-db-view]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          $('dbViewRaw').classList.toggle('hidden', btn.dataset.dbView !== 'raw');
+          $('dbViewSchema').classList.toggle('hidden', btn.dataset.dbView !== 'schema');
+        });
+      });
+
+      $('btnRefreshDb')?.addEventListener('click', () => renderPanel());
+    } catch (err) {
+      panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('database', 'Couldn\'t load data', err.message)}</div></div>`;
+    }
+  }
+
+  function renderJSONPretty(obj) {
+    if (!obj || typeof obj !== 'object') return escapeHTML(String(obj || ''));
+    try {
+      const json = JSON.stringify(obj, null, 2);
+      return escapeHTML(json)
+        .replace(/"([^"]+)":/g, '<span class="key">"$1"</span>:')
+        .replace(/: "([^"]*)"/g, ': <span class="str">"$1"</span>')
+        .replace(/: (-?\d+\.?\d*)/g, ': <span class="num">$1</span>')
+        .replace(/: (true|false)/g, ': <span class="bool">$1</span>')
+        .replace(/: null/g, ': <span class="null">null</span>');
+    } catch {
+      return escapeHTML(String(obj));
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL: LOGS
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderLogsPanel(panel) {
+    panel.innerHTML = skeletonCard(6);
+
+    S.logsOffset = 0;
+    const res = await apiFetch(API_HOST + '?action=logs&pid=' + encodeURIComponent(S.pid) + '&limit=50');
+    if (!res.ok || !res.data?.success) {
+      panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('list', 'Couldn\'t load logs', 'Try refreshing.')}</div></div>`;
+      return;
+    }
+
+    S.logsData = res.data;
+    S.tabCounts.logs = res.data.total || 0;
+    renderTabs();
+
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('list', 15, 2.2)} Activity (${res.data.total || 0})</div>
+          <button class="btn btn-sm btn-ghost" id="btnRefreshLogs">${svg('refresh', 12, 2.2)}</button>
+        </div>
+        <div class="card-body tight">
+          ${(res.data.logs || []).length === 0
+            ? emptyState('list', 'No activity yet', 'Actions in your project will appear here.')
+            : `<div class="row-list" id="logList">
+                ${res.data.logs.map(renderLogRow).join('')}
+              </div>
+              ${res.data.hasMore ? `<button class="btn btn-secondary btn-block" id="btnLoadMoreLogs" style="margin-top:12px;">Load more</button>` : ''}
+            `
+          }
+        </div>
+      </div>
+    `;
+
+    $('btnRefreshLogs')?.addEventListener('click', () => renderPanel());
+    $('btnLoadMoreLogs')?.addEventListener('click', loadMoreLogs);
+  }
+
+  function renderLogRow(l) {
+    return `
+      <div class="log-entry">
+        <div class="log-time">${timeAgo(l.ts)}</div>
+        <div class="log-body">
+          <div class="log-type">${escapeHTML(l.type || 'event')}</div>
+          <div class="log-action">${escapeHTML(l.action || '')}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function loadMoreLogs() {
+    const newOffset = S.logsOffset + 50;
+    const res = await apiFetch(API_HOST + '?action=logs&pid=' + encodeURIComponent(S.pid) + '&limit=50&offset=' + newOffset);
+    if (!res.ok || !res.data?.success) return;
+    S.logsOffset = newOffset;
+    const list = $('logList');
+    if (!list) return;
+    (res.data.logs || []).forEach(l => {
+      list.insertAdjacentHTML('beforeend', renderLogRow(l));
+    });
+    if (!res.data.hasMore) $('btnLoadMoreLogs')?.remove();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL: DOWNLOADS (owner)
+  // ═══════════════════════════════════════════════════════════
+
+  function renderDownloadsPanel(panel) {
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('download', 15, 2.2)} Export project</div>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+          <button class="btn btn-primary btn-block" id="btnDownloadFolio">
+            ${svg('download', 14, 2.4)} Download .folio backup
+          </button>
+          <div class="field-hint">Full backup: files, versions, JSON DB, and schema.</div>
+
+          <button class="btn btn-secondary btn-block" id="btnDownloadZip" style="margin-top:6px;">
+            ${svg('download', 14, 2.4)} Download .zip (files only)
+          </button>
+          <div class="field-hint">Just the current files, no version history.</div>
+
+          <button class="btn btn-secondary btn-block" id="btnDownloadDb" style="margin-top:6px;">
+            ${svg('download', 14, 2.4)} Download JSON database
+          </button>
+          <div class="field-hint">The current JSON database as a .json file.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('upload', 15, 2.2)} Import</div>
+        </div>
+        <div class="card-body">
+          <button class="btn btn-secondary btn-block" id="btnImportFolio">
+            ${svg('upload', 14, 2.4)} Import .folio backup
+          </button>
+          <div class="field-hint">Merge an offline copy back into this project (last-write-wins).</div>
+          <input type="file" id="fileImportFolio" accept=".folio,.zip" style="display:none;">
+        </div>
+      </div>
+    `;
+
+    $('btnDownloadFolio')?.addEventListener('click', () => downloadProject('folio'));
+    $('btnDownloadZip')?.addEventListener('click', () => downloadProject('zip'));
+    $('btnDownloadDb')?.addEventListener('click', downloadJsonDb);
+
+    $('btnImportFolio')?.addEventListener('click', () => $('fileImportFolio').click());
+    $('fileImportFolio')?.addEventListener('change', handleImportFile);
+  }
+
+  async function downloadProject(format) {
+    try {
+      const url = `${API_HOST}?action=project/export&pid=${encodeURIComponent(S.pid)}&format=${format}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${S.session}` },
+      });
+      if (!res.ok) throw new Error('Download failed');
+
+      const blob = await res.blob();
+      const filename = `${S.project.slug || 'project'}-${S.pid.slice(-6)}.${format === 'folio' ? 'folio' : 'zip'}`;
+      triggerDownload(blob, filename);
+      toast(`Downloaded ${filename}`, 'success');
+    } catch (err) {
+      toast(err.message || 'Download failed', 'error');
+    }
+  }
+
+  async function downloadJsonDb() {
+    try {
+      const res = await apiFetch(API_HOST + '?action=db/get&pid=' + encodeURIComponent(S.pid));
+      if (!res.ok || !res.data?.success) throw new Error('Failed');
+
+      const blob = new Blob([JSON.stringify(res.data.data || {}, null, 2)], { type: 'application/json' });
+      triggerDownload(blob, `${S.project.slug || 'project'}-db.json`);
+      toast('Database downloaded', 'success');
+    } catch (err) {
+      toast(err.message || 'Download failed', 'error');
+    }
+  }
+
+  function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    confirmModal(
+      'Import backup?',
+      'Files, versions, and JSON DB will merge into this project. Existing files are overwritten.',
+      'Import',
+      false,
+      async () => {
+        showLoading('Importing', 'Reading and syncing backup…');
+        try {
+          // For .folio/.zip we can't easily read server-side without unzipping.
+          // For now: parse if it's a .json, else guide the user to sync-back flow.
+          const text = await file.text();
+          let data = null;
+          try { data = JSON.parse(text); } catch {
+            hideLoading();
+            toast('Import needs sync-back — use the sync feature instead', 'info', 3500);
+            return;
+          }
+
+          const res = await apiFetch(API_HOST + '?action=project/sync-back', {
+            method: 'POST',
+            body: JSON.stringify({
+              pid: S.pid,
+              files: data.files || null,
+              versions: data.versions || null,
+              db: data.db || null,
+              schema: data.schema || null,
+              manifest: data.manifest || null,
+            }),
+          });
+          hideLoading();
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+          toast('Imported successfully', 'success');
+          renderPanel();
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Import failed', 'error');
+        }
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL: DOWNLOAD (shared mode)
+  // ═══════════════════════════════════════════════════════════
+
+  async function renderDownloadSharedPanel(panel) {
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('download', 15, 2.2)} Download project</div>
+        </div>
+        <div class="card-body">
+          <p style="font-size:12.5px;color:var(--theme-text-secondary);line-height:1.55;margin-bottom:14px;">
+            Download the public files from this project to work on them offline.
+            You can save as a copy in your own account later.
+          </p>
+
+          <button class="btn btn-primary btn-block" id="btnDownloadPublicFolio">
+            ${svg('download', 14, 2.4)} Download as .folio
+          </button>
+          <div class="field-hint">Includes public files and metadata for offline editing.</div>
+
+          <button class="btn btn-secondary btn-block" id="btnDownloadPublicZip" style="margin-top:10px;">
+            ${svg('download', 14, 2.4)} Download files as .zip
+          </button>
+          <div class="field-hint">Just the raw files, no metadata.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('folder', 15, 2.2)} Save to your account</div>
+        </div>
+        <div class="card-body">
+          <p style="font-size:12.5px;color:var(--theme-text-secondary);line-height:1.55;margin-bottom:14px;">
+            Create your own copy of this project so you can edit and deploy it as your own.
+            The public files will be copied to a new project owned by you.
+          </p>
+          <button class="btn btn-primary btn-block" id="btnCopyProject">
+            ${svg('copy', 14, 2.2)} Save as copy in my account
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('info', 15, 2.2)} Note</div>
+        </div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--theme-text-tertiary);line-height:1.55;">
+            You're viewing this project as a collaborator. Downloads only include public files.
+            Full history and JSON database are not included.
+          </div>
+        </div>
+      </div>
+    `;
+
+    $('btnDownloadPublicFolio')?.addEventListener('click', () => downloadProjectPublic('folio'));
+    $('btnDownloadPublicZip')?.addEventListener('click', () => downloadProjectPublic('zip'));
+    $('btnCopyProject')?.addEventListener('click', saveAsCopy);
+  }
+
+  async function downloadProjectPublic(format) {
+    try {
+      const url = `${API_HOST}?action=project/export&pid=${encodeURIComponent(S.pid)}&format=${format}&publicOnly=true`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${S.session}` },
+      });
+      if (!res.ok) throw new Error('Download failed');
+
+      const blob = await res.blob();
+      const filename = `${S.project.slug || 'project'}-public-${S.pid.slice(-6)}.${format === 'folio' ? 'folio' : 'zip'}`;
+      triggerDownload(blob, filename);
+      toast(`Downloaded ${filename}`, 'success');
+    } catch (err) {
+      toast(err.message || 'Download failed', 'error');
+    }
+  }
+
+  async function saveAsCopy() {
+    confirmModal(
+      'Save as copy?',
+      'A new project will be created in your account with the public files.',
+      'Save copy',
+      false,
+      async () => {
+        showLoading('Creating copy', 'Cloning files into your account…');
+        try {
+          const res = await apiFetch(API_HOST + '?action=project/copy', {
+            method: 'POST',
+            body: JSON.stringify({
+              pid: S.pid,
+              newName: `${S.project.name} (copy)`,
+            }),
+          });
+          hideLoading();
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Copy failed');
+          toast('Copy created', 'success');
+          setTimeout(() => {
+            window.location.href = `/project?pid=${res.data.pid}`;
+          }, 800);
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Copy failed', 'error');
+        }
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PANEL: DANGER
+  // ═══════════════════════════════════════════════════════════
+
+  function renderDangerPanel(panel) {
+    if (!S.isOwner) {
+      panel.innerHTML = `<div class="card card-danger"><div class="card-body">${emptyState('alert', 'Owner only', 'Only the project owner can access danger zone actions.')}</div></div>`;
+      return;
+    }
+
+    panel.innerHTML = `
+      <div class="card card-danger">
+        <div class="card-header">
+          <div class="card-title">${svg('trash', 15, 2.2)} Clear versions</div>
+        </div>
+        <div class="card-body">
+          <div style="font-size:12.5px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:12px;">
+            Delete all version snapshots. Current files stay intact.
+          </div>
+          <button class="btn btn-outline-danger btn-block" id="btnClearVersions">${svg('trash', 14, 2.2)} Clear all versions</button>
+        </div>
+      </div>
+
+      <div class="card card-danger">
+        <div class="card-header">
+          <div class="card-title">${svg('refresh', 15, 2.2)} Clear cache</div>
+        </div>
+        <div class="card-body">
+          <div style="font-size:12.5px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:12px;">
+            Clear local browser cache for this project. No server data affected.
+          </div>
+          <button class="btn btn-outline-danger btn-block" id="btnClearCache">${svg('refresh', 14, 2.2)} Clear cache</button>
+        </div>
+      </div>
+
+      <div class="card card-danger">
+        <div class="card-header">
+          <div class="card-title">${svg('alert', 15, 2.2)} Delete project</div>
+        </div>
+        <div class="card-body">
+          <div style="font-size:12.5px;color:var(--theme-text-secondary);line-height:1.5;margin-bottom:12px;">
+            Permanently delete this project, all its files, versions, and data. This cannot be undone.
+          </div>
+          <button class="btn btn-danger btn-block" id="btnDeleteProject">${svg('trash', 14, 2.2)} Delete project</button>
+        </div>
+      </div>
+    `;
+
+    $('btnClearVersions')?.addEventListener('click', confirmClearVersions);
+    $('btnClearCache')?.addEventListener('click', clearLocalCache);
+    $('btnDeleteProject')?.addEventListener('click', confirmDeleteProject);
+  }
+
+  function confirmClearVersions() {
+    confirmModal(
+      'Clear all versions?',
+      'All version snapshots will be deleted. Current files stay.',
+      'Clear versions',
+      true,
+      async () => {
+        showLoading('Clearing', '');
+        try {
+          const res = await apiFetch(API_HOST + '?action=versions/clear', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid }),
+          });
+          hideLoading();
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+          toast(`${res.data.cleared} versions cleared`, 'success');
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Failed', 'error');
+        }
+      }
+    );
+  }
+
+  function clearLocalCache() {
+    try {
+      localStorage.removeItem(STORAGE.lastTab + '.' + S.pid);
+      toast('Local cache cleared', 'success');
+    } catch {
+      toast('Could not clear cache', 'error');
+    }
+  }
+
+  function confirmDeleteProject() {
+    openModal(`
+      <div class="modal-title">Delete project?</div>
+      <div class="modal-desc">Type the project name to confirm. This cannot be undone.</div>
+      <div class="field" style="margin-bottom:16px;">
+        <label class="field-label">Type "${escapeHTML(S.project.name)}"</label>
+        <input class="input" id="deleteConfirmInput" placeholder="Project name">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="ProjectPage.closeModal()">Cancel</button>
+        <button class="btn btn-danger" id="deleteConfirmBtn" disabled>Delete project</button>
+      </div>
+    `);
+
+    $('deleteConfirmInput').addEventListener('input', (e) => {
+      $('deleteConfirmBtn').disabled = e.target.value !== S.project.name;
+    });
+
+    $('deleteConfirmBtn').addEventListener('click', async () => {
+      showLoading('Deleting', 'Removing project and all data…');
+      try {
+        const res = await apiFetch(API_HOST + '?action=projects/delete', {
+          method: 'POST',
+          body: JSON.stringify({ pid: S.pid }),
+        });
+        hideLoading();
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        toast('Project deleted', 'success');
+        setTimeout(() => { window.location.href = '/projects'; }, 800);
+      } catch (err) {
+        hideLoading();
+        toast(err.message || 'Delete failed', 'error');
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // MODAL MANAGEMENT
+  // ═══════════════════════════════════════════════════════════
+
+  function initModal() {
+    $('modalOverlay').addEventListener('click', (e) => {
+      if (e.target === $('modalOverlay')) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $('modalOverlay').classList.contains('active')) {
+        closeModal();
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SHARE BUTTON
+  // ═══════════════════════════════════════════════════════════
+
+  function initShareButton() {
+    $('btnShare')?.addEventListener('click', () => {
+      const url = `${location.origin}/${S.user?.username || ''}/${S.project?.slug || ''}`;
+      if (navigator.share) {
+        navigator.share({ title: S.project?.name, url }).catch(() => {});
+      } else {
+        navigator.clipboard.writeText(url).then(() => toast('Link copied', 'success', 1400)).catch(() => toast('Copy failed', 'error'));
+      }
+    });
+  }
+
+  function initRefreshButton() {
+    $('btnRefresh')?.addEventListener('click', () => {
+      S.tabLoaded.clear();
+      renderPanel();
+      loadDeployState();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BOOT
+  // ═══════════════════════════════════════════════════════════
+
+  async function boot() {
+    readSession();
+
+    S.pid = getPid();
+    if (!S.pid) {
+      showFatal('Missing project', 'No project ID in URL. Return to projects list.');
+      return;
+    }
+
+    if (!S.session) {
+      window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
+      return;
+    }
+
+    // Determine initial tab
+    const hashTab = getHashTab();
+    const lastTab = shouldRememberTab() ? getLastTab() : null;
+    S.activeTab = hashTab || lastTab || 'overview';
+
+    // Load project
+    const ok = await loadProject();
+    if (!ok) return;
+
+    // Re-validate tab (mode may have changed)
+    if (!S.tabs.some(t => t.id === S.activeTab)) {
+      S.activeTab = 'overview';
+    }
+
+    renderTabs();
+    renderPanel();
+
+    initModal();
+    initShareButton();
+    initRefreshButton();
+  }
+
+  // Expose for inline onclick handlers
+  window.ProjectPage = {
+    closeModal,
+  };
+
+  document.addEventListener('DOMContentLoaded', boot);
+
+})();
+</script>
+
+</body>
+</html>
