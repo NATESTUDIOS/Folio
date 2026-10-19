@@ -1,0 +1,1871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<title>Notifications — Folio</title>
+<meta name="theme-color" content="#0a0c10" id="metaThemeColor">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio">
+<meta name="robots" content="noindex">
+
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === "light") document.documentElement.setAttribute("data-theme", "light");
+    if (pref === "auto" || pref === "system") {
+      if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    }
+    if (localStorage.getItem("folio.reducedMotion") === "true") {
+      document.documentElement.setAttribute("data-reduced-motion", "true");
+    }
+    var scale = Number(localStorage.getItem("folio.pageScale") || 1);
+    if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
+    if (scale > 1.35) scale = 1.35;
+    document.documentElement.style.setProperty("--page-scale", String(scale));
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   THEME (ported from settings.html)
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --theme-primary: #F59E0B;
+  --theme-primary-hover: #fbbf24;
+  --theme-primary-glow: rgba(245, 158, 11, 0.40);
+  --theme-primary-soft: rgba(245, 158, 11, 0.14);
+
+  --theme-bg: #0a0c10;
+  --theme-surface: #0f1218;
+  --theme-surface-card: rgba(21, 25, 34, 0.72);
+  --theme-surface-card-solid: #151922;
+  --theme-surface-elevated: #1a1f2a;
+  --theme-text: #e8ecf1;
+  --theme-text-secondary: rgba(232, 236, 241, 0.72);
+  --theme-text-tertiary: rgba(232, 236, 241, 0.44);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.05);
+  --theme-glass-border: rgba(255, 255, 255, 0.09);
+  --theme-overlay: rgba(10, 12, 16, 0.85);
+  --theme-card-border: rgba(255, 255, 255, 0.08);
+  --theme-divider: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(26, 31, 42, 0.88);
+
+  --theme-success: #10B981;
+  --theme-success-soft: rgba(16, 185, 129, 0.14);
+  --theme-danger: #EF4444;
+  --theme-danger-soft: rgba(239, 68, 68, 0.12);
+  --theme-warning: #D97706;
+  --theme-warning-soft: rgba(217, 119, 6, 0.14);
+  --theme-info: #3B82F6;
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.10) 0%, transparent 55%);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --content-max: 720px;
+
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Monaco, monospace;
+}
+
+[data-theme="light"] {
+  --theme-primary: #D97706;
+  --theme-primary-hover: #B45309;
+  --theme-primary-glow: rgba(217, 119, 6, 0.28);
+  --theme-primary-soft: rgba(217, 119, 6, 0.10);
+  --theme-bg: #f7f8fa;
+  --theme-surface: #ffffff;
+  --theme-surface-card: rgba(255, 255, 255, 0.85);
+  --theme-surface-card-solid: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-text: #121316;
+  --theme-text-secondary: rgba(18, 19, 22, 0.72);
+  --theme-text-tertiary: rgba(18, 19, 22, 0.48);
+  --theme-glass-bg: rgba(255, 255, 255, 0.75);
+  --theme-glass-border: rgba(0, 0, 0, 0.08);
+  --theme-overlay: rgba(18, 19, 22, 0.55);
+  --theme-card-border: rgba(0, 0, 0, 0.07);
+  --theme-divider: rgba(0, 0, 0, 0.06);
+  --input-bg: #ffffff;
+  --theme-success: #059669;
+  --theme-success-soft: rgba(5, 150, 105, 0.12);
+  --theme-danger: #DC2626;
+  --theme-danger-soft: rgba(220, 38, 38, 0.10);
+  --theme-warning: #B45309;
+  --theme-warning-soft: rgba(180, 83, 9, 0.10);
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(217, 119, 6, 0.08) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BASE + PAGE SCALE
+   ═══════════════════════════════════════════════════════════ */
+html { font-size: calc(16px * var(--page-scale, 1)); }
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  background: var(--theme-bg);
+  font-family: var(--font);
+  color: var(--theme-text);
+  font-size: 1rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
+  background-attachment: fixed;
+  padding: calc(1rem + var(--safe-top)) calc(1rem + var(--safe-right)) calc(1.25rem + var(--safe-bottom)) calc(1rem + var(--safe-left));
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+html[data-reduced-motion="true"] *,
+html[data-reduced-motion="true"] *::before,
+html[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border: none; background: none; padding: 0; }
+a { color: var(--theme-primary); text-decoration: none; }
+svg { display: block; }
+.hidden { display: none !important; }
+.mono { font-family: var(--font-mono); }
+
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.container {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BACK LINK
+   ═══════════════════════════════════════════════════════════ */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--theme-text-secondary);
+  padding: 0.4rem 0.7rem 0.4rem 0.5rem;
+  border-radius: 0.5rem;
+  transition: all 0.15s var(--ease);
+  margin-bottom: 0.9rem;
+}
+.back-link:hover { color: var(--theme-primary); background: var(--theme-glass-bg); }
+.back-link svg { width: 0.85rem; height: 0.85rem; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ═══════════════════════════════════════════════════════════
+   BANNERS (offline + status)
+   ═══════════════════════════════════════════════════════════ */
+.banner {
+  display: none;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  line-height: 1.4;
+  animation: slideDown 0.25s var(--ease);
+}
+.banner.visible { display: flex; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.banner svg {
+  width: 1rem; height: 1rem;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.banner .txt { flex: 1; min-width: 0; }
+
+.banner .banner-btn {
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: currentColor;
+  color: var(--theme-bg);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: opacity 0.15s var(--ease);
+}
+.banner .banner-btn:hover { opacity: 0.85; }
+
+.banner.offline {
+  background: var(--theme-warning-soft);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  color: var(--theme-warning);
+}
+
+.banner.status {
+  background: var(--theme-danger-soft);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: var(--theme-danger);
+}
+.banner.status.warning {
+  background: var(--theme-warning-soft);
+  border-color: rgba(217, 119, 6, 0.35);
+  color: var(--theme-warning);
+}
+.banner.status .banner-btn { background: var(--theme-danger); color: #fff; }
+.banner.status.warning .banner-btn { background: var(--theme-warning); color: #0a0c10; }
+
+/* ═══════════════════════════════════════════════════════════
+   PERMISSION GATE
+   ═══════════════════════════════════════════════════════════ */
+.gate {
+  display: none;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  animation: fadeUp 0.3s var(--ease);
+}
+.gate.visible { display: block; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.gate-icon {
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 1.5rem;
+  background: linear-gradient(135deg, var(--theme-primary-soft), rgba(249, 115, 22, 0.10));
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: var(--theme-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem;
+  position: relative;
+}
+.gate-icon svg {
+  width: 2.5rem; height: 2.5rem;
+  stroke: currentColor; fill: none;
+  stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.gate-icon::after {
+  content: '';
+  position: absolute;
+  inset: -0.5rem;
+  border-radius: 2rem;
+  border: 1px dashed rgba(245, 158, 11, 0.15);
+  animation: pulseRing 2.4s ease-in-out infinite;
+}
+@keyframes pulseRing {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.04); }
+}
+
+.gate-icon.blocked {
+  background: linear-gradient(135deg, var(--theme-danger-soft), rgba(239, 68, 68, 0.08));
+  border-color: rgba(239, 68, 68, 0.3);
+  color: var(--theme-danger);
+}
+.gate-icon.blocked::after { border-color: rgba(239, 68, 68, 0.2); }
+
+.gate-title {
+  font-size: 1.375rem;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--theme-text);
+  margin-bottom: 0.5rem;
+}
+
+.gate-desc {
+  font-size: 0.84rem;
+  color: var(--theme-text-secondary);
+  line-height: 1.55;
+  max-width: 26rem;
+  margin: 0 auto 1.5rem;
+}
+
+.gate-features {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 21rem;
+  margin: 0 auto 1.75rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-lg);
+  text-align: left;
+}
+.gate-feature {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+  color: var(--theme-text-secondary);
+  line-height: 1.4;
+}
+.gate-feature svg {
+  width: 1rem; height: 1rem;
+  stroke: var(--theme-primary); fill: none;
+  stroke-width: 2.4;
+  stroke-linecap: round; stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.gate-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.75rem;
+  border-radius: 0.7rem;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  font-size: 0.875rem;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.28);
+  transition: all 0.2s var(--ease);
+  margin-bottom: 0.75rem;
+}
+[data-theme="light"] .gate-cta { color: #ffffff; }
+.gate-cta:hover {
+  background: var(--theme-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 32px rgba(245, 158, 11, 0.35);
+}
+.gate-cta:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.gate-cta svg {
+  width: 1rem; height: 1rem;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+.gate-secondary {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--theme-text-tertiary);
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s, color 0.15s;
+}
+.gate-secondary:hover { color: var(--theme-text-secondary); text-decoration-color: currentColor; }
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN
+   ═══════════════════════════════════════════════════════════ */
+.main { display: none; }
+.main.visible { display: block; animation: fadeUp 0.3s var(--ease); }
+
+/* ═══════════════════════════════════════════════════════════
+   PAGE HEADER
+   ═══════════════════════════════════════════════════════════ */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--theme-glass-border);
+  flex-wrap: wrap;
+}
+
+.page-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--theme-text);
+}
+
+.badge-count {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.page-sub {
+  font-size: 0.75rem;
+  color: var(--theme-text-tertiary);
+  margin-top: 0.2rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 0.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-secondary);
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  transition: all 0.15s var(--ease);
+  flex-shrink: 0;
+}
+.icon-btn:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.icon-btn:active { transform: scale(0.94); }
+.icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.icon-btn svg {
+  width: 0.95rem; height: 0.95rem;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   STATS GRID
+   ═══════════════════════════════════════════════════════════ */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 1.1rem;
+}
+
+.stat {
+  padding: 0.85rem 0.75rem;
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-md);
+  text-align: center;
+  transition: border-color 0.15s var(--ease);
+  min-width: 0;
+}
+.stat:hover { border-color: var(--theme-primary-glow); }
+
+.stat-num {
+  font-size: 1.375rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--theme-text);
+  letter-spacing: -0.5px;
+}
+.stat-num.primary { color: var(--theme-primary); }
+.stat-num.success { color: var(--theme-success); }
+
+.stat-label {
+  font-size: 0.62rem;
+  color: var(--theme-text-tertiary);
+  margin-top: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FILTERS
+   ═══════════════════════════════════════════════════════════ */
+.filters {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.filters::-webkit-scrollbar { display: none; }
+
+.filter-pill {
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.5rem;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s var(--ease);
+  font-family: inherit;
+}
+.filter-pill:hover {
+  border-color: var(--theme-primary-glow);
+  color: var(--theme-text);
+}
+.filter-pill.active {
+  background: var(--theme-primary);
+  color: #0a0c10;
+  border-color: var(--theme-primary);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+}
+[data-theme="light"] .filter-pill.active { color: #ffffff; }
+
+.filter-pill .pill-count {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0 0.35rem;
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.15);
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 0.95rem;
+}
+.filter-pill.active .pill-count { background: rgba(0, 0, 0, 0.2); }
+
+/* ═══════════════════════════════════════════════════════════
+   NOTIFICATION LIST
+   ═══════════════════════════════════════════════════════════ */
+.notif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.notif {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  background: var(--theme-surface-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-md);
+  transition: all 0.15s var(--ease);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  color: var(--theme-text);
+}
+
+.notif::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.notif.unread::before { background: var(--theme-primary); }
+
+.notif:hover {
+  border-color: var(--theme-primary-glow);
+  background: var(--theme-surface-card-solid);
+  transform: translateX(2px);
+}
+.notif:active { transform: translateX(1px); }
+.notif.dismissed { opacity: 0.5; }
+
+.notif-icon {
+  width: 2.375rem;
+  height: 2.375rem;
+  border-radius: 0.7rem;
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.15s var(--ease);
+}
+.notif:hover .notif-icon { transform: scale(1.05); }
+.notif-icon svg {
+  width: 1.1rem; height: 1.1rem;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.notif-icon.system { color: var(--theme-info); background: rgba(59, 130, 246, 0.14); }
+.notif-icon.project { color: var(--theme-primary); background: var(--theme-primary-soft); }
+.notif-icon.invite { color: var(--theme-success); background: var(--theme-success-soft); }
+.notif-icon.storage { color: var(--theme-warning); background: var(--theme-warning-soft); }
+.notif-icon.db { color: var(--theme-info); background: rgba(59, 130, 246, 0.14); }
+.notif-icon.analytics { color: var(--theme-success); background: var(--theme-success-soft); }
+
+.notif-body { flex: 1; min-width: 0; }
+
+.notif-title {
+  font-size: 0.81rem;
+  font-weight: 700;
+  color: var(--theme-text);
+  margin-bottom: 0.2rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.notif-text {
+  font-size: 0.75rem;
+  color: var(--theme-text-secondary);
+  line-height: 1.45;
+  margin-bottom: 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.notif-meta {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.66rem;
+  color: var(--theme-text-tertiary);
+  flex-wrap: wrap;
+}
+
+.notif-meta .dot {
+  width: 0.2rem;
+  height: 0.2rem;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.notif-meta .tag {
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.3rem;
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-size: 0.58rem;
+}
+
+.notif-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.notif-act {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  transition: all 0.15s var(--ease);
+  flex-shrink: 0;
+}
+.notif-act:hover { color: var(--theme-text); background: var(--theme-glass-bg); }
+.notif-act.danger:hover { color: var(--theme-danger); background: var(--theme-danger-soft); }
+.notif-act svg {
+  width: 0.8rem; height: 0.8rem;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EMPTY
+   ═══════════════════════════════════════════════════════════ */
+.empty {
+  padding: 3rem 1.25rem;
+  text-align: center;
+  animation: fadeUp 0.3s var(--ease);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.empty-icon {
+  width: 3.75rem;
+  height: 3.75rem;
+  border-radius: 1.1rem;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 0.75rem;
+  color: var(--theme-text-tertiary);
+}
+.empty-icon svg {
+  width: 1.6rem; height: 1.6rem;
+  stroke: currentColor; fill: none;
+  stroke-width: 2;
+}
+
+.empty-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+
+.empty-desc {
+  font-size: 0.75rem;
+  color: var(--theme-text-tertiary);
+  line-height: 1.5;
+  max-width: 21rem;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LOADING + LOAD MORE
+   ═══════════════════════════════════════════════════════════ */
+.loading {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--theme-text-tertiary);
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.spinner {
+  width: 1.625rem;
+  height: 1.625rem;
+  border: 2.5px solid var(--theme-primary-soft);
+  border-top-color: var(--theme-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.load-more {
+  width: 100%;
+  padding: 0.8rem;
+  margin-top: 0.85rem;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--theme-text-secondary);
+  transition: all 0.15s var(--ease);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-family: inherit;
+}
+.load-more:hover:not(:disabled) {
+  color: var(--theme-text);
+  border-color: var(--theme-primary-glow);
+  background: var(--theme-surface-elevated);
+}
+.load-more:disabled { opacity: 0.5; cursor: not-allowed; }
+.load-more svg {
+  width: 0.75rem; height: 0.75rem;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SYNC HINT
+   ═══════════════════════════════════════════════════════════ */
+.sync-hint {
+  display: none;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.55rem;
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--theme-primary);
+  margin-bottom: 0.9rem;
+}
+.sync-hint.visible { display: flex; }
+.sync-hint svg {
+  width: 0.85rem; height: 0.85rem;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2;
+  flex-shrink: 0;
+}
+.sync-hint .txt { flex: 1; min-width: 0; line-height: 1.35; }
+
+/* ═══════════════════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: calc(1rem + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: calc(100% - 2rem);
+  max-width: 24rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  pointer-events: none;
+}
+@media (min-width: 1024px) {
+  .toast-container { left: auto; right: 1.25rem; transform: none; bottom: 1.25rem; }
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--theme-text);
+  transform: translateY(20px);
+  opacity: 0;
+  transition: all 0.3s var(--ease-spring);
+  pointer-events: all;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  overflow-wrap: break-word;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast svg {
+  width: 0.9rem; height: 0.9rem;
+  flex-shrink: 0;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.4;
+}
+.toast.success { color: var(--theme-success); border-color: rgba(16, 185, 129, 0.3); }
+.toast.error { color: var(--theme-danger); border-color: rgba(239, 68, 68, 0.3); }
+.toast.info { color: var(--theme-primary); border-color: rgba(245, 158, 11, 0.3); }
+.toast.warning { color: var(--theme-warning); border-color: rgba(217, 119, 6, 0.3); }
+.toast span { color: var(--theme-text); flex: 1; }
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE — compress on small screens
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  body {
+    padding: calc(0.7rem + var(--safe-top)) calc(0.7rem + var(--safe-right)) calc(1rem + var(--safe-bottom)) calc(0.7rem + var(--safe-left));
+  }
+
+  .back-link { font-size: 0.7rem; padding: 0.3rem 0.55rem 0.3rem 0.35rem; margin-bottom: 0.6rem; }
+  .back-link svg { width: 0.75rem; height: 0.75rem; }
+
+  .banner { padding: 0.6rem 0.75rem; font-size: 0.72rem; gap: 0.55rem; margin-bottom: 0.75rem; }
+  .banner svg { width: 0.85rem; height: 0.85rem; }
+  .banner .banner-btn { padding: 0.3rem 0.6rem; font-size: 0.66rem; }
+
+  .page-title { font-size: 1.05rem; gap: 0.4rem; }
+  .badge-count { font-size: 0.62rem; padding: 0.08rem 0.4rem; }
+  .page-sub { font-size: 0.68rem; }
+  .page-header { margin-bottom: 0.75rem; padding-bottom: 0.7rem; gap: 0.5rem; }
+  .header-actions { gap: 0.3rem; }
+  .icon-btn { width: 1.875rem; height: 1.875rem; border-radius: 0.45rem; }
+  .icon-btn svg { width: 0.85rem; height: 0.85rem; }
+
+  .stats-grid { gap: 0.35rem; margin-bottom: 0.75rem; }
+  .stat { padding: 0.65rem 0.5rem; border-radius: 0.55rem; }
+  .stat-num { font-size: 1.125rem; }
+  .stat-label { font-size: 0.55rem; margin-top: 0.3rem; letter-spacing: 0.3px; }
+
+  .filters { gap: 0.25rem; margin-bottom: 0.7rem; }
+  .filter-pill { padding: 0.35rem 0.7rem; font-size: 0.68rem; border-radius: 0.45rem; }
+  .filter-pill .pill-count { font-size: 0.58rem; padding: 0 0.3rem; line-height: 0.85rem; }
+
+  .notif-list { gap: 0.4rem; }
+  .notif { padding: 0.75rem 0.8rem; gap: 0.6rem; border-radius: 0.6rem; }
+  .notif-icon { width: 2rem; height: 2rem; border-radius: 0.55rem; }
+  .notif-icon svg { width: 0.95rem; height: 0.95rem; }
+  .notif-title { font-size: 0.76rem; }
+  .notif-text { font-size: 0.71rem; -webkit-line-clamp: 2; }
+  .notif-meta { font-size: 0.62rem; gap: 0.3rem; }
+  .notif-meta .tag { font-size: 0.55rem; padding: 0.04rem 0.35rem; }
+  .notif-act { width: 1.5rem; height: 1.5rem; }
+  .notif-act svg { width: 0.7rem; height: 0.7rem; }
+  .notif-actions { gap: 0.15rem; }
+
+  .empty { padding: 2rem 1rem; }
+  .empty-icon { width: 3rem; height: 3rem; border-radius: 0.9rem; margin-bottom: 0.6rem; }
+  .empty-icon svg { width: 1.3rem; height: 1.3rem; }
+  .empty-title { font-size: 0.82rem; }
+  .empty-desc { font-size: 0.7rem; }
+
+  .load-more { padding: 0.7rem; font-size: 0.7rem; margin-top: 0.7rem; }
+
+  .gate { padding: 1.75rem 1rem; }
+  .gate-icon { width: 4.5rem; height: 4.5rem; border-radius: 1.25rem; margin-bottom: 1.1rem; }
+  .gate-icon svg { width: 2rem; height: 2rem; }
+  .gate-title { font-size: 1.15rem; }
+  .gate-desc { font-size: 0.78rem; margin-bottom: 1.15rem; }
+  .gate-features { padding: 0.85rem 1rem; gap: 0.5rem; margin-bottom: 1.35rem; border-radius: 0.9rem; }
+  .gate-feature { font-size: 0.72rem; gap: 0.5rem; }
+  .gate-feature svg { width: 0.85rem; height: 0.85rem; }
+  .gate-cta { padding: 0.7rem 1.5rem; font-size: 0.82rem; }
+  .gate-secondary { font-size: 0.7rem; }
+
+  /* Disable backdrop-filter on small screens for performance */
+  .stat, .notif, .toast, .gate-features {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--theme-surface-card-solid);
+  }
+}
+
+@media (max-width: 360px) {
+  .page-title { font-size: 0.95rem; }
+  .stat-num { font-size: 1rem; }
+  .notif { padding: 0.65rem 0.7rem; }
+  .notif-icon { width: 1.8rem; height: 1.8rem; }
+  .notif-icon svg { width: 0.85rem; height: 0.85rem; }
+  .notif-title { font-size: 0.72rem; }
+  .notif-text { font-size: 0.68rem; }
+  .filter-pill { padding: 0.3rem 0.6rem; font-size: 0.64rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Back link -->
+  <a href="/" class="back-link" id="backLink">
+    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    Back to editor
+  </a>
+
+  <!-- Offline banner -->
+  <div class="banner offline" id="offlineBanner">
+    <svg viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/></svg>
+    <div class="txt">You're offline. Showing cached data.</div>
+    <button class="banner-btn" id="offlineRetry" type="button">Retry</button>
+  </div>
+
+  <!-- Status banner -->
+  <div class="banner status" id="statusBanner">
+    <svg viewBox="0 0 24 24" id="statusIcon"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <div class="txt" id="statusText">Something needs attention.</div>
+    <button class="banner-btn" id="statusRetry" type="button">Retry</button>
+  </div>
+
+  <!-- Permission gate -->
+  <div class="gate" id="permissionGate">
+    <div class="gate-icon" id="gateIcon">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    </div>
+    <h1 class="gate-title" id="gateTitle">Enable notifications</h1>
+    <p class="gate-desc" id="gateDesc">
+      Notifications keep you informed about deploys, collaborator invites, storage limits, and database activity — even when this tab is closed.
+    </p>
+
+    <div class="gate-features" id="gateFeatures">
+      <div class="gate-feature">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Get notified when your project finishes deploying</span>
+      </div>
+      <div class="gate-feature">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>See collaborator invites the moment they arrive</span>
+      </div>
+      <div class="gate-feature">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Alerts for storage limits and API activity</span>
+      </div>
+    </div>
+
+    <button class="gate-cta" id="gateEnableBtn" type="button">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Enable notifications
+    </button>
+
+    <a href="/" class="gate-secondary" id="gateSkip">Not now, go back to editor</a>
+  </div>
+
+  <!-- Main page -->
+  <div class="main" id="main">
+
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">
+          Notifications
+          <span class="badge-count" id="unreadBadge" style="display:none;">0</span>
+        </h1>
+        <div class="page-sub" id="pageSub">Loading…</div>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="refreshBtn" aria-label="Refresh" title="Refresh">
+          <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+        <button class="icon-btn" id="markAllBtn" aria-label="Mark all as read" title="Mark all as read">
+          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
+        <button class="icon-btn" id="dismissReadBtn" aria-label="Clear read" title="Dismiss all read">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="sync-hint" id="syncHint">
+      <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      <div class="txt" id="syncHintText">—</div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="stat-num" id="statTotal">—</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num primary" id="statUnread">—</div>
+        <div class="stat-label">Unread</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num success" id="statToday">—</div>
+        <div class="stat-label">Today</div>
+      </div>
+    </div>
+
+    <div class="filters" id="filters"></div>
+
+    <div class="notif-list" id="notifList">
+      <div class="loading">
+        <div class="spinner"></div>
+        <div>Loading notifications…</div>
+      </div>
+    </div>
+
+    <button class="load-more" id="loadMoreBtn" style="display:none;" type="button">
+      Load more
+      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+<script src="/fcm-client.js" defer></script>
+<script>
+(function () {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════════════════════
+
+  const API = 'https://foliostudios.vercel.app/api/notify';
+
+  const STORAGE = {
+    session: 'folio.session',
+    user: 'folio.user',
+    theme: 'folio.theme',
+    pageScale: 'folio.pageScale',
+    reducedMotion: 'folio.reducedMotion',
+  };
+
+  const DB_NAME = 'folio';
+  const DB_VERSION = 2;
+
+  const TYPE_LABELS = {
+    all: 'All',
+    system: 'System',
+    project: 'Projects',
+    invite: 'Invites',
+    storage: 'Storage',
+    db: 'Database',
+    analytics: 'Analytics',
+  };
+
+  const TYPE_ICONS = {
+    system: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    project: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    invite: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    storage: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+    db: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+    analytics: '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+  };
+
+  const UI_ICONS = {
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+    bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+    inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  };
+
+  const svg = (name, size = 14, sw = 2.2) =>
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${UI_ICONS[name] || ''}</svg>`;
+
+  // ═══════════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════════
+
+  const STATE = {
+    session: null,
+    user: null,
+    filter: 'all',
+    offset: 0,
+    limit: 20,
+    items: [],
+    hasMore: false,
+    stats: null,
+    loading: false,
+    online: navigator.onLine,
+    permission: 'default',
+    fcmSubscribed: false,
+    statusError: null,
+    online: navigator.onLine,
+    idbAvailable: false,
+    pendingSync: 0,
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // ═══════════════════════════════════════════════════════════
+  // IDB (read-only, for sync hint)
+  // ═══════════════════════════════════════════════════════════
+
+  let idbConn = null;
+
+  function openIDB() {
+    if (idbConn) return Promise.resolve(idbConn);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => { idbConn = req.result; resolve(idbConn); };
+      req.onupgradeneeded = (event) => {
+        const conn = event.target.result;
+        if (!conn.objectStoreNames.contains('projects')) conn.createObjectStore('projects', { keyPath: 'pid' });
+        if (!conn.objectStoreNames.contains('files')) {
+          const s = conn.createObjectStore('files', { keyPath: ['pid', 'path'] });
+          s.createIndex('pid', 'pid');
+        }
+        if (!conn.objectStoreNames.contains('versions')) {
+          const s = conn.createObjectStore('versions', { keyPath: 'vid' });
+          s.createIndex('pid', 'pid');
+        }
+        if (!conn.objectStoreNames.contains('projectMeta')) conn.createObjectStore('projectMeta', { keyPath: 'pid' });
+        if (!conn.objectStoreNames.contains('syncQueue')) conn.createObjectStore('syncQueue', { keyPath: 'id', autoIncrement: true });
+      };
+    });
+  }
+
+  function idbWrap(req) {
+    return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
+  }
+
+  async function countPendingSync() {
+    try {
+      await openIDB();
+      if (!idbConn.objectStoreNames.contains('syncQueue')) return 0;
+      const store = idbConn.transaction('syncQueue', 'readonly').objectStore('syncQueue');
+      const all = await idbWrap(store.getAll());
+      return (all || []).length;
+    } catch { return 0; }
+  }
+
+  async function refreshSyncHint() {
+    const hint = $('syncHint');
+    const text = $('syncHintText');
+    if (!hint || !text) return;
+    const count = await countPendingSync();
+    STATE.pendingSync = count;
+    if (count > 0) {
+      text.textContent = `${count} local change${count === 1 ? '' : 's'} waiting to sync — open the editor to push.`;
+      hint.classList.add('visible');
+    } else {
+      hint.classList.remove('visible');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TOAST
+  // ═══════════════════════════════════════════════════════════
+
+  function toast(msg, type = 'info', duration = 2400) {
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    const ic = type === 'success' ? 'check' : type === 'error' ? 'alert' : type === 'warning' ? 'alert' : 'info';
+    el.innerHTML = svg(ic, 14, 2.4) + '<span></span>';
+    el.querySelector('span').textContent = msg;
+    $('toastContainer').appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SESSION + API
+  // ═══════════════════════════════════════════════════════════
+
+  function readSession() {
+    try { STATE.session = localStorage.getItem(STORAGE.session); } catch {}
+    try {
+      const raw = localStorage.getItem(STORAGE.user);
+      STATE.user = raw ? JSON.parse(raw) : null;
+    } catch {}
+  }
+
+  async function api(path, opts = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (STATE.session) headers['Authorization'] = `Bearer ${STATE.session}`;
+    try {
+      const res = await fetch(API + path, { ...opts, headers });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      return { ok: res.ok, status: res.status, data };
+    } catch {
+      return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // UTILS
+  // ═══════════════════════════════════════════════════════════
+
+  function relTime(ts) {
+    if (!ts) return '—';
+    const diff = Date.now() - ts;
+    if (diff < 60_000) return 'just now';
+    const m = Math.floor(diff / 60_000);
+    if (m < 60) return m + 'm ago';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + 'h ago';
+    const d = Math.floor(h / 24);
+    if (d < 7) return d + 'd ago';
+    return new Date(ts).toLocaleDateString();
+  }
+
+  function isSameDay(ts) {
+    if (!ts) return false;
+    const a = new Date(ts);
+    const b = new Date();
+    return a.getFullYear() === b.getFullYear()
+      && a.getMonth() === b.getMonth()
+      && a.getDate() === b.getDate();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PERMISSION
+  // ═══════════════════════════════════════════════════════════
+
+  function getPermission() {
+    if (!('Notification' in window)) return 'unsupported';
+    return Notification.permission;
+  }
+
+  function isFCMSupported() {
+    return !!(window.FOLIO && window.FOLIO.fcm && window.FOLIO.fcm.isSupported && window.FOLIO.fcm.isSupported());
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BANNERS
+  // ═══════════════════════════════════════════════════════════
+
+  function updateOfflineBanner() {
+    const el = $('offlineBanner');
+    if (!el) return;
+    el.classList.toggle('visible', !STATE.online);
+  }
+
+  function showStatusError(msg, opts = {}) {
+    const banner = $('statusBanner');
+    const text = $('statusText');
+    const icon = $('statusIcon');
+    if (!banner || !text || !icon) return;
+    STATE.statusError = msg;
+    banner.classList.remove('warning');
+    if (opts.warning) banner.classList.add('warning');
+    text.textContent = msg;
+    banner.classList.add('visible');
+  }
+
+  function clearStatusError() {
+    const banner = $('statusBanner');
+    if (!banner) return;
+    STATE.statusError = null;
+    banner.classList.remove('visible');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // GATE
+  // ═══════════════════════════════════════════════════════════
+
+  function renderGate() {
+    const gate = $('permissionGate');
+    const main = $('main');
+    if (!gate || !main) return;
+
+    const perm = getPermission();
+    STATE.permission = perm;
+
+    // If no session — hard block with sign-in prompt
+    if (!STATE.session) {
+      gate.classList.add('visible');
+      main.classList.remove('visible');
+      $('gateIcon').className = 'gate-icon blocked';
+      $('gateTitle').textContent = 'Sign in required';
+      $('gateDesc').textContent = 'Notifications are tied to your Folio account. Sign in to view and manage them.';
+      $('gateFeatures').style.display = 'none';
+      const btn = $('gateEnableBtn');
+      btn.innerHTML = svg('lock', 16, 2.4) + '<span style="margin-left:0.4rem;">Sign in</span>';
+      btn.disabled = false;
+      btn.onclick = () => {
+        window.location.href = '/register?next=' + encodeURIComponent('/notifications');
+      };
+      $('gateSkip').textContent = 'Back to editor';
+      return;
+    }
+
+    // Sign in done — check push support & permission
+    if (perm === 'unsupported') {
+      gate.classList.add('visible');
+      main.classList.remove('visible');
+      $('gateIcon').className = 'gate-icon blocked';
+      $('gateTitle').textContent = 'Not supported';
+      $('gateDesc').textContent = 'Your browser doesn\'t support push notifications. You can still use Folio, but won\'t get alerts.';
+      $('gateFeatures').style.display = 'none';
+      $('gateEnableBtn').style.display = 'none';
+      $('gateSkip').textContent = 'Continue to notifications';
+      $('gateSkip').href = '#continue';
+      $('gateSkip').onclick = (e) => {
+        e.preventDefault();
+        gate.classList.remove('visible');
+        main.classList.add('visible');
+      };
+      return;
+    }
+
+    if (perm === 'denied') {
+      gate.classList.add('visible');
+      main.classList.remove('visible');
+      $('gateIcon').className = 'gate-icon blocked';
+      $('gateIcon').innerHTML = '<svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+      $('gateTitle').textContent = 'Notifications blocked';
+      $('gateDesc').textContent = 'Enable notifications in your browser settings, then reload this page. In Chrome: click the lock icon in the address bar → Notifications → Allow.';
+      $('gateFeatures').style.display = 'none';
+      $('gateEnableBtn').innerHTML = svg('refresh', 16, 2.4) + '<span style="margin-left:0.4rem;">Reload page</span>';
+      $('gateEnableBtn').disabled = false;
+      $('gateEnableBtn').onclick = () => location.reload();
+      $('gateSkip').textContent = 'Continue anyway';
+      $('gateSkip').href = '#continue';
+      $('gateSkip').onclick = (e) => {
+        e.preventDefault();
+        gate.classList.remove('visible');
+        main.classList.add('visible');
+      };
+      return;
+    }
+
+    if (perm === 'granted') {
+      gate.classList.remove('visible');
+      main.classList.add('visible');
+      return;
+    }
+
+    // Default — show enable prompt
+    gate.classList.add('visible');
+    main.classList.remove('visible');
+    $('gateIcon').className = 'gate-icon';
+    $('gateIcon').innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+    $('gateTitle').textContent = 'Enable notifications';
+    $('gateDesc').textContent = 'Notifications keep you informed about deploys, collaborator invites, storage limits, and database activity — even when this tab is closed.';
+    $('gateFeatures').style.display = '';
+    const btn = $('gateEnableBtn');
+    btn.innerHTML = svg('bell', 16, 2.4) + '<span style="margin-left:0.4rem;">Enable notifications</span>';
+    btn.disabled = false;
+    btn.onclick = handleEnableNotifications;
+    $('gateSkip').textContent = 'Not now, go back to editor';
+    $('gateSkip').href = '/';
+    $('gateSkip').onclick = null;
+  }
+
+  async function handleEnableNotifications() {
+    const btn = $('gateEnableBtn');
+    if (!btn) return;
+    btn.disabled = true;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:0.4rem;vertical-align:middle;"></span>Requesting…';
+
+    try {
+      if (!isFCMSupported()) {
+        throw new Error('Push notifications aren\'t available on this page yet.');
+      }
+      await window.FOLIO.fcm.subscribe();
+      STATE.fcmSubscribed = true;
+      toast('Notifications enabled', 'success');
+      clearStatusError();
+      renderGate();
+      await refreshAll();
+    } catch (err) {
+      const msg = err?.message || 'Could not enable notifications';
+      showStatusError(msg + ' — tap Retry to try again.');
+      toast(msg, 'error', 4000);
+      btn.disabled = false;
+      btn.innerHTML = originalHTML;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER: FILTERS
+  // ═══════════════════════════════════════════════════════════
+
+  function renderFilters() {
+    const wrap = $('filters');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    for (const key of Object.keys(TYPE_LABELS)) {
+      const btn = document.createElement('button');
+      btn.className = 'filter-pill' + (STATE.filter === key ? ' active' : '');
+      btn.type = 'button';
+      const count = (key === 'all')
+        ? (STATE.stats?.total || 0)
+        : (STATE.stats?.[key] || 0);
+      btn.innerHTML = esc(TYPE_LABELS[key]) + (count > 0 ? `<span class="pill-count">${count}</span>` : '');
+      btn.addEventListener('click', () => {
+        STATE.filter = key;
+        STATE.offset = 0;
+        STATE.items = [];
+        renderFilters();
+        loadNotifications(true);
+      });
+      wrap.appendChild(btn);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER: STATS
+  // ═══════════════════════════════════════════════════════════
+
+  function renderStats() {
+    const s = STATE.stats;
+    if (!s) {
+      $('statTotal').textContent = '—';
+      $('statUnread').textContent = '—';
+      $('statToday').textContent = '—';
+      return;
+    }
+    $('statTotal').textContent = String(s.total ?? 0);
+    $('statUnread').textContent = String(s.unread ?? 0);
+    // "Today" not provided by server — derive from items
+    const todayCount = STATE.items.filter(n => isSameDay(n.createdAt)).length;
+    $('statToday').textContent = String(todayCount);
+
+    const unread = s.unread || 0;
+    const badge = $('unreadBadge');
+    if (badge) {
+      if (unread > 0) {
+        badge.textContent = String(unread);
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    $('pageSub').textContent = unread > 0
+      ? `${unread} unread notification${unread === 1 ? '' : 's'}`
+      : 'You\'re all caught up';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER: LIST
+  // ═══════════════════════════════════════════════════════════
+
+  function renderNotifications() {
+    const list = $('notifList');
+    if (!list) return;
+
+    if (STATE.items.length === 0) {
+      list.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">${svg('inbox', 26, 2)}</div>
+          <div class="empty-title">No notifications</div>
+          <div class="empty-desc">${STATE.filter === 'all'
+            ? 'When something happens — a deploy, an invite, an alert — it will show up here.'
+            : 'No ' + (TYPE_LABELS[STATE.filter] || '').toLowerCase() + ' notifications yet.'}</div>
+        </div>
+      `;
+      $('loadMoreBtn').style.display = 'none';
+      return;
+    }
+
+    list.innerHTML = '';
+    for (const n of STATE.items) {
+      const type = n.type || 'system';
+      const btn = document.createElement('button');
+      btn.className = 'notif'
+        + (n.read ? '' : ' unread')
+        + (n.dismissed ? ' dismissed' : '');
+      btn.type = 'button';
+      btn.innerHTML = `
+        <div class="notif-icon ${esc(type)}">${svgInline(TYPE_ICONS[type] || TYPE_ICONS.system, 18)}</div>
+        <div class="notif-body">
+          <div class="notif-title">${esc(n.title || 'Notification')}</div>
+          ${n.body ? `<div class="notif-text">${esc(n.body)}</div>` : ''}
+          <div class="notif-meta">
+            <span>${relTime(n.createdAt)}</span>
+            <span class="dot"></span>
+            <span class="tag">${esc(TYPE_LABELS[type] || type)}</span>
+          </div>
+        </div>
+        <div class="notif-actions">
+          ${!n.read ? `<button class="notif-act" data-mark-read="${esc(n.id)}" aria-label="Mark read" title="Mark read">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>` : ''}
+          ${!n.dismissed ? `<button class="notif-act danger" data-dismiss="${esc(n.id)}" aria-label="Dismiss" title="Dismiss">
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+          </button>` : ''}
+        </div>
+      `;
+
+      btn.addEventListener('click', (e) => {
+        if (e.target.closest('.notif-act')) return;
+        openNotification(n);
+      });
+
+      btn.querySelector('[data-mark-read]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        markRead(n.id);
+      });
+      btn.querySelector('[data-dismiss]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dismiss(n.id);
+      });
+
+      list.appendChild(btn);
+    }
+
+    $('loadMoreBtn').style.display = STATE.hasMore ? '' : 'none';
+    $('loadMoreBtn').disabled = false;
+    $('loadMoreBtn').innerHTML = `Load more ${svg('refresh', 12, 2.2)}`;
+  }
+
+  function svgInline(body, size = 18) {
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ACTIONS
+  // ═══════════════════════════════════════════════════════════
+
+  async function openNotification(n) {
+    if (!n.read) markRead(n.id);
+    const link = n.link || n.action?.url || '/';
+    if (link) {
+      if (/^https?:\/\//i.test(link) && !link.startsWith(location.origin)) {
+        window.open(link, '_blank', 'noopener');
+      } else {
+        window.location.href = link;
+      }
+    }
+  }
+
+  async function markRead(id) {
+    const res = await api('?action=mark_read', {
+      method: 'POST',
+      body: JSON.stringify({ notificationId: id }),
+    });
+    if (res.ok && res.data?.success) {
+      const item = STATE.items.find(n => n.id === id);
+      if (item) item.read = true;
+      renderNotifications();
+      renderStats();
+      loadStats();
+    } else {
+      toast(res.data?.error || 'Could not mark read', 'error');
+    }
+  }
+
+  async function dismiss(id) {
+    const res = await api('?action=dismiss', {
+      method: 'POST',
+      body: JSON.stringify({ notificationId: id }),
+    });
+    if (res.ok && res.data?.success) {
+      STATE.items = STATE.items.filter(n => n.id !== id);
+      renderNotifications();
+      renderStats();
+      loadStats();
+      toast('Dismissed', 'success', 1400);
+    } else {
+      toast(res.data?.error || 'Could not dismiss', 'error');
+    }
+  }
+
+  async function markAllRead() {
+    const res = await api('?action=mark_all_read', { method: 'POST', body: '{}' });
+    if (res.ok && res.data?.success) {
+      STATE.items.forEach(n => { n.read = true; });
+      renderNotifications();
+      renderStats();
+      loadStats();
+      toast('All marked read', 'success');
+    } else {
+      toast(res.data?.error || 'Could not mark all read', 'error');
+    }
+  }
+
+  async function dismissAllRead() {
+    const res = await api('?action=dismiss_all_read', { method: 'POST', body: '{}' });
+    if (res.ok && res.data?.success) {
+      STATE.items = STATE.items.filter(n => !n.read);
+      renderNotifications();
+      renderStats();
+      loadStats();
+      toast('Cleared read notifications', 'success');
+    } else {
+      toast(res.data?.error || 'Could not clear', 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOADERS
+  // ═══════════════════════════════════════════════════════════
+
+  async function loadNotifications(reset = false) {
+    if (STATE.loading) return;
+    if (!STATE.session) {
+      $('notifList').innerHTML = '';
+      return;
+    }
+
+    if (reset) {
+      STATE.offset = 0;
+      STATE.items = [];
+    }
+
+    STATE.loading = true;
+    const btn = $('loadMoreBtn');
+    if (!reset && btn) { btn.disabled = true; }
+
+    if (reset && STATE.items.length === 0) {
+      $('notifList').innerHTML = `<div class="loading"><div class="spinner"></div><div>Loading notifications…</div></div>`;
+    }
+
+    const url = '?action=list&type=' + encodeURIComponent(STATE.filter)
+      + '&limit=' + STATE.limit
+      + '&offset=' + STATE.offset
+      + '&sort=desc';
+
+    const res = await api(url);
+    STATE.loading = false;
+
+    if (!res.ok || !res.data?.success) {
+      $('notifList').innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">${svg('alert', 24, 2)}</div>
+          <div class="empty-title">Couldn't load notifications</div>
+          <div class="empty-desc">${esc(res.data?.error || 'Check your connection and try again.')}</div>
+        </div>
+      `;
+      $('loadMoreBtn').style.display = 'none';
+      showStatusError(res.data?.error || 'Could not load notifications.');
+      return;
+    }
+
+    clearStatusError();
+    const notifications = res.data.notifications || [];
+    STATE.items = STATE.items.concat(notifications);
+    STATE.hasMore = !!res.data.hasMore;
+    STATE.offset += notifications.length;
+
+    renderNotifications();
+    renderStats();
+  }
+
+  async function loadStats() {
+    if (!STATE.session) return;
+    const res = await api('?action=stats');
+    if (res.ok && res.data?.success) {
+      STATE.stats = res.data.stats;
+      renderStats();
+    }
+  }
+
+  async function refreshAll() {
+    await Promise.all([
+      loadNotifications(true),
+      loadStats(),
+      refreshSyncHint(),
+    ]);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // WIRE
+  // ═══════════════════════════════════════════════════════════
+
+  function wire() {
+    $('refreshBtn').addEventListener('click', () => {
+      refreshAll();
+      toast('Refreshed', 'info', 1400);
+    });
+    $('markAllBtn').addEventListener('click', markAllRead);
+    $('dismissReadBtn').addEventListener('click', dismissAllRead);
+    $('loadMoreBtn').addEventListener('click', () => loadNotifications(false));
+
+    $('offlineRetry').addEventListener('click', () => {
+      if (navigator.onLine) { STATE.online = true; updateOfflineBanner(); refreshAll(); }
+    });
+    $('statusRetry').addEventListener('click', async () => {
+      clearStatusError();
+      if (!STATE.session) { renderGate(); return; }
+      if (STATE.permission !== 'granted') { renderGate(); return; }
+      if (!STATE.fcmSubscribed && isFCMSupported()) {
+        await handleEnableNotifications();
+        return;
+      }
+      await refreshAll();
+    });
+
+    window.addEventListener('online', () => {
+      STATE.online = true;
+      updateOfflineBanner();
+      refreshAll();
+      toast('Back online', 'success', 1600);
+    });
+    window.addEventListener('offline', () => {
+      STATE.online = false;
+      updateOfflineBanner();
+    });
+
+    // SW / FCM messages
+    navigator.serviceWorker?.addEventListener('message', (event) => {
+      const d = event.data || {};
+      if (d.type === 'PUSH_RECEIVED' || d.type === 'NOTIFICATION_CLICKED' || d.type === 'NOTIFICATION_CLOSED') {
+        refreshAll();
+      }
+    });
+
+    // Re-check permission on focus
+    window.addEventListener('focus', () => {
+      const newPerm = getPermission();
+      if (newPerm !== STATE.permission) {
+        renderGate();
+        if (newPerm === 'granted') refreshAll();
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BOOT
+  // ═══════════════════════════════════════════════════════════
+
+  async function boot() {
+    readSession();
+    STATE.online = navigator.onLine;
+    updateOfflineBanner();
+    renderFilters();
+    renderGate();
+    wire();
+
+    if (!STATE.session) return;
+
+    // If FCM client is loaded and user previously subscribed, wire up
+    if (isFCMSupported() && window.FOLIO.fcm.isSubscribed) {
+      try { STATE.fcmSubscribed = await window.FOLIO.fcm.isSubscribed(); } catch {}
+    }
+
+    const perm = getPermission();
+    if (perm === 'granted') {
+      await refreshAll();
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+})();
+</script>
+
+</body>
+</html>
