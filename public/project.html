@@ -1442,6 +1442,20 @@ svg { display: block; }
 }
 .offline-banner.visible { display: inline-flex; }
 .offline-banner svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+  .header-sync-badge {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--theme-warning-soft);
+  color: var(--theme-warning);
+  font-size: 8.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.header-sync-badge.cached {
+  background: var(--theme-divider);
+  color: var(--theme-text-tertiary);
+}
 </style>
 </head>
 <body>
@@ -1698,19 +1712,19 @@ svg { display: block; }
   };
 
   function normalizeServerProject(p) {
-  return {
-    pid: p.pid,
-    name: p.name || 'Untitled project',
-    slug: p.slug || '',
-    description: p.description || '',
-    iconUrl: p.iconUrl || null,
-    primaryFile: p.primaryFile || null,
-    createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
-    updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
-    myRole: p.myRole || 'viewer',
-    _server: true,
-  };
-}
+    return {
+      pid: p.pid,
+      name: p.name || 'Untitled project',
+      slug: p.slug || '',
+      description: p.description || '',
+      iconUrl: p.iconUrl || null,
+      primaryFile: p.primaryFile || null,
+      createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
+      updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
+      myRole: p.myRole || 'viewer',
+      _server: true,
+    };
+  }
 
   // ═══════════════════════════════════════════════════════════
   // STATE
@@ -1720,6 +1734,7 @@ svg { display: block; }
     session: null, user: null, uid: null,
     pid: null, project: null, role: null,
     isOwner: false, isEditor: false, isSharedMode: false,
+    syncState: 'unknown',
     activeTab: 'overview', tabs: OWNER_TABS, tabCounts: {},
     deployState: null, analyticsData: null, logsData: null, logsOffset: 0,
     dbData: null, iconVariants: [], selectedIconUrl: null,
@@ -1930,26 +1945,54 @@ svg { display: block; }
     const banner = $('modeBanner');
     const text = $('modeBannerText');
     const action = $('modeBannerAction');
-    if (!banner) return;
+    if (!banner || !text || !action) return;
 
-    if (S.isLocalOnly) {
+    const state = S.syncState;
+
+    if (state === 'local' && !S.isGuest) {
       banner.hidden = false;
       banner.classList.add('visible');
-      text.textContent = S.session
-        ? 'Local project — files live only on this device. Sync to your account to unlock deploys, analytics, and sharing.'
-        : 'Local project — files live only on this device. Sign in to sync and unlock deploys.';
-      action.textContent = S.session ? 'Sync now' : 'Sign in';
+      text.textContent = 'Saved only on this device. Sync to your account to back it up and enable deploys.';
+      action.textContent = 'Sync to account';
+      action.disabled = false;
       action.onclick = () => promoteLocalProject();
-    } else if (!S.online) {
+      return;
+    }
+
+    if (state === 'local' && S.isGuest) {
       banner.hidden = false;
       banner.classList.add('visible');
-      text.textContent = 'You\'re offline — showing cached data.';
-      action.textContent = 'Retry';
-      action.onclick = () => location.reload();
-    } else {
-      banner.hidden = true;
-      banner.classList.remove('visible');
+      text.textContent = 'Saved only on this device. Sign in to back it up and deploy.';
+      action.textContent = 'Sign in';
+      action.disabled = false;
+      action.onclick = () => {
+        window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
+      };
+      return;
     }
+
+    if (state === 'orphan') {
+      banner.hidden = false;
+      banner.classList.add('visible');
+      text.textContent = 'This project isn\'t on the server yet. Push it to keep your files safe and enable sharing.';
+      action.textContent = 'Push to server';
+      action.disabled = false;
+      action.onclick = () => pushOrphanToServer();
+      return;
+    }
+
+    if (state === 'cached' || !S.online) {
+      banner.hidden = false;
+      banner.classList.add('visible');
+      text.textContent = 'Offline — showing cached data. Changes will sync when you reconnect.';
+      action.textContent = 'Retry';
+      action.disabled = false;
+      action.onclick = () => location.reload();
+      return;
+    }
+
+    banner.hidden = true;
+    banner.classList.remove('visible');
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2251,6 +2294,7 @@ svg { display: block; }
         pid: S.pid, name: S.project.name, slug: S.project.slug || '',
         description: S.project.description || '', iconUrl: uploadData.url,
         createdAt: S.project.createdAt || Date.now(), updatedAt: Date.now(),
+        myRole: S.project.myRole || 'owner', _server: true,
       });
       updateProjectIcons();
       closeModal();
@@ -2301,103 +2345,99 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   async function loadProject() {
-  let localProject = null;
-  try { localProject = await IDB.getProject(S.pid); } catch {}
+    let localProject = null;
+    try { localProject = await IDB.getProject(S.pid); } catch {}
 
-  if (/^local_/.test(S.pid)) {
-    if (!localProject) {
-      showFatal('Not found', 'This local project no longer exists.');
-      return false;
-    }
-    S.project = {
-      ...localProject,
-      myRole: 'owner',
-      visibility: localProject.visibility || { profile: 'private' },
-    };
-    S.isLocalOnly = true;
-    applyProjectMeta();
-    return true;
-  }
-
-  if (S.session && S.online) {
-    let res;
-    try {
-      res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
-    } catch (err) {
-      console.warn('[loadProject] projects/get network error:', err);
-      res = { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
-    }
-
-    if (res.ok && res.data?.success) {
-      const norm = normalizeServerProject(res.data.project);
-      try { await IDB.putProject(norm); } catch {}
-      S.project = { ...res.data.project, ...norm };
-      S.isLocalOnly = false;
-      cacheProject(S.project);
+    if (/^local_/.test(S.pid)) {
+      if (!localProject) {
+        showFatal('Not found', 'This local project no longer exists.');
+        return false;
+      }
+      S.project = {
+        ...localProject,
+        myRole: 'owner',
+        visibility: localProject.visibility || { profile: 'private' },
+      };
+      S.isLocalOnly = true;
+      S.syncState = 'local';
       applyProjectMeta();
       return true;
     }
 
-    if (res.status === 401) {
-      toast('Session expired — signing in again', 'warning', 3200);
-      setTimeout(() => {
-        window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
-      }, 1200);
-      return false;
-    }
+    if (S.session && S.online) {
+      let res;
+      try {
+        res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
+      } catch (err) {
+        console.warn('[loadProject] projects/get network error:', err);
+        res = { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
+      }
 
-    if (res.status === 404 || res.status === 403) {
-      if (localProject) {
-        const inferredRole = localProject.myRole
-          || (localProject._server ? 'viewer' : 'owner');
-        S.project = {
-          ...localProject,
-          myRole: inferredRole,
-          visibility: localProject.visibility || { profile: 'private' },
-        };
+      if (res.ok && res.data?.success) {
+        const norm = normalizeServerProject(res.data.project);
+        try { await IDB.putProject(norm); } catch {}
+        S.project = { ...res.data.project, ...norm };
         S.isLocalOnly = false;
+        S.syncState = 'synced';
+        cacheProject(S.project);
         applyProjectMeta();
-        toast(
-          res.status === 404
-            ? 'Showing local copy — project not yet on server'
-            : 'Showing cached data',
-          'warning',
-          3000
-        );
         return true;
       }
-      showFatal('Project not found', 'This project may have been deleted or you don\'t have access.');
-      return false;
+
+      if (res.status === 401) {
+        toast('Session expired — signing in again', 'warning', 3200);
+        setTimeout(() => {
+          window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
+        }, 1200);
+        return false;
+      }
+
+      if (res.status === 404 || res.status === 403) {
+        if (localProject) {
+          const inferredRole = localProject.myRole
+            || (localProject._server ? 'viewer' : 'owner');
+          S.project = {
+            ...localProject,
+            myRole: inferredRole,
+            visibility: localProject.visibility || { profile: 'private' },
+          };
+          S.isLocalOnly = false;
+          S.syncState = 'orphan';
+          applyProjectMeta();
+          return true;
+        }
+        showFatal('Project not found', 'This project may have been deleted or you don\'t have access.');
+        return false;
+      }
+
+      console.warn('[loadProject] projects/get returned', res.status, res.data);
     }
 
-    console.warn('[loadProject] projects/get returned', res.status, res.data);
-  }
+    if (localProject) {
+      const inferredRole = localProject.myRole
+        || (localProject._server ? 'viewer' : 'owner');
+      S.project = {
+        ...localProject,
+        myRole: inferredRole,
+        visibility: localProject.visibility || { profile: 'private' },
+      };
+      S.isLocalOnly = false;
+      S.syncState = 'cached';
+      applyProjectMeta();
+      return true;
+    }
 
-  if (localProject) {
-    const inferredRole = localProject.myRole
-      || (localProject._server ? 'viewer' : 'owner');
-    S.project = {
-      ...localProject,
-      myRole: inferredRole,
-      visibility: localProject.visibility || { profile: 'private' },
-    };
-    S.isLocalOnly = false;
-    applyProjectMeta();
-    if (!S.online) toast('Showing cached data', 'warning');
-    return true;
-  }
+    const cached = readCachedProject();
+    if (cached) {
+      S.project = { ...cached, myRole: cached.myRole || 'viewer' };
+      S.syncState = 'cached';
+      applyProjectMeta();
+      return true;
+    }
 
-  const cached = readCachedProject();
-  if (cached) {
-    S.project = { ...cached, myRole: cached.myRole || 'viewer' };
-    applyProjectMeta();
-    toast('Showing cached data', 'warning');
-    return true;
+    showFatal('Couldn\'t load project', 'Check your connection and try again.');
+    return false;
   }
-
-  showFatal('Couldn\'t load project', 'Check your connection and try again.');
-  return false;
-}
 
   function applyProjectMeta() {
     S.role = S.project.myRole || (S.isLocalOnly ? 'owner' : 'viewer');
@@ -2419,15 +2459,20 @@ svg { display: block; }
 
   function updateHeader() {
     $('headerProjectName').textContent = S.project.name || 'Untitled project';
-    const parts = [];
-    if (S.project.slug) parts.push(`@${escapeHTML(S.project.slug)}`);
+    const slugPart = S.project.slug ? `@${escapeHTML(S.project.slug)}` : '';
+    let stateBadge = '';
+    if (S.syncState === 'local' || S.syncState === 'orphan') {
+      stateBadge = `<span class="header-sync-badge">Not synced</span>`;
+    } else if (S.syncState === 'cached') {
+      stateBadge = `<span class="header-sync-badge cached">Cached</span>`;
+    }
     const roleBadge = `<span class="header-role-badge">${S.isOwner ? 'Owner' : S.role || 'Viewer'}</span>`;
     const deployBadge = S.project.deployment?.url
       ? `<span class="header-deploy-badge"><span class="dot"></span>Live</span>`
       : S.project.deployment?.state === 'OFFLINE'
       ? `<span class="header-deploy-badge offline">Offline</span>`
       : '';
-    $('headerProjectSub').innerHTML = parts.join('') + roleBadge + deployBadge;
+    $('headerProjectSub').innerHTML = slugPart + roleBadge + stateBadge + deployBadge;
     document.title = `${S.project.name || 'Project'} — Folio`;
   }
 
@@ -2561,7 +2606,7 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   async function loadDeployState() {
-    if (!S.online || S.isLocalOnly) return;
+    if (!S.online || S.isLocalOnly || S.syncState !== 'synced') return;
     try {
       const res = await apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.pid));
       if (res.ok && res.data?.success) {
@@ -2628,6 +2673,8 @@ svg { display: block; }
         iconUrl: S.project.iconUrl || null,
         createdAt: S.project.createdAt || Date.now(),
         updatedAt: Date.now(),
+        myRole: 'owner',
+        _server: true,
       };
       await IDB.putProject(project);
       for (const f of files) await IDB.putFile(newPid, f.path, f.content);
@@ -2645,22 +2692,96 @@ svg { display: block; }
         }
       } catch {}
 
-      S.pid = newPid;
-      S.project = project;
-      S.isLocalOnly = false;
-      const url = new URL(location.href);
-      url.searchParams.set('pid', newPid);
-      history.replaceState(null, '', url.toString());
-
       hideLoading();
       toast('Project synced to your account', 'success');
-      await loadProject();
-      renderSidebar();
-      renderTopTabs();
-      renderPanel();
+      setTimeout(() => {
+        window.location.href = '/project.html?pid=' + encodeURIComponent(newPid);
+      }, 400);
     } catch (err) {
       hideLoading();
       toast(err.message || 'Sync failed', 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PUSH ORPHAN → SERVER
+  // ═══════════════════════════════════════════════════════════
+
+  async function pushOrphanToServer() {
+    if (!S.session) {
+      window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
+      return;
+    }
+    if (!S.online) { toast('Requires internet', 'warning'); return; }
+    if (S.syncState !== 'orphan') { toast('Nothing to push', 'info'); return; }
+
+    const oldPid = S.pid;
+    showLoading('Pushing to server', 'Creating project…');
+
+    try {
+      const create = await apiFetch(API_HOST + '?action=projects/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: S.project.name || 'Untitled project',
+          description: S.project.description || '',
+        }),
+      });
+      if (!create.ok || !create.data?.success) {
+        throw new Error(create.data?.error || 'Create failed');
+      }
+      const newPid = create.data.pid;
+
+      const files = await IDB.listFiles(oldPid);
+      const fileMap = {};
+      for (const f of files) {
+        if (/(^|\/)\.gitkeep$/i.test(f.path) || /(^|\/)\.keep$/i.test(f.path)) continue;
+        if (typeof f.content === 'string') fileMap[f.path] = f.content;
+      }
+      if (Object.keys(fileMap).length === 0) {
+        throw new Error('No files to push');
+      }
+
+      setLoadingDesc(`Uploading ${Object.keys(fileMap).length} files…`);
+      const sync = await apiFetch(API_HOST + '?action=project/sync-back', {
+        method: 'POST',
+        body: JSON.stringify({ pid: newPid, files: fileMap }),
+      });
+      if (!sync.ok || !sync.data?.success) {
+        throw new Error(sync.data?.error || 'Sync failed');
+      }
+
+      const versions = await IDB.listVersions(oldPid);
+      if (versions.length > 0) {
+        const vMap = Object.fromEntries(versions.map(v => [
+          v.vid,
+          { message: v.message || '', files: v.files || {}, createdAt: v.createdAt },
+        ]));
+        await apiFetch(API_HOST + '?action=project/sync-back', {
+          method: 'POST',
+          body: JSON.stringify({ pid: newPid, versions: vMap }),
+        }).catch(() => {});
+      }
+
+      for (const f of files) {
+        await IDB.putFile(newPid, f.path, f.content);
+      }
+      await IDB.putProject({
+        ...S.project,
+        pid: newPid,
+        myRole: 'owner',
+        _server: true,
+        updatedAt: Date.now(),
+      });
+      await IDB.deleteProject(oldPid);
+
+      hideLoading();
+      toast('Project pushed to server', 'success');
+      setTimeout(() => {
+        window.location.href = '/project.html?pid=' + encodeURIComponent(newPid);
+      }, 400);
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Push failed', 'error', 5000);
     }
   }
 
@@ -2729,9 +2850,12 @@ svg { display: block; }
       <div class="card">
         <div class="card-header"><div class="card-title">${svg('rocket', 13, 2.2)} Live deployment</div></div>
         <div class="card-body">
-          ${S.isLocalOnly ? `
-            <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">Local projects can't be deployed. Sync to your account first.</div>
-            ${S.session ? `<button class="btn btn-primary btn-sm" id="btnQuickDeploy">${svg('upload', 10, 2.4)} Sync & deploy</button>` : ''}
+          ${S.isLocalOnly || S.syncState === 'orphan' ? `
+            <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">
+              ${S.syncState === 'orphan' ? 'Project is not on the server yet.' : 'Local projects can\'t be deployed.'}
+              Push to server first to enable deploys.
+            </div>
+            ${S.session ? `<button class="btn btn-primary btn-sm" id="btnQuickDeploy">${svg('upload', 10, 2.4)} ${S.syncState === 'orphan' ? 'Push to server' : 'Sync & deploy'}</button>` : ''}
           ` : deployed ? `
             <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--theme-success-soft);border-radius:8px;margin-bottom:8px;">
               ${svg('checkCircle', 14, 2.4)}
@@ -2748,7 +2872,7 @@ svg { display: block; }
             ${canEdit ? `<button class="btn btn-primary btn-sm" id="btnQuickDeploy">${svg('rocket', 10, 2.4)} Deploy now</button>` : ''}`}
         </div>
       </div>
-      ${!S.isLocalOnly ? `
+      ${!S.isLocalOnly && S.syncState !== 'orphan' ? `
         <div class="card">
           <div class="card-header"><div class="card-title">${svg('image', 13, 2.2)} Icon</div>
             ${canEdit ? `<button class="btn btn-sm btn-secondary" id="btnChangeIcon">${svg('refresh', 10, 2.2)} Regenerate</button>` : ''}</div>
@@ -2770,7 +2894,8 @@ svg { display: block; }
       $('btnQuickRedeploy')?.addEventListener('click', () => switchTab('deployments'));
     }
     $('btnQuickDeploy')?.addEventListener('click', () => {
-      if (S.isLocalOnly) promoteLocalProject();
+      if (S.syncState === 'orphan') pushOrphanToServer();
+      else if (S.isLocalOnly) promoteLocalProject();
       else switchTab('deployments');
     });
     $('btnCopySlug')?.addEventListener('click', () => {
@@ -2790,7 +2915,7 @@ svg { display: block; }
     const btn = $('btnSaveDetails');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     try {
-      if (S.session && !S.isLocalOnly) {
+      if (S.session && !S.isLocalOnly && S.syncState === 'synced') {
         const res = await apiFetch(API_HOST + '?action=projects/update', {
           method: 'POST', body: JSON.stringify({ pid: S.pid, name, description }),
         });
@@ -2803,6 +2928,7 @@ svg { display: block; }
         pid: S.pid, name, description, slug: S.project.slug || '',
         iconUrl: S.project.iconUrl || null, primaryFile: S.project.primaryFile,
         createdAt: S.project.createdAt || Date.now(), updatedAt: Date.now(),
+        myRole: S.project.myRole || 'owner', _server: S.project._server !== false,
       });
       cacheProject(S.project);
       updateHeader();
@@ -3050,7 +3176,7 @@ svg { display: block; }
       if (existing) { toast('File already exists', 'warning'); return; }
       try {
         await IDB.putFile(S.pid, path, '');
-        if (S.online && S.session && !S.isLocalOnly) {
+        if (S.online && S.session && !S.isLocalOnly && S.syncState === 'synced') {
           await apiFetch(API_HOST + '?action=project/sync-back', {
             method: 'POST',
             body: JSON.stringify({ pid: S.pid, files: { [path]: '' } }),
@@ -3114,7 +3240,7 @@ svg { display: block; }
       try {
         const text = ta.value;
         await IDB.putFile(S.pid, path, text);
-        if (S.online && S.session && !S.isLocalOnly) {
+        if (S.online && S.session && !S.isLocalOnly && S.syncState === 'synced') {
           const res = await apiFetch(API_HOST + '?action=project/sync-back', {
             method: 'POST',
             body: JSON.stringify({ pid: S.pid, files: { [path]: text } }),
@@ -3144,7 +3270,6 @@ svg { display: block; }
         try {
           await dbWrap(dbTx('files', 'readwrite').delete([S.pid, path]));
           if (S.online && S.session && !S.isLocalOnly) {
-            // Best effort — server may not support this action
             try {
               await apiFetch(API_HOST + '?action=file/delete', {
                 method: 'POST',
@@ -3183,7 +3308,7 @@ svg { display: block; }
         console.warn('[Upload]', file.name, err);
       }
     }
-    if (S.online && S.session && !S.isLocalOnly && Object.keys(fileMap).length > 0) {
+    if (S.online && S.session && !S.isLocalOnly && S.syncState === 'synced' && Object.keys(fileMap).length > 0) {
       try {
         await apiFetch(API_HOST + '?action=project/sync-back', {
           method: 'POST',
@@ -3204,7 +3329,7 @@ svg { display: block; }
   }
 
   async function refreshFilesPanel(panel) {
-    if (S.online && S.session && !S.isLocalOnly) {
+    if (S.online && S.session && !S.isLocalOnly && S.syncState === 'synced') {
       try { await pullFilesFromServer(false); } catch {}
     }
     renderFilesPanel(panel);
@@ -3241,13 +3366,24 @@ svg { display: block; }
 
     const isLive = current?.url && current.state !== 'OFFLINE';
     const isOffline = current?.state === 'OFFLINE';
+    const canDeploy = S.isEditor && S.online && S.syncState === 'synced';
 
     panel.innerHTML = `
       <div class="card">
         <div class="card-header"><div class="card-title">${svg('rocket', 13, 2.2)} Current</div>
-          ${S.isEditor ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">${svg('rocket', 10, 2.4)} Deploy</button>` : ''}</div>
+          ${canDeploy
+            ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">${svg('rocket', 10, 2.4)} Deploy</button>`
+            : (S.syncState === 'local' || S.syncState === 'orphan')
+              ? `<button class="btn btn-sm btn-secondary" id="btnDeployPushFirst">${svg('upload', 10, 2.2)} Push to server first</button>`
+              : ''}
+        </div>
         <div class="card-body">
-          ${isLive ? `
+          ${S.syncState === 'local' || S.syncState === 'orphan' ? `
+            <div style="font-size:11px;color:var(--theme-text-tertiary);">
+              ${S.syncState === 'orphan' ? 'This project isn\'t on the server yet.' : 'Local projects can\'t be deployed.'}
+              Push to server first to enable deploys.
+            </div>
+          ` : isLive ? `
             <div style="display:flex;flex-direction:column;gap:8px;">
               <div style="display:flex;align-items:center;gap:8px;">
                 <span class="vis-badge public">${svg('checkCircle', 9, 2.4)} Live</span>
@@ -3275,6 +3411,10 @@ svg { display: block; }
     `;
 
     $('btnDeployNow')?.addEventListener('click', deployNow);
+    $('btnDeployPushFirst')?.addEventListener('click', () => {
+      if (S.syncState === 'orphan') pushOrphanToServer();
+      else if (S.syncState === 'local') promoteLocalProject();
+    });
     $('btnRefreshHistory')?.addEventListener('click', () => renderPanel());
     $('btnTakeOffline')?.addEventListener('click', takeOffline);
     document.querySelectorAll('[data-redeploy]').forEach(btn => btn.addEventListener('click', () => redeployVersion(btn.dataset.redeploy)));
@@ -3300,14 +3440,8 @@ svg { display: block; }
 
   async function deployNow() {
     if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
-    if (S.isLocalOnly) {
-      confirmModal(
-        'Sync project first?',
-        'Local projects must be synced to your account before they can be deployed.',
-        'Sync now',
-        false,
-        () => promoteLocalProject()
-      );
+    if (S.syncState !== 'synced') {
+      toast('Push project to server first', 'warning');
       return;
     }
 
@@ -3544,96 +3678,94 @@ svg { display: block; }
     $('btnInviteCollab')?.addEventListener('click', openInviteModal);
     document.querySelectorAll('[data-remove-collab]').forEach(btn => btn.addEventListener('click', () => confirmRemoveCollab(btn.dataset.removeCollab)));
     $('btnGenApiKey')?.addEventListener('click', generateApiKey);
-    // Pending invites — fetch and render
-if (S.isOwner) {
-  loadPendingInvites();
-  $('btnRefreshInvites')?.addEventListener('click', loadPendingInvites);
-}
+    if (S.isOwner) {
+      loadPendingInvites();
+      $('btnRefreshInvites')?.addEventListener('click', loadPendingInvites);
+    }
   }
-
-
 
   async function loadPendingInvites() {
-  const card = $('pendingInvitesCard');
-  const body = $('pendingInvitesBody');
-  if (!card || !body) return;
-  try {
-    const res = await apiFetch(API_HOST + '?action=invite/list&pid=' + encodeURIComponent(S.pid));
-    if (!res.ok || !res.data?.success) {
-      body.innerHTML = `<div style="padding:12px;text-align:center;font-size:11px;color:var(--theme-text-tertiary);">Couldn't load invites.</div>`;
-      return;
-    }
-    const invites = (res.data.invites || []).filter(i => !i.used);
-    const now = Date.now();
+    const card = $('pendingInvitesCard');
+    const body = $('pendingInvitesBody');
+    if (!card || !body) return;
+    try {
+      const res = await apiFetch(API_HOST + '?action=invite/list&pid=' + encodeURIComponent(S.pid));
+      if (!res.ok || !res.data?.success) {
+        body.innerHTML = `<div style="padding:12px;text-align:center;font-size:11px;color:var(--theme-text-tertiary);">Couldn't load invites.</div>`;
+        return;
+      }
+      const invites = (res.data.invites || []).filter(i => !i.used);
+      const now = Date.now();
 
-    if (invites.length === 0) {
-      card.style.display = 'none';
-      return;
-    }
-    card.style.display = '';
-    body.innerHTML = `<div class="row-list">
-      ${invites.map(i => {
-        const expired = i.expiresAt && i.expiresAt < now;
-        const daysLeft = i.expiresAt ? Math.max(0, Math.ceil((i.expiresAt - now) / (24 * 60 * 60 * 1000))) : null;
-        return `
-          <div class="row-item">
-            <div class="row-icon" style="${expired ? 'color:var(--theme-warning);' : ''}">
-              ${svg(expired ? 'alert' : 'clock', 13, 2.2)}
-            </div>
-            <div class="row-content">
-              <div class="row-title mono" style="font-size:10px;">${escapeHTML(i.invitedUid?.slice(0, 12) || 'invited user')}${i.invitedUid?.length > 12 ? '…' : ''}</div>
-              <div class="row-sub">
-                ${escapeHTML(i.role || 'viewer')} ·
-                ${expired
-                  ? '<span style="color:var(--theme-warning);">expired</span>'
-                  : `${daysLeft}d left`}
+      if (invites.length === 0) {
+        card.style.display = 'none';
+        return;
+      }
+      card.style.display = '';
+      body.innerHTML = `<div class="row-list">
+        ${invites.map(i => {
+          const expired = i.expiresAt && i.expiresAt < now;
+          const daysLeft = i.expiresAt ? Math.max(0, Math.ceil((i.expiresAt - now) / (24 * 60 * 60 * 1000))) : null;
+          return `
+            <div class="row-item">
+              <div class="row-icon" style="${expired ? 'color:var(--theme-warning);' : ''}">
+                ${svg(expired ? 'alert' : 'clock', 13, 2.2)}
               </div>
-            </div>
-            <div class="row-actions">
-              <button class="btn btn-ghost btn-sm btn-icon" data-copy-invite="${escapeAttr(i.token)}" title="Copy link">
-                ${svg('copy', 10, 2.2)}
-              </button>
-              <button class="btn btn-ghost btn-sm btn-icon" data-cancel-invite="${escapeAttr(i.token)}" title="Cancel" style="color:var(--theme-danger);">
-                ${svg('trash', 10, 2.2)}
-              </button>
-            </div>
-          </div>`;
-      }).join('')}
-    </div>`;
+              <div class="row-content">
+                <div class="row-title mono" style="font-size:10px;">${escapeHTML(i.invitedUid?.slice(0, 12) || 'invited user')}${i.invitedUid?.length > 12 ? '…' : ''}</div>
+                <div class="row-sub">
+                  ${escapeHTML(i.role || 'viewer')} ·
+                  ${expired
+                    ? '<span style="color:var(--theme-warning);">expired</span>'
+                    : `${daysLeft}d left`}
+                </div>
+              </div>
+              <div class="row-actions">
+                <button class="btn btn-ghost btn-sm btn-icon" data-copy-invite="${escapeAttr(i.token)}" title="Copy link">
+                  ${svg('copy', 10, 2.2)}
+                </button>
+                <button class="btn btn-ghost btn-sm btn-icon" data-cancel-invite="${escapeAttr(i.token)}" title="Cancel" style="color:var(--theme-danger);">
+                  ${svg('trash', 10, 2.2)}
+                </button>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>`;
 
-    body.querySelectorAll('[data-copy-invite]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const token = btn.dataset.copyInvite;
-        const url = `${location.origin}/invite.html?token=${encodeURIComponent(token)}`;
-        if (copyToClipboard(url)) toast('Invite link copied', 'success', 1400);
-        else toast('Copy failed', 'error');
-      });
-    });
-
-    body.querySelectorAll('[data-cancel-invite]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const token = btn.dataset.cancelInvite;
-        confirmModal('Cancel this invite?', 'The recipient will no longer be able to use this link.', 'Cancel invite', true, async () => {
-          try {
-            const cancelRes = await apiFetch(API_HOST + '?action=invite/cancel', {
-              method: 'POST',
-              body: JSON.stringify({ token }),
-            });
-            if (!cancelRes.ok || !cancelRes.data?.success) {
-              throw new Error(cancelRes.data?.error || 'Failed');
-            }
-            toast('Invite cancelled', 'success');
-            loadPendingInvites();
-          } catch (err) {
-            toast(err.message || 'Could not cancel', 'error');
-          }
+      body.querySelectorAll('[data-copy-invite]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const token = btn.dataset.copyInvite;
+          const url = `${location.origin}/invite.html?token=${encodeURIComponent(token)}`;
+          if (copyToClipboard(url)) toast('Invite link copied', 'success', 1400);
+          else toast('Copy failed', 'error');
         });
       });
-    });
-  } catch {
-    body.innerHTML = `<div style="padding:12px;text-align:center;font-size:11px;color:var(--theme-text-tertiary);">Couldn't load invites.</div>`;
+
+      body.querySelectorAll('[data-cancel-invite]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const token = btn.dataset.cancelInvite;
+          confirmModal('Cancel this invite?', 'The recipient will no longer be able to use this link.', 'Cancel invite', true, async () => {
+            try {
+              const cancelRes = await apiFetch(API_HOST + '?action=invite/cancel', {
+                method: 'POST',
+                body: JSON.stringify({ token }),
+              });
+              if (!cancelRes.ok || !cancelRes.data?.success) {
+                throw new Error(cancelRes.data?.error || 'Failed');
+              }
+              toast('Invite cancelled', 'success');
+              loadPendingInvites();
+            } catch (err) {
+              toast(err.message || 'Could not cancel', 'error');
+            }
+          });
+        });
+      });
+    } catch {
+      body.innerHTML = `<div style="padding:12px;text-align:center;font-size:11px;color:var(--theme-text-tertiary);">Couldn't load invites.</div>`;
+    }
   }
-}
+
   function axisLabel(axis) {
     return { profile: 'Show in profile', liveSite: 'Live site link', code: 'Code viewer', languages: 'Language breakdown', db: 'JSON database API' }[axis] || axis;
   }
@@ -3644,6 +3776,7 @@ if (S.isOwner) {
   async function toggleVisibility(axis, btn) {
     if (!S.isOwner) { toast('Only owner can change visibility', 'warning'); return; }
     if (!S.online) { toast('Requires internet', 'warning'); return; }
+    if (S.syncState !== 'synced') { toast('Push project to server first', 'warning'); return; }
     const current = S.project.visibility?.[axis];
     const next = current === 'public' ? 'private' : 'public';
     btn.classList.toggle('on', next === 'public');
@@ -3662,74 +3795,72 @@ if (S.isOwner) {
   }
 
   function openInviteModal() {
-  openModal(`
-    <div class="modal-title">Invite collaborator</div>
-    <div class="modal-desc">They must have a Folio account.</div>
-    <div class="field"><label class="field-label">Username</label>
-      <input class="input" id="inviteUsername" placeholder="alice"></div>
-    <div class="field"><label class="field-label">Role</label>
-      <select class="select" id="inviteRole">
-        <option value="viewer">Viewer — read only</option>
-        <option value="commenter">Commenter — read + comment</option>
-        <option value="editor">Editor — read/write</option>
-      </select></div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="inviteSubmit">${svg('plus', 12, 2.4)} Send invite</button>
-    </div>
-  `);
+    openModal(`
+      <div class="modal-title">Invite collaborator</div>
+      <div class="modal-desc">They must have a Folio account.</div>
+      <div class="field"><label class="field-label">Username</label>
+        <input class="input" id="inviteUsername" placeholder="alice"></div>
+      <div class="field"><label class="field-label">Role</label>
+        <select class="select" id="inviteRole">
+          <option value="viewer">Viewer — read only</option>
+          <option value="commenter">Commenter — read + comment</option>
+          <option value="editor">Editor — read/write</option>
+        </select></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="inviteSubmit">${svg('plus', 12, 2.4)} Send invite</button>
+      </div>
+    `);
 
-  $('inviteSubmit').addEventListener('click', async () => {
-    const username = $('inviteUsername').value.trim();
-    const role = $('inviteRole').value;
-    if (!username) { toast('Username required', 'error'); return; }
-    $('inviteSubmit').disabled = true;
-    try {
-      const res = await apiFetch(API_HOST + '?action=invite/create', {
-        method: 'POST',
-        body: JSON.stringify({ pid: S.pid, username, role }),
-      });
-      if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+    $('inviteSubmit').addEventListener('click', async () => {
+      const username = $('inviteUsername').value.trim();
+      const role = $('inviteRole').value;
+      if (!username) { toast('Username required', 'error'); return; }
+      $('inviteSubmit').disabled = true;
+      try {
+        const res = await apiFetch(API_HOST + '?action=invite/create', {
+          method: 'POST',
+          body: JSON.stringify({ pid: S.pid, username, role }),
+        });
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
 
-      // Success — show the link so the owner can share it manually
-      const inviteUrl = res.data.inviteUrl ||
-        `${location.origin}/invite.html?token=${encodeURIComponent(res.data.token)}`;
+        const inviteUrl = res.data.inviteUrl ||
+          `${location.origin}/invite.html?token=${encodeURIComponent(res.data.token)}`;
 
-      openModal(`
-        <div class="modal-title">Invite sent</div>
-        <div class="modal-desc">
-          <strong>${escapeHTML(username)}</strong> was invited as <strong>${escapeHTML(role)}</strong>.
-          They'll get a notification, but you can also share this link directly.
-        </div>
-        <div class="field">
-          <label class="field-label">Invite link</label>
-          <div style="display:flex;gap:5px;">
-            <input class="input mono" value="${escapeAttr(inviteUrl)}" readonly style="font-size:10.5px;"
-              onclick="this.select()">
-            <button class="btn btn-secondary btn-icon" id="copyInviteUrlBtn" aria-label="Copy">
-              ${svg('copy', 12, 2.2)}
-            </button>
+        openModal(`
+          <div class="modal-title">Invite sent</div>
+          <div class="modal-desc">
+            <strong>${escapeHTML(username)}</strong> was invited as <strong>${escapeHTML(role)}</strong>.
+            They'll get a notification, but you can also share this link directly.
           </div>
-          <div class="field-hint">Expires in 7 days. Anyone with the link and the right account can accept it.</div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-primary btn-block" onclick="closeModal()">Done</button>
-        </div>
-      `);
+          <div class="field">
+            <label class="field-label">Invite link</label>
+            <div style="display:flex;gap:5px;">
+              <input class="input mono" value="${escapeAttr(inviteUrl)}" readonly style="font-size:10.5px;"
+                onclick="this.select()">
+              <button class="btn btn-secondary btn-icon" id="copyInviteUrlBtn" aria-label="Copy">
+                ${svg('copy', 12, 2.2)}
+              </button>
+            </div>
+            <div class="field-hint">Expires in 7 days. Anyone with the link and the right account can accept it.</div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-primary btn-block" onclick="closeModal()">Done</button>
+          </div>
+        `);
 
-      $('copyInviteUrlBtn')?.addEventListener('click', () => {
-        if (copyToClipboard(inviteUrl)) toast('Invite link copied', 'success', 1400);
-        else toast('Copy failed', 'error');
-      });
+        $('copyInviteUrlBtn')?.addEventListener('click', () => {
+          if (copyToClipboard(inviteUrl)) toast('Invite link copied', 'success', 1400);
+          else toast('Copy failed', 'error');
+        });
 
-      // Refresh the pending invites list
-      loadPendingInvites();
-    } catch (err) {
-      toast(err.message || 'Invite failed', 'error');
-      $('inviteSubmit').disabled = false;
-    }
-  });
-}
+        loadPendingInvites();
+      } catch (err) {
+        toast(err.message || 'Invite failed', 'error');
+        $('inviteSubmit').disabled = false;
+      }
+    });
+  }
 
   function confirmRemoveCollab(uid) {
     confirmModal('Remove collaborator?', 'They will lose access.', 'Remove', true, async () => {
@@ -3745,6 +3876,7 @@ if (S.isOwner) {
   }
 
   async function generateApiKey() {
+    if (S.syncState !== 'synced') { toast('Push project to server first', 'warning'); return; }
     confirmModal('Generate API key?', 'The new key is shown once.', 'Generate', false, async () => {
       showLoading('Generating', '');
       try {
@@ -3775,6 +3907,18 @@ if (S.isOwner) {
 
   async function renderDataPanel(panel) {
     if (!gate(panel, { label: 'Data' })) return;
+    if (S.syncState !== 'synced') {
+      panel.innerHTML = `<div class="card"><div class="card-body">
+        ${emptyState('upload', 'Data needs a server project',
+          'Push this project to the server first to enable the JSON database.',
+          `<button class="btn btn-primary" id="btnPushForData">${svg('upload', 12, 2.4)} ${S.syncState === 'orphan' ? 'Push to server' : 'Sync to account'}</button>`)}
+      </div></div>`;
+      $('btnPushForData')?.addEventListener('click', () => {
+        if (S.syncState === 'orphan') pushOrphanToServer();
+        else if (S.syncState === 'local') promoteLocalProject();
+      });
+      return;
+    }
     panel.innerHTML = skeletonCard(4);
     try {
       const res = await apiFetch(API_HOST + '?action=db/get&pid=' + encodeURIComponent(S.pid));
@@ -3855,6 +3999,10 @@ if (S.isOwner) {
 
   async function renderLogsPanel(panel) {
     if (!gate(panel, { label: 'Logs' })) return;
+    if (S.syncState !== 'synced') {
+      panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('list', 'Logs need a server project', 'Push this project to the server first to see activity.')}</div></div>`;
+      return;
+    }
     panel.innerHTML = skeletonCard(6);
     S.logsOffset = 0;
     const res = await apiFetch(API_HOST + '?action=logs&pid=' + encodeURIComponent(S.pid) + '&limit=50');
@@ -3913,16 +4061,16 @@ if (S.isOwner) {
         <div class="card-header"><div class="card-title">${svg('download', 13, 2.2)} Export</div></div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
           <button class="btn btn-primary btn-block" id="btnDownloadFolio">${svg('download', 12, 2.4)} .folio backup</button>
-          <div class="field-hint">Files, versions${!S.isLocalOnly ? ', JSON DB, schema' : ''}.</div>
+          <div class="field-hint">Files, versions${S.syncState === 'synced' ? ', JSON DB, schema' : ''}.</div>
           <button class="btn btn-secondary btn-block" id="btnDownloadZip" style="margin-top:4px;">${svg('download', 12, 2.4)} .zip (files)</button>
           <div class="field-hint">Current files only.</div>
-          ${!S.isLocalOnly ? `
+          ${S.syncState === 'synced' ? `
             <button class="btn btn-secondary btn-block" id="btnDownloadDb" style="margin-top:4px;">${svg('download', 12, 2.4)} JSON database</button>
             <div class="field-hint">The current DB as .json.</div>
           ` : ''}
         </div>
       </div>
-      ${!S.isLocalOnly ? `
+      ${S.syncState === 'synced' ? `
         <div class="card">
           <div class="card-header"><div class="card-title">${svg('upload', 13, 2.2)} Import</div></div>
           <div class="card-body">
@@ -3935,11 +4083,11 @@ if (S.isOwner) {
     `;
 
     $('btnDownloadFolio')?.addEventListener('click', async () => {
-      if (S.isLocalOnly || !S.session) await exportLocalFolio();
+      if (S.isLocalOnly || !S.session || S.syncState !== 'synced') await exportLocalFolio();
       else await downloadProject('folio');
     });
     $('btnDownloadZip')?.addEventListener('click', async () => {
-      if (S.isLocalOnly || !S.session) await exportLocalJson();
+      if (S.isLocalOnly || !S.session || S.syncState !== 'synced') await exportLocalJson();
       else await downloadProject('zip');
     });
     $('btnDownloadDb')?.addEventListener('click', downloadJsonDb);
@@ -3991,7 +4139,7 @@ if (S.isOwner) {
   }
 
   async function downloadJsonDb() {
-    if (!S.online || S.isLocalOnly) { toast('Requires internet', 'warning'); return; }
+    if (!S.online || S.syncState !== 'synced') { toast('Requires internet', 'warning'); return; }
     try {
       const res = await apiFetch(API_HOST + '?action=db/get&pid=' + encodeURIComponent(S.pid));
       if (!res.ok || !res.data?.success) throw new Error('Failed');
@@ -4132,7 +4280,7 @@ if (S.isOwner) {
     confirmModal('Clear all versions?', 'All snapshots will be deleted.', 'Clear', true, async () => {
       showLoading('Clearing', '');
       try {
-        if (!S.isLocalOnly && S.session && S.online) {
+        if (!S.isLocalOnly && S.session && S.online && S.syncState === 'synced') {
           const res = await apiFetch(API_HOST + '?action=versions/clear', {
             method: 'POST', body: JSON.stringify({ pid: S.pid }),
           });
@@ -4176,7 +4324,7 @@ if (S.isOwner) {
     $('deleteConfirmBtn').addEventListener('click', async () => {
       showLoading('Deleting', '');
       try {
-        if (S.session && !S.isLocalOnly && S.online) {
+        if (S.session && !S.isLocalOnly && S.online && S.syncState === 'synced') {
           const res = await apiFetch(API_HOST + '?action=projects/delete', {
             method: 'POST', body: JSON.stringify({ pid: S.pid }),
           });
@@ -4257,7 +4405,11 @@ if (S.isOwner) {
     readSession();
     S.pid = getPid();
     if (!S.pid) { showFatal('Missing project', 'No project ID in URL.'); return; }
-    try { await openDB(); } catch (err) { console.error('[Project] DB failed:', err); }
+    try { await openDB(); } catch (err) {
+      console.error('[Project] DB failed:', err);
+      showFatal('Storage unavailable', 'Your browser blocked local storage. Close other tabs and reload.');
+      return;
+    }
 
     const hashTab = getHashTab();
     const lastTab = shouldRememberTab() ? getLastTab() : null;
