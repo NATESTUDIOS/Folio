@@ -143,7 +143,9 @@ async function createUserRecord({
   return record;
 }
 
-async function callNotifyBridge(action, uid, extra = {}) {
+// 🆕 Bridge call with retry — was previously fire-and-forget, which was
+// killed by Vercel before the fetch completed. Now awaited by callers.
+async function callNotifyBridge(action, uid, extra = {}, retries = 1) {
   try {
     const res = await fetch(`${BASE_URL}/api/notify?action=${action}`, {
       method: "POST",
@@ -155,9 +157,36 @@ async function callNotifyBridge(action, uid, extra = {}) {
     });
     if (!res.ok) {
       log("auth.notify_bridge_failed", { action, uid, status: res.status });
+      if (retries > 0 && res.status >= 500) {
+        await new Promise(r => setTimeout(r, 400));
+        return callNotifyBridge(action, uid, extra, retries - 1);
+      }
     }
   } catch (err) {
     log("auth.notify_bridge_error", { action, uid, message: err.message });
+    if (retries > 0) {
+      await new Promise(r => setTimeout(r, 400));
+      return callNotifyBridge(action, uid, extra, retries - 1);
+    }
+  }
+}
+
+// 🆕 User-facing notification creation. Always awaited — Vercel terminates
+// pending fetches after res.json() so fire-and-forget would silently fail.
+async function callNotify(type, uid, payload) {
+  if (!uid) return;
+  try {
+    const res = await fetch(`${BASE_URL}/api/notify?action=create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ADMIN_API_KEY || "",
+      },
+      body: JSON.stringify({ type, uid, ...payload }),
+    });
+    if (!res.ok) log("auth.notify_failed", { type, uid, status: res.status });
+  } catch (err) {
+    log("auth.notify_error", { type, uid, message: err.message });
   }
 }
 
@@ -169,6 +198,13 @@ function isValidHttpsUrl(url) {
   } catch {
     return false;
   }
+}
+
+// 🆕 Helper for display in notification bodies — hashed prefix of caller IP
+// so the user can spot "same device" vs "somewhere else" without leaking the
+// full IP into the notification history.
+function ipShort(req) {
+  return hashIp(getClientIp(req)).slice(0, 8);
 }
 
 // =========================================================================
@@ -258,7 +294,10 @@ async function handleRegister(req, res, reqId) {
     return res.status(500).json({ success: false, error: "Registration failed" });
   }
 
-  callNotifyBridge("auth_signup", uid, { username: assigned.username }).catch(() => {});
+  // 🆕 Bridge — awaited now (was fire-and-forget)
+  try {
+    await callNotifyBridge("auth_signup", uid, { username: assigned.username });
+  } catch {}
 
   await logUserEvent(uid, "auth", "user.registered", {
     email: emailLower,
@@ -267,6 +306,18 @@ async function handleRegister(req, res, reqId) {
     wasModified: assigned.isModified,
     hasAvatar: !!cleanAvatarUrl,
   });
+
+  // 🆕 A1 — Welcome notification
+  try {
+    await callNotify("system", uid, {
+      title: `Welcome to Folio, ${assigned.username}!`,
+      body: "Your account is ready. Create your first project to get started.",
+      link: `${BASE_URL}/projects/create`,
+      extra: { kind: "welcome", username: assigned.username },
+      dedupeKey: `welcome_${uid}`,
+      dedupeTtlMs: 0,
+    });
+  } catch {}
 
   const sessionToken = signSession(uid, assigned.username);
 
@@ -330,6 +381,44 @@ async function handleLogin(req, res, reqId) {
     const newCount = (attempts.count || 0) + 1;
     const lockedUntil = newCount >= LOGIN_MAX_FAILURES ? now + LOGIN_LOCK_MS : 0;
     await attemptsRef.set({ count: newCount, lastAttempt: now, lockedUntil });
+
+    // 🆕 A3 — Wrong password ×3 (owner still has 2 more before lockout)
+    if (newCount === 3) {
+      try {
+        await callNotify("security", found.uid, {
+          title: "Failed login attempts detected",
+          body: "Someone has failed to log into your account 3 times in the last hour. If this wasn't you, consider changing your password.",
+          link: `${BASE_URL}/account/security`,
+          priority: "high",
+          extra: {
+            kind: "failed_login_3",
+            ipHash: ipShort(req),
+          },
+          dedupeKey: `failed_login_${found.uid}_${idHash}`,
+          dedupeTtlMs: 60 * 60 * 1000,
+        });
+      } catch {}
+    }
+
+    // 🆕 A4 — Lockout triggered
+    if (lockedUntil) {
+      try {
+        await callNotify("security", found.uid, {
+          title: "Account locked after failed logins",
+          body: `Too many failed login attempts. Your account is locked for ${LOGIN_LOCK_MS / 60000} minutes.`,
+          link: `${BASE_URL}/login`,
+          priority: "urgent",
+          extra: {
+            kind: "login_locked",
+            lockedUntil,
+            ipHash: ipShort(req),
+          },
+          dedupeKey: `login_locked_${found.uid}_${lockedUntil}`,
+          dedupeTtlMs: 0,
+        });
+      } catch {}
+    }
+
     return res.status(401).json({ success: false, error: "Invalid credentials" });
   }
 
@@ -361,7 +450,11 @@ async function handleLogout(req, res, reqId) {
   if (!user) return;
   if (!(await enforceRate(req, res, "logout", `uid_${user.uid}`))) return;
 
-  callNotifyBridge("auth_logout", user.uid).catch(() => {});
+  // 🆕 Bridge — awaited now (was fire-and-forget)
+  try {
+    await callNotifyBridge("auth_logout", user.uid);
+  } catch {}
+
   await logUserEvent(user.uid, "auth", "user.logout", {});
 
   return res.status(200).json({ success: true });
@@ -406,6 +499,22 @@ async function handleChangePassword(req, res, reqId) {
   await db.ref(`users/${user.uid}/updatedAt`).set(Date.now());
   await logUserEvent(user.uid, "auth", "password.changed", {});
 
+  // 🆕 A2 — Password changed (self-notify for security audit)
+  try {
+    await callNotify("security", user.uid, {
+      title: "Password changed",
+      body: "Your Folio password was just changed. If this wasn't you, reset it immediately.",
+      link: `${BASE_URL}/account/security`,
+      priority: "high",
+      extra: {
+        kind: "password_changed",
+        ipHash: ipShort(req),
+      },
+      dedupeKey: `password_changed_${user.uid}`,
+      dedupeTtlMs: 60 * 1000,
+    });
+  } catch {}
+
   return res.status(200).json({ success: true });
 }
 
@@ -447,6 +556,25 @@ async function handleChangeEmail(req, res, reqId) {
   }
 
   await logUserEvent(user.uid, "auth", "email.changed", {});
+
+  // 🆕 A6 — Email changed (self-notify for security audit)
+  try {
+    await callNotify("security", user.uid, {
+      title: "Email address changed",
+      body: `Your Folio email was changed to ${newLower}. If this wasn't you, contact support immediately.`,
+      link: `${BASE_URL}/account/security`,
+      priority: "high",
+      extra: {
+        kind: "email_changed",
+        newEmailLower: newLower,
+        oldEmailLower: oldLower, // for future email-notification flow
+        ipHash: ipShort(req),
+      },
+      dedupeKey: `email_changed_${user.uid}`,
+      dedupeTtlMs: 60 * 1000,
+    });
+  } catch {}
+
   return res.status(200).json({ success: true });
 }
 
@@ -485,6 +613,22 @@ async function handleChangeUsername(req, res, reqId) {
   }
 
   await logUserEvent(user.uid, "auth", "username.changed", { from: oldName, to: newName });
+
+  // 🆕 A7 — Username changed (informational)
+  try {
+    await callNotify("system", user.uid, {
+      title: "Username changed",
+      body: `Your username is now @${newName}. Update any bookmarks to ${BASE_URL}/${newName}.`,
+      link: `${BASE_URL}/${newName}`,
+      extra: {
+        kind: "username_changed",
+        from: oldName,
+        to: newName,
+      },
+      dedupeKey: `username_changed_${user.uid}`,
+      dedupeTtlMs: 60 * 1000,
+    });
+  } catch {}
 
   const sessionToken = signSession(user.uid, newName);
   return res.status(200).json({ success: true, sessionToken, username: newName });
