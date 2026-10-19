@@ -107,6 +107,10 @@ async function enforceRate(req, res, action, identifier) {
       retryAfter: r.retryAfter,
       reset: r.reset,
     });
+    // 🆕 Notify owner on repeated rate-limit abuse (fires once per hour after 5 denials)
+    try {
+      await maybeNotifyRateLimitAbuse(action, identifier, r).catch(() => {});
+    } catch {}
     return false;
   }
   return true;
@@ -746,6 +750,130 @@ function buildZip(entries) {
 }
 
 // =========================================================================
+// 🆕 NOTIFICATIONS — helpers
+// =========================================================================
+
+async function callNotify(type, uid, payload) {
+  if (!uid) return;
+  try {
+    const res = await fetch(`${BASE_URL}/api/notify?action=create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ADMIN_API_KEY || "",
+      },
+      body: JSON.stringify({ type, uid, ...payload }),
+    });
+    if (!res.ok) log("host.notify_failed", { type, uid, status: res.status });
+  } catch (err) {
+    log("host.notify_error", { type, uid, message: err.message });
+  }
+}
+
+// Fan-out to multiple recipients. Fire-and-forget, dedupe uids.
+function notifyMany(type, uids, payload) {
+  const unique = [...new Set((uids || []).filter(Boolean))];
+  Promise.allSettled(unique.map(uid => callNotify(type, uid, payload))).catch(() => {});
+}
+
+// Returns ownerId + every uid that has a role on this project.
+async function getProjectAudience(pid) {
+  try {
+    const snap = await db.ref(`projects/${pid}`).once("value");
+    if (!snap.exists()) return { ownerId: null, uids: [] };
+    const p = snap.val();
+    const uids = new Set();
+    if (p.ownerId) uids.add(p.ownerId);
+    for (const uid of Object.keys(p.roles || {})) uids.add(uid);
+    return { ownerId: p.ownerId || null, uids: [...uids] };
+  } catch {
+    return { ownerId: null, uids: [] };
+  }
+}
+
+// Fire-once-per-window dedupe helper.
+async function shouldNotifyOnce(uid, key, ttlMs = 24 * 60 * 60 * 1000) {
+  if (!uid) return false;
+  try {
+    const ref = db.ref(`notify_dedupe/${uid}/${sanitizeFirebasePath(key)}`);
+    const snap = await ref.once("value");
+    const now = Date.now();
+    if (snap.exists() && now - (snap.val()?.ts || 0) < ttlMs) return false;
+    await ref.set({ ts: now }).catch(() => {});
+    return true;
+  } catch {
+    return true; // fail-open: better a duplicate than silence
+  }
+}
+
+// Deploy failure notify helper.
+function notifyDeployFailed(access, pid, projectName, reason, status) {
+  if (!access?.uid || access.uid === "api") return;
+  callNotify("project", access.uid, {
+    title: "Deployment failed",
+    body: `Deploy to "${projectName || "project"}" failed: ${reason}`,
+    link: `${BASE_URL}/project.html?pid=${pid}`,
+    extra: { pid, status, kind: "deploy_failed" },
+  }).catch(() => {});
+}
+
+// Storage warning. Dedupes per project for `ttlMs` so 100 writes at 82% don't spam.
+async function notifyStorageWarning(pid, ownerId, finalSize, LIMIT, percentUsed, kind = "nearly_full") {
+  if (!ownerId) return;
+  const key = `storage_${kind}_${pid}`;
+  const ttl = kind === "full" ? 6 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
+  if (!(await shouldNotifyOnce(ownerId, key, ttl))) return;
+  callNotify("storage", ownerId, {
+    title: kind === "full" ? "Database limit reached" : "Database nearly full",
+    body: kind === "full"
+      ? `Writes to this project are being rejected — ${percentUsed}% full.`
+      : `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of ${Math.round(LIMIT / 1024 / 1024)} MB).`,
+    link: `${BASE_URL}/project.html?pid=${pid}`,
+    extra: { pid, size: finalSize, limit: LIMIT, percentUsed, kind },
+  }).catch(() => {});
+}
+
+// Rate-limit abuse notifier — fires once per hour after 5 consecutive 429s.
+async function maybeNotifyRateLimitAbuse(action, identifier, rateResult) {
+  const s = String(identifier || "");
+  let pid = null;
+  let directUid = null;
+  if (s.startsWith("pid_")) pid = s.slice(4);
+  else if (s.startsWith("uid_")) directUid = s.slice(4);
+  else return; // ignore ip_ keys — we don't know who owns them
+
+  const windowKey = `rl_abuse_${action}_${sanitizeFirebasePath(s)}`;
+  const ref = db.ref(`rate_limit_abuse/${windowKey}`);
+  const now = Date.now();
+  const HOUR = 60 * 60 * 1000;
+
+  let fired = false;
+  let ownerId = directUid;
+  try {
+    await ref.transaction(cur => {
+      const c = cur && (now - (cur.first || 0) < HOUR) ? cur : { count: 0, first: now };
+      c.count += 1;
+      if (c.count === 5 && !c.fired) { c.fired = true; fired = true; }
+      return c;
+    });
+  } catch { return; }
+
+  if (!fired) return;
+  if (!ownerId && pid) {
+    const snap = await db.ref(`projects/${pid}/ownerId`).once("value").catch(() => null);
+    if (snap?.exists()) ownerId = snap.val();
+  }
+  if (!ownerId) return;
+
+  callNotify("security", ownerId, {
+    title: "Repeated rate-limit warnings",
+    body: `"${action}" is being rejected repeatedly${pid ? " on one of your projects" : ""}. Possible abuse or a stuck client.`,
+    link: pid ? `${BASE_URL}/project.html?pid=${pid}` : `${BASE_URL}/projects`,
+    extra: { action, pid, identifier: s, retryAfter: rateResult?.retryAfter },
+  }).catch(() => {});
+}
+
+// =========================================================================
 // PROJECTS CRUD
 // =========================================================================
 
@@ -847,6 +975,23 @@ async function handleProjectsUpdate(req, res, reqId) {
     await invalidateProjectOgImage(pid);
   }
 
+  // 🆕 Notify other project members (not the actor) about significant metadata changes
+  try {
+    const audience = await getProjectAudience(pid);
+    const others = audience.uids.filter(u => u !== access.uid);
+    if (others.length) {
+      const touched = Object.keys(patch).filter(k => ["name", "description", "iconUrl"].includes(k));
+      if (touched.length) {
+        notifyMany("project", others, {
+          title: "Project details updated",
+          body: `Someone updated ${touched.join(", ")} on a project you collaborate on.`,
+          link: `${BASE_URL}/project.html?pid=${pid}`,
+          extra: { pid, fields: touched },
+        });
+      }
+    }
+  } catch {}
+
   const snap = await db.ref(`projects/${pid}`).once("value");
   const p = snap.exists() ? snap.val() : {};
   const { apiKeyHash, ...safe } = p;
@@ -861,29 +1006,34 @@ async function handleProjectsDelete(req, res, reqId) {
   const access = await requireProjectRole(req, res, pid, "owner");
   if (!access) return;
 
+  // 🆕 Snapshot the audience BEFORE deleting so we can notify them
+  let projectName = "";
+  let collaborators = [];
+  try {
+    const audience = await getProjectAudience(pid);
+    collaborators = audience.uids.filter(u => u !== access.uid);
+    const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
+    projectName = nameSnap.exists() ? nameSnap.val() : "";
+  } catch {}
+
   try {
     await deleteProjectRecord(pid, access.uid);
+    // 🆕 Notify collaborators after successful delete (fire-and-forget)
+    if (collaborators.length) {
+      notifyMany("project", collaborators, {
+        title: "Project deleted",
+        body: `"${projectName || "A project you collaborated on"}" was deleted by its owner.`,
+        link: `${BASE_URL}/projects`,
+        extra: { pid, deleted: true },
+      });
+    }
     return res.status(200).json({ success: true });
   } catch (err) {
     log("host.projects_delete.failed", { reqId, pid, message: err.message });
     return res.status(500).json({ success: false, error: "Could not delete project" });
   }
 }
-async function callNotify(type, uid, payload) {
-  try {
-    const res = await fetch(`${BASE_URL}/api/notify?action=create`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": process.env.ADMIN_API_KEY || "",
-      },
-      body: JSON.stringify({ type, uid, ...payload }),
-    });
-    if (!res.ok) log("host.notify_failed", { type, uid, status: res.status });
-  } catch (err) {
-    log("host.notify_error", { type, uid, message: err.message });
-  }
-}
+
 // =========================================================================
 // DEPLOY (DB-only — no external host)
 // =========================================================================
@@ -915,6 +1065,11 @@ async function handleDeploy(req, res, reqId) {
     if (content.length > MAX_FILE_BYTES) { skipped.push(filePath); continue; }
     totalBytes += content.length;
     if (totalBytes > MAX_TOTAL_BYTES) {
+      // 🆕 Deploy failed — notify deployer + owner
+      notifyDeployFailed(access, pid, project.name, "payload exceeds size limit", 413);
+      if (project.ownerId && project.ownerId !== access.uid) {
+        notifyDeployFailed({ uid: project.ownerId }, pid, project.name, "payload exceeds size limit", 413);
+      }
       return res.status(413).json({
         success: false,
         error: "Project too large to deploy",
@@ -936,6 +1091,8 @@ async function handleDeploy(req, res, reqId) {
   }
 
   if (filesWritten === 0) {
+    // 🆕 No files written — notify deployer
+    notifyDeployFailed(access, pid, project.name, "no valid files in payload", 400);
     return res.status(400).json({ success: false, error: "No valid files to deploy" });
   }
 
@@ -980,12 +1137,19 @@ async function handleDeploy(req, res, reqId) {
     filesSkipped: skipped.length,
   });
 
-  callNotify("project", project.ownerId, {
-    title: "Deployment complete",
-    body: `Project "${project.name}" is live.`,
-    link: `${BASE_URL}/project.html?pid=${pid}`,
-    extra: { pid },
-  }).catch(() => {});
+  // 🆕 Notify owner + all collaborators (excluding the deployer)
+  try {
+    const audience = await getProjectAudience(pid);
+    const others = audience.uids.filter(u => u !== access.uid);
+    if (others.length) {
+      notifyMany("project", others, {
+        title: "Deployment complete",
+        body: `Project "${project.name}" is live.`,
+        link: `${BASE_URL}/project.html?pid=${pid}`,
+        extra: { pid, deploymentId: deploymentRecord.deploymentId },
+      });
+    }
+  } catch {}
 
   return res.status(202).json({
     success: true,
@@ -1090,6 +1254,22 @@ async function handleDeploymentOffline(req, res, reqId) {
 
   await logProjectEvent(pid, access.uid, "deploy", "deployment.offline", {});
 
+  // 🆕 Notify owner + collaborators (not the actor)
+  try {
+    const audience = await getProjectAudience(pid);
+    const others = audience.uids.filter(u => u !== access.uid);
+    if (others.length) {
+      const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
+      const pname = nameSnap.exists() ? nameSnap.val() : "a project";
+      notifyMany("project", others, {
+        title: "Deployment taken offline",
+        body: `"${pname}" was taken offline.`,
+        link: `${BASE_URL}/project.html?pid=${pid}`,
+        extra: { pid, kind: "offline" },
+      });
+    }
+  } catch {}
+
   return res.status(200).json({ success: true });
 }
 
@@ -1110,6 +1290,20 @@ async function handleDeploymentDelete(req, res, reqId) {
   if (isCurrent) await db.ref(`projects/${pid}/deployment`).remove();
 
   await logProjectEvent(pid, access.uid, "deploy", "deployment.deleted", { deploymentId });
+
+  // 🆕 Notify collaborators (not the actor)
+  try {
+    const audience = await getProjectAudience(pid);
+    const others = audience.uids.filter(u => u !== access.uid);
+    if (others.length) {
+      notifyMany("project", others, {
+        title: "Deployment removed",
+        body: `A ${isCurrent ? "current " : ""}deployment record was deleted.`,
+        link: `${BASE_URL}/project.html?pid=${pid}`,
+        extra: { pid, deploymentId, isCurrent, kind: "deploy_deleted" },
+      });
+    }
+  } catch {}
 
   return res.status(200).json({ success: true, vercelDeleted: false });
 }
@@ -1384,6 +1578,23 @@ async function handleProjectExport(req, res, reqId) {
     publicOnly,
   });
 
+  // 🆕 If a non-owner pulled a copy of a public project, tell the owner.
+  // Only for publicOnly exports of the full project — this is the "fork" signal.
+  try {
+    if (publicOnly && access.uid && project.ownerId && project.ownerId !== access.uid) {
+      const exporter = await getUser(access.uid);
+      const who = exporter?.profile?.username ? `@${exporter.profile.username}` : "a user";
+      if (await shouldNotifyOnce(project.ownerId, `export_${pid}_${access.uid}`, 24 * 60 * 60 * 1000)) {
+        callNotify("project", project.ownerId, {
+          title: "Someone downloaded your project",
+          body: `${who} exported a copy of "${safeProject.name || "your project"}".`,
+          link: `${BASE_URL}/project.html?pid=${pid}`,
+          extra: { pid, exporterUid: access.uid, format },
+        }).catch(() => {});
+      }
+    }
+  } catch {}
+
   return res.status(200).send(zipBuffer);
 }
 
@@ -1464,6 +1675,22 @@ async function handleProjectSyncBack(req, res, reqId) {
   if (result.filesWritten > 0 && !projSnap.val().description?.trim()) {
     await invalidateProjectOgImage(pid);
   }
+
+  // 🆕 Notify collaborators when significant content was synced back
+  try {
+    if (result.filesWritten > 0 || result.dbWritten || result.schemaWritten) {
+      const audience = await getProjectAudience(pid);
+      const others = audience.uids.filter(u => u !== access.uid);
+      if (others.length) {
+        notifyMany("project", others, {
+          title: "Project updated from sync",
+          body: `${result.filesWritten} file(s) synced back${result.dbWritten ? ", DB imported" : ""}.`,
+          link: `${BASE_URL}/project.html?pid=${pid}`,
+          extra: { pid, ...result },
+        });
+      }
+    }
+  } catch {}
 
   return res.status(200).json({ success: true, ...result });
 }
@@ -1583,6 +1810,7 @@ async function handleFileGet(req, res, reqId) {
     updatedAt: file.updatedAt || null,
   });
 }
+
 // =========================================================================
 // PROJECT COPY (fork)
 // =========================================================================
@@ -1663,6 +1891,23 @@ async function handleProjectCopy(req, res, reqId) {
     fullCopy: canFullCopy,
   });
 
+  // 🆕 Notify source owner when someone else forks their public project.
+  // Dedupe per (source, forker) for 24h so quick re-forks don't spam.
+  try {
+    if (source.ownerId && source.ownerId !== user.uid) {
+      if (await shouldNotifyOnce(source.ownerId, `fork_${sourcePid}_${user.uid}`, 24 * 60 * 60 * 1000)) {
+        const forker = await getUser(user.uid);
+        const who = forker?.profile?.username ? `@${forker.profile.username}` : "someone";
+        callNotify("project", source.ownerId, {
+          title: "Someone copied your project",
+          body: `${who} saved a copy of "${source.name || "your project"}".`,
+          link: `${BASE_URL}/${forker?.profile?.username || ""}/${newProject.slug || ""}`,
+          extra: { sourcePid, newPid: newProject.pid, forkerUid: user.uid },
+        }).catch(() => {});
+      }
+    }
+  } catch {}
+
   const { apiKeyHash, ...safeNew } = newProject;
   return res.status(200).json({
     success: true,
@@ -1715,10 +1960,6 @@ async function handleDbSet(req, res, reqId) {
 
   // ═══════════════════════════════════════════════════════════
   // Branch 1 — PATH WRITE (key + value)
-  // Writes ONLY the given path. Preserves every sibling.
-  // Example: key="posts/pA/comments/c1", value={...}
-  //   → projectData/{pid}/posts/pA/comments/c1 = {...}
-  //   → posts/pB untouched, posts/pA.body untouched
   // ═══════════════════════════════════════════════════════════
   if (key !== undefined) {
     if (data !== undefined) {
@@ -1738,7 +1979,6 @@ async function handleDbSet(req, res, reqId) {
       });
     }
 
-    // Sanitize each segment individually — never mangle the separators.
     const safeParts = [];
     for (const seg of parts) {
       const safe = sanitizeFirebasePath(seg);
@@ -1752,17 +1992,11 @@ async function handleDbSet(req, res, reqId) {
       safeParts.push(safe);
     }
 
-    // Build a nested multi-path update:
-    //   parts = ["posts","pA","comments","c1"]
-    //   value = { ...comment }
-    //   →  { posts: { pA: { comments: { c1: {...comment} } } } }
-    // Firebase .update() with this object writes ONLY the leaf.
     let nested = value === undefined ? null : value;
     for (let i = safeParts.length - 1; i >= 0; i--) {
       nested = { [safeParts[i]]: nested };
     }
 
-    // Size check on the payload value only (not the whole DB)
     const serialized = JSON.stringify(value === undefined ? null : value);
     if (serialized.length > LIMIT) {
       return res.status(413).json({
@@ -1775,7 +2009,6 @@ async function handleDbSet(req, res, reqId) {
     }
 
     try {
-      // Multi-path update — writes only the leaf path, keeps every sibling.
       await dbRef.update(nested);
     } catch (err) {
       log("host.dbSet.path_write_failed", { reqId, pid, key, message: err.message });
@@ -1794,6 +2027,13 @@ async function handleDbSet(req, res, reqId) {
     } catch {}
 
     if (finalSize > LIMIT) {
+      // 🆕 DB full — notify owner (deduped)
+      try {
+        const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
+        if (ownerSnap.exists()) {
+          await notifyStorageWarning(pid, ownerSnap.val(), finalSize, LIMIT, 100, "full");
+        }
+      } catch {}
       return res.status(413).json({
         success: false,
         error: "Database exceeds 15 MB limit after write",
@@ -1807,7 +2047,6 @@ async function handleDbSet(req, res, reqId) {
     const spaceRemaining = Math.max(0, LIMIT - finalSize);
     const percentUsed = Math.min(100, Math.round((finalSize / LIMIT) * 1000) / 10);
 
-    // Analytics
     await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
       const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
       c.writes = (c.writes || 0) + 1;
@@ -1815,7 +2054,6 @@ async function handleDbSet(req, res, reqId) {
       return c;
     }).catch(() => {});
 
-    // Aggregate call counts
     let totalWrites = 0;
     let todayWrites = 0;
     try {
@@ -1837,17 +2075,12 @@ async function handleDbSet(req, res, reqId) {
       viaApiKey: access.uid === "api",
     });
 
-    // Storage warning at 80%
+    // 🆕 Storage warning at 80% (deduped 12h)
     try {
       if (finalSize > LIMIT * 0.8) {
         const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
         if (ownerSnap.exists()) {
-          callNotify("storage", ownerSnap.val(), {
-            title: "Database nearly full",
-            body: `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of 15 MB).`,
-            link: `${BASE_URL}/project.html?pid=${pid}`,
-            extra: { pid },
-          }).catch(() => {});
+          await notifyStorageWarning(pid, ownerSnap.val(), finalSize, LIMIT, percentUsed, "nearly_full");
         }
       }
     } catch {}
@@ -1864,10 +2097,6 @@ async function handleDbSet(req, res, reqId) {
 
   // ═══════════════════════════════════════════════════════════
   // Branch 2 — DATA MERGE (data + mode:"merge")
-  // Shallow top-level update. The client MUST send the full subtree
-  // for any top-level key it includes (e.g. the entire `posts` object,
-  // not just one post), because Firebase .update() replaces each
-  // provided top-level value wholesale.
   // ═══════════════════════════════════════════════════════════
   if (data !== undefined && mode === "merge") {
     const serialized = JSON.stringify(data ?? null);
@@ -1896,8 +2125,6 @@ async function handleDbSet(req, res, reqId) {
     }
 
     try {
-      // Multi-path update. Top-level keys in `data` are treated as
-      // full-subtree replacements — the client contract.
       await dbRef.update(data);
     } catch (err) {
       log("host.dbSet.merge_failed", { reqId, pid, message: err.message });
@@ -1908,13 +2135,18 @@ async function handleDbSet(req, res, reqId) {
       });
     }
 
-    // ── Post-write size check ──
     let finalSize = 0;
     try {
       const s = await dbRef.once("value");
       finalSize = JSON.stringify(s.val() || {}).length;
     } catch {}
     if (finalSize > LIMIT) {
+      try {
+        const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
+        if (ownerSnap.exists()) {
+          await notifyStorageWarning(pid, ownerSnap.val(), finalSize, LIMIT, 100, "full");
+        }
+      } catch {}
       return res.status(413).json({
         success: false,
         error: "Database exceeds 15 MB limit after write",
@@ -1927,7 +2159,6 @@ async function handleDbSet(req, res, reqId) {
     const spaceRemaining = Math.max(0, LIMIT - finalSize);
     const percentUsed = Math.min(100, Math.round((finalSize / LIMIT) * 1000) / 10);
 
-    // Analytics
     await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
       const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
       c.writes = (c.writes || 0) + 1;
@@ -1957,17 +2188,12 @@ async function handleDbSet(req, res, reqId) {
       viaApiKey: access.uid === "api",
     });
 
-    // Storage warning at 80%
+    // 🆕 Storage warning at 80% (deduped)
     try {
       if (finalSize > LIMIT * 0.8) {
         const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
         if (ownerSnap.exists()) {
-          callNotify("storage", ownerSnap.val(), {
-            title: "Database nearly full",
-            body: `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of 15 MB).`,
-            link: `${BASE_URL}/project.html?pid=${pid}`,
-            extra: { pid },
-          }).catch(() => {});
+          await notifyStorageWarning(pid, ownerSnap.val(), finalSize, LIMIT, percentUsed, "nearly_full");
         }
       }
     } catch {}
@@ -1984,8 +2210,6 @@ async function handleDbSet(req, res, reqId) {
 
   // ═══════════════════════════════════════════════════════════
   // Branch 3 — DATA REPLACE (data, no mode)
-  // Full replacement of projectData/{pid}. Use only for
-  // create-group, delete-group, and explicit "wipe DB" ops.
   // ═══════════════════════════════════════════════════════════
   if (data !== undefined) {
     const serialized = JSON.stringify(data ?? null);
@@ -2010,7 +2234,6 @@ async function handleDbSet(req, res, reqId) {
       });
     }
 
-    // ── Post-write size check ──
     let finalSize = 0;
     try {
       const s = await dbRef.once("value");
@@ -2021,7 +2244,6 @@ async function handleDbSet(req, res, reqId) {
       ? Math.min(100, Math.round((finalSize / LIMIT) * 1000) / 10)
       : 0;
 
-    // Analytics
     await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
       const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
       c.writes = (c.writes || 0) + 1;
@@ -2050,6 +2272,16 @@ async function handleDbSet(req, res, reqId) {
       viaApiKey: access.uid === "api",
     });
 
+    // 🆕 Storage warning at 80% — this branch was previously missing it
+    try {
+      if (finalSize > LIMIT * 0.8) {
+        const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
+        if (ownerSnap.exists()) {
+          await notifyStorageWarning(pid, ownerSnap.val(), finalSize, LIMIT, percentUsed, "nearly_full");
+        }
+      }
+    } catch {}
+
     return res.status(200).json({
       success: true,
       mode: "replace",
@@ -2059,9 +2291,6 @@ async function handleDbSet(req, res, reqId) {
     });
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // Nothing to do
-  // ═══════════════════════════════════════════════════════════
   return res.status(400).json({
     success: false,
     error: "Missing key or data",
@@ -2102,7 +2331,6 @@ async function handleDbGet(req, res, reqId) {
   const serialized = JSON.stringify(data || {});
   const bytesOut = serialized.length;
 
-  // Analytics write (reads counter)
   await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
     const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
     c.reads = (c.reads || 0) + 1;
@@ -2110,7 +2338,6 @@ async function handleDbGet(req, res, reqId) {
     return c;
   }).catch(() => {});
 
-  // ── Aggregate call counts across all days ──
   let totalWrites = 0;
   let todayWrites = 0;
   let totalReads = 0;
@@ -2128,7 +2355,6 @@ async function handleDbGet(req, res, reqId) {
     }
   } catch {}
 
-  // ── Space usage ──
   const LIMIT = 15 * 1024 * 1024;
   const used = serialized.length;
   const space = {
@@ -2138,7 +2364,6 @@ async function handleDbGet(req, res, reqId) {
     percentUsed: LIMIT > 0 ? Math.min(100, Math.round((used / LIMIT) * 1000) / 10) : 0,
   };
 
-  // ── Rate limit snapshot (does NOT increment — read-only peek) ──
   const cfg = RATE_LIMITS.dbSet;
   let rateLimit = { limit: cfg.max, remaining: cfg.max, reset: null };
   try {
@@ -2169,7 +2394,7 @@ async function handleDbGet(req, res, reqId) {
     rateLimit,
     space,
   });
-} 
+}
 
 async function canAccessProjectFromReq(req) {
   const header = req.headers.authorization || "";
@@ -2227,6 +2452,20 @@ async function handleApiKeyGenerate(req, res, reqId) {
   });
   await logProjectEvent(pid, access.uid, "project", "apikey.generated", {});
 
+  // 🆕 Notify the owner (even if they were the actor — security event)
+  // We notify any other owner-role collaborators too, and the actor for their own audit trail.
+  try {
+    const audience = await getProjectAudience(pid);
+    const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
+    const pname = nameSnap.exists() ? nameSnap.val() : "your project";
+    notifyMany("project", audience.uids, {
+      title: "New API key generated",
+      body: `A new API key was created for "${pname}". If this wasn't you, revoke it now.`,
+      link: `${BASE_URL}/project.html?pid=${pid}`,
+      extra: { pid, security: true },
+    });
+  } catch {}
+
   return res.status(200).json({ success: true, key });
 }
 
@@ -2262,6 +2501,24 @@ async function handleVisibility(req, res, reqId) {
   patch.updatedAt = Date.now();
   await db.ref(`projects/${pid}`).update(patch);
   await logProjectEvent(pid, access.uid, "project", "visibility.updated", { changes });
+
+  // 🆕 Only significant flips (profile / liveSite) are worth notifying the team
+  try {
+    const significant = ["profile", "liveSite"].filter(a => changes[a]);
+    if (significant.length) {
+      const audience = await getProjectAudience(pid);
+      const others = audience.uids.filter(u => u !== access.uid);
+      if (others.length) {
+        const wentPublic = significant.some(a => changes[a] === "public");
+        notifyMany("project", others, {
+          title: wentPublic ? "Project went public" : "Project made private",
+          body: `${significant.join(", ")} visibility changed.`,
+          link: `${BASE_URL}/project.html?pid=${pid}`,
+          extra: { pid, changes },
+        });
+      }
+    }
+  } catch {}
 
   return res.status(200).json({ success: true });
 }
@@ -2332,12 +2589,17 @@ async function handleInviteCreate(req, res, reqId) {
     createdAt: now,
   });
 
-  callNotify("invite", invited.uid, {
-    title: "Project invitation",
-    body: `You've been invited to join a project as ${role}.`,
-    link: `${BASE_URL}/invite.html?token=${token}`,
-    extra: { token, pid, role },
-  }).catch(() => {});
+  // Notify invitee
+  try {
+    const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
+    const pname = nameSnap.exists() ? nameSnap.val() : "a project";
+    callNotify("invite", invited.uid, {
+      title: "Project invitation",
+      body: `You've been invited to join "${pname}" as ${role}.`,
+      link: `${BASE_URL}/invite.html?token=${token}`,
+      extra: { token, pid, role },
+    }).catch(() => {});
+  } catch {}
 
   await logProjectEvent(pid, access.uid, "invite", "invite.sent", {
     invitedUid: invited.uid,
@@ -2422,6 +2684,24 @@ async function handleInviteAccept(req, res, reqId) {
   await db.ref(`invites/${token}`).update({ used: true, usedAt: Date.now() });
   await logProjectEvent(invite.pid, user.uid, "invite", "invite.accepted", { role: invite.role });
 
+  // 🆕 Notify inviter that their invite was accepted
+  try {
+    if (invite.invitedBy && invite.invitedBy !== user.uid) {
+      const [nameSnap, acceptorUser] = await Promise.all([
+        db.ref(`projects/${invite.pid}/name`).once("value"),
+        getUser(user.uid),
+      ]);
+      const pname = nameSnap.exists() ? nameSnap.val() : "your project";
+      const who = acceptorUser?.profile?.username ? `@${acceptorUser.profile.username}` : "Someone";
+      callNotify("invite", invite.invitedBy, {
+        title: "Invitation accepted",
+        body: `${who} joined "${pname}" as ${invite.role}.`,
+        link: `${BASE_URL}/project.html?pid=${invite.pid}`,
+        extra: { pid: invite.pid, uid: user.uid, role: invite.role },
+      }).catch(() => {});
+    }
+  } catch {}
+
   return res.status(200).json({ success: true, pid: invite.pid, role: invite.role });
 }
 
@@ -2440,6 +2720,20 @@ async function handleInviteCancel(req, res, reqId) {
   await db.ref(`invites/${token}`).remove();
   await logProjectEvent(invite.pid, access.uid, "invite", "invite.cancelled", {});
 
+  // 🆕 Notify the invitee that their invite is gone
+  try {
+    if (invite.invitedUid) {
+      const nameSnap = await db.ref(`projects/${invite.pid}/name`).once("value");
+      const pname = nameSnap.exists() ? nameSnap.val() : "a project";
+      callNotify("invite", invite.invitedUid, {
+        title: "Invitation cancelled",
+        body: `Your invitation to "${pname}" was cancelled.`,
+        link: `${BASE_URL}/projects`,
+        extra: { pid: invite.pid },
+      }).catch(() => {});
+    }
+  } catch {}
+
   return res.status(200).json({ success: true });
 }
 
@@ -2456,6 +2750,18 @@ async function handleCollaboratorRemove(req, res, reqId) {
   await db.ref(`projects/${pid}/roles/${targetUid}`).remove();
   await db.ref(`users/${targetUid}/projectIds/${pid}`).remove();
   await logProjectEvent(pid, access.uid, "invite", "collaborator.removed", { targetUid });
+
+  // 🆕 Tell the removed collaborator
+  try {
+    const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
+    const pname = nameSnap.exists() ? nameSnap.val() : "a project";
+    callNotify("project", targetUid, {
+      title: "Removed from project",
+      body: `You no longer have access to "${pname}".`,
+      link: `${BASE_URL}/projects`,
+      extra: { pid },
+    }).catch(() => {});
+  } catch {}
 
   return res.status(200).json({ success: true });
 }
