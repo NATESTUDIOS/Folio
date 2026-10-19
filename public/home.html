@@ -1,0 +1,1339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Folio — Code in your pocket</title>
+<meta name="description" content="A mobile-first code editor. Write, preview, and deploy — from your phone.">
+<meta name="theme-color" content="#0a0c10">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════ */
+:root {
+  --bg: #0a0c10;
+  --surface: #0f1218;
+  --elevated: #1a1f2a;
+  --card: rgba(21, 25, 34, 0.72);
+  --text: #e8ecf1;
+  --text-2: rgba(232, 236, 241, 0.72);
+  --text-3: rgba(232, 236, 241, 0.44);
+  --primary: #F59E0B;
+  --primary-hover: #fbbf24;
+  --primary-glow: rgba(245, 158, 11, 0.4);
+  --primary-soft: rgba(245, 158, 11, 0.14);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --divider: rgba(255, 255, 255, 0.08);
+  --success: #10B981;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  background-image:
+    radial-gradient(circle at 50% -20%, rgba(245, 158, 11, 0.16), transparent 60%),
+    radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.08), transparent 55%);
+  background-attachment: fixed;
+}
+
+a { color: var(--primary); text-decoration: none; }
+button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+img { display: block; max-width: 100%; }
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOP NAV
+   ═══════════════════════════════════════════════════════ */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(10, 12, 16, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 60px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.3px;
+}
+.nav-logo-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--primary), #f97316);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0a0c10;
+  font-weight: 900;
+  font-size: 16px;
+}
+.nav-links {
+  display: none;
+  gap: 4px;
+  margin-left: auto;
+}
+.nav-link {
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s var(--ease);
+}
+.nav-link:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+.nav-cta {
+  padding: 9px 18px;
+  border-radius: 9px;
+  background: var(--primary);
+  color: #0a0c10;
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.2s var(--ease);
+  margin-left: auto;
+}
+.nav-cta:hover { background: var(--primary-hover); transform: translateY(-1px); }
+
+@media (min-width: 768px) {
+  .nav-links { display: flex; }
+  .nav-cta { margin-left: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   HERO
+   ═══════════════════════════════════════════════════════ */
+.hero {
+  padding: 48px 0 24px;
+  text-align: center;
+}
+@media (min-width: 768px) { .hero { padding: 80px 0 40px; } }
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+.hero-eyebrow .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.hero-title {
+  font-size: clamp(36px, 8vw, 72px);
+  font-weight: 900;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  margin-bottom: 20px;
+  color: var(--text);
+}
+.hero-title .accent {
+  background: linear-gradient(135deg, #F59E0B, #f97316);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-sub {
+  font-size: clamp(16px, 2vw, 20px);
+  color: var(--text-2);
+  max-width: 620px;
+  margin: 0 auto 32px;
+  line-height: 1.5;
+}
+
+.hero-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 60px;
+}
+.btn-lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 28px;
+  border-radius: 11px;
+  font-size: 15px;
+  font-weight: 700;
+  transition: all 0.2s var(--ease);
+}
+.btn-lg.primary {
+  background: var(--primary);
+  color: #0a0c10;
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.24);
+}
+.btn-lg.primary:hover {
+  background: var(--primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(245, 158, 11, 0.32);
+}
+.btn-lg.ghost {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+}
+.btn-lg.ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--primary-glow);
+}
+.btn-lg svg { width: 18px; height: 18px; }
+
+/* ═══════════════════════════════════════════════════════
+   PHONE SLIDER
+   ═══════════════════════════════════════════════════════ */
+.slider-section {
+  padding: 24px 0 80px;
+  overflow: hidden;
+}
+@media (min-width: 768px) { .slider-section { padding: 40px 0 120px; } }
+
+.slider-header {
+  text-align: center;
+  margin-bottom: 40px;
+  padding: 0 20px;
+}
+.slider-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  margin-bottom: 12px;
+}
+.slider-heading {
+  font-size: clamp(24px, 4vw, 36px);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin-bottom: 8px;
+}
+.slider-desc {
+  font-size: 15px;
+  color: var(--text-2);
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.slider-viewport {
+  position: relative;
+  padding: 24px 0 56px;
+}
+
+.slider-track {
+  display: flex;
+  gap: 32px;
+  padding: 0 calc((100vw - 280px) / 2);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  /* fade edges */
+  mask-image: linear-gradient(90deg,
+    transparent 0,
+    black 8%,
+    black 92%,
+    transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg,
+    transparent 0,
+    black 8%,
+    black 92%,
+    transparent 100%);
+}
+.slider-track::-webkit-scrollbar { display: none; }
+
+.phone-slide {
+  scroll-snap-align: center;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.phone {
+  position: relative;
+  width: 280px;
+  height: 572px;
+  border-radius: 44px;
+  background: #000;
+  padding: 10px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 0 4px #1a1a1a,
+    0 0 0 6px #0a0a0a,
+    0 40px 80px -20px rgba(245, 158, 11, 0.24),
+    0 20px 40px -10px rgba(0, 0, 0, 0.5);
+  transition: transform 0.4s var(--ease);
+}
+.phone-slide:hover .phone {
+  transform: translateY(-4px) scale(1.01);
+}
+
+.phone-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 34px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+/* Notch */
+.phone-screen::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 88px;
+  height: 24px;
+  border-radius: 12px;
+  background: #000;
+  z-index: 10;
+}
+
+/* Screenshot */
+.phone-screen img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  display: block;
+}
+
+/* Placeholder when no image */
+.phone-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 24px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.15), transparent 60%),
+    linear-gradient(180deg, var(--surface), var(--elevated));
+}
+.phone-placeholder-icon {
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.phone-placeholder-icon svg { width: 24px; height: 24px; }
+.phone-placeholder-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 4px;
+}
+.phone-placeholder-hint {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+  max-width: 200px;
+}
+.phone-placeholder-hint code {
+  font-family: var(--mono);
+  font-size: 10px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.phone-caption {
+  text-align: center;
+  max-width: 240px;
+}
+.phone-caption-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.phone-caption-desc {
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+/* Slider controls */
+.slider-controls {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+.slider-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s var(--ease);
+}
+.slider-btn:hover {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+.slider-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+.slider-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+.slider-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  transition: all 0.3s var(--ease);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.slider-dot.active {
+  background: var(--primary);
+  width: 22px;
+  border-radius: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   FEATURES
+   ═══════════════════════════════════════════════════════ */
+.section {
+  padding: 60px 0;
+}
+@media (min-width: 768px) { .section { padding: 100px 0; } }
+
+.section-header {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto 48px;
+  padding: 0 20px;
+}
+.section-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  margin-bottom: 12px;
+}
+.section-title {
+  font-size: clamp(26px, 4vw, 42px);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin-bottom: 12px;
+}
+.section-desc {
+  font-size: 16px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+@media (min-width: 640px) { .features-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { .features-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.feature-card {
+  padding: 24px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: all 0.3s var(--ease);
+}
+.feature-card:hover {
+  border-color: var(--primary-glow);
+  transform: translateY(-2px);
+}
+.feature-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.feature-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.feature-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+.feature-desc {
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+/* ═══════════════════════════════════════════════════════
+   DOCUMENTATION
+   ═══════════════════════════════════════════════════════ */
+.docs-wrap {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.docs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.doc-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  overflow: hidden;
+  transition: all 0.2s var(--ease);
+}
+.doc-item[open] {
+  border-color: var(--primary-glow);
+}
+
+.doc-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: background 0.15s var(--ease);
+}
+.doc-summary::-webkit-details-marker { display: none; }
+.doc-summary:hover { background: rgba(255, 255, 255, 0.03); }
+
+.doc-num {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.doc-summary-text {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.doc-chevron {
+  width: 20px;
+  height: 20px;
+  color: var(--text-3);
+  transition: transform 0.3s var(--ease);
+}
+.doc-chevron svg { width: 100%; height: 100%; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.doc-item[open] .doc-chevron { transform: rotate(180deg); color: var(--primary); }
+
+.doc-content {
+  padding: 0 20px 20px 62px;
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+.doc-content h4 {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 16px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.doc-content h4:first-child { margin-top: 0; }
+.doc-content p { margin-bottom: 12px; }
+.doc-content ul, .doc-content ol {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+.doc-content li { margin-bottom: 6px; }
+.doc-content code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.doc-content pre {
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 12px 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.doc-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text);
+}
+.doc-content a {
+  color: var(--primary);
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+.doc-content a:hover { border-color: var(--primary); }
+@media (max-width: 640px) {
+  .doc-content { padding-left: 20px; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   FINAL CTA
+   ═══════════════════════════════════════════════════════ */
+.final-cta {
+  padding: 80px 20px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.final-cta::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.16), transparent 60%);
+  pointer-events: none;
+}
+.final-cta-inner {
+  position: relative;
+  max-width: 560px;
+  margin: 0 auto;
+}
+.final-cta h2 {
+  font-size: clamp(28px, 5vw, 48px);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-bottom: 16px;
+}
+.final-cta p {
+  font-size: 17px;
+  color: var(--text-2);
+  margin-bottom: 28px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════════════════ */
+.footer {
+  padding: 32px 20px calc(32px + var(--safe-b));
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.footer a { color: var(--text-2); }
+.footer a:hover { color: var(--primary); }
+
+/* ═══════════════════════════════════════════════════════
+   REVEAL ANIMATION
+   ═══════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.8s var(--ease), transform 0.8s var(--ease);
+  }
+  .reveal.in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     NAV
+     ═══════════════════════════════════════════════════════ -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <span class="nav-logo-mark">F</span>
+      <span>Folio</span>
+    </a>
+    <div class="nav-links">
+      <a href="#screens" class="nav-link">Screens</a>
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#docs" class="nav-link">Docs</a>
+    </div>
+    <a href="https://foliostudios.vercel.app" class="nav-cta">Open app</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════
+     HERO
+     ═══════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="container">
+    <span class="hero-eyebrow">
+      <span class="dot"></span>
+      Mobile-first code editor
+    </span>
+    <h1 class="hero-title">
+      Code in your<br>
+      <span class="accent">pocket.</span>
+    </h1>
+    <p class="hero-sub">
+      Write, preview, and deploy projects from your phone. No desktop, no
+      setup, no syncing between devices. Just open and code.
+    </p>
+    <div class="hero-cta-row">
+      <a href="https://foliostudios.vercel.app" class="btn-lg primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="16 18 22 12 16 6"/>
+          <polyline points="8 6 2 12 8 18"/>
+        </svg>
+        Open Folio
+      </a>
+      <a href="#docs" class="btn-lg ghost">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+        </svg>
+        See how it works
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     PHONE SLIDER
+     ═══════════════════════════════════════════════════════ -->
+<section class="slider-section" id="screens">
+  <div class="slider-header">
+    <div class="slider-label">Screens</div>
+    <h2 class="slider-heading">A whole IDE. On your phone.</h2>
+    <p class="slider-desc">Swipe through what Folio looks like when you're building on the go.</p>
+  </div>
+
+  <div class="slider-viewport">
+    <div class="slider-track" id="sliderTrack">
+
+      <!-- SLIDE 1: EDITOR -->
+      <div class="phone-slide">
+        <div class="phone">
+          <div class="phone-screen">
+            <!--
+              ═══════════════════════════════════════════════════
+              REPLACE with your screenshot:
+              <img src="screen-editor.png" alt="Folio editor">
+              Take this at 390×844 viewport of foliostudios.vercel.app
+              with a project open.
+              ═══════════════════════════════════════════════════
+            -->
+            <div class="phone-placeholder">
+              <div class="phone-placeholder-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="16 18 22 12 16 6"/>
+                  <polyline points="8 6 2 12 8 18"/>
+                </svg>
+              </div>
+              <div class="phone-placeholder-label">Editor</div>
+              <div class="phone-placeholder-hint">
+                Screenshot the app at 390×844 and save as <code>screen-editor.png</code>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-caption">
+          <div class="phone-caption-title">Editor</div>
+          <div class="phone-caption-desc">Full syntax highlighting, autocomplete, and find-and-replace.</div>
+        </div>
+      </div>
+
+      <!-- SLIDE 2: PROJECTS -->
+      <div class="phone-slide">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="phone-placeholder">
+              <div class="phone-placeholder-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                </svg>
+              </div>
+              <div class="phone-placeholder-label">Projects</div>
+              <div class="phone-placeholder-hint">
+                Save as <code>screen-projects.png</code>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-caption">
+          <div class="phone-caption-title">Projects</div>
+          <div class="phone-caption-desc">All your work in one list. Tap to open, swipe to manage.</div>
+        </div>
+      </div>
+
+      <!-- SLIDE 3: PREVIEW -->
+      <div class="phone-slide">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="phone-placeholder">
+              <div class="phone-placeholder-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </div>
+              <div class="phone-placeholder-label">Preview</div>
+              <div class="phone-placeholder-hint">
+                Save as <code>screen-preview.png</code>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-caption">
+          <div class="phone-caption-title">Live preview</div>
+          <div class="phone-caption-desc">See your site as you type. No build step, no delay.</div>
+        </div>
+      </div>
+
+      <!-- SLIDE 4: DEPLOYMENTS -->
+      <div class="phone-slide">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="phone-placeholder">
+              <div class="phone-placeholder-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
+                  <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+                </svg>
+              </div>
+              <div class="phone-placeholder-label">Deployments</div>
+              <div class="phone-placeholder-hint">
+                Save as <code>screen-deployments.png</code>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-caption">
+          <div class="phone-caption-title">Deployments</div>
+          <div class="phone-caption-desc">One tap to make it live. Every deploy versioned and reversible.</div>
+        </div>
+      </div>
+
+      <!-- SLIDE 5: DATABASE -->
+      <div class="phone-slide">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="phone-placeholder">
+              <div class="phone-placeholder-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+              </div>
+              <div class="phone-placeholder-label">JSON DB</div>
+              <div class="phone-placeholder-hint">
+                Save as <code>screen-db.png</code>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-caption">
+          <div class="phone-caption-title">JSON database</div>
+          <div class="phone-caption-desc">Built-in storage for your projects. Read from anywhere, write with a key.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="slider-controls">
+      <button class="slider-btn" id="prevBtn" aria-label="Previous">
+        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <button class="slider-btn" id="nextBtn" aria-label="Next">
+        <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+
+    <div class="slider-dots" id="sliderDots"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     FEATURES
+     ═══════════════════════════════════════════════════════ -->
+<section class="section" id="features">
+  <div class="section-header">
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Everything you need. Nothing you don't.</h2>
+    <p class="section-desc">A focused tool for the 90% case: writing a static site on a device that fits in your hand.</p>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </div>
+      <h3 class="feature-title">Real code editor</h3>
+      <p class="feature-desc">Syntax highlighting for HTML, CSS, JS, TS, JSON, and Markdown. Autocomplete, bracket matching, and multiple cursors.</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </div>
+      <h3 class="feature-title">Live preview</h3>
+      <p class="feature-desc">Full-screen, split-pane, or floating. See your changes render as you type, on the same device you're coding on.</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0   2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/></svg>
+      </div>
+      <h3 class="feature-title">One-tap deploy</h3>
+      <p class="feature-desc">Publish your project to a live URL instantly. Every deployment is versioned, reversible, and served with proper caching.</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      </div>
+      <h3 class="feature-title">Built-in JSON database</h3>
+      <p class="feature-desc">Every project comes with a hosted JSON store. Read it publicly, write it with an API key. No backend needed.</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      </div>
+      <h3 class="feature-title">Offline-first</h3>
+      <p class="feature-desc">Everything is stored locally first. Keep coding in the subway, on a plane, anywhere. Sync happens when you're back online.</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      </div>
+      <h3 class="feature-title">Share and collaborate</h3>
+      <p class="feature-desc">Invite collaborators, share public projects, and control exactly which parts of your work are visible to the world.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     DOCUMENTATION
+     ═══════════════════════════════════════════════════════ -->
+<section class="section" id="docs">
+  <div class="section-header">
+    <div class="section-label">Documentation</div>
+    <h2 class="section-title">How Folio works</h2>
+    <p class="section-desc">Everything you need to know about using the editor, hosting projects, and integrating the JSON database.</p>
+  </div>
+
+  <div class="docs-wrap">
+    <div class="docs-list">
+
+      <!-- DOC 1 -->
+      <details class="doc-item">
+        <summary class="doc-summary">
+          <span class="doc-num">1</span>
+          <span class="doc-summary-text">Getting started</span>
+          <span class="doc-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </summary>
+        <div class="doc-content">
+          <h4>Create your first project</h4>
+          <p>Open <a href="https://foliostudios.vercel.app" target="_blank" rel="noopener">foliostudios.vercel.app</a> and tap <strong>New project</strong>. Give it a name, choose an icon, and you'll land in the editor with three starter files: <code>index.html</code>, <code>style.css</code>, and <code>app.js</code>.</p>
+
+          <h4>The three core panels</h4>
+          <ul>
+            <li><strong>Editor</strong> — write code with syntax highlighting, autocomplete, and search.</li>
+            <li><strong>Files</strong> — create, rename, and organize files and folders. Everything lives in your browser first.</li>
+            <li><strong>Preview</strong> — see your HTML render live. Full-screen, mini panel, or open in a new tab.</li>
+          </ul>
+
+          <h4>Saving</h4>
+          <p>Every keystroke autosaves to your local browser storage after 2 seconds. Files are marked dirty until saved. The save icon in the toolbar forces an immediate save, and <code>Ctrl/Cmd + S</code> works too.</p>
+        </div>
+      </details>
+
+      <!-- DOC 2 -->
+      <details class="doc-item">
+        <summary class="doc-summary">
+          <span class="doc-num">2</span>
+          <span class="doc-summary-text">Editing code</span>
+          <span class="doc-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </summary>
+        <div class="doc-content">
+          <h4>Supported languages</h4>
+          <p>Syntax highlighting is built in for HTML, CSS, JavaScript, TypeScript, JSX/TSX, JSON, Markdown, Python, and several other common formats.</p>
+
+          <h4>Toolbar actions</h4>
+          <ul>
+            <li><strong>Undo / Redo</strong> — standard behavior, scoped per file.</li>
+            <li><strong>Find</strong> — search in the current file. <code>Ctrl/Cmd + F</code>.</li>
+            <li><strong>Format</strong> — auto-format HTML, CSS, JS, JSON, or Markdown using Prettier.</li>
+            <li><strong>Symbols</strong> — quick-insert common characters (<code>{</code>, <code>;</code>, <code>&lt;</code>, etc.).</li>
+          </ul>
+
+          <h4>Versions</h4>
+          <p>Tap <strong>Commit</strong> in the toolbar to snapshot your project. Every commit is versioned and you can restore or diff any previous version later. Versions live in your local browser storage until you sync to the cloud.</p>
+        </div>
+      </details>
+
+      <!-- DOC 3 -->
+      <details class="doc-item">
+        <summary class="doc-summary">
+          <span class="doc-num">3</span>
+          <span class="doc-summary-text">Deploying a project</span>
+          <span class="doc-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </summary>
+        <div class="doc-content">
+          <h4>Before you deploy</h4>
+          <p>You need a Folio account. If you're not signed in, the app works fully as a guest — everything is stored locally and survives browser refreshes. But deploying requires a session.</p>
+
+          <h4>How deployment works</h4>
+          <p>Click <strong>Host</strong> in the toolbar or open the <strong>Deploys</strong> tab in your project. Folio packages every file in the project (up to 8 MB total) and serves them from the Folio origin. You get a live URL of the form:</p>
+          <pre><code>https://foliostudios.vercel.app/api/host
+  ?action=serve
+  &amp;pid=YOUR_PROJECT_ID
+  &amp;path=index.html</code></pre>
+
+          <h4>How files are served</h4>
+          <p>Every file in the project — HTML, CSS, JS, images — is served through the <code>action=serve</code> endpoint. When the browser loads your <code>index.html</code>, Folio rewrites every relative URL in the page (like <code>&lt;link href="style.css"&gt;</code>) to point through the same endpoint. So your multi-file project just works, with no config.</p>
+
+          <h4>Taking a project offline</h4>
+          <p>From the Deploys tab, tap <strong>Take offline</strong>. The URL stops serving immediately, but your files and versions stay intact. Re-deploy any time to bring it back.</p>
+        </div>
+      </details>
+
+      <!-- DOC 4 -->
+      <details class="doc-item">
+        <summary class="doc-summary">
+          <span class="doc-num">4</span>
+          <span class="doc-summary-text">The JSON database</span>
+          <span class="doc-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </summary>
+        <div class="doc-content">
+          <h4>What it is</h4>
+          <p>Every project has a private JSON blob attached to it — a key-value store you can read and write from your deployed site. It's not a real database (no queries, no indexes, no per-user records), but it's enough for guestbooks, site config, todo lists, feature flags, and small dynamic content.</p>
+
+          <h4>Enable public reads</h4>
+          <p>By default, nobody can read the DB. To let visitors read it, go to your project page → <strong>Sharing</strong> → flip <strong>JSON database API</strong> to <strong>Public</strong>.</p>
+
+          <h4>Reading</h4>
+          <pre><code>const res = await fetch(
+  'https://foliostudios.vercel.app/api/host' +
+  '?action=db/get&pid=YOUR_PID'
+);
+const { data } = await res.json();
+console.log(data);</code></pre>
+          <p>No auth needed if the DB is public. If you want to read it privately, send the project's API key in an <code>x-project-key</code> header.</p>
+
+          <h4>Writing</h4>
+          <p>Writes always require the API key. Generate one at project page → <strong>Sharing</strong> → <strong>API key</strong>. It's shown once — copy it and keep it safe.</p>
+          <pre><code>await fetch(
+  'https://foliostudios.vercel.app/api/host' +
+  '?action=db/set&pid=YOUR_PID',
+  {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-project-key': 'fol_...'
+    },
+    body: JSON.stringify({
+      pid: 'YOUR_PID',
+      data: { entries: [/* ... */] }
+    })
+  }
+);</code></pre>
+          <p>The <code>data</code> field replaces the entire DB. Read first, merge, then write. There's no atomic append.</p>
+
+          <h4>Security note</h4>
+          <p>If you embed the key in client-side JavaScript, anyone who opens DevTools can read it and write to your DB. For anything beyond a toy project, put the key in a small backend and proxy writes through it.</p>
+        </div>
+      </details>
+
+      <!-- DOC 5 -->
+      <details class="doc-item">
+        <summary class="doc-summary">
+          <span class="doc-num">5</span>
+          <span class="doc-summary-text">Sharing and access</span>
+          <span class="doc-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </summary>
+        <div class="doc-content">
+          <h4>Visibility axes</h4>
+          <p>Each project has five independent public/private toggles in the <strong>Sharing</strong> tab:</p>
+          <ul>
+            <li><strong>Show in profile</strong> — project appears on your public profile page.</li>
+            <li><strong>Live site link</strong> — the "Visit live site" button shows on the share page.</li>
+            <li><strong>Code viewer</strong> — visitors can browse your source files.</li>
+            <li><strong>Language breakdown</strong> — show the language percentage badges.</li>
+            <li><strong>JSON database API</strong> — external reads via <code>db/get</code> are allowed.</li>
+          </ul>
+
+          <h4>Inviting collaborators</h4>
+          <p>From the Sharing tab, tap <strong>Invite</strong>. Enter their Folio username and choose a role:</p>
+          <ul>
+            <li><strong>Viewer</strong> — can open the project and see files.</li>
+            <li><strong>Commenter</strong> — viewer, plus can leave comments.</li>
+            <li><strong>Editor</strong> — full write access, including deploys.</li>
+          </ul>
+          <p>They'll get a notification with a link. The invite expires in 7 days.</p>
+        </div>
+      </details>
+
+      <!-- DOC 6 -->
+      <details class="doc-item">
+        <summary class="doc-summary">
+          <span class="doc-num">6</span>
+          <span class="doc-summary-text">Exporting your work</span>
+          <span class="doc-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </summary>
+        <div class="doc-content">
+          <h4>Backup formats</h4>
+          <p>From the <strong>Downloads</strong> tab:</p>
+          <ul>
+            <li><strong>.folio</strong> — full backup including files, versions, JSON DB, and schema. Re-importable through the same tab.</li>
+            <li><strong>.zip</strong> — just the current files, ready to open in any local editor.</li>
+            <li><strong>.json</strong> — the JSON DB alone.</li>
+          </ul>
+
+          <h4>Importing a backup</h4>
+          <p>From the same tab, tap <strong>Import .folio</strong> and select a backup file. Files merge into the current project — existing files are overwritten by the backup's versions.</p>
+
+          <h4>Getting your work out</h4>
+          <p>Your files always live in your browser first, so even if Folio vanished tomorrow, your work would still be in your IndexedDB. But it's still worth exporting regular backups — browsers occasionally wipe local storage during "clear site data" operations.</p>
+        </div>
+      </details>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     FINAL CTA
+     ═══════════════════════════════════════════════════════ -->
+<section class="final-cta">
+  <div class="final-cta-inner">
+    <h2>Ready to build something?</h2>
+    <p>Open Folio, create a project, and be looking at a live URL in under two minutes.</p>
+    <a href="https://foliostudios.vercel.app" class="btn-lg primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="16 18 22 12 16 6"/>
+        <polyline points="8 6 2 12 8 18"/>
+      </svg>
+      Open Folio
+    </a>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════════════════ -->
+<footer class="footer">
+  <div>Folio — code in your pocket.</div>
+</footer>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// SLIDER LOGIC
+// ═══════════════════════════════════════════════════════
+(function () {
+  const track = document.getElementById('sliderTrack');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const dotsEl = document.getElementById('sliderDots');
+  if (!track) return;
+
+  const slides = track.querySelectorAll('.phone-slide');
+  if (slides.length === 0) return;
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const dot = document.createElement('button');
+    dot.className = 'slider-dot' + (i === 0 ? ' active' : '');
+    dot.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+    dot.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(dot);
+  });
+  const dots = dotsEl.querySelectorAll('.slider-dot');
+
+  function currentIndex() {
+    // Find the slide whose center is closest to the viewport center
+    const trackRect = track.getBoundingClientRect();
+    const viewportCenter = trackRect.left + trackRect.width / 2;
+    let best = 0;
+    let bestDist = Infinity;
+    slides.forEach((slide, i) => {
+      const r = slide.getBoundingClientRect();
+      const c = r.left + r.width / 2;
+      const d = Math.abs(c - viewportCenter);
+      if (d < bestDist) { bestDist = d; best = i; }
+    });
+    return best;
+  }
+
+  function updateDots() {
+    const i = currentIndex();
+    dots.forEach((d, idx) => d.classList.toggle('active', idx === i));
+  }
+
+  function goTo(i) {
+    if (i < 0) i = 0;
+    if (i >= slides.length) i = slides.length - 1;
+    const slide = slides[i];
+    const trackRect = track.getBoundingClientRect();
+    const slideRect = slide.getBoundingClientRect();
+    const scrollLeft =
+      slide.offsetLeft - (trackRect.width - slide.offsetWidth) / 2;
+    track.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+  }
+
+  prevBtn.addEventListener('click', () => goTo(currentIndex() - 1));
+  nextBtn.addEventListener('click', () => goTo(currentIndex() + 1));
+
+  // Update dots on scroll (throttled with rAF)
+  let raf = null;
+  track.addEventListener('scroll', () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      updateDots();
+      raf = null;
+    });
+  }, { passive: true });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, textarea')) return;
+    if (e.key === 'ArrowLeft') { goTo(currentIndex() - 1); }
+    if (e.key === 'ArrowRight') { goTo(currentIndex() + 1); }
+  });
+
+  // Initial dot state
+  updateDots();
+})();
+
+// ═══════════════════════════════════════════════════════
+// REVEAL ON SCROLL
+// ═══════════════════════════════════════════════════════
+(function () {
+  if (!('IntersectionObserver' in window)) {
+    document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+    return;
+  }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('in');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+})();
+</script>
+
+</body>
+</html>
