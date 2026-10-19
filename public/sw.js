@@ -145,36 +145,34 @@ self.addEventListener('install', (event) => {
 
     console.log(`[Folio SW] install complete — bulk=${bulkOk} fetched=${fetched} missed=${missed}`);
 
-    // Only broadcast if this is a genuine update (there's an old SW controlling at least one client).
-    // On the very first install, no client is controlled — skip the broadcast.
+    // Only broadcast SW_UPDATE_AVAILABLE if at least one currently-open
+    // window is already controlled by an OLDER worker. On first install
+    // (nothing is controlled yet), or on a same-bytes reinstall, stay quiet.
     try {
-      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      if (clients.length > 0) {
-        let hasControlledClient = false;
-        for (const c of clients) {
+      const clients = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+      const controlledClients = clients.filter(c => !!c.controller);
+      if (controlledClients.length > 0) {
+        controlledClients.forEach(c => {
           try {
-            // If the client has a controller, it's controlled by an OLDER SW → genuine update
-            if ('controller' in c && c.controller) { hasControlledClient = true; break; }
+            c.postMessage({
+              type: 'SW_UPDATE_AVAILABLE',
+              version: CACHE_VERSION,
+              builtAt: CACHE_BUILT_AT,
+            });
           } catch {}
-        }
-        // Fall back: if we can't determine, broadcast anyway (safer than missing an update)
-        if (hasControlledClient || clients.length > 0) {
-          clients.forEach(c => {
-            try {
-              c.postMessage({
-                type: 'SW_UPDATE_AVAILABLE',
-                version: CACHE_VERSION,
-                builtAt: CACHE_BUILT_AT,
-              });
-            } catch {}
-          });
-        }
+        });
       }
     } catch (err) {
       console.warn('[Folio SW] update broadcast failed:', err);
     }
 
-    await self.skipWaiting();
+    // NOTE: intentionally NOT calling self.skipWaiting() here.
+    // The new worker must enter the "waiting" state so update.js can
+    // detect a genuine update and the user controls when to apply it.
+    // skipWaiting() is sent by update.js when the user taps "Update now".
   })());
 });
 
@@ -192,12 +190,16 @@ self.addEventListener('activate', (event) => {
     await self.clients.claim();
 
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    clients.forEach(c => c.postMessage({
-      type: 'SW_ACTIVATED',
-      version: CACHE_VERSION,
-      builtAt: CACHE_BUILT_AT,
-      timestamp: Date.now(),
-    }));
+    clients.forEach(c => {
+      try {
+        c.postMessage({
+          type: 'SW_ACTIVATED',
+          version: CACHE_VERSION,
+          builtAt: CACHE_BUILT_AT,
+          timestamp: Date.now(),
+        });
+      } catch {}
+    });
 
     console.log(`[Folio SW] activated`);
   })());
