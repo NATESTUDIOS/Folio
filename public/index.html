@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <title>Folio — Code in your pocket</title>
 <meta name="description" content="Mobile-first, offline-first code editor.">
-<meta name="theme-color" content="#0a0c10" id="metaThemeColor">
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -32,33 +32,25 @@
 <script>
 (function () {
   try {
-    // 1. Read the raw preference from storage ("dark", "light", "auto", or "system")
     var pref = localStorage.getItem("folio.theme") || "dark";
-
-    // 2. If it's "auto" or "system", resolve it to a concrete value using the OS setting
     var resolved = pref;
     if (pref === "auto" || pref === "system") {
       resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
         ? "light" : "dark";
     }
-
-    // 3. Apply the RESOLVED value (not the raw preference)
     if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
     else document.documentElement.removeAttribute("data-theme");
 
-    // 4. Also apply reduced-motion (Settings slider writes this)
     if (localStorage.getItem("folio.reducedMotion") === "true") {
       document.documentElement.setAttribute("data-reduced-motion", "true");
     }
 
-    // 5. Also apply page scale (Settings text-size slider writes this)
     var scale = Number(localStorage.getItem("folio.pageScale") || 1);
     if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
     if (scale > 1.35) scale = 1.35;
     document.documentElement.style.setProperty("--page-scale", String(scale));
 
-    // 6. Update the mobile browser chrome color bar
-    var meta = document.getElementById("themeColorMeta") || document.getElementById("metaThemeColor");
+    var meta = document.getElementById("themeColorMeta");
     if (meta) meta.setAttribute("content", resolved === "light" ? "#f7f8fa" : "#0a0c10");
   } catch (e) {}
 })();
@@ -107,6 +99,7 @@
       <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
     <div class="header-left">
+      <div class="header-project-icon" id="headerProjectIcon" hidden></div>
       <nav class="header-breadcrumb" id="breadcrumb">
         <span class="seg current">No project</span>
       </nav>
@@ -194,8 +187,11 @@
         <svg viewBox="0 0 24 24"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
         <span class="label">Redo</span>
       </button>
-      <button class="toolbar-btn" id="tbCtrl" aria-label="Ctrl modifier">
-        <svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="2"/><line x1="7" y1="12" x2="7.01" y2="12"/><line x1="12" y1="12" x2="12.01" y2="12"/><line x1="17" y1="12" x2="17.01" y2="12"/></svg>
+      <button class="toolbar-btn" id="tbCtrl" aria-label="Ctrl modifier" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 10l7-7 7 7"/>
+          <line x1="12" y1="3" x2="12" y2="21"/>
+        </svg>
         <span class="label">Ctrl</span>
       </button>
       <button class="toolbar-btn" id="tbSearch" aria-label="Find">
@@ -261,6 +257,10 @@
   <a class="nav-btn" href="/projects">
     <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
     <span>Projects</span>
+  </a>
+  <a class="nav-btn" href="/tools">
+    <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+    <span>Tools</span>
   </a>
   <a class="nav-btn" id="navProfile" href="/profile">
     <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -329,9 +329,17 @@
   <div class="symbols-sheet-inner">
     <div class="symbols-sheet-header">
       <span class="symbols-sheet-title">Insert symbol</span>
-      <button class="sheet-close" id="symbolsClose" aria-label="Close">
-        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+      <div style="display:flex;gap:4px;align-items:center;">
+        <a class="btn btn-ghost btn-sm" href="/tools" aria-label="Tools">
+          <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+          Tools
+        </a>
+        <button class="sheet-close" id="symbolsClose" aria-label="Close">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
     </div>
     <div class="symbols-grid" id="symbolsGrid"></div>
   </div>
@@ -386,6 +394,7 @@
     <symbol id="i-file-json" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
     <symbol id="i-file-image" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="10" cy="14" r="2"/><path d="m20 18-4-4-6 6"/></symbol>
     <symbol id="i-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
@@ -408,9 +417,16 @@
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+    <symbol id="i-tool" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+    <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-droplet" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></symbol>
+    <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="currentColor"/></symbol>
   </defs>
 </svg>
-  
+
 <script src="/install.js" defer></script>
 <script src="/update.js" defer></script>
 <script src="/fcm-client.js" defer></script>
@@ -427,31 +443,31 @@
 
 <script type="module">
 "use strict";
+
+// ═══════════════════════════════════════════════════════════
+// THEME
+// ═══════════════════════════════════════════════════════════
+
+function applyTheme(pref) {
+  var resolved = pref;
+  if (pref === 'auto' || pref === 'system') {
+    resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+      ? 'light' : 'dark';
+  }
+  if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  else document.documentElement.removeAttribute('data-theme');
+  var meta = document.getElementById('themeColorMeta');
+  if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
+}
+
 function wireThemeSync() {
   window.addEventListener('storage', function (e) {
     try {
-      // Theme changed in another tab
-      if (e.key === 'folio.theme') {
-        var pref = e.newValue || 'dark';
-        var resolved = pref;
-        if (pref === 'auto' || pref === 'system') {
-          resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
-            ? 'light' : 'dark';
-        }
-        if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
-        else document.documentElement.removeAttribute('data-theme');
-
-        var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
-        if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
-      }
-
-      // Reduced-motion toggled in another tab
+      if (e.key === 'folio.theme') applyTheme(e.newValue || 'dark');
       if (e.key === 'folio.reducedMotion') {
         if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
         else document.documentElement.removeAttribute('data-reduced-motion');
       }
-
-      // Page scale changed in another tab
       if (e.key === 'folio.pageScale') {
         var scale = Number(e.newValue || 1);
         if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
@@ -460,25 +476,25 @@ function wireThemeSync() {
       }
     } catch (err) {}
   });
-  }
+}
+
 function wireThemeMediaQuery() {
   if (!window.matchMedia) return;
   var mq = window.matchMedia('(prefers-color-scheme: light)');
   var handler = function () {
     try {
       var pref = localStorage.getItem('folio.theme') || 'dark';
-      if (pref !== 'auto' && pref !== 'system') return;   // only react when theme is auto
-      var resolved = mq.matches ? 'light' : 'dark';
-      if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
-      else document.documentElement.removeAttribute('data-theme');
-      var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
-      if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
+      if (pref !== 'auto' && pref !== 'system') return;
+      applyTheme(pref);
     } catch (e) {}
   };
   if (mq.addEventListener) mq.addEventListener('change', handler);
   else if (mq.addListener) mq.addListener(handler);
 }
-console.log("[Folio] Boot");
+
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════
 
 const API_BASE = 'https://foliostudios.vercel.app/api';
 const API_AUTH = API_BASE + '/auth';
@@ -497,8 +513,23 @@ const STORAGE = {
 };
 
 const DB_NAME = 'folio';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const AUTOSAVE_DELAY = 2000;
+
+const MAX_FILE_BYTES = 5 * 1024 * 1024;                    // 5 MB per file
+const DEFAULT_PROJECT_STORAGE_LIMIT = 50 * 1024 * 1024;    // 50 MB per project
+const NOTES_PATH = 'notes.json';
+const NOTES_MAX_COUNT = 200;
+const NOTES_MAX_BODY_BYTES = 200 * 1024;                   // 200 KB per note
+
+const NOTE_COLORS = {
+  amber:  '#F59E0B',
+  sky:    '#0284c7',
+  violet: '#a855f7',
+  emerald:'#10B981',
+  rose:   '#ec4899',
+  cyan:   '#06b6d4',
+};
 
 const DEFAULT_PREFS = {
   fontSize: 14, lineHeight: 1.5, tabSize: 2, softTabs: true,
@@ -508,13 +539,22 @@ const DEFAULT_PREFS = {
 
 const SETUP_PAGES = [
   { id: 'projects', title: 'Projects', desc: 'All your projects', icon: 'i-folder', href: '/projects' },
-  { id: 'tools', title: 'Tools', desc: 'Web-dev utilities', icon: 'i-code', href: '/tools' },
+  { id: 'tools', title: 'Tools', desc: 'Web-dev utilities', icon: 'i-tool', href: '/tools' },
   { id: 'analytics', title: 'Analytics', desc: 'Usage across projects', icon: 'i-hash', href: '/analytics' },
   { id: 'notifications', title: 'Notifications', desc: 'Alerts and activity', icon: 'i-info', action: 'open-notifications', requiresAuth: true },
   { id: 'profile', title: 'Profile', desc: 'Your public profile', icon: 'i-edit', href: '/profile', requiresAuth: true },
   { id: 'settings', title: 'Settings', desc: 'App configuration', icon: 'i-more', href: '/settings' },
   { id: 'offline', title: 'Offline page', desc: 'Preview offline fallback', icon: 'i-file-text', href: '/offline' },
 ];
+
+const VIEWER_TYPES = {
+  image: /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i,
+  pdf:   /\.pdf$/i,
+  video: /\.(mp4|webm|ogv|mov)$/i,
+  audio: /\.(mp3|wav|ogg|m4a|flac)$/i,
+  text:  /\.(txt|log|csv|tsv)$/i,
+  font:  /\.(woff2?|ttf|otf)$/i,
+};
 
 const S = {
   session: null, user: null, isGuest: true, online: true,
@@ -523,7 +563,13 @@ const S = {
   prefs: { ...DEFAULT_PREFS }, previewMode: 'fullscreen',
   sidebarPanel: 'files', sidebarOpen: false, symbolsOpen: false,
   ctrlLatch: false,
+  deploymentCache: new Map(),
+  notesCorruptWarned: false,
 };
+
+// ═══════════════════════════════════════════════════════════
+// DOM HELPERS
+// ═══════════════════════════════════════════════════════════
 
 const $ = (id) => document.getElementById(id);
 
@@ -583,7 +629,7 @@ function fileIconName(path) {
   if (['html', 'htm', 'css', 'scss', 'less', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx'].includes(ext)) return 'file-code';
   if (ext === 'json') return 'file-json';
   if (['md', 'markdown', 'txt'].includes(ext)) return 'file-text';
-  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return 'file-image';
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif'].includes(ext)) return 'file-image';
   return 'file';
 }
 
@@ -591,8 +637,22 @@ function isTextFile(path) {
   return /\.(html?|css|js|mjs|cjs|jsx|tsx?|py|json|md|txt|ya?ml)$/i.test(path);
 }
 
+function getFileKind(path) {
+  for (const [kind, re] of Object.entries(VIEWER_TYPES)) {
+    if (re.test(path)) return kind;
+  }
+  if (isTextFile(path)) return 'code';
+  return 'binary';
+}
+
+function isImageFile(path) { return getFileKind(path) === 'image'; }
+
 function isPlaceholder(path) {
   return /(^|\/)\.gitkeep$/i.test(path) || /(^|\/)\.keep$/i.test(path);
+}
+
+function isSystemFile(path) {
+  return path === NOTES_PATH || isPlaceholder(path);
 }
 
 function debounce(fn, ms) {
@@ -602,6 +662,60 @@ function debounce(fn, ms) {
     t = setTimeout(() => fn.apply(this, args), ms);
   };
 }
+
+function haptic(ms = 8) {
+  try { navigator.vibrate?.(ms); } catch {}
+}
+
+function formatBytes(n) {
+  if (!n || n < 0) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+}
+
+function estimateBytes(content) {
+  if (!content) return 0;
+  if (typeof content !== 'string') content = String(content);
+  if (content.startsWith('data:')) {
+    const comma = content.indexOf(',');
+    const b64 = comma >= 0 ? content.slice(comma + 1) : content;
+    return Math.floor(b64.length * 0.75);
+  }
+  try { return new Blob([content]).size; } catch { return content.length; }
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function getInitials(name) {
+  const s = String(name || '').trim();
+  if (!s) return '·';
+  const parts = s.split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+const AVATAR_GRADIENTS = [
+  'linear-gradient(135deg, #F59E0B, #f97316)',
+  'linear-gradient(135deg, #0284c7, #0369a1)',
+  'linear-gradient(135deg, #a855f7, #6d28d9)',
+  'linear-gradient(135deg, #10B981, #059669)',
+  'linear-gradient(135deg, #ec4899, #be185d)',
+  'linear-gradient(135deg, #06b6d4, #0891b2)',
+];
+function getAvatarColor(seed) {
+  const s = String(seed || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+}
+
+// ═══════════════════════════════════════════════════════════
+// SESSION / PREFS
+// ═══════════════════════════════════════════════════════════
 
 function loadPrefs() {
   try {
@@ -635,6 +749,10 @@ async function apiFetch(url, opts = {}) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════
+
 const toastQueue = [];
 let toastActive = false;
 
@@ -666,6 +784,36 @@ function drainToast() {
     }, 250);
   }, next.duration);
 }
+
+function showUndoToast(message, onUndo, duration = 10000) {
+  const container = $('toastContainer');
+  if (!container) return;
+  const node = el('div', { class: 'toast success' },
+    icon('check', 12),
+    el('span', {}, message),
+    el('button', {
+      class: 'toast-action',
+      type: 'button',
+      onclick: () => {
+        node.classList.remove('show');
+        setTimeout(() => node.remove(), 250);
+        Promise.resolve().then(onUndo).catch(() => {});
+      },
+    }, 'Undo')
+  );
+  container.appendChild(node);
+  requestAnimationFrame(() => node.classList.add('show'));
+  setTimeout(() => {
+    if (node.isConnected) {
+      node.classList.remove('show');
+      setTimeout(() => node.remove(), 250);
+    }
+  }, duration);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SHEET / CONFIRM / PROMPT
+// ═══════════════════════════════════════════════════════════
 
 let sheetOpen = false;
 
@@ -725,7 +873,7 @@ function confirm({ title, message, confirmLabel = 'Confirm', danger = false }) {
     $('confirmOk').className = danger ? 'btn btn-danger' : 'btn btn-primary';
     backdrop.classList.add('visible');
     dialog.classList.add('open');
-    setTimeout(() => $('confirmOk')?.focus(), 50);
+    setTimeout(() => $('confirmCancel')?.focus(), 50);
   });
 }
 window.confirm = confirm;
@@ -739,6 +887,34 @@ function resolveConfirm(value) {
   confirmResolve = null;
   if (r) r(value);
 }
+
+function promptSheet(title, placeholder = '', defaultValue = '') {
+  return new Promise((resolve) => {
+    const input = el('input', { class: 'input', placeholder, value: defaultValue });
+    const body = el('div', {}, el('div', { class: 'field', style: 'margin:0' }, input));
+    const footer = el('div', { style: 'display:flex;gap:6px;width:100%;' },
+      el('button', { class: 'btn btn-secondary', type: 'button', onclick: () => { closeSheet(); resolve(null); } }, 'Cancel'),
+      el('button', {
+        class: 'btn btn-primary', type: 'button',
+        onclick: () => { const v = input.value.trim(); closeSheet(); resolve(v || null); },
+      }, 'OK')
+    );
+    openSheet({ title, body, footer, onClose: () => resolve(null) });
+    setTimeout(() => input.focus(), 100);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const v = input.value.trim();
+        closeSheet();
+        resolve(v || null);
+      }
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// INDEXEDDB
+// ═══════════════════════════════════════════════════════════
 
 let dbConn = null;
 
@@ -761,6 +937,10 @@ async function openDB() {
       }
       if (!conn.objectStoreNames.contains('projectMeta')) conn.createObjectStore('projectMeta', { keyPath: 'pid' });
       if (!conn.objectStoreNames.contains('syncQueue')) conn.createObjectStore('syncQueue', { keyPath: 'id', autoIncrement: true });
+      if (!conn.objectStoreNames.contains('folders')) {
+        const store = conn.createObjectStore('folders', { keyPath: ['pid', 'path'] });
+        store.createIndex('pid', 'pid');
+      }
     };
   });
 }
@@ -789,6 +969,8 @@ const db = {
     for (const f of files) await dbWrap(dbTx('files', 'readwrite').delete([f.pid, f.path]));
     const versions = await dbWrap(dbTx('versions').index('pid').getAll(pid));
     for (const v of versions) await dbWrap(dbTx('versions', 'readwrite').delete(v.vid));
+    const folders = await dbWrap(dbTx('folders').index('pid').getAll(pid));
+    for (const fo of folders) await dbWrap(dbTx('folders', 'readwrite').delete([fo.pid, fo.path]));
   },
   async listFiles(pid) { return dbWrap(dbTx('files').index('pid').getAll(pid)); },
   async getFile(pid, path) { return dbWrap(dbTx('files').get([pid, path])); },
@@ -805,11 +987,23 @@ const db = {
   async deleteVersion(vid) { return dbWrap(dbTx('versions', 'readwrite').delete(vid)); },
   async getProjectMeta(pid) {
     const m = await dbWrap(dbTx('projectMeta').get(pid));
-    return m || { pid, notepad: '' };
+    return m || { pid, notepad: '', meta: {} };
   },
   async setProjectMeta(pid, patch) {
     const current = await this.getProjectMeta(pid);
     return dbWrap(dbTx('projectMeta', 'readwrite').put({ ...current, ...patch, pid }));
+  },
+  async listFolders(pid) { return dbWrap(dbTx('folders').index('pid').getAll(pid)); },
+  async putFolder(pid, path) {
+    return dbWrap(dbTx('folders', 'readwrite').put({ pid, path, createdAt: Date.now() }));
+  },
+  async deleteFolder(pid, path) {
+    const all = await dbWrap(dbTx('folders').index('pid').getAll(pid));
+    for (const f of all) {
+      if (f.path === path || f.path.startsWith(path + '/')) {
+        await dbWrap(dbTx('folders', 'readwrite').delete([pid, f.path]));
+      }
+    }
   },
   async enqueueSync(op) {
     if (!S.session) return;
@@ -817,7 +1011,181 @@ const db = {
   },
 };
 
-// ── Shared project helpers (used by editor + list + dashboard) ──
+// ═══════════════════════════════════════════════════════════
+// STORAGE BUDGET
+// ═══════════════════════════════════════════════════════════
+
+async function computeProjectStorage(pid) {
+  const files = await db.listFiles(pid).catch(() => []);
+  let total = 0;
+  for (const f of files) total += estimateBytes(f.content);
+  return total;
+}
+
+async function checkStorageBudget(pid, addBytes) {
+  const project = await db.getProject(pid);
+  const limit = project?.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+  const used = await computeProjectStorage(pid);
+  if (used + addBytes > limit) {
+    const err = new Error(`Storage limit exceeded. ${formatBytes(used)}/${formatBytes(limit)} used.`);
+    err.code = 'QUOTA_EXCEEDED';
+    err.used = used;
+    err.limit = limit;
+    throw err;
+  }
+  return { used, limit, remaining: limit - used };
+}
+
+// ═══════════════════════════════════════════════════════════
+// NOTES
+// ═══════════════════════════════════════════════════════════
+
+async function readNotes(pid) {
+  const file = await db.getFile(pid, NOTES_PATH).catch(() => null);
+  if (!file || !file.content) return { version: 1, notes: [] };
+  try {
+    const parsed = JSON.parse(file.content);
+    if (!parsed || !Array.isArray(parsed.notes)) return { version: 1, notes: [] };
+    return { version: parsed.version || 1, notes: parsed.notes };
+  } catch (err) {
+    if (!S.notesCorruptWarned) {
+      S.notesCorruptWarned = true;
+      toast('Notes file was corrupted — reset to empty', 'warning', 4000);
+    }
+    return { version: 1, notes: [] };
+  }
+}
+
+async function writeNotes(pid, data) {
+  if (data.notes.length > NOTES_MAX_COUNT) {
+    throw new Error(`Too many notes (max ${NOTES_MAX_COUNT}).`);
+  }
+  for (const n of data.notes) {
+    if (estimateBytes(n.body || '') > NOTES_MAX_BODY_BYTES) {
+      throw new Error(`Note "${n.title || 'Untitled'}" exceeds ${formatBytes(NOTES_MAX_BODY_BYTES)}.`);
+    }
+  }
+  const json = JSON.stringify(data, null, 2);
+  const existing = await db.getFile(pid, NOTES_PATH).catch(() => null);
+  const oldBytes = existing ? estimateBytes(existing.content) : 0;
+  const newBytes = estimateBytes(json);
+  await checkStorageBudget(pid, newBytes - oldBytes);
+  await db.putFile(pid, NOTES_PATH, json);
+  const project = await db.getProject(pid);
+  if (project) { project.updatedAt = Date.now(); await db.putProject(project); }
+}
+
+async function migrateLegacyNotes(pid) {
+  const existing = await db.getFile(pid, NOTES_PATH).catch(() => null);
+  if (existing) return;
+  const meta = await db.getProjectMeta(pid);
+  const legacy = meta.notepad;
+  if (!legacy || !legacy.trim()) return;
+  try {
+    await writeNotes(pid, {
+      version: 1,
+      notes: [{
+        id: `n_${Date.now()}_migrated`,
+        title: 'Project notes',
+        body: legacy,
+        color: 'amber',
+        pinned: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }],
+    });
+  } catch (err) {
+    console.warn('[Notes] legacy migration failed:', err);
+  }
+}
+
+function noteAccentColor(color) {
+  return NOTE_COLORS[color] || NOTE_COLORS.amber;
+}
+
+// ═══════════════════════════════════════════════════════════
+// META TAGS
+// ═══════════════════════════════════════════════════════════
+
+function buildMetaLines(meta) {
+  const lines = [];
+  const set = (s) => { if (s && s.trim()) lines.push(s.trim()); };
+  set(meta.title && `<title>${escapeHtml(meta.title)}</title>`);
+  set(meta.description && `<meta name="description" content="${escapeHtml(meta.description)}">`);
+  set(meta.keywords && `<meta name="keywords" content="${escapeHtml(meta.keywords)}">`);
+  set(meta.author && `<meta name="author" content="${escapeHtml(meta.author)}">`);
+  set(meta.robots && `<meta name="robots" content="${escapeHtml(meta.robots)}">`);
+  set(meta.themeColor && `<meta name="theme-color" content="${escapeHtml(meta.themeColor)}">`);
+  set(meta.canonical && `<link rel="canonical" href="${escapeHtml(meta.canonical)}">`);
+  set(meta.ogTitle && `<meta property="og:title" content="${escapeHtml(meta.ogTitle)}">`);
+  set(meta.ogDescription && `<meta property="og:description" content="${escapeHtml(meta.ogDescription)}">`);
+  set(meta.ogImage && `<meta property="og:image" content="${escapeHtml(meta.ogImage)}">`);
+  set(meta.twitterCard && `<meta name="twitter:card" content="${escapeHtml(meta.twitterCard)}">`);
+  return lines;
+}
+
+function stripEquivalentTags(html, meta) {
+  let cleaned = html;
+  if (meta.title) cleaned = cleaned.replace(/<title>[\s\S]*?<\/title>/i, '');
+  if (meta.description) cleaned = cleaned.replace(/<meta\s+name=["']description["'][^>]*>/gi, '');
+  if (meta.keywords) cleaned = cleaned.replace(/<meta\s+name=["']keywords["'][^>]*>/gi, '');
+  if (meta.author) cleaned = cleaned.replace(/<meta\s+name=["']author["'][^>]*>/gi, '');
+  if (meta.robots) cleaned = cleaned.replace(/<meta\s+name=["']robots["'][^>]*>/gi, '');
+  if (meta.themeColor) cleaned = cleaned.replace(/<meta\s+name=["']theme-color["'][^>]*>/gi, '');
+  if (meta.canonical) cleaned = cleaned.replace(/<link\s+rel=["']canonical["'][^>]*>/gi, '');
+  if (meta.ogTitle) cleaned = cleaned.replace(/<meta\s+property=["']og:title["'][^>]*>/gi, '');
+  if (meta.ogDescription) cleaned = cleaned.replace(/<meta\s+property=["']og:description["'][^>]*>/gi, '');
+  if (meta.ogImage) cleaned = cleaned.replace(/<meta\s+property=["']og:image["'][^>]*>/gi, '');
+  if (meta.twitterCard) cleaned = cleaned.replace(/<meta\s+name=["']twitter:card["'][^>]*>/gi, '');
+  return cleaned;
+}
+
+function injectMetaIntoHtml(html, meta) {
+  const lines = buildMetaLines(meta);
+  if (lines.length === 0) return html;
+  const block = lines.join('\n  ');
+  const cleaned = stripEquivalentTags(html, meta);
+  if (/<\/head>/i.test(cleaned)) {
+    return cleaned.replace(/<\/head>/i, `  ${block}\n</head>`);
+  }
+  if (/<head[^>]*>/i.test(cleaned)) {
+    return cleaned.replace(/<head[^>]*>/i, (m) => m + `\n  ${block}\n`);
+  }
+  return `${block}\n${cleaned}`;
+}
+
+async function injectMetaTags(pid, meta) {
+  const files = await db.listFiles(pid);
+  const indexFile = files.find(f => /(^|\/)index\.html?$/i.test(f.path) && !isPlaceholder(f.path));
+  if (!indexFile) {
+    toast('No index.html found to inject into', 'warning', 4000);
+    return false;
+  }
+  const original = indexFile.content || '';
+  const updated = injectMetaIntoHtml(original, meta);
+  if (updated === original) {
+    toast('Meta tags already up to date', 'info');
+    return false;
+  }
+  await db.putFile(pid, indexFile.path, updated);
+  if (S.activeFile === indexFile.path && cm.view) {
+    cm.setContent(updated);
+    workspace.markDirty();
+  }
+  showUndoToast(`Meta tags injected into ${indexFile.path}`, async () => {
+    await db.putFile(pid, indexFile.path, original);
+    if (S.activeFile === indexFile.path && cm.view) {
+      cm.setContent(original);
+    }
+    toast('Reverted meta tags', 'info');
+  });
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROJECT HELPERS
+// ═══════════════════════════════════════════════════════════
+
 const PID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 
 function getPidFromUrl() {
@@ -845,47 +1213,16 @@ function normalizeServerProject(p) {
     iconUrl: p.iconUrl || null,
     createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
     updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
+    storageLimit: p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT,
+    deployment: p.deployment || null,
     _server: true,
     _serverData: p,
   };
 }
 
-async function hydrateProjectsFromServer(projects) {
-  if (!Array.isArray(projects)) return;
-  for (const p of projects) {
-    if (!p || !p.pid) continue;
-    const existing = await db.getProject(p.pid);
-    const localUpdated = existing?.updatedAt || 0;
-    const serverUpdated = p.updatedAt ? new Date(p.updatedAt).getTime() : 0;
-    if (existing && localUpdated > serverUpdated) continue;
-    await db.putProject(normalizeServerProject(p));
-  }
-}
-
 // ═══════════════════════════════════════════════════════════
-// PROJECT BOOT: overlay, deep-link, picker sheet, recents
+// LOADER OVERLAY
 // ═══════════════════════════════════════════════════════════
-
-function getInitials(name) {
-  const s = String(name || '').trim();
-  if (!s) return '·';
-  return s.split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
-}
-
-const AVATAR_GRADIENTS = [
-  'linear-gradient(135deg, #F59E0B, #f97316)',
-  'linear-gradient(135deg, #0284c7, #0369a1)',
-  'linear-gradient(135deg, #a855f7, #6d28d9)',
-  'linear-gradient(135deg, #10B981, #059669)',
-  'linear-gradient(135deg, #ec4899, #be185d)',
-  'linear-gradient(135deg, #06b6d4, #0891b2)',
-];
-function getAvatarColor(seed) {
-  const s = String(seed || '');
-  let hash = 0;
-  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
-}
 
 function showProjectLoader(title, desc) {
   const node = $('projectLoader');
@@ -910,8 +1247,12 @@ function hideProjectLoader() {
   node.setAttribute('aria-hidden', 'true');
 }
 
-async function loadProjectFromUrl(pid) {
-  showProjectLoader('Loading project…', '');
+// ═══════════════════════════════════════════════════════════
+// PROJECT OPEN
+// ═══════════════════════════════════════════════════════════
+
+async function openProjectById(pid, { showLoader = true } = {}) {
+  if (showLoader) showProjectLoader('Loading project…', '');
 
   let project = null;
   try { project = await db.getProject(pid); } catch {}
@@ -927,25 +1268,51 @@ async function loadProjectFromUrl(pid) {
   }
 
   if (!project) {
-    hideProjectLoader();
+    if (showLoader) hideProjectLoader();
     toast('Project not found', 'error');
     return null;
   }
 
-  setProjectLoaderText('Loading "' + (project.name || 'project') + '"…', 'Preparing editor…');
+  if (showLoader) setProjectLoaderText('Loading "' + (project.name || 'project') + '"…', 'Preparing editor…');
   try {
     await workspace.openProject(project);
     setPidInUrl(project.pid);
-    hideProjectLoader();
+    try { localStorage.setItem(STORAGE.lastProject, project.pid); } catch {}
     renderEmptyRecent();
+    if (showLoader) hideProjectLoader();
     return project;
   } catch (err) {
-    console.error('[ProjectBoot] open failed:', err);
-    hideProjectLoader();
+    console.error('[openProjectById]', err);
+    if (showLoader) hideProjectLoader();
     toast('Could not open project', 'error');
     return null;
   }
 }
+
+async function loadProjectFromUrl(pid) {
+  return openProjectById(pid, { showLoader: true });
+}
+
+// ═══════════════════════════════════════════════════════════
+// DEPLOYMENT CACHE
+// ═══════════════════════════════════════════════════════════
+
+async function loadDeploymentHistoryFor(pid) {
+  if (!S.session || !navigator.onLine) return;
+  try {
+    const res = await apiFetch(API_HOST + '?action=deployment/history&pid=' + encodeURIComponent(pid));
+    if (res.ok && res.data?.success) {
+      S.deploymentCache.set(pid, {
+        deployments: res.data.deployments || [],
+        currentId: res.data.currentDeploymentId || null,
+      });
+    }
+  } catch {}
+}
+
+// ═══════════════════════════════════════════════════════════
+// RECENTS
+// ═══════════════════════════════════════════════════════════
 
 async function renderEmptyRecent() {
   const wrap = $('emptyRecent');
@@ -966,13 +1333,7 @@ async function renderEmptyRecent() {
     list.appendChild(el('button', {
       class: 'empty-recent-item',
       type: 'button',
-      onclick: async () => {
-        try {
-          await workspace.openProject(p);
-          setPidInUrl(p.pid);
-          renderEmptyRecent();
-        } catch { toast('Could not open', 'error'); }
-      },
+      onclick: async () => { await openProjectById(p.pid); },
     },
       el('span', { class: 'empty-recent-name' }, p.name || 'Untitled'),
       el('span', { class: 'empty-recent-time' }, relativeTime(p.updatedAt))
@@ -1022,16 +1383,7 @@ async function openProjectsSheet() {
       type: 'button',
       onclick: async () => {
         closeSheet();
-        showProjectLoader('Opening "' + (p.name || 'project') + '"…', '');
-        try {
-          await workspace.openProject(p);
-          setPidInUrl(p.pid);
-          renderEmptyRecent();
-        } catch {
-          toast('Could not open project', 'error');
-        } finally {
-          hideProjectLoader();
-        }
+        await openProjectById(p.pid);
       },
     },
       el('span', {
@@ -1062,7 +1414,7 @@ async function openProjectsSheet() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// CodeMirror
+// CODEMIRROR
 // ═══════════════════════════════════════════════════════════
 
 const TAG_SCRIPT_OPEN  = '<' + 'script>';
@@ -1356,6 +1708,74 @@ const cm = {
   destroy() { if (this.view) { this.view.destroy(); this.view = null; } },
 };
 
+// ═══════════════════════════════════════════════════════════
+// FILE VIEWER (non-code)
+// ═══════════════════════════════════════════════════════════
+
+function renderFileViewer(kind, path, content) {
+  const wrap = el('div', { class: 'file-viewer' });
+  const name = path.split('/').pop();
+  const header = el('div', { class: 'file-viewer-header' },
+    el('span', {}, name),
+    el('span', { class: 'file-viewer-size' }, formatBytes(estimateBytes(content)))
+  );
+  wrap.appendChild(header);
+
+  const body = el('div', { class: 'file-viewer-body' });
+
+  if (kind === 'image') {
+    const img = document.createElement('img');
+    img.src = content;
+    img.alt = name;
+    body.appendChild(img);
+  } else if (kind === 'pdf') {
+    const iframe = document.createElement('iframe');
+    iframe.src = content;
+    body.classList.add('file-viewer-body--flush');
+    body.appendChild(iframe);
+  } else if (kind === 'video') {
+    const v = document.createElement('video');
+    v.src = content; v.controls = true;
+    body.appendChild(v);
+  } else if (kind === 'audio') {
+    const a = document.createElement('audio');
+    a.src = content; a.controls = true;
+    body.appendChild(a);
+  } else if (kind === 'text') {
+    const pre = el('pre', { class: 'file-viewer-pre' }, content);
+    body.classList.add('file-viewer-body--top');
+    body.appendChild(pre);
+  } else if (kind === 'font') {
+    body.appendChild(el('div', { class: 'empty-state' },
+      el('div', { class: 'empty-state-icon' }, icon('file', 20)),
+      el('div', { class: 'empty-state-title' }, 'Font file'),
+      el('div', { class: 'empty-state-desc' }, `${name} · ${formatBytes(estimateBytes(content))}`),
+    ));
+  } else {
+    body.appendChild(el('div', { class: 'empty-state' },
+      el('div', { class: 'empty-state-icon' }, icon('file', 20)),
+      el('div', { class: 'empty-state-title' }, 'Preview not available'),
+      el('div', { class: 'empty-state-desc' }, `This file type can't be previewed.`),
+      el('button', {
+        class: 'btn btn-secondary btn-sm', style: 'margin-top:6px',
+        onclick: () => {
+          const a = document.createElement('a');
+          a.href = content;
+          a.download = name;
+          a.click();
+        },
+      }, 'Download'),
+    ));
+  }
+
+  wrap.appendChild(body);
+  return wrap;
+}
+
+// ═══════════════════════════════════════════════════════════
+// WORKSPACE
+// ═══════════════════════════════════════════════════════════
+
 const workspace = {
   get currentProject() { return S.currentProject; },
   get activeFile() { return S.activeFile; },
@@ -1387,13 +1807,22 @@ const workspace = {
     updateDirtyDot();
     renderSidebar();
 
+    // Load deployment history for this project
+    loadDeploymentHistoryFor(project.pid).then(() => {
+      refreshInfoIfOpen();
+    });
+
+    // Migrate legacy notepad
+    migrateLegacyNotes(project.pid).catch(() => {});
+
     let files = [];
-    try { files = await db.listFiles(project.pid); } catch (err) {
+    try { files = await db.listFiles(project.pid); }
+    catch (err) {
       console.error('[Workspace] listFiles failed:', err);
       showEmpty('Failed to load files');
       return;
     }
-    const realFiles = files.filter(f => !isPlaceholder(f.path));
+    const realFiles = files.filter(f => !isSystemFile(f.path));
 
     if (realFiles.length > 0) {
       let lastPath = null;
@@ -1407,6 +1836,11 @@ const workspace = {
 
   async openFile(path) {
     if (!S.currentProject) return;
+    if (isSystemFile(path) && path === NOTES_PATH) {
+      // Notes.json is a system file — never open in editor
+      openSidebar('notes');
+      return;
+    }
     const file = await db.getFile(S.currentProject.pid, path);
     if (!file) { toast('File not found', 'error'); return; }
 
@@ -1423,19 +1857,31 @@ const workspace = {
     const empty = $('editorEmpty');
     if (!container) return;
 
+    const kind = getFileKind(path);
+    if (kind !== 'code') {
+      cm.destroy();
+      container.innerHTML = '';
+      container.appendChild(renderFileViewer(kind, path, file.content));
+      loading?.classList.add('hidden');
+      empty?.classList.add('hidden');
+      updateDirtyDot();
+      return;
+    }
+
     if (!cm.modules) {
-      loading.classList.remove('hidden');
-      empty.classList.add('hidden');
+      loading?.classList.remove('hidden');
+      empty?.classList.add('hidden');
     }
 
     try {
       container.innerHTML = '';
       await cm.init(container, file.content, path);
-      loading.classList.add('hidden');
-      empty.classList.add('hidden');
+      loading?.classList.add('hidden');
+      empty?.classList.add('hidden');
+      updateDirtyDot();
     } catch (err) {
       console.error('[Workspace] Editor failed:', err);
-      loading.classList.add('hidden');
+      loading?.classList.add('hidden');
       showEditorError();
     }
   },
@@ -1478,9 +1924,21 @@ const workspace = {
     let content;
     if (cm.view) content = cm.getContent();
     else {
-      if (!silent) toast('Editor not ready — nothing to save', 'info');
+      if (!silent) toast('Nothing to save', 'info');
       return;
     }
+
+    // Warn (don't block) if over budget
+    try {
+      const project = await db.getProject(S.currentProject.pid);
+      const limit = project?.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+      const used = await computeProjectStorage(S.currentProject.pid);
+      const delta = estimateBytes(content);
+      if (used + delta > limit * 0.9 && !silent) {
+        toast(`Approaching storage limit (${formatBytes(used)}/${formatBytes(limit)})`, 'warning', 4000);
+      }
+    } catch {}
+
     try {
       await db.putFile(S.currentProject.pid, S.activeFile, content);
       const project = await db.getProject(S.currentProject.pid);
@@ -1489,10 +1947,11 @@ const workspace = {
       if (S.currentProject?.pid) setPidInUrl(S.currentProject.pid);
       updateDirtyDot();
       updateTabs();
+      refreshInfoIfOpen();
       if (!S.isGuest) {
         db.enqueueSync({ action: 'file:put', pid: S.currentProject.pid, path: S.activeFile, content }).catch(() => {});
       }
-      if (!silent) toast(S.isGuest ? 'Saved locally' : 'Saved', 'success');
+      if (!silent) { toast(S.isGuest ? 'Saved locally' : 'Saved', 'success'); haptic(6); }
     } catch (err) {
       if (err?.name === 'QuotaExceededError') {
         toast('Storage full. Delete old versions or projects.', 'error', 8000);
@@ -1515,18 +1974,47 @@ const workspace = {
     updateDirtyDot();
     updateTabs();
     toast(`Saved ${dirty.length} file${dirty.length === 1 ? '' : 's'}`, 'success');
+    haptic(10);
   },
 };
 
+// ═══════════════════════════════════════════════════════════
+// HEADER / TABS / EMPTY STATE
+// ═══════════════════════════════════════════════════════════
+
 function updateDirtyDot() {
-  $('dirtyDot')?.classList.toggle('visible', S.dirtyFiles.size > 0);
+  const hasDirty = S.dirtyFiles.size > 0;
+  $('dirtyDot')?.classList.toggle('visible', hasDirty);
+  const canSave = !!S.activeFile || hasDirty;
   const saveBtn = $('saveBtn');
-  if (saveBtn) saveBtn.disabled = S.dirtyFiles.size === 0;
+  if (saveBtn) saveBtn.disabled = !canSave;
+  const tbSave = $('tbSave');
+  if (tbSave) tbSave.disabled = !canSave;
 }
 
 function updateBreadcrumb() {
   const bc = $('breadcrumb');
+  const iconWrap = $('headerProjectIcon');
   if (!bc) return;
+
+  if (iconWrap) {
+    iconWrap.innerHTML = '';
+    if (S.currentProject?.iconUrl) {
+      const img = document.createElement('img');
+      img.src = S.currentProject.iconUrl;
+      img.alt = '';
+      iconWrap.appendChild(img);
+      iconWrap.hidden = false;
+    } else if (S.currentProject) {
+      iconWrap.textContent = getInitials(S.currentProject.name);
+      iconWrap.style.background = getAvatarColor(S.currentProject.name);
+      iconWrap.style.color = '#0a0c10';
+      iconWrap.hidden = false;
+    } else {
+      iconWrap.hidden = true;
+    }
+  }
+
   bc.innerHTML = '';
   if (!S.currentProject) {
     bc.appendChild(el('span', { class: 'seg current' }, 'No project'));
@@ -1567,6 +2055,9 @@ function updateTabs() {
     );
     tabsEl.appendChild(tab);
   }
+  requestAnimationFrame(() => {
+    tabsEl.querySelector('.editor-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
 }
 
 function showEmpty(message) {
@@ -1619,6 +2110,7 @@ function showEditorError() {
 
 const SIDEBAR_PANELS = [
   { id: 'files', label: 'Files' },
+  { id: 'info', label: 'Info' },
   { id: 'search', label: 'Search' },
   { id: 'versions', label: 'Versions' },
   { id: 'changes', label: 'Changes' },
@@ -1638,6 +2130,18 @@ function closeSidebar() {
   S.sidebarOpen = false;
   $('sidebar').classList.remove('open');
   $('sidebarBackdrop').classList.remove('open');
+}
+
+function refreshInfoIfOpen() {
+  if (S.sidebarPanel === 'info') {
+    const bodyEl = $('sidebarBody');
+    if (bodyEl) {
+      bodyEl.innerHTML = '';
+      renderInfoPanel(bodyEl).catch(err => {
+        console.error('[Info] refresh failed:', err);
+      });
+    }
+  }
 }
 
 let sidebarToken = 0;
@@ -1680,6 +2184,7 @@ function renderSidebar() {
 
   switch (S.sidebarPanel) {
     case 'files': paint(renderFilesPanel); break;
+    case 'info': paint(renderInfoPanel); break;
     case 'search': paint(renderSearchPanel); break;
     case 'versions': paint(renderVersionsPanel); break;
     case 'changes': paint(renderChangesPanel); break;
@@ -1687,6 +2192,10 @@ function renderSidebar() {
     case 'notes': paint(renderNotesPanel); break;
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+// FILES PANEL (with pinned block)
+// ═══════════════════════════════════════════════════════════
 
 async function renderFilesPanel(container) {
   if (!S.currentProject) {
@@ -1709,8 +2218,69 @@ async function renderFilesPanel(container) {
     return;
   }
 
-  const visibleFiles = files.filter(f => !isPlaceholder(f.path));
+  const explicitFolders = await db.listFolders(S.currentProject.pid).catch(() => []);
+  const visibleFiles = files.filter(f => !isSystemFile(f.path));
 
+  // Pinned project block
+  const totalBytes = files.reduce((n, f) => n + estimateBytes(f.content), 0);
+  const limit = S.currentProject.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+  const pct = Math.min(100, (totalBytes / limit) * 100);
+  const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
+  const deployUrl = S.currentProject.deployment?.url;
+  const deployed = !!deployUrl;
+
+  const pinned = el('div', { class: 'pinned-project-block' });
+
+  const iconWrap = el('div', { class: 'pinned-project-icon' });
+  if (S.currentProject.iconUrl) {
+    const img = document.createElement('img');
+    img.src = S.currentProject.iconUrl;
+    img.alt = '';
+    iconWrap.appendChild(img);
+  } else {
+    iconWrap.textContent = getInitials(S.currentProject.name);
+    iconWrap.style.background = getAvatarColor(S.currentProject.name);
+    iconWrap.style.color = '#0a0c10';
+  }
+  pinned.appendChild(iconWrap);
+
+  const infoWrap = el('div', { class: 'pinned-project-info' });
+  infoWrap.appendChild(el('div', { class: 'pinned-project-name' }, S.currentProject.name || 'Untitled'));
+  const bar = el('div', { class: 'mini-storage-bar' },
+    el('div', { class: `mini-storage-bar-fill ${barClass}`, style: `width:${pct}%` })
+  );
+  infoWrap.appendChild(bar);
+  infoWrap.appendChild(el('div', { class: 'mini-storage-label' },
+    `${formatBytes(totalBytes)} / ${formatBytes(limit)}`
+  ));
+  pinned.appendChild(infoWrap);
+
+  const actions = el('div', { class: 'pinned-project-actions' });
+  const rocketBtn = el('button', {
+    class: `pinned-action${deployed ? ' active' : ''}`,
+    type: 'button',
+    'aria-label': deployed ? 'Open live site' : 'Deploy project',
+    title: deployed ? 'Open live site' : 'Deploy project',
+    onclick: () => {
+      if (deployed) window.open(deployUrl, '_blank', 'noopener');
+      else hostProject();
+    },
+  }, icon('rocket', 12));
+  actions.appendChild(rocketBtn);
+
+  const moreBtn = el('button', {
+    class: 'pinned-action',
+    type: 'button',
+    'aria-label': 'Project info',
+    title: 'Project info',
+    onclick: () => { S.sidebarPanel = 'info'; renderSidebar(); },
+  }, icon('more', 12));
+  actions.appendChild(moreBtn);
+  pinned.appendChild(actions);
+
+  container.appendChild(pinned);
+
+  // Section title with actions
   container.appendChild(el('div', { class: 'sidebar-section-title' },
     el('span', {}, `Files (${visibleFiles.length})`),
     el('div', { class: 'actions' },
@@ -1739,7 +2309,7 @@ async function renderFilesPanel(container) {
       ? visibleFiles.filter(f => f.path.toLowerCase().includes(S.fileFilter.toLowerCase()))
       : visibleFiles;
 
-    if (filtered.length === 0) {
+    if (filtered.length === 0 && explicitFolders.length === 0) {
       treeEl.appendChild(el('div', { class: 'empty-state', style: 'padding:20px 6px' },
         el('div', { class: 'empty-state-title', style: 'font-size:12px' }, 'No files yet'),
         el('button', { class: 'btn btn-primary btn-sm', style: 'margin-top:6px', onclick: () => createFilePrompt() }, 'Create first file')
@@ -1747,7 +2317,10 @@ async function renderFilesPanel(container) {
       return;
     }
 
-    const tree = buildTree(filtered.map(f => f.path));
+    const tree = buildTree(
+      filtered.map(f => f.path),
+      explicitFolders.map(f => f.path)
+    );
     try { await renderTreeNodes(treeEl, tree, 0); }
     catch (err) { console.error('[Tree]', err); }
   }
@@ -1755,19 +2328,29 @@ async function renderFilesPanel(container) {
   await refreshTree();
 }
 
-function buildTree(paths) {
+function buildTree(paths, extraFolders = []) {
   const root = { name: '', children: {}, files: [], path: '' };
-  for (const path of paths) {
-    const parts = path.split('/');
+  const ensureFolder = (parts) => {
     let node = root;
-    for (let i = 0; i < parts.length - 1; i++) {
+    for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       if (!node.children[part]) {
-        node.children[part] = { name: part, children: {}, files: [], path: parts.slice(0, i + 1).join('/'), isFolder: true };
+        node.children[part] = {
+          name: part, children: {}, files: [],
+          path: parts.slice(0, i + 1).join('/'), isFolder: true,
+        };
       }
       node = node.children[part];
     }
+    return node;
+  };
+  for (const path of paths) {
+    const parts = path.split('/');
+    const node = ensureFolder(parts.slice(0, -1));
     node.files.push({ name: parts[parts.length - 1], path });
+  }
+  for (const folderPath of extraFolders) {
+    ensureFolder(folderPath.split('/'));
   }
   return root;
 }
@@ -1806,7 +2389,7 @@ async function renderTreeNodes(container, node, depth) {
 
   const files = node.files.sort((a, b) => a.name.localeCompare(b.name));
   for (const file of files) {
-    if (isPlaceholder(file.path)) continue;
+    if (isSystemFile(file.path)) continue;
     const isActive = file.path === S.activeFile;
     const fileRow = el('div', {
       class: `tree-node${isActive ? ' active' : ''}`,
@@ -1824,9 +2407,310 @@ async function renderTreeNodes(container, node, depth) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// INFO PANEL
+// ═══════════════════════════════════════════════════════════
+
+async function renderInfoPanel(container) {
+  if (!S.currentProject) {
+    container.appendChild(el('div', { class: 'empty-state', style: 'padding:20px 6px' },
+      el('div', { class: 'empty-state-title' }, 'No project open')
+    ));
+    return;
+  }
+
+  const p = S.currentProject;
+  const files = await db.listFiles(p.pid).catch(() => []);
+  const realFiles = files.filter(f => !isSystemFile(f.path));
+  const folders = await db.listFolders(p.pid).catch(() => []);
+  const versions = await db.listVersions(p.pid).catch(() => []);
+  const meta = await db.getProjectMeta(p.pid);
+
+  const totalBytes = files.reduce((n, f) => n + estimateBytes(f.content), 0);
+  const totalLimit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+  const pct = Math.min(100, (totalBytes / totalLimit) * 100);
+  const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
+
+  const totalLines = realFiles
+    .filter(f => isTextFile(f.path))
+    .reduce((n, f) => n + String(f.content || '').split('\n').length, 0);
+
+  // Header with "Open dashboard →" button
+  const headerWrap = el('div', { class: 'info-tab-header' });
+  headerWrap.appendChild(el('button', {
+    class: 'btn btn-secondary btn-sm btn-block',
+    type: 'button',
+    onclick: () => { window.location.href = '/project?pid=' + encodeURIComponent(p.pid); },
+  }, icon('external', 12), ' Open dashboard'));
+
+  // Project identity
+  const idCard = el('div', { class: 'info-identity' });
+  const iconWrap = el('div', { class: 'info-identity-icon' });
+  if (p.iconUrl) {
+    const img = document.createElement('img');
+    img.src = p.iconUrl;
+    img.alt = '';
+    iconWrap.appendChild(img);
+  } else {
+    iconWrap.textContent = getInitials(p.name);
+    iconWrap.style.background = getAvatarColor(p.name);
+    iconWrap.style.color = '#0a0c10';
+  }
+  idCard.appendChild(iconWrap);
+  const idInfo = el('div', { class: 'info-identity-info' });
+  idInfo.appendChild(el('div', { class: 'info-identity-name' }, p.name || 'Untitled'));
+  idInfo.appendChild(el('div', { class: 'info-identity-slug' }, p.slug ? '/' + p.slug : p.pid.slice(-8)));
+  if (p.description) idInfo.appendChild(el('div', { class: 'info-identity-desc' }, p.description));
+  idCard.appendChild(idInfo);
+
+  // Stats grid
+  const stats = el('div', { class: 'info-stats' });
+  const stat = (label, value) => el('div', { class: 'info-stat' },
+    el('div', { class: 'info-stat-label' }, label),
+    el('div', { class: 'info-stat-value' }, String(value))
+  );
+  stats.appendChild(stat('Files', realFiles.length));
+  stats.appendChild(stat('Folders', folders.length));
+  stats.appendChild(stat('Versions', versions.length));
+  stats.appendChild(stat('Lines', totalLines));
+
+  // Storage section
+  const storage = el('div', { class: 'storage-bar-full' });
+  storage.appendChild(el('div', { class: 'storage-bar-header' },
+    el('span', { class: 'storage-bar-label' }, 'Storage'),
+    el('span', { class: 'storage-bar-amount' }, `${formatBytes(totalBytes)} / ${formatBytes(totalLimit)}`)
+  ));
+  storage.appendChild(el('div', { class: 'storage-bar-track' },
+    el('div', { class: `storage-bar-fill ${barClass}`, style: `width:${pct}%` })
+  ));
+  storage.appendChild(el('div', { class: 'storage-bar-hint' },
+    pct > 90 ? '⚠ Nearly full — delete files or versions'
+    : pct > 70 ? 'Getting full'
+    : `${formatBytes(totalLimit - totalBytes)} remaining`
+  ));
+
+  // Deployments
+  const deployments = el('div', { class: 'info-deployments' });
+  deployments.appendChild(el('div', { class: 'sidebar-section-title' },
+    el('span', {}, 'Deployments'),
+    el('div', { class: 'actions' },
+      el('button', {
+        class: 'act', type: 'button', title: 'Deploy now',
+        onclick: () => hostProject(),
+      }, icon('rocket', 12))
+    )
+  ));
+
+  const cache = S.deploymentCache.get(p.pid);
+  const deployUrl = p.deployment?.url;
+  const isLive = deployUrl && p.deployment?.state !== 'OFFLINE';
+  const isOffline = p.deployment?.state === 'OFFLINE';
+
+  const deployRow = el('div', { class: 'info-deployment-current' });
+  if (isLive) {
+    deployRow.appendChild(el('div', { class: 'deploy-status live' },
+      el('span', { class: 'deploy-dot' }), 'Live'
+    ));
+    const urlLink = el('a', {
+      class: 'deploy-url',
+      href: deployUrl,
+      target: '_blank',
+      rel: 'noopener',
+    }, deployUrl);
+    deployRow.appendChild(urlLink);
+    deployRow.appendChild(el('button', {
+      class: 'btn btn-ghost btn-sm', type: 'button',
+      onclick: () => {
+        try { navigator.clipboard.writeText(deployUrl); toast('URL copied', 'success', 1200); } catch {}
+      },
+    }, icon('copy', 10), ' Copy'));
+  } else if (isOffline) {
+    deployRow.appendChild(el('div', { class: 'deploy-status offline' },
+      el('span', { class: 'deploy-dot' }), 'Offline'
+    ));
+    deployRow.appendChild(el('button', {
+      class: 'btn btn-primary btn-sm', type: 'button',
+      onclick: () => hostProject(),
+    }, 'Deploy to go live'));
+  } else {
+    deployRow.appendChild(el('div', { class: 'deploy-status offline' },
+      el('span', { class: 'deploy-dot' }), 'Not deployed'
+    ));
+    deployRow.appendChild(el('button', {
+      class: 'btn btn-primary btn-sm', type: 'button',
+      onclick: () => hostProject(),
+    }, icon('rocket', 10), ' Deploy'));
+  }
+  deployments.appendChild(deployRow);
+
+  if (cache && cache.deployments.length > 1) {
+    const hist = el('div', { class: 'deploy-history' });
+    for (const d of cache.deployments.slice(0, 5)) {
+      const isCurrent = d.id === cache.currentId;
+      hist.appendChild(el('div', { class: `deploy-history-row${isCurrent ? ' current' : ''}` },
+        el('span', { class: 'deploy-history-time' }, relativeTime(d.deployedAt)),
+        el('span', { class: 'deploy-history-status' }, isCurrent ? 'Current' : (d.state || 'READY')),
+        d.url ? el('a', {
+          class: 'deploy-history-link',
+          href: d.url,
+          target: '_blank',
+          rel: 'noopener',
+          'aria-label': 'Open',
+        }, icon('external', 10)) : null,
+        el('button', {
+          class: 'deploy-history-action danger',
+          type: 'button',
+          title: 'Delete',
+          onclick: async () => {
+            const ok = await confirm({ title: 'Delete deployment?', message: 'This removes the deployed version.', confirmLabel: 'Delete', danger: true });
+            if (!ok) return;
+            const res = await apiFetch(API_HOST + '?action=deployment/delete', {
+              method: 'POST', body: JSON.stringify({ pid: p.pid, deploymentId: d.id }),
+            });
+            if (res.ok && res.data?.success) {
+              toast('Deleted', 'success');
+              await loadDeploymentHistoryFor(p.pid);
+              refreshInfoIfOpen();
+            } else {
+              toast(res.data?.error || 'Delete failed', 'error');
+            }
+          },
+        }, icon('trash', 10))
+      ));
+    }
+    deployments.appendChild(hist);
+  }
+
+  // Meta tags form
+  const metaSection = el('div', { class: 'meta-form' });
+  metaSection.appendChild(el('div', { class: 'sidebar-section-title' }, el('span', {}, 'Meta tags')));
+
+  const metaFields = [
+    ['title', 'Title', 'Page title'],
+    ['description', 'Description', 'SEO description'],
+    ['keywords', 'Keywords', 'comma, separated'],
+    ['author', 'Author', 'Author name'],
+    ['ogTitle', 'OG title', 'Social title'],
+    ['ogDescription', 'OG description', 'Social description'],
+    ['ogImage', 'OG image URL', 'https://...'],
+    ['canonical', 'Canonical URL', 'https://...'],
+  ];
+  const metaValues = meta.meta || {};
+
+  for (const [key, label, placeholder] of metaFields) {
+    const field = el('div', { class: 'meta-field' });
+    field.appendChild(el('label', { class: 'meta-field-label' }, label));
+    const input = el('input', {
+      class: 'input', type: 'text', placeholder,
+      value: metaValues[key] || '',
+      onblur: debounce(async (e) => {
+        const current = await db.getProjectMeta(p.pid);
+        const m = current.meta || {};
+        m[key] = e.target.value.trim();
+        await db.setProjectMeta(p.pid, { meta: m });
+        toast('Saved', 'success', 800);
+      }, 400),
+    });
+    field.appendChild(input);
+    metaSection.appendChild(field);
+  }
+
+  metaSection.appendChild(el('button', {
+    class: 'btn btn-primary btn-sm btn-block',
+    type: 'button',
+    style: 'margin-top:8px;',
+    onclick: async () => {
+      const current = await db.getProjectMeta(p.pid);
+      const m = current.meta || {};
+      const ok = await confirm({
+        title: 'Inject meta tags?',
+        message: 'Meta tags will be written into index.html. Preview always uses saved meta — this makes it permanent.',
+        confirmLabel: 'Inject',
+        danger: false,
+      });
+      if (!ok) return;
+      await injectMetaTags(p.pid, m);
+    },
+  }, icon('file-code', 12), ' Inject into index.html'));
+
+  // File types breakdown
+  const fileTypes = el('div', { class: 'info-file-types' });
+  fileTypes.appendChild(el('div', { class: 'sidebar-section-title' }, el('span', {}, 'File types')));
+  const kindCounts = {};
+  for (const f of realFiles) {
+    const k = getFileKind(f.path);
+    kindCounts[k] = (kindCounts[k] || 0) + 1;
+  }
+  const kindLabels = { code: 'Code', image: 'Images', pdf: 'PDFs', video: 'Video', audio: 'Audio', text: 'Text', font: 'Fonts', binary: 'Other' };
+  for (const [k, n] of Object.entries(kindCounts)) {
+    fileTypes.appendChild(el('div', { class: 'info-file-type-row' },
+      el('span', {}, kindLabels[k] || k),
+      el('span', {}, String(n))
+    ));
+  }
+  if (Object.keys(kindCounts).length === 0) {
+    fileTypes.appendChild(el('div', { class: 'info-file-type-row' },
+      el('span', { style: 'color:var(--theme-text-tertiary);' }, 'No files yet')
+    ));
+  }
+
+  // Timeline
+  const timeline = el('div', { class: 'info-timeline' });
+  timeline.appendChild(el('div', { class: 'sidebar-section-title' }, el('span', {}, 'Timeline')));
+  timeline.appendChild(el('div', { class: 'list-row' },
+    el('span', { class: 'icon' }, icon('clock', 12)),
+    el('span', { class: 'name' }, 'Created'),
+    el('span', { class: 'value' }, p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—')
+  ));
+  timeline.appendChild(el('div', { class: 'list-row' },
+    el('span', { class: 'icon' }, icon('clock', 12)),
+    el('span', { class: 'name' }, 'Last edit'),
+    el('span', { class: 'value' }, relativeTime(p.updatedAt || Date.now()))
+  ));
+
+  // Danger zone
+  const danger = el('button', {
+    class: 'btn btn-outline-danger btn-block btn-sm',
+    type: 'button',
+    style: 'margin-top:12px;',
+    onclick: async () => {
+      const ok = await confirm({
+        title: `Delete ${p.name}?`,
+        message: 'All files, versions, and data will be deleted.',
+        confirmLabel: 'Delete project',
+        danger: true,
+      });
+      if (!ok) return;
+      await db.deleteProject(p.pid);
+      S.currentProject = null;
+      S.activeFile = null;
+      showEmpty('No project open');
+      setPidInUrl(null);
+      try { localStorage.removeItem(STORAGE.lastProject); } catch {}
+      toast('Project deleted', 'info');
+      renderSidebar();
+    },
+  }, icon('trash', 11), ' Delete project');
+
+  // Assemble
+  container.appendChild(headerWrap);
+  container.appendChild(idCard);
+  container.appendChild(stats);
+  container.appendChild(storage);
+  container.appendChild(deployments);
+  container.appendChild(metaSection);
+  container.appendChild(fileTypes);
+  container.appendChild(timeline);
+  container.appendChild(danger);
+}
+
+// ═══════════════════════════════════════════════════════════
+// FILE / FOLDER ACTIONS
+// ═══════════════════════════════════════════════════════════
+
 async function createFilePrompt(parentPath = '') {
   if (!S.currentProject) { toast('No project', 'warning'); return; }
-  const name = prompt('File name (e.g. index.html):');
+  const name = await promptSheet('New file', 'e.g. index.html');
   if (!name) return;
   const cleaned = name.trim().replace(/[^a-zA-Z0-9._/-]/g, '');
   if (!cleaned) return;
@@ -1834,6 +2718,13 @@ async function createFilePrompt(parentPath = '') {
   const existing = await db.getFile(S.currentProject.pid, path);
   if (existing) { toast('File already exists', 'warning'); return; }
   await db.putFile(S.currentProject.pid, path, '');
+  if (parentPath) {
+    const parts = parentPath.split('/');
+    for (let i = 1; i <= parts.length; i++) {
+      await db.putFolder(S.currentProject.pid, parts.slice(0, i).join('/')).catch(() => {});
+    }
+    S.expandedFolders.add(parentPath);
+  }
   toast(`Created ${path}`, 'success');
   await workspace.openFile(path);
   renderSidebar();
@@ -1841,16 +2732,19 @@ async function createFilePrompt(parentPath = '') {
 
 async function createFolderPrompt(parentPath = '') {
   if (!S.currentProject) { toast('No project', 'warning'); return; }
-  const name = prompt('Folder name:');
+  const name = await promptSheet('New folder', 'e.g. components');
   if (!name) return;
   const cleaned = name.trim().replace(/[^a-zA-Z0-9._-]/g, '');
   if (!cleaned) return;
   const folderPath = parentPath ? `${parentPath}/${cleaned}` : cleaned;
-  const placeholderPath = `${folderPath}/.gitkeep`;
-  await db.putFile(S.currentProject.pid, placeholderPath, '');
+  const parts = folderPath.split('/');
+  for (let i = 1; i <= parts.length; i++) {
+    await db.putFolder(S.currentProject.pid, parts.slice(0, i).join('/')).catch(() => {});
+  }
   S.expandedFolders.add(folderPath);
   toast(`Created ${folderPath}`, 'success');
   renderSidebar();
+  refreshInfoIfOpen();
 }
 
 async function deleteFile(path) {
@@ -1868,13 +2762,23 @@ async function deleteFile(path) {
   }
   toast('File deleted', 'info');
   renderSidebar();
+  refreshInfoIfOpen();
 }
 
 async function deleteFolder(path) {
   if (!S.currentProject) return;
   const files = await db.listFiles(S.currentProject.pid);
   const inFolder = files.filter(f => f.path.startsWith(path + '/'));
-  if (inFolder.length === 0) { toast('Empty folder', 'info'); return; }
+  if (inFolder.length === 0) {
+    const ok = await confirm({ title: `Delete folder ${path.split('/').pop()}?`, message: 'Empty folder will be removed.', confirmLabel: 'Delete', danger: true });
+    if (!ok) return;
+    await db.deleteFolder(S.currentProject.pid, path);
+    S.expandedFolders.delete(path);
+    toast('Folder deleted', 'info');
+    renderSidebar();
+    refreshInfoIfOpen();
+    return;
+  }
   const ok = await confirm({
     title: `Delete folder ${path.split('/').pop()}?`,
     message: `Deletes ${inFolder.length} file${inFolder.length === 1 ? '' : 's'}. Cannot be undone.`,
@@ -1885,14 +2789,16 @@ async function deleteFolder(path) {
     await db.deleteFile(S.currentProject.pid, f.path);
     S.dirtyFiles.delete(f.path);
   }
+  await db.deleteFolder(S.currentProject.pid, path);
   S.expandedFolders.delete(path);
   toast('Folder deleted', 'info');
   renderSidebar();
+  refreshInfoIfOpen();
 }
 
 async function renameFile(oldPath) {
   if (!S.currentProject) return;
-  const newName = prompt('New name:', oldPath.split('/').pop());
+  const newName = await promptSheet('Rename file', '', oldPath.split('/').pop());
   if (!newName) return;
   const dir = oldPath.includes('/') ? oldPath.slice(0, oldPath.lastIndexOf('/')) : '';
   const newPath = dir ? `${dir}/${newName.trim()}` : newName.trim();
@@ -1913,7 +2819,7 @@ async function renameFile(oldPath) {
 
 async function renameFolder(path) {
   if (!S.currentProject) return;
-  const newName = prompt('New folder name:', path.split('/').pop());
+  const newName = await promptSheet('Rename folder', '', path.split('/').pop());
   if (!newName) return;
   const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
   const newPath = parent ? `${parent}/${newName.trim()}` : newName.trim();
@@ -1929,6 +2835,8 @@ async function renameFolder(path) {
     if (S.activeFile === f.path) S.activeFile = newFilePath;
     if (S.dirtyFiles.has(f.path)) { S.dirtyFiles.delete(f.path); S.dirtyFiles.add(newFilePath); }
   }
+  await db.deleteFolder(S.currentProject.pid, path);
+  await db.putFolder(S.currentProject.pid, newPath).catch(() => {});
   toast('Folder renamed', 'success');
   updateTabs();
   renderSidebar();
@@ -1941,17 +2849,51 @@ async function importFile() {
   input.multiple = true;
   input.onchange = async () => {
     const files = Array.from(input.files);
-    let imported = 0;
+    let imported = 0, skipped = 0;
+
+    const used = await computeProjectStorage(S.currentProject.pid);
+    const project = await db.getProject(S.currentProject.pid);
+    const limit = project?.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+    let budget = limit - used;
+
     for (const file of files) {
+      if (file.size > MAX_FILE_BYTES) {
+        toast(`${file.name} exceeds 5 MB limit`, 'error', 4000);
+        skipped++;
+        continue;
+      }
+      if (file.size > budget) {
+        toast(`Project storage full. Free up space or delete files.`, 'error', 5000);
+        skipped++;
+        continue;
+      }
+
       try {
-        const content = await file.text();
+        const kind = getFileKind(file.name);
+        let content;
+        if (kind === 'code' || kind === 'text') {
+          content = await file.text();
+        } else {
+          content = await new Promise((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(r.result);
+            r.onerror = rej;
+            r.readAsDataURL(file);
+          });
+        }
         await db.putFile(S.currentProject.pid, file.name, content);
+        budget -= file.size;
         imported++;
-      } catch (err) { console.error('Import failed:', file.name, err); }
+      } catch (err) {
+        console.error('Import failed:', file.name, err);
+        skipped++;
+      }
     }
+
     if (imported > 0) {
-      toast(`Imported ${imported} file${imported === 1 ? '' : 's'}`, 'success');
+      toast(`Imported ${imported} file${imported === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
       renderSidebar();
+      refreshInfoIfOpen();
     }
   };
   input.click();
@@ -1960,12 +2902,310 @@ async function importFile() {
 async function expandAllFolders() {
   if (!S.currentProject) return;
   const files = await db.listFiles(S.currentProject.pid);
+  const folders = await db.listFolders(S.currentProject.pid).catch(() => []);
   for (const f of files) {
     const parts = f.path.split('/');
     for (let i = 1; i < parts.length; i++) S.expandedFolders.add(parts.slice(0, i).join('/'));
   }
+  for (const f of folders) S.expandedFolders.add(f.path);
   renderSidebar();
 }
+
+// ═══════════════════════════════════════════════════════════
+// NOTES PANEL + EDITOR
+// ═══════════════════════════════════════════════════════════
+
+async function renderNotesPanel(container) {
+  if (!S.currentProject) {
+    container.appendChild(el('div', { class: 'empty-state', style: 'padding:20px 6px' },
+      el('div', { class: 'empty-state-title', style: 'font-size:12px' }, 'No project')
+    ));
+    return;
+  }
+
+  const data = await readNotes(S.currentProject.pid);
+  const sorted = [...data.notes].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return (b.updatedAt || 0) - (a.updatedAt || 0);
+  });
+
+  container.appendChild(el('div', { class: 'sidebar-section-title' },
+    el('span', {}, `Notes (${sorted.length})`),
+    el('div', { class: 'actions' },
+      el('button', {
+        class: 'act', type: 'button', title: 'New note',
+        onclick: () => openNoteEditor(null),
+      }, icon('plus', 12))
+    )
+  ));
+
+  if (sorted.length === 0) {
+    container.appendChild(el('div', { class: 'empty-state', style: 'padding:20px 6px' },
+      el('div', { class: 'empty-state-title', style: 'font-size:12px' }, 'No notes yet'),
+      el('div', { class: 'empty-state-desc', style: 'font-size:10px' }, 'Jot down ideas, snippets, or TODOs.'),
+      el('button', {
+        class: 'btn btn-primary btn-sm', style: 'margin-top:6px',
+        onclick: () => openNoteEditor(null),
+      }, icon('plus', 10), ' New note')
+    ));
+    return;
+  }
+
+  for (const note of sorted) {
+    const card = el('button', {
+      class: 'note-card',
+      type: 'button',
+      'data-note-id': note.id,
+      style: `--note-accent:${noteAccentColor(note.color)};`,
+      onclick: () => openNoteEditor(note.id),
+    },
+      el('div', { class: 'note-card-title' }, note.title || 'Untitled'),
+      el('div', { class: 'note-card-preview' }, (note.body || '').slice(0, 120) || 'Empty note'),
+      el('div', { class: 'note-card-meta' },
+        note.pinned ? el('span', { class: 'note-pin' }, icon('bookmark', 9)) : null,
+        el('span', {}, relativeTime(note.updatedAt || note.createdAt || 0))
+      )
+    );
+    container.appendChild(card);
+  }
+}
+
+function openNoteEditor(noteId) {
+  if (!S.currentProject) return;
+  showFullscreenNoteEditor(noteId);
+}
+
+async function showFullscreenNoteEditor(noteId) {
+  const data = await readNotes(S.currentProject.pid);
+  const existing = noteId ? data.notes.find(n => n.id === noteId) : null;
+  const note = existing || {
+    id: `n_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    title: '',
+    body: '',
+    color: 'amber',
+    pinned: false,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const overlay = el('div', { class: 'note-editor-overlay' });
+
+  const header = el('div', { class: 'note-editor-header' });
+  const backBtn = el('button', {
+    class: 'note-editor-back', type: 'button', 'aria-label': 'Back',
+    onclick: () => closeNoteEditor(),
+  }, icon('chevron-left', 16));
+  header.appendChild(backBtn);
+
+  const titleInput = el('input', {
+    class: 'note-editor-title', type: 'text', placeholder: 'Note title',
+    value: note.title || '', maxlength: '120',
+    oninput: () => { note.title = titleInput.value; markDirty(); },
+  });
+  header.appendChild(titleInput);
+
+  const actions = el('div', { class: 'note-editor-actions' });
+
+  const pinBtn = el('button', {
+    class: `note-editor-action${note.pinned ? ' active' : ''}`,
+    type: 'button',
+    'aria-label': note.pinned ? 'Unpin' : 'Pin',
+    title: note.pinned ? 'Unpin' : 'Pin',
+    onclick: () => {
+      note.pinned = !note.pinned;
+      pinBtn.classList.toggle('active', note.pinned);
+      markDirty();
+    },
+  }, icon('bookmark', 14));
+  actions.appendChild(pinBtn);
+
+  const colorBtn = el('button', {
+    class: 'note-editor-action', type: 'button', 'aria-label': 'Color', title: 'Color',
+    onclick: () => openColorPicker(note, colorBtn),
+  }, icon('droplet', 14));
+  colorBtn.style.color = noteAccentColor(note.color);
+  actions.appendChild(colorBtn);
+
+  if (existing) {
+    const delBtn = el('button', {
+      class: 'note-editor-action danger', type: 'button', 'aria-label': 'Delete', title: 'Delete note',
+      onclick: () => deleteNote(note.id),
+    }, icon('trash', 14));
+    actions.appendChild(delBtn);
+  }
+  header.appendChild(actions);
+  overlay.appendChild(header);
+
+  const bodyArea = el('textarea', {
+    class: 'note-editor-body',
+    placeholder: 'Start writing…',
+    oninput: () => { note.body = bodyArea.value; scheduleAutosave(); },
+  });
+  bodyArea.value = note.body || '';
+  overlay.appendChild(bodyArea);
+
+  const status = el('div', { class: 'note-editor-status' });
+  const wordCount = el('span', { class: 'note-editor-words' }, '0 words');
+  const saveState = el('span', { class: 'note-editor-save' }, 'Saved');
+  status.appendChild(wordCount);
+  status.appendChild(saveState);
+  overlay.appendChild(status);
+
+  function updateWordCount() {
+    const words = (bodyArea.value.trim().match(/\S+/g) || []).length;
+    wordCount.textContent = `${words} word${words === 1 ? '' : 's'}`;
+  }
+  updateWordCount();
+
+  let autosaveTimer = null;
+  let dirty = false;
+  let isDeleted = false;
+
+  function markDirty() {
+    if (!dirty) {
+      dirty = true;
+      saveState.textContent = 'Editing…';
+      saveState.classList.add('dirty');
+    }
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(doSave, 800);
+  }
+
+  function scheduleAutosave() {
+    updateWordCount();
+    markDirty();
+  }
+
+  async function doSave() {
+    if (!dirty || isDeleted) return;
+    try {
+      if (!note.title.trim()) {
+        const m = bodyArea.value.match(/^#\s+(.+)$/m);
+        if (m) {
+          note.title = m[1].trim().slice(0, 120);
+          titleInput.value = note.title;
+        }
+      }
+      note.updatedAt = Date.now();
+
+      const fresh = await readNotes(S.currentProject.pid);
+      const idx = fresh.notes.findIndex(n => n.id === note.id);
+      if (idx >= 0) fresh.notes[idx] = note;
+      else fresh.notes.push(note);
+
+      await writeNotes(S.currentProject.pid, fresh);
+      dirty = false;
+      saveState.textContent = 'Saved';
+      saveState.classList.remove('dirty');
+
+      if (S.sidebarPanel === 'notes') {
+        const bodyEl = $('sidebarBody');
+        if (bodyEl) {
+          bodyEl.innerHTML = '';
+          renderNotesPanel(bodyEl).catch(() => {});
+        }
+      }
+      refreshInfoIfOpen();
+    } catch (err) {
+      console.error('[Note] save failed:', err);
+      saveState.textContent = 'Save failed';
+      saveState.classList.add('error');
+      toast(err.message || "Couldn't save note", 'error', 4000);
+    }
+  }
+
+  function closeNoteEditor() {
+    if (dirty && !isDeleted) {
+      doSave().then(() => teardown());
+    } else {
+      teardown();
+    }
+  }
+
+  function teardown() {
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+    overlay.classList.remove('open');
+    setTimeout(() => overlay.remove(), 320);
+    if (cm.view) setTimeout(() => cm.view.focus(), 100);
+  }
+
+  async function deleteNote(id) {
+    const ok = await confirm({
+      title: 'Delete this note?',
+      message: "This can't be undone.",
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    isDeleted = true;
+    const fresh = await readNotes(S.currentProject.pid);
+    fresh.notes = fresh.notes.filter(n => n.id !== id);
+    await writeNotes(S.currentProject.pid, fresh);
+    toast('Note deleted', 'info');
+    teardown();
+    if (S.sidebarPanel === 'notes') {
+      const bodyEl = $('sidebarBody');
+      if (bodyEl) {
+        bodyEl.innerHTML = '';
+        renderNotesPanel(bodyEl).catch(() => {});
+      }
+    }
+    refreshInfoIfOpen();
+  }
+
+  function openColorPicker(note, anchor) {
+    const existing = document.querySelector('.note-color-popover');
+    if (existing) { existing.remove(); return; }
+
+    const pop = el('div', { class: 'note-color-popover' });
+    for (const [name, hex] of Object.entries(NOTE_COLORS)) {
+      pop.appendChild(el('button', {
+        class: `note-color-swatch${note.color === name ? ' active' : ''}`,
+        type: 'button', 'aria-label': name,
+        style: `background:${hex};`,
+        onclick: () => {
+          note.color = name;
+          anchor.style.color = hex;
+          markDirty();
+          pop.remove();
+        },
+      }));
+    }
+    const rect = anchor.getBoundingClientRect();
+    pop.style.top = (rect.bottom + 4) + 'px';
+    pop.style.right = (window.innerWidth - rect.right) + 'px';
+    document.body.appendChild(pop);
+    setTimeout(() => {
+      document.addEventListener('click', function handler(e) {
+        if (!pop.contains(e.target) && e.target !== anchor) {
+          pop.remove();
+          document.removeEventListener('click', handler);
+        }
+      });
+    }, 50);
+  }
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('open'));
+
+  setTimeout(() => {
+    if (!note.title) titleInput.focus();
+    else bodyArea.focus();
+  }, 100);
+
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeNoteEditor();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SEARCH PANEL
+// ═══════════════════════════════════════════════════════════
 
 function renderSearchPanel(container) {
   if (!S.currentProject) {
@@ -2009,7 +3249,6 @@ function renderSearchPanel(container) {
   container.appendChild(summary);
   container.appendChild(results);
 
-  // Initial hint state
   results.appendChild(el('div', { class: 'search-hint' },
     el('div', { class: 'search-hint-icon' }, icon('search', 18)),
     el('div', { class: 'search-hint-title' }, 'Search this project'),
@@ -2026,8 +3265,9 @@ async function doSearch(query, resultsEl, summaryEl) {
   const matchesByFile = [];
 
   for (const file of files) {
-    if (!isTextFile(file.path) || isPlaceholder(file.path)) continue;
-    const lines = file.content.split('\n');
+    if (isSystemFile(file.path)) continue;
+    if (!isTextFile(file.path)) continue;
+    const lines = String(file.content || '').split('\n');
     const fileMatches = [];
     for (let i = 0; i < lines.length; i++) {
       const idx = lines[i].toLowerCase().indexOf(lower);
@@ -2073,9 +3313,7 @@ async function doSearch(query, resultsEl, summaryEl) {
     const body = el('div', { class: 'search-file-body' });
 
     for (const m of matches) {
-      // Build highlighted line with context clipping
       const ctx = buildHighlightedLine(m.content, m.matchStart, m.matchLen, query);
-
       const row = el('div', { class: 'search-match' },
         el('span', { class: 'search-line-num' }, String(m.line)),
         ctx
@@ -2102,8 +3340,6 @@ async function doSearch(query, resultsEl, summaryEl) {
 
 function buildHighlightedLine(content, start, len, _query) {
   const wrap = el('span', { class: 'search-match-content' });
-
-  // Compute context window: up to 30 chars before, 60 chars after the match
   const ctxBefore = 30;
   const ctxAfter = 60;
   const winStart = Math.max(0, start - ctxBefore);
@@ -2115,15 +3351,16 @@ function buildHighlightedLine(content, start, len, _query) {
 
   if (winStart > 0) wrap.appendChild(el('span', { class: 'search-match-ellipsis' }, '…'));
   if (pre) wrap.appendChild(el('span', { class: 'search-match-pre' }, pre));
-
-  const mark = el('mark', { class: 'search-match-hit' }, hit);
-  wrap.appendChild(mark);
-
+  wrap.appendChild(el('mark', { class: 'search-match-hit' }, hit));
   if (post) wrap.appendChild(el('span', { class: 'search-match-post' }, post));
   if (winEnd < content.length) wrap.appendChild(el('span', { class: 'search-match-ellipsis' }, '…'));
 
   return wrap;
 }
+
+// ═══════════════════════════════════════════════════════════
+// VERSIONS
+// ═══════════════════════════════════════════════════════════
 
 async function renderVersionsPanel(container) {
   if (!S.currentProject) {
@@ -2196,7 +3433,7 @@ async function restoreVersion(vid) {
   if (!version) return;
   const files = await db.listFiles(S.currentProject.pid);
   const snapshot = {};
-  for (const f of files) { if (!isPlaceholder(f.path)) snapshot[f.path] = f.content; }
+  for (const f of files) { if (!isSystemFile(f.path)) snapshot[f.path] = f.content; }
   const autoVid = `v_auto_${Date.now()}`;
   try {
     await db.putVersion({
@@ -2233,6 +3470,10 @@ async function deleteVersionConfirm(vid) {
   toast('Version deleted', 'info');
   renderSidebar();
 }
+
+// ═══════════════════════════════════════════════════════════
+// CHANGES / OUTLINE
+// ═══════════════════════════════════════════════════════════
 
 async function renderChangesPanel(container) {
   if (!S.currentProject) {
@@ -2344,21 +3585,9 @@ function extractOutline(content, lang) {
   return items;
 }
 
-async function renderNotesPanel(container) {
-  if (!S.currentProject) {
-    container.innerHTML = '<div class="empty-state" style="padding:20px 6px"><div class="empty-state-title" style="font-size:12px;">No project</div></div>';
-    return;
-  }
-  container.appendChild(el('div', { class: 'sidebar-section-title' }, el('span', {}, 'Notes')));
-  const meta = await db.getProjectMeta(S.currentProject.pid);
-  const area = el('textarea', { class: 'notepad', placeholder: 'Project notes, ideas, snippets…' });
-  area.value = meta.notepad || '';
-  area.addEventListener('blur', async () => {
-    await db.setProjectMeta(S.currentProject.pid, { notepad: area.value });
-    toast('Notes saved', 'success', 1200);
-  });
-  container.appendChild(area);
-}
+// ═══════════════════════════════════════════════════════════
+// COMMIT
+// ═══════════════════════════════════════════════════════════
 
 async function openCommitDialog() {
   if (!S.currentProject) { toast('No project', 'warning'); return; }
@@ -2371,7 +3600,7 @@ async function openCommitDialog() {
   const changes = [];
   let totalAdd = 0, totalRem = 0;
   for (const f of files) {
-    if (isPlaceholder(f.path)) continue;
+    if (isSystemFile(f.path)) continue;
     const before = lastVersion?.files?.[f.path] || '';
     const after = f.content || '';
     if (before === after) continue;
@@ -2461,7 +3690,7 @@ function generateCommitMessage(changes, totalAdd, totalRem) {
 async function createVersion(message) {
   const files = await db.listFiles(S.currentProject.pid);
   const snapshot = {};
-  for (const f of files) { if (!isPlaceholder(f.path)) snapshot[f.path] = f.content; }
+  for (const f of files) { if (!isSystemFile(f.path)) snapshot[f.path] = f.content; }
   const vid = `v_${Date.now()}`;
   await db.putVersion({
     vid, pid: S.currentProject.pid, message, files: snapshot, createdAt: Date.now(),
@@ -2470,68 +3699,18 @@ async function createVersion(message) {
     db.enqueueSync({ action: 'version:create', pid: S.currentProject.pid, vid, message }).catch(() => {});
   }
   toast(S.isGuest ? 'Committed locally' : 'Version committed', 'success');
+  haptic(10);
   renderSidebar();
+  refreshInfoIfOpen();
 }
 
-async function openProjectsDialog() {
-  const projects = await db.listProjects();
-  const body = el('div', {},
-    el('div', { class: 'sidebar-section-title', style: 'margin-top:0' },
-      el('span', {}, `Projects (${projects.length})`),
-      el('button', {
-        class: 'btn btn-primary btn-sm', type: 'button', style: 'padding:3px 8px;',
-        onclick: () => { closeSheet(); setTimeout(createNewProject, 250); },
-      }, icon('plus', 10), ' New')
-    )
-  );
-  if (projects.length === 0) {
-    body.appendChild(el('div', { class: 'empty-state' },
-      el('div', { class: 'empty-state-icon' }, icon('folder', 20)),
-      el('div', { class: 'empty-state-title' }, 'No projects yet'),
-      el('div', { class: 'empty-state-desc' }, 'Create your first project.')
-    ));
-  } else {
-    for (const p of projects) {
-      body.appendChild(el('div', { class: 'list-row', style: 'cursor:pointer;padding:8px;',
-        onclick: async () => {
-          closeSheet();
-          await workspace.openProject(p);
-          setPidInUrl(p.pid);
-          renderEmptyRecent();
-        } },
-        el('span', { class: 'icon' }, icon('folder', 12)),
-        el('div', { style: 'flex:1;min-width:0;' },
-          el('div', { style: 'font-weight:600;font-size:12px;' }, p.name),
-          el('div', { style: 'font-size:9.5px;color:var(--theme-text-tertiary);' }, relativeTime(p.updatedAt))
-        ),
-        el('button', {
-          class: 'btn btn-ghost btn-sm btn-icon', type: 'button', style: 'color:var(--theme-danger)',
-          onclick: async (e) => {
-            e.stopPropagation();
-            const ok = await confirm({ title: `Delete ${p.name}?`, message: 'All files and versions will be deleted.', confirmLabel: 'Delete project', danger: true });
-            if (!ok) return;
-            await db.deleteProject(p.pid);
-            if (S.currentProject?.pid === p.pid) {
-              S.currentProject = null;
-              S.activeFile = null;
-              showEmpty('No project open');
-              setPidInUrl(null);
-              try { localStorage.removeItem(STORAGE.lastProject); } catch {}
-            }
-            toast('Project deleted', 'info');
-            closeSheet();
-            setTimeout(openProjectsDialog, 250);
-          },
-        }, icon('trash', 10))
-      ));
-    }
-  }
-  openSheet({ title: 'Projects', body });
-}
+// ═══════════════════════════════════════════════════════════
+// CREATE PROJECT
+// ═══════════════════════════════════════════════════════════
 
 async function createNewProject() {
   if (!S.isGuest && !S.online) { toast('Requires internet to create cloud project', 'warning'); return; }
-  const name = prompt('Project name:');
+  const name = await promptSheet('New project', 'Project name');
   if (!name) return;
   const cleaned = name.trim();
   if (!cleaned) return;
@@ -2539,14 +3718,11 @@ async function createNewProject() {
   let pid;
   let slug;
   let createdAt = Date.now();
-  let serverProject = null;
 
   if (S.isGuest) {
-    // Guest path — local-only, no server call
     pid = `local_${Date.now()}`;
     slug = cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
   } else {
-    // Signed in — create on the server first
     const res = await apiFetch(API_HOST + '?action=projects/create', {
       method: 'POST',
       body: JSON.stringify({ name: cleaned, description: '' }),
@@ -2555,24 +3731,21 @@ async function createNewProject() {
       toast(res.data?.error || 'Could not create project', 'error');
       return;
     }
-    serverProject = res.data.project || null;
+    const serverProject = res.data.project || null;
     pid = res.data.pid;
     slug = serverProject?.slug
-  || cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
-  || 'project';
+      || cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+      || 'project';
     createdAt = serverProject?.createdAt
       ? (typeof serverProject.createdAt === 'number' ? serverProject.createdAt : new Date(serverProject.createdAt).getTime())
       : Date.now();
   }
 
   const project = {
-    pid,
-    name: cleaned,
-    slug,
-    description: '',
+    pid, name: cleaned, slug, description: '',
     iconUrl: null,
-    createdAt,
-    updatedAt: Date.now(),
+    createdAt, updatedAt: Date.now(),
+    storageLimit: DEFAULT_PROJECT_STORAGE_LIMIT,
     myRole: 'owner',
     _server: !S.isGuest,
   };
@@ -2597,26 +3770,19 @@ async function createNewProject() {
     console.error('[CreateProject] putFile failed:', err);
   }
 
-  // Push seed files to server (signed-in path only)
   if (!S.isGuest && S.online) {
     try {
       const sync = await apiFetch(API_HOST + '?action=project/sync-back', {
         method: 'POST',
         body: JSON.stringify({
           pid,
-          files: {
-            'index.html': indexHtml,
-            'style.css': styleCss,
-            'app.js': appJs,
-          },
+          files: { 'index.html': indexHtml, 'style.css': styleCss, 'app.js': appJs },
         }),
       });
       if (!sync.ok || !sync.data?.success) {
-        console.warn('[CreateProject] sync-back responded with error:', sync.status, sync.data);
         toast('Project created, but files not synced to server', 'warning', 4000);
       }
     } catch (err) {
-      console.warn('[CreateProject] sync-back network error:', err);
       toast('Project created, but files not synced to server', 'warning', 4000);
     }
   }
@@ -2634,7 +3800,7 @@ async function createNewProject() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// Symbols, preview, setup, guest banner (unchanged behavior)
+// SYMBOLS / PREVIEW / SETUP / HOST
 // ═══════════════════════════════════════════════════════════
 
 const SYMBOLS = ['{', '}', '(', ')', '[', ']', '<', '>', '=', ';', ':', '.', ',', '"', "'", '`', '&', '|', '$', '#', '/', '\\', '!', '?', '%', '^', '~', '@', '+', '-', '*'];
@@ -2645,7 +3811,9 @@ function openSymbolsSheet() {
   grid.innerHTML = '';
   for (const sym of SYMBOLS) {
     grid.appendChild(el('button', {
-      class: 'symbol-btn', type: 'button', onclick: () => cm.insertText(sym),
+      class: 'symbol-btn', type: 'button',
+      onmousedown: (e) => e.preventDefault(),
+      onclick: () => cm.insertText(sym),
     }, sym));
   }
   $('symbolsSheet').classList.add('open');
@@ -2657,6 +3825,7 @@ function closeSymbolsSheet() {
   $('symbolsSheet').classList.remove('open');
   S.symbolsOpen = false;
   shiftEditorForSymbols(false);
+  if (cm.view) setTimeout(() => cm.view.focus(), 50);
 }
 
 function shiftEditorForSymbols(open) {
@@ -2673,7 +3842,14 @@ function shiftEditorForSymbols(open) {
 function setCtrlLatch(on) {
   S.ctrlLatch = on;
   const btn = $('tbCtrl');
-  if (btn) btn.classList.toggle('active', on);
+  if (btn) {
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  if (on) {
+    haptic(6);
+    if (cm.view) cm.view.focus();
+  }
 }
 
 async function launchPreview() {
@@ -2684,59 +3860,70 @@ async function launchPreview() {
 }
 
 async function buildPreviewHtml() {
+  if (!S.currentProject) return null;
   const files = await db.listFiles(S.currentProject.pid);
-  const htmlFile = files.find(f => f.path.endsWith('.html') || f.path.endsWith('.htm'));
+  const htmlFiles = files.filter(f =>
+    /\.html?$/i.test(f.path) && !isSystemFile(f.path)
+  );
+
+  const htmlFile =
+    htmlFiles.find(f => f.path === 'index.html') ||
+    htmlFiles.find(f => /(^|\/)index\.html?$/i.test(f.path)) ||
+    htmlFiles[0];
+
   if (!htmlFile) return null;
 
-  const fileMap = {};
-  for (const f of files) fileMap[f.path] = f.content;
+  const fileMapLower = {};
+  for (const f of files) {
+    if (f.path === NOTES_PATH) continue;
+    fileMapLower[f.path.toLowerCase()] = f.content;
+  }
 
   let html = htmlFile.content;
 
   html = html.replace(
     /<link[^>]*href=["']([^"']+\.css)["'][^>]*>/gi,
     (match, href) => {
-      const path = href.replace(/^\.\//, '');
-      if (fileMap[path]) {
-        return TAG_STYLE_OPEN + '\n' + fileMap[path] + '\n' + TAG_STYLE_CLOSE;
+      const key = href.replace(/^\.\//, '').toLowerCase();
+      if (fileMapLower[key] != null) {
+        return TAG_STYLE_OPEN + '\n' + fileMapLower[key] + '\n' + TAG_STYLE_CLOSE;
       }
       return match;
     }
   );
 
-  const scriptRe = new RegExp(
-    TAG_SCRIPT_OPEN.replace('>', '[^>]*src=["\']([^"\']+\\.js)["\'][^>]*>'),
-    'gi'
-  );
-
-  html = html.replace(scriptRe, (match, src) => {
-    const path = src.replace(/^\.\//, '');
-    if (fileMap[path]) {
-      return TAG_SCRIPT_OPEN + '\n' + fileMap[path] + '\n' + TAG_SCRIPT_CLOSE;
+  html = html.replace(/<script([^>]*)src=["']([^"']+\.js)["'][^>]*>\s*<\/script>/gi, (match, attrs, src) => {
+    const key = src.replace(/^\.\//, '').toLowerCase();
+    if (fileMapLower[key] != null) {
+      return TAG_SCRIPT_OPEN + '\n' + fileMapLower[key] + '\n' + TAG_SCRIPT_CLOSE;
     }
     return match;
   });
 
-  const consoleBridge =
+  const bridge =
     TAG_SCRIPT_OPEN + '\n' +
-    '(function(){\n' +
-    '  var orig = { log: console.log, warn: console.warn, error: console.error };\n' +
-    '  [\'log\',\'warn\',\'error\'].forEach(function(level){\n' +
-    '    console[level] = function(){\n' +
-    '      try { window.parent.postMessage({ __folio: \'console\', level: level, args: Array.prototype.slice.call(arguments).map(String) }, \'*\'); } catch(e) {}\n' +
-    '      return orig[level].apply(console, arguments);\n' +
-    '    };\n' +
-    '  });\n' +
-    '})();\n' +
+    '(function(){var o={log:console.log,warn:console.warn,error:console.error};' +
+    '["log","warn","error"].forEach(function(l){console[l]=function(){' +
+    'try{window.parent.postMessage({__folio:"console",level:l,args:Array.prototype.slice.call(arguments).map(String)},"*");}catch(e){}' +
+    'return o[l].apply(console,arguments);};});})();\n' +
     TAG_SCRIPT_CLOSE;
 
-  html = html.replace(/<head[^>]*>/i, (match) => match + consoleBridge);
+  html = html.replace(/<head[^>]*>/i, (m) => m + bridge);
+
+  // Inject meta from projectMeta (in-memory only)
+  try {
+    const meta = (await db.getProjectMeta(S.currentProject.pid)).meta || {};
+    if (Object.keys(meta).length > 0) {
+      html = injectMetaIntoHtml(html, meta);
+    }
+  } catch {}
+
   return html;
 }
 
 async function openFullscreenPreview() {
   const html = await buildPreviewHtml();
-  if (!html) { toast('No HTML file to preview', 'warning'); return; }
+  if (!html) { toast('No HTML file found. Create index.html or import one.', 'warning', 4000); return; }
   $('previewFullFrame').srcdoc = html;
   $('previewConsole').innerHTML = '';
   $('previewFullscreen').classList.add('visible');
@@ -2744,14 +3931,14 @@ async function openFullscreenPreview() {
 
 async function openMiniPreview() {
   const html = await buildPreviewHtml();
-  if (!html) { toast('No HTML file to preview', 'warning'); return; }
+  if (!html) { toast('No HTML file found. Create index.html or import one.', 'warning', 4000); return; }
   $('previewMiniFrame').srcdoc = html;
   $('previewMini').classList.add('visible');
 }
 
 async function openTabPreview() {
   const html = await buildPreviewHtml();
-  if (!html) { toast('No HTML file to preview', 'warning'); return; }
+  if (!html) { toast('No HTML file found. Create index.html or import one.', 'warning', 4000); return; }
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
@@ -2781,21 +3968,17 @@ function openSetupDialog() {
       onclick: () => {
         if (requiresAuth) { toast('Sign in to access this page', 'info'); closeSheet(); return; }
         if (page.action === 'open-notifications') {
-  closeSheet();
-  setTimeout(() => {
-    try {
-      if (window.FOLIO?.notifications?.open) {
-        window.FOLIO.notifications.open();
-      } else {
-        window.location.href = '/notifications';
-      }
-    } catch (e) {
-      console.warn('[Folio] could not open notifications', e);
-      window.location.href = '/notifications';
-    }
-  }, 250);
-  return;
-}
+          closeSheet();
+          setTimeout(() => {
+            try {
+              if (window.FOLIO?.notifications?.open) window.FOLIO.notifications.open();
+              else window.location.href = '/notifications';
+            } catch (e) {
+              window.location.href = '/notifications';
+            }
+          }, 250);
+          return;
+        }
         closeSheet();
         window.location.href = page.href;
       },
@@ -2817,6 +4000,9 @@ function applyGuestState() {
   const navProfile = $('navProfile');
   const railProfile = $('railProfile');
 
+  const SVG_USER = '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  const SVG_LOCK = '<svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+
   if (S.isGuest) {
     guestBadge?.classList.add('visible');
     const dismissed = (() => { try { return localStorage.getItem(STORAGE.guestBannerDismissed) === 'true'; } catch { return false; } })();
@@ -2828,7 +4014,7 @@ function applyGuestState() {
     if (railProfile) {
       railProfile.href = '/register?next=%2Findex.html';
       railProfile.classList.add('guest-signin');
-      railProfile.innerHTML = iconHTML('lock', 12) + '<span>Sign in</span>';
+      railProfile.innerHTML = SVG_LOCK + '<span>Sign in</span>';
     }
   } else {
     guestBadge?.classList.remove('visible');
@@ -2840,7 +4026,7 @@ function applyGuestState() {
     if (railProfile) {
       railProfile.href = '/profile';
       railProfile.classList.remove('guest-signin');
-      railProfile.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+      railProfile.innerHTML = SVG_USER;
     }
   }
 }
@@ -2850,8 +4036,7 @@ async function hostProject() {
     const ok = await confirm({
       title: 'Sign in to deploy',
       message: 'Hosting requires a Folio account. Your local project is safe.',
-      confirmLabel: 'Sign in',
-      danger: false,
+      confirmLabel: 'Sign in', danger: false,
     });
     if (ok) window.location.href = '/register?next=' + encodeURIComponent('/');
     return;
@@ -2862,15 +4047,26 @@ async function hostProject() {
   const ok = await confirm({
     title: 'Deploy project?',
     message: 'Your project will be built and deployed to a live URL.',
-    confirmLabel: 'Deploy',
-    danger: false,
+    confirmLabel: 'Deploy', danger: false,
   });
   if (!ok) return;
 
   toast('Deploying…', 'info', 2000);
   const files = await db.listFiles(S.currentProject.pid);
   const fileMap = {};
-  for (const f of files) fileMap[f.path] = f.content;
+  for (const f of files) {
+    if (f.path === NOTES_PATH) continue;
+    if (isPlaceholder(f.path)) continue;
+    fileMap[f.path] = f.content;
+  }
+
+  // Apply meta tags to index.html in-memory before upload
+  try {
+    const meta = (await db.getProjectMeta(S.currentProject.pid)).meta || {};
+    if (Object.keys(meta).length > 0 && fileMap['index.html']) {
+      fileMap['index.html'] = injectMetaIntoHtml(fileMap['index.html'], meta);
+    }
+  } catch {}
 
   const res = await apiFetch(API_HOST + '?action=deploy', {
     method: 'POST',
@@ -2882,15 +4078,15 @@ async function hostProject() {
     return;
   }
   toast('Deployed: ' + (res.data.url || 'success'), 'success', 4000);
-}
 
-async function drainSyncQueue() {
-  if (S.isGuest || !S.online) return;
-  console.log('[Sync] Queue drain skipped (no endpoints wired yet)');
+  // Refresh deployment cache
+  setTimeout(() => {
+    loadDeploymentHistoryFor(S.currentProject.pid).then(() => refreshInfoIfOpen());
+  }, 2000);
 }
 
 // ═══════════════════════════════════════════════════════════
-// Wire UI
+// KEYBOARD / UI WIRING
 // ═══════════════════════════════════════════════════════════
 
 function wireUI() {
@@ -2905,7 +4101,7 @@ function wireUI() {
   window.addEventListener('popstate', () => {
     const urlPid = getPidFromUrl();
     if (urlPid && urlPid !== S.currentProject?.pid) {
-      loadProjectFromUrl(urlPid);
+      openProjectById(urlPid, { showLoader: true });
     }
   });
 
@@ -2957,7 +4153,7 @@ function wireUI() {
   $('tbSave')?.addEventListener('click', () => workspace.saveActiveFile());
   $('tbUndo')?.addEventListener('click', () => cm.view ? cm.undo() : toast('Open a file first', 'info'));
   $('tbRedo')?.addEventListener('click', () => cm.view ? cm.redo() : toast('Open a file first', 'info'));
-  $('tbSearch')?.addEventListener('click', () => cm.view ? cm.openSearch() : toast('Open a file first', 'info'));
+  $('tbSearch')?.addEventListener('click', () => cm.view ? cm.openSearch() : openSidebar('search'));
   $('tbFormat')?.addEventListener('click', () => cm.formatCurrent());
   $('tbMore')?.addEventListener('click', () => { $('toolbarRow2').classList.toggle('visible'); });
 
@@ -2996,7 +4192,14 @@ function wireUI() {
     if (!cm.view) { toast('Open a file first', 'info'); return; }
     cm.selectAll();
   });
-  $('tbSymbols')?.addEventListener('click', openSymbolsSheet);
+  $('tbSymbols')?.addEventListener('click', () => {
+    if (!cm.view && !S.activeFile) { toast('Open a file to insert symbols', 'info'); return; }
+    if (!cm.view && S.activeFile && isImageFile(S.activeFile)) {
+      toast('Cannot insert symbols into an image', 'info');
+      return;
+    }
+    openSymbolsSheet();
+  });
   $('tbCommit')?.addEventListener('click', openCommitDialog);
   $('tbPreview')?.addEventListener('click', launchPreview);
   $('tbHost')?.addEventListener('click', hostProject);
@@ -3017,8 +4220,10 @@ function wireUI() {
   });
 
   document.addEventListener('keydown', (e) => {
-    if (S.ctrlLatch && !(e.ctrlKey || e.metaKey)) {
-      const key = e.key.toLowerCase();
+    const mod = e.metaKey || e.ctrlKey;
+    const key = (e.key || '').toLowerCase();
+
+    if (S.ctrlLatch && !mod && !e.altKey) {
       let handled = true;
       if (key === 'a' && cm.view) cm.selectAll();
       else if (key === 's') { e.preventDefault(); workspace.saveActiveFile(); }
@@ -3027,16 +4232,22 @@ function wireUI() {
       else if (key === 'f' && cm.view) { e.preventDefault(); cm.openSearch(); }
       else if (key === 'c' && cm.view) {
         const sel = cm.getSelection();
-        if (sel) navigator.clipboard.writeText(sel);
-      }
-      else if (key === 'v' && cm.view) {
-        navigator.clipboard.readText().then(t => { if (t) { cm.replaceSelection(t); workspace.markDirty(); } });
-      }
-      else if (key === 'x' && cm.view) {
+        if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+      } else if (key === 'v' && cm.view) {
+        navigator.clipboard.readText().then(t => {
+          if (t) { cm.replaceSelection(t); workspace.markDirty(); }
+        }).catch(() => {});
+      } else if (key === 'x' && cm.view) {
         const sel = cm.getSelection();
-        if (sel) { navigator.clipboard.writeText(sel); cm.replaceSelection(''); workspace.markDirty(); }
-      }
-      else handled = false;
+        if (sel) {
+          navigator.clipboard.writeText(sel).catch(() => {});
+          cm.replaceSelection('');
+          workspace.markDirty();
+        }
+      } else if (key === 'escape') {
+        handled = true;
+      } else handled = false;
+
       if (handled) {
         e.preventDefault();
         setCtrlLatch(false);
@@ -3044,14 +4255,12 @@ function wireUI() {
       }
     }
 
-    const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key === 's') {
+    if (mod && key === 's') {
       e.preventDefault();
-      if (e.shiftKey) workspace.saveAll();
-      else workspace.saveActiveFile();
+      e.shiftKey ? workspace.saveAll() : workspace.saveActiveFile();
       return;
     }
-    if (mod && e.key === 'f') {
+    if (mod && key === 'f') {
       e.preventDefault();
       cm.view ? cm.openSearch() : openSidebar('search');
       return;
@@ -3061,7 +4270,7 @@ function wireUI() {
       openSidebar('search');
       return;
     }
-    if (mod && e.key === 'b') {
+    if (mod && key === 'b') {
       e.preventDefault();
       S.sidebarOpen ? closeSidebar() : openSidebar();
       return;
@@ -3082,13 +4291,25 @@ function wireUI() {
       e.returnValue = '';
       return '';
     }
+    const notesOverlay = document.querySelector('.note-editor-overlay.open');
+    if (notesOverlay) {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    }
+  });
+
+  window.addEventListener('pagehide', () => {
+    if (S.activeFile && S.dirtyFiles.has(S.activeFile)) {
+      workspace.saveActiveFile({ silent: true });
+    }
   });
 
   const updateOnline = () => {
     S.online = navigator.onLine;
     $('offlineBanner')?.classList.toggle('visible', !S.online);
   };
-  window.addEventListener('online', () => { updateOnline(); drainSyncQueue(); });
+  window.addEventListener('online', updateOnline);
   window.addEventListener('offline', updateOnline);
   updateOnline();
 
@@ -3104,18 +4325,20 @@ function wireUI() {
   setupPreviewConsole();
 }
 
+// ═══════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════
+
 async function boot() {
-  console.log('[Boot] Starting');
   wireThemeSync();
-wireThemeMediaQuery();
+  wireThemeMediaQuery();
   readSession();
   applyGuestState();
 
-  
   loadPrefs();
   try { S.previewMode = localStorage.getItem(STORAGE.previewMode) || 'fullscreen'; } catch {}
 
-  try { await openDB(); console.log('[Boot] DB opened'); }
+  try { await openDB(); }
   catch (err) {
     console.error('[Boot] DB failed:', err);
     toast('Storage initialization failed', 'error');
@@ -3124,14 +4347,12 @@ wireThemeMediaQuery();
   try { await navigator.storage?.persist?.(); } catch {}
 
   wireUI();
-  console.log('[Boot] Wired');
 
   if (window.innerWidth >= 1024) openSidebar('files');
 
   try { S.projects = await db.listProjects(); }
   catch (err) { console.error('[Boot] projects load:', err); }
 
-  // Deep-link: prefer ?pid=, then last-used, then empty state
   try {
     const urlPid = getPidFromUrl();
     let project = null;
@@ -3161,8 +4382,6 @@ wireThemeMediaQuery();
     }).catch(() => {});
   }
 
-  if (!S.isGuest && S.online) drainSyncQueue();
-
   setTimeout(() => {
     try {
       const raw = localStorage.getItem(STORAGE.pendingInsert);
@@ -3178,8 +4397,6 @@ wireThemeMediaQuery();
       }
     } catch {}
   }, 800);
-
-  console.log('[Boot] Complete');
 }
 
 boot().catch(err => {
