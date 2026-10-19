@@ -20,33 +20,26 @@
 <script>
 (function () {
   try {
-    // 1. Read the raw preference from storage ("dark", "light", "auto", or "system")
     var pref = localStorage.getItem("folio.theme") || "dark";
-
-    // 2. If it's "auto" or "system", resolve it to a concrete value using the OS setting
+    if (pref === 'system') pref = 'auto';
     var resolved = pref;
-    if (pref === "auto" || pref === "system") {
+    if (pref === "auto") {
       resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
         ? "light" : "dark";
     }
-
-    // 3. Apply the RESOLVED value (not the raw preference)
     if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
     else document.documentElement.removeAttribute("data-theme");
 
-    // 4. Also apply reduced-motion (Settings slider writes this)
     if (localStorage.getItem("folio.reducedMotion") === "true") {
       document.documentElement.setAttribute("data-reduced-motion", "true");
     }
 
-    // 5. Also apply page scale (Settings text-size slider writes this)
     var scale = Number(localStorage.getItem("folio.pageScale") || 1);
     if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
     if (scale > 1.35) scale = 1.35;
     document.documentElement.style.setProperty("--page-scale", String(scale));
 
-    // 6. Update the mobile browser chrome color bar
-    var meta = document.getElementById("themeColorMeta") || document.getElementById("metaThemeColor");
+    var meta = document.getElementById("themeColorMeta");
     if (meta) meta.setAttribute("content", resolved === "light" ? "#f7f8fa" : "#0a0c10");
   } catch (e) {}
 })();
@@ -124,9 +117,6 @@
   --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   BASE
-   ═══════════════════════════════════════════════════════════ */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {
@@ -165,9 +155,6 @@ svg { display: block; }
   border-radius: 6px;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SHELL
-   ═══════════════════════════════════════════════════════════ */
 .app { display: flex; width: 100%; min-height: 100vh; min-height: 100dvh; }
 
 .rail {
@@ -216,9 +203,6 @@ svg { display: block; }
 }
 .rail-divider { width: 24px; height: 1px; background: var(--theme-divider); margin: 6px 0; }
 
-/* ═══════════════════════════════════════════════════════════
-   MAIN
-   ═══════════════════════════════════════════════════════════ */
 .main {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column;
@@ -234,9 +218,6 @@ svg { display: block; }
 }
 @media (min-width: 1024px) { .main-inner { padding: 24px 24px 0; } }
 
-/* ═══════════════════════════════════════════════════════════
-   HEADER
-   ═══════════════════════════════════════════════════════════ */
 .page-header {
   display: flex; align-items: center; gap: 10px;
   flex-wrap: wrap;
@@ -283,9 +264,6 @@ svg { display: block; }
 .offline-banner.visible { display: flex; }
 .offline-banner svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
 
-/* ═══════════════════════════════════════════════════════════
-   TABS
-   ═══════════════════════════════════════════════════════════ */
 .tabs-bar {
   display: flex; gap: 2px;
   overflow-x: auto; scrollbar-width: none;
@@ -309,9 +287,6 @@ svg { display: block; }
   height: 2px; background: var(--theme-primary); border-radius: 2px 2px 0 0;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   PANEL
-   ═══════════════════════════════════════════════════════════ */
 .panel { display: none; flex-direction: column; gap: 16px; animation: panelIn 0.28s var(--ease); }
 .panel.active { display: flex; }
 @keyframes panelIn {
@@ -319,9 +294,6 @@ svg { display: block; }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   STATS GRID
-   ═══════════════════════════════════════════════════════════ */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -355,9 +327,6 @@ svg { display: block; }
   font-weight: 500;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   CARDS
-   ═══════════════════════════════════════════════════════════ */
 .card {
   background: var(--theme-surface-card);
   backdrop-filter: blur(20px);
@@ -380,9 +349,6 @@ svg { display: block; }
 .card-body { padding: 16px; }
 .card-body.tight { padding: 12px 16px; }
 
-/* ═══════════════════════════════════════════════════════════
-   BAR CHART
-   ═══════════════════════════════════════════════════════════ */
 .bar-chart {
   display: flex; align-items: flex-end;
   gap: 4px; height: 100px;
@@ -422,7 +388,6 @@ svg { display: block; }
   font-family: var(--font-mono);
 }
 
-/* Horizontal bars for top projects */
 .hbar-chart {
   display: flex; flex-direction: column; gap: 8px;
 }
@@ -478,9 +443,6 @@ svg { display: block; }
   flex-shrink: 0;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   TABLES / ROWS
-   ═══════════════════════════════════════════════════════════ */
 .row-list { display: flex; flex-direction: column; }
 
 .row-item {
@@ -537,7 +499,6 @@ svg { display: block; }
 .row-badge.live { background: var(--theme-success-soft); color: var(--theme-success); }
 .row-badge.offline { background: var(--theme-divider); color: var(--theme-text-tertiary); }
 
-/* Projects table (desktop) */
 .projects-table { width: 100%; }
 .projects-table .row-item {
   display: grid;
@@ -563,7 +524,6 @@ svg { display: block; }
 .project-cell .row-title { font-size: 12.5px; }
 .project-cell .row-sub { font-size: 10px; }
 
-/* Mobile project card */
 .project-card-mobile {
   background: var(--theme-glass-bg);
   border: 1px solid var(--theme-card-border);
@@ -593,9 +553,6 @@ svg { display: block; }
   font-weight: 700; color: var(--theme-text);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   FILTER PILLS
-   ═══════════════════════════════════════════════════════════ */
 .pills-row {
   display: flex; gap: 6px; flex-wrap: wrap;
   padding: 4px 0;
@@ -642,16 +599,16 @@ svg { display: block; }
 .search-input:focus { border-color: var(--theme-primary); }
 .search-input::placeholder { color: var(--theme-text-tertiary); }
 
-/* ═══════════════════════════════════════════════════════════
-   ACTIVITY FEED
-   ═══════════════════════════════════════════════════════════ */
 .activity-row {
   display: flex; gap: 10px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--theme-divider);
   align-items: flex-start;
+  transition: background 0.15s var(--ease);
 }
 .activity-row:last-child { border-bottom: none; }
+.activity-row[role="button"] { cursor: pointer; }
+.activity-row[role="button"]:hover { background: var(--theme-glass-bg); }
 
 .activity-icon {
   width: 26px; height: 26px;
@@ -680,9 +637,6 @@ svg { display: block; }
   margin-top: 2px;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   LOGS
-   ═══════════════════════════════════════════════════════════ */
 .log-row {
   display: flex; gap: 10px;
   padding: 10px 16px;
@@ -727,9 +681,6 @@ svg { display: block; }
   white-space: pre;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   BUTTONS
-   ═══════════════════════════════════════════════════════════ */
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
   gap: 7px; padding: 10px 16px; border-radius: 10px;
@@ -756,9 +707,6 @@ svg { display: block; }
 .btn-sm svg { width: 12px; height: 12px; }
 .btn-block { width: 100%; }
 
-/* ═══════════════════════════════════════════════════════════
-   SKELETON
-   ═══════════════════════════════════════════════════════════ */
 .skeleton {
   background: linear-gradient(90deg, var(--theme-divider) 0%, var(--theme-glass-border) 50%, var(--theme-divider) 100%);
   background-size: 200% 100%;
@@ -770,9 +718,6 @@ svg { display: block; }
   to { background-position: -200% 0; }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   EMPTY STATE
-   ═══════════════════════════════════════════════════════════ */
 .empty-state {
   padding: 48px 20px; text-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 10px;
@@ -789,9 +734,6 @@ svg { display: block; }
 .empty-title { font-size: 14px; font-weight: 700; color: var(--theme-text); }
 .empty-desc { font-size: 12px; color: var(--theme-text-tertiary); line-height: 1.45; max-width: 320px; margin-bottom: 4px; }
 
-/* ═══════════════════════════════════════════════════════════
-   TOAST
-   ═══════════════════════════════════════════════════════════ */
 .toast-container {
   position: fixed;
   bottom: calc(16px + var(--safe-bottom));
@@ -824,9 +766,6 @@ svg { display: block; }
 .toast.info svg { stroke: var(--theme-primary); }
 .toast.warning svg { stroke: var(--theme-warning); }
 
-/* ═══════════════════════════════════════════════════════════
-   LOADING
-   ═══════════════════════════════════════════════════════════ */
 .loading-overlay {
   position: fixed; inset: 0; z-index: 900;
   background: var(--theme-overlay);
@@ -846,9 +785,6 @@ svg { display: block; }
 .loading-title { font-size: 15px; font-weight: 700; color: var(--theme-text); }
 .loading-desc { font-size: 12.5px; color: var(--theme-text-secondary); text-align: center; max-width: 320px; line-height: 1.5; }
 
-/* ═══════════════════════════════════════════════════════════
-   BOTTOM NAV
-   ═══════════════════════════════════════════════════════════ */
 .bottom-nav {
   position: fixed;
   bottom: calc(8px + var(--safe-bottom));
@@ -878,9 +814,6 @@ svg { display: block; }
 .nav-btn.active { color: var(--theme-primary); background: var(--theme-primary-soft); }
 .nav-btn:active { transform: scale(0.94); }
 
-/* ═══════════════════════════════════════════════════════════
-   MISC
-   ═══════════════════════════════════════════════════════════ */
 .info-banner {
   padding: 10px 12px;
   background: var(--theme-glass-bg);
@@ -911,7 +844,6 @@ svg { display: block; }
 
 <div class="app" id="app">
 
-  <!-- ═══════════ RAIL ═══════════ -->
   <aside class="rail" aria-label="Main navigation">
     <div class="rail-top">
       <a class="rail-logo" href="/" aria-label="Folio">
@@ -938,7 +870,6 @@ svg { display: block; }
     </div>
   </aside>
 
-  <!-- ═══════════ MAIN ═══════════ -->
   <main class="main">
     <div class="main-inner">
       <header class="page-header">
@@ -955,14 +886,13 @@ svg { display: block; }
         <span>Offline — showing cached analytics</span>
       </div>
 
-      <nav class="tabs-bar" id="tabsBar"></nav>
+      <nav class="tabs-bar" id="tabsBar" role="tablist" aria-label="Analytics sections"></nav>
 
       <div id="panelMount"></div>
     </div>
   </main>
 </div>
 
-<!-- ═══════════ BOTTOM NAV ═══════════ -->
 <nav class="bottom-nav" aria-label="Main navigation">
   <a class="nav-btn" href="/">
     <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -982,72 +912,71 @@ svg { display: block; }
   </a>
 </nav>
 
-<!-- ═══════════ LOADING ═══════════ -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
   <div class="loading-title" id="loadingTitle">Loading…</div>
   <div class="loading-desc" id="loadingDesc"></div>
 </div>
 
-<!-- ═══════════ TOAST ═══════════ -->
 <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
 <script>
 (function () {
   'use strict';
 
+  // ═══════════════════════════════════════════════════════════
+  // THEME SYNC
+  // ═══════════════════════════════════════════════════════════
 
   function wireThemeSync() {
-  window.addEventListener('storage', function (e) {
-    try {
-      // Theme changed in another tab
-      if (e.key === 'folio.theme') {
-        var pref = e.newValue || 'dark';
-        var resolved = pref;
-        if (pref === 'auto' || pref === 'system') {
-          resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
-            ? 'light' : 'dark';
+    window.addEventListener('storage', function (e) {
+      try {
+        if (e.key === 'folio.theme') {
+          var pref = e.newValue || 'dark';
+          if (pref === 'system') pref = 'auto';
+          var resolved = pref;
+          if (pref === 'auto') {
+            resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+              ? 'light' : 'dark';
+          }
+          if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+          else document.documentElement.removeAttribute('data-theme');
+          var meta = document.getElementById('themeColorMeta');
+          if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
         }
+        if (e.key === 'folio.reducedMotion') {
+          if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
+          else document.documentElement.removeAttribute('data-reduced-motion');
+        }
+        if (e.key === 'folio.pageScale') {
+          var scale = Number(e.newValue || 1);
+          if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
+          if (scale > 1.35) scale = 1.35;
+          document.documentElement.style.setProperty('--page-scale', String(scale));
+        }
+      } catch (err) {}
+    });
+  }
+
+  function wireThemeMediaQuery() {
+    if (!window.matchMedia) return;
+    var mq = window.matchMedia('(prefers-color-scheme: light)');
+    var handler = function () {
+      try {
+        var pref = localStorage.getItem('folio.theme') || 'dark';
+        if (pref === 'system') pref = 'auto';
+        if (pref !== 'auto') return;
+        var resolved = mq.matches ? 'light' : 'dark';
         if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
         else document.documentElement.removeAttribute('data-theme');
-
-        var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
+        var meta = document.getElementById('themeColorMeta');
         if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
-      }
-
-      // Reduced-motion toggled in another tab
-      if (e.key === 'folio.reducedMotion') {
-        if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
-        else document.documentElement.removeAttribute('data-reduced-motion');
-      }
-
-      // Page scale changed in another tab
-      if (e.key === 'folio.pageScale') {
-        var scale = Number(e.newValue || 1);
-        if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
-        if (scale > 1.35) scale = 1.35;
-        document.documentElement.style.setProperty('--page-scale', String(scale));
-      }
-    } catch (err) {}
-  });
+      } catch (e) {}
+    };
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else if (mq.addListener) mq.addListener(handler);
   }
-  function wireThemeMediaQuery() {
-  if (!window.matchMedia) return;
-  var mq = window.matchMedia('(prefers-color-scheme: light)');
-  var handler = function () {
-    try {
-      var pref = localStorage.getItem('folio.theme') || 'dark';
-      if (pref !== 'auto' && pref !== 'system') return;   // only react when theme is auto
-      var resolved = mq.matches ? 'light' : 'dark';
-      if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
-      else document.documentElement.removeAttribute('data-theme');
-      var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
-      if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
-    } catch (e) {}
-  };
-  if (mq.addEventListener) mq.addEventListener('change', handler);
-  else if (mq.addListener) mq.addListener(handler);
-}
+
   // ═══════════════════════════════════════════════════════════
   // CONFIG
   // ═══════════════════════════════════════════════════════════
@@ -1107,6 +1036,11 @@ svg { display: block; }
     { id: 'modified', label: 'Modified' },
   ];
 
+  // Fan-out limits to avoid rate-limit hammering
+  const OVERVIEW_ANALYTICS_LIMIT = 10;
+  const OVERVIEW_ACTIVITY_LIMIT = 5;
+  const CACHE_TTL = 5 * 60 * 1000;
+
   // ═══════════════════════════════════════════════════════════
   // SVG
   // ═══════════════════════════════════════════════════════════
@@ -1145,21 +1079,25 @@ svg { display: block; }
     uid: null,
     projects: [],
     activeTab: 'overview',
-    projectAnalytics: new Map(), // pid -> { data, fetchedAt }
-    projectActivity: new Map(), // pid -> { items, fetchedAt }
+    projectAnalytics: new Map(),
+    projectActivity: new Map(),
     profileAnalytics: null,
     profileFetchedAt: 0,
     logs: [],
     logsOffset: 0,
     logsHasMore: false,
     logsFilter: 'all',
+    logsLoading: false,
     activityAggregated: null,
     activityFetchedAt: 0,
     activityFilter: 'all',
     projectsRange: '7d',
     projectsSort: 'views',
     projectsSearch: '',
-    loading: false,
+    analyticsFetchedAt: 0,
+    overviewAnalyticsLimited: false,
+    overviewActivityLimited: false,
+    renderToken: 0,
   };
 
   const $ = id => document.getElementById(id);
@@ -1231,12 +1169,14 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   function toast(msg, type = 'info', duration = 2800) {
+    const container = $('toastContainer');
+    if (!container) return;
     const el = document.createElement('div');
     el.className = 'toast ' + type;
     const icon = type === 'success' ? 'check' : type === 'error' ? 'alert' : type === 'warning' ? 'alert' : 'info';
     el.innerHTML = svg(icon, 15, 2.4) + '<span></span>';
     el.querySelector('span').textContent = msg;
-    $('toastContainer').appendChild(el);
+    container.appendChild(el);
     requestAnimationFrame(() => el.classList.add('show'));
     setTimeout(() => {
       el.classList.remove('show');
@@ -1249,12 +1189,17 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   function showLoading(title, desc) {
+    const el = $('loadingOverlay');
+    if (!el) return;
     $('loadingTitle').textContent = title || 'Loading…';
     $('loadingDesc').textContent = desc || '';
-    $('loadingOverlay').classList.add('active');
+    el.classList.add('active');
   }
 
-  function hideLoading() { $('loadingOverlay').classList.remove('active'); }
+  function hideLoading() {
+    const el = $('loadingOverlay');
+    if (el) el.classList.remove('active');
+  }
 
   function readSession() {
     try { S.session = localStorage.getItem(STORAGE.session); } catch {}
@@ -1306,8 +1251,6 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   async function boot() {
-    wireThemeSync();
-wireThemeMediaQuery();
     readSession();
 
     if (!S.session) {
@@ -1318,6 +1261,10 @@ wireThemeMediaQuery();
     const me = await apiFetch(API_AUTH + '?action=me');
     if (!me.ok || !me.data?.success) {
       if (me.status === 401) {
+        try {
+          localStorage.removeItem(STORAGE.session);
+          localStorage.removeItem(STORAGE.user);
+        } catch {}
         window.location.href = '/register?next=' + encodeURIComponent(location.pathname);
         return;
       }
@@ -1328,13 +1275,11 @@ wireThemeMediaQuery();
     S.user = me.data.user;
     S.uid = S.user.uid;
 
-    // Load projects
     const projRes = await apiFetch(API_HOST + '?action=projects/list');
     if (projRes.ok && projRes.data?.success) {
       S.projects = projRes.data.projects || [];
     }
 
-    // Initial tab
     const hashTab = getHashTab();
     if (hashTab) S.activeTab = hashTab;
     else {
@@ -1347,29 +1292,44 @@ wireThemeMediaQuery();
     renderTabs();
     renderPanel();
 
-    // Online/offline
-    const updateOnline = () => $('offlineBanner').classList.toggle('visible', !navigator.onLine);
-    window.addEventListener('online', () => { updateOnline(); });
+    const updateOnline = () => {
+      const banner = $('offlineBanner');
+      if (banner) banner.classList.toggle('visible', !navigator.onLine);
+    };
+    window.addEventListener('online', updateOnline);
     window.addEventListener('offline', updateOnline);
     updateOnline();
 
-    // Refresh button
-    $('refreshBtn').addEventListener('click', () => {
+    // Refresh button — wait for actual data reload
+    $('refreshBtn')?.addEventListener('click', async () => {
       const btn = $('refreshBtn');
+      if (!btn || btn.disabled) return;
       btn.classList.add('spinning');
+      btn.disabled = true;
+
       S.projectAnalytics.clear();
       S.projectActivity.clear();
       S.activityAggregated = null;
+      S.activityFetchedAt = 0;
       S.profileAnalytics = null;
+      S.profileFetchedAt = 0;
+      S.analyticsFetchedAt = 0;
       S.logs = [];
       S.logsOffset = 0;
-      setTimeout(() => {
+
+      try {
+        if (S.activeTab === 'projects' || S.activeTab === 'overview') {
+          await loadAllProjectAnalytics();
+        }
         renderPanel();
+      } catch (err) {
+        toast('Refresh failed', 'error');
+      } finally {
         btn.classList.remove('spinning');
-      }, 300);
+        btn.disabled = false;
+      }
     });
 
-    // Hash change
     window.addEventListener('hashchange', () => {
       const t = getHashTab();
       if (t && t !== S.activeTab) {
@@ -1381,13 +1341,14 @@ wireThemeMediaQuery();
   }
 
   function renderError() {
-    $('panelMount').innerHTML = `
+    const mount = $('panelMount') || document.body;
+    mount.innerHTML = `
       <div class="card"><div class="card-body">
         <div class="empty-state">
           <div class="empty-icon" style="background:var(--theme-danger-soft);color:var(--theme-danger);">${svg('alert', 24, 2)}</div>
           <div class="empty-title">Couldn't load analytics</div>
           <div class="empty-desc">Check your connection and try again.</div>
-          <button class="btn btn-primary" onclick="location.reload()">${svg('refresh', 14, 2.2)} Retry</button>
+          <button class="btn btn-primary" onclick="location.reload()" style="margin-top:8px;">${svg('refresh', 14, 2.2)} Retry</button>
         </div>
       </div></div>
     `;
@@ -1401,7 +1362,11 @@ wireThemeMediaQuery();
     const el = $('tabsBar');
     if (!el) return;
     el.innerHTML = TABS.map(t => `
-      <button class="tab ${t.id === S.activeTab ? 'active' : ''}" data-tab="${escapeAttr(t.id)}" type="button">
+      <button class="tab ${t.id === S.activeTab ? 'active' : ''}"
+              data-tab="${escapeAttr(t.id)}"
+              type="button"
+              role="tab"
+              aria-selected="${t.id === S.activeTab}">
         ${escapeHTML(t.label)}
       </button>
     `).join('');
@@ -1417,8 +1382,10 @@ wireThemeMediaQuery();
   function renderPanel() {
     const mount = $('panelMount');
     if (!mount) return;
+    const token = ++S.renderToken;
     mount.innerHTML = `<div class="panel active" id="panel-${S.activeTab}"></div>`;
     const panel = $('panel-' + S.activeTab);
+    if (!panel) return;
     const renderers = {
       overview: renderOverview,
       projects: renderProjectsPanel,
@@ -1426,14 +1393,16 @@ wireThemeMediaQuery();
       activity: renderActivityPanel,
       logs: renderLogsPanel,
     };
-    if (renderers[S.activeTab]) renderers[S.activeTab](panel);
+    if (renderers[S.activeTab]) {
+      Promise.resolve(renderers[S.activeTab](panel, token)).catch(err => {
+        console.error('[Analytics panel]', err);
+      });
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
   // ANALYTICS FETCHERS
   // ═══════════════════════════════════════════════════════════
-
-  const CACHE_TTL = 5 * 60 * 1000; // 5 min
 
   async function loadProjectAnalytics(pid) {
     const cached = S.projectAnalytics.get(pid);
@@ -1446,7 +1415,7 @@ wireThemeMediaQuery();
     return cached?.data || null;
   }
 
-  async function loadProjectActivity(pid, limit = 10) {
+  async function loadProjectActivity(pid, limit = 5) {
     const cached = S.projectActivity.get(pid);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.items;
     const res = await apiFetch(API_ANALYTICS + '?action=activity&pid=' + encodeURIComponent(pid) + '&limit=' + limit);
@@ -1469,16 +1438,27 @@ wireThemeMediaQuery();
     return S.profileAnalytics;
   }
 
+  // Returns Map<pid, analyticsData> — deterministic mapping (fix #2/#5)
   async function loadAllProjectAnalytics() {
-    const results = await Promise.all(
-      S.projects.slice(0, 20).map(p => loadProjectAnalytics(p.pid))
-    );
-    return results.filter(Boolean);
+    const map = new Map();
+    const projects = S.projects.slice(0, OVERVIEW_ANALYTICS_LIMIT);
+    S.overviewAnalyticsLimited = S.projects.length > OVERVIEW_ANALYTICS_LIMIT;
+
+    await Promise.all(projects.map(async p => {
+      const data = await loadProjectAnalytics(p.pid);
+      if (data) map.set(p.pid, data);
+    }));
+
+    S.analyticsFetchedAt = Date.now();
+    return map;
   }
 
   async function loadAllProjectActivity() {
+    const projects = S.projects.slice(0, OVERVIEW_ACTIVITY_LIMIT);
+    S.overviewActivityLimited = S.projects.length > OVERVIEW_ACTIVITY_LIMIT;
+
     const results = await Promise.all(
-      S.projects.slice(0, 15).map(p => loadProjectActivity(p.pid, 5))
+      projects.map(p => loadProjectActivity(p.pid, 5))
     );
     return results.flat();
   }
@@ -1494,14 +1474,14 @@ wireThemeMediaQuery();
         total: res.data.total || 0,
       };
     }
-    return { logs: [], hasMore: false, total: 0 };
+    return { logs: [], hasMore: false, total: 0, error: true };
   }
 
   // ═══════════════════════════════════════════════════════════
   // TAB: OVERVIEW
   // ═══════════════════════════════════════════════════════════
 
-  async function renderOverview(panel) {
+  async function renderOverview(panel, token) {
     if (S.projects.length === 0) {
       panel.innerHTML = `
         <div class="card"><div class="card-body">
@@ -1534,27 +1514,34 @@ wireThemeMediaQuery();
       </div>
     `;
 
-    const analytics = await loadAllProjectAnalytics();
+    const analyticsByPid = await loadAllProjectAnalytics();
     const activity = await loadAllProjectActivity();
 
-    // Stats
+    // Guard: panel was replaced while awaiting
+    if (token !== S.renderToken || !$('overviewStats')) return;
+
+    // Stats — iterate projects (not analytics array) so index is deterministic
     let totalViews = 0;
     let total7d = 0;
     let totalDb = 0;
     let totalApi = 0;
 
-    for (const data of analytics) {
+    for (const p of S.projects) {
+      const data = analyticsByPid.get(p.pid);
+      if (!data) continue;
       totalViews += data.total || 0;
       total7d += (data.trend7 || []).reduce((s, t) => s + t.count, 0);
       totalDb += (data.db?.reads || 0) + (data.db?.writes || 0);
       totalApi += (data.api?.calls || 0);
     }
 
-    $('overviewStats').innerHTML = `
+    const statsEl = $('overviewStats');
+    if (!statsEl) return;
+    statsEl.innerHTML = `
       <div class="stat-tile">
         <div class="stat-label">Total views</div>
         <div class="stat-value">${formatNumber(totalViews)}</div>
-        <div class="stat-hint">Across ${S.projects.length} project${S.projects.length === 1 ? '' : 's'}</div>
+        <div class="stat-hint">Across ${analyticsByPid.size} project${analyticsByPid.size === 1 ? '' : 's'}${S.overviewAnalyticsLimited ? ` (of ${S.projects.length})` : ''}</div>
       </div>
       <div class="stat-tile">
         <div class="stat-label">7-day views</div>
@@ -1570,20 +1557,23 @@ wireThemeMediaQuery();
       </div>
     `;
 
-    // Top projects
-    const projectList = S.projects.map((p, i) => ({
+    // Top projects — deterministic per-project lookup
+    const projectList = S.projects.map(p => ({
       project: p,
-      views: analytics[i]?.trend7?.reduce((s, t) => s + t.count, 0) || 0,
-    })).sort((a, b) => b.views - a.views).slice(0, 5);
+      views: analyticsByPid.get(p.pid)?.trend7?.reduce((s, t) => s + t.count, 0) || 0,
+    })).filter(x => x.views > 0).sort((a, b) => b.views - a.views).slice(0, 5);
 
     const maxViews = Math.max(1, ...projectList.map(p => p.views));
 
-    if (projectList.length === 0 || projectList.every(p => p.views === 0)) {
-      $('topProjectsBody').innerHTML = `<div class="empty-state" style="padding:20px;">
+    const topBody = $('topProjectsBody');
+    if (!topBody) return;
+
+    if (projectList.length === 0) {
+      topBody.innerHTML = `<div class="empty-state" style="padding:20px;">
         <div class="empty-desc">No page views yet — deploy a project to start tracking.</div>
       </div>`;
     } else {
-      $('topProjectsBody').innerHTML = `
+      topBody.innerHTML = `
         <div class="hbar-chart">
           ${projectList.map(item => {
             const p = item.project;
@@ -1593,7 +1583,7 @@ wireThemeMediaQuery();
               : `<span>${escapeHTML(getInitials(p.name))}</span>`;
             const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
             return `
-              <div class="hbar-item" data-pid="${escapeAttr(p.pid)}">
+              <div class="hbar-item" data-pid="${escapeAttr(p.pid)}" role="button" tabindex="0">
                 <div class="hbar-icon" style="${iconBg}">${iconHTML}</div>
                 <div class="hbar-info">
                   <div class="hbar-name">${escapeHTML(p.name || 'Untitled')}</div>
@@ -1607,36 +1597,50 @@ wireThemeMediaQuery();
           }).join('')}
         </div>
       `;
-      $('topProjectsBody').querySelectorAll('[data-pid]').forEach(el => {
-        el.addEventListener('click', () => {
-          window.location.href = '/project?pid=' + encodeURIComponent(el.dataset.pid) + '#analytics';
+      topBody.querySelectorAll('[data-pid]').forEach(el => {
+        const open = () => window.location.href = '/project?pid=' + encodeURIComponent(el.dataset.pid) + '#analytics';
+        el.addEventListener('click', open);
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
         });
       });
     }
-    $('topUpdated').textContent = analytics.length > 0 ? 'updated ' + timeAgo(Date.now()) : '—';
+
+    const topUpdated = $('topUpdated');
+    if (topUpdated) {
+      topUpdated.textContent = S.analyticsFetchedAt
+        ? 'updated ' + timeAgo(S.analyticsFetchedAt)
+        : '—';
+    }
 
     // Recent activity
+    const recentBody = $('recentActivityBody');
+    if (!recentBody) return;
+
     if (activity.length === 0) {
-      $('recentActivityBody').innerHTML = `<div class="empty-state" style="padding:20px;">
+      recentBody.innerHTML = `<div class="empty-state" style="padding:20px;">
         <div class="empty-desc">No recent activity across your projects.</div>
       </div>`;
     } else {
-      const sorted = activity.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 10);
-      $('recentActivityBody').innerHTML = `
+      const sorted = [...activity].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 10);
+      recentBody.innerHTML = `
         <div class="row-list">
           ${sorted.map(a => renderActivityRow(a)).join('')}
         </div>
       `;
-      wireActivityRows($('recentActivityBody'));
+      wireActivityRows(recentBody);
     }
 
-    // Storage summary
+    // Storage
+    const storageBody = $('storageSummaryBody');
+    if (!storageBody) return;
+
     const totalStorage = S.projects.reduce((s, p) => s + (p.storageUsed || 0), 0);
-    const limit = S.user.settings?.globalLimit || 10 * 1024 * 1024;
+    const limit = S.user?.settings?.globalLimit || 10 * 1024 * 1024;
     const pct = limit > 0 ? Math.min(100, (totalStorage / limit) * 100) : 0;
     const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
 
-    $('storageSummaryBody').innerHTML = `
+    storageBody.innerHTML = `
       <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;">
         <span style="color:var(--theme-text-secondary);font-weight:600;">${formatBytes(totalStorage)} of ${formatBytes(limit)}</span>
         <span style="color:var(--theme-text-tertiary);font-weight:700;">${pct.toFixed(0)}%</span>
@@ -1646,7 +1650,7 @@ wireThemeMediaQuery();
       </div>
       ${pct > 70 ? `<div class="info-banner" style="margin-top:10px;">
         ${svg('alert', 14, 2.2)}
-        <span>Storage is ${pct > 90 ? 'nearly full' : 'getting full'}. <a href="/settings#storage" style="color:var(--theme-primary);font-weight:700;">Manage storage →</a></span>
+        <span>Storage is ${pct > 90 ? 'nearly full' : 'getting full'}. <a href="/settings.html#storage" style="color:var(--theme-primary);font-weight:700;">Manage storage →</a></span>
       </div>` : ''}
     `;
   }
@@ -1655,7 +1659,7 @@ wireThemeMediaQuery();
   // TAB: PROJECTS
   // ═══════════════════════════════════════════════════════════
 
-  async function renderProjectsPanel(panel) {
+  async function renderProjectsPanel(panel, token) {
     if (S.projects.length === 0) {
       panel.innerHTML = `
         <div class="card"><div class="card-body">
@@ -1684,36 +1688,34 @@ wireThemeMediaQuery();
       <div class="card">
         <div class="card-header"><div class="card-title">${svg('folder', 15, 2.2)} Projects</div></div>
         <div class="projects-table" id="projectsTableBody">
-          <div class="row-item row-header">
-            <div>Project</div><div>Views</div><div>DB ops</div><div>API</div><div>Storage</div><div>Status</div>
-          </div>
           <div class="skeleton" style="height:60px;margin:12px;"></div>
         </div>
       </div>
     `;
 
-    $('projectsSearchInput').addEventListener('input', debounce((e) => {
+    $('projectsSearchInput')?.addEventListener('input', debounce((e) => {
       S.projectsSearch = e.target.value.trim().toLowerCase();
       renderProjectsTable();
     }, 200));
 
-    document.querySelectorAll('[data-range]').forEach(btn => {
+    panel.querySelectorAll('[data-range]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.projectsRange = btn.dataset.range;
-        document.querySelectorAll('[data-range]').forEach(b => b.classList.toggle('active', b === btn));
+        panel.querySelectorAll('[data-range]').forEach(b => b.classList.toggle('active', b === btn));
         renderProjectsTable();
       });
     });
 
-    document.querySelectorAll('[data-sort]').forEach(btn => {
+    panel.querySelectorAll('[data-sort]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.projectsSort = btn.dataset.sort;
-        document.querySelectorAll('[data-sort]').forEach(b => b.classList.toggle('active', b === btn));
+        panel.querySelectorAll('[data-sort]').forEach(b => b.classList.toggle('active', b === btn));
         renderProjectsTable();
       });
     });
 
     await loadAllProjectAnalytics();
+    if (token !== S.renderToken) return;
     renderProjectsTable();
   }
 
@@ -1740,7 +1742,7 @@ wireThemeMediaQuery();
     });
 
     if (S.projectsSearch) {
-      rows = rows.filter(r => r.project.name?.toLowerCase().includes(S.projectsSearch));
+      rows = rows.filter(r => (r.project.name || '').toLowerCase().includes(S.projectsSearch));
     }
 
     if (S.projectsSort === 'views') rows.sort((a, b) => b.views - a.views);
@@ -1755,73 +1757,82 @@ wireThemeMediaQuery();
       return;
     }
 
+    const desktopRows = rows.map(r => renderProjectDesktopRow(r)).join('');
+    const mobileCards = rows.map(r => renderProjectMobileCard(r)).join('');
+
     container.innerHTML = `
       <div class="row-item row-header">
         <div>Project</div><div>Views</div><div>DB ops</div><div>API</div><div>Storage</div><div>Status</div>
       </div>
-      ${rows.map(r => {
-        const p = r.project;
-        const iconHTML = p.iconUrl
-          ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
-          : `<span>${escapeHTML(getInitials(p.name))}</span>`;
-        const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
-        const live = !!p.deployment?.url;
-        return `
-          <div class="row-item" data-pid="${escapeAttr(p.pid)}">
-            <div class="project-cell">
-              <div class="row-icon" style="${iconBg}">${iconHTML}</div>
-              <div style="min-width:0;">
-                <div class="row-title">${escapeHTML(p.name || 'Untitled')}</div>
-                <div class="row-sub">@${escapeHTML(p.slug || '')}</div>
-              </div>
-            </div>
-            <div class="row-value">${formatNumber(r.views)}</div>
-            <div class="row-value">${formatNumber(r.dbOps)}</div>
-            <div class="row-value">${formatNumber(r.apiCalls)}</div>
-            <div class="row-value">${formatBytes(r.storage)}</div>
-            <div class="row-badge ${live ? 'live' : 'offline'}">${live ? 'Live' : 'Offline'}</div>
-          </div>
-        `;
-      }).join('')}
-      ${rows.map(r => {
-        const p = r.project;
-        const iconHTML = p.iconUrl
-          ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
-          : `<span>${escapeHTML(getInitials(p.name))}</span>`;
-        const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
-        const live = !!p.deployment?.url;
-        return `
-          <div class="project-card-mobile" data-pid="${escapeAttr(p.pid)}">
-            <div class="pc-header">
-              <div class="row-icon" style="${iconBg}">${iconHTML}</div>
-              <div style="flex:1;min-width:0;">
-                <div class="row-title">${escapeHTML(p.name || 'Untitled')}</div>
-                <div class="row-sub">@${escapeHTML(p.slug || '')} · <span style="color:var(--theme-${live ? 'success' : 'text-tertiary'});">${live ? 'Live' : 'Offline'}</span></div>
-              </div>
-            </div>
-            <div class="pc-stats">
-              <div class="pc-stat"><div class="pc-stat-label">Views</div><div class="pc-stat-value">${formatNumber(r.views)}</div></div>
-              <div class="pc-stat"><div class="pc-stat-label">DB ops</div><div class="pc-stat-value">${formatNumber(r.dbOps)}</div></div>
-              <div class="pc-stat"><div class="pc-stat-label">API calls</div><div class="pc-stat-value">${formatNumber(r.apiCalls)}</div></div>
-              <div class="pc-stat"><div class="pc-stat-label">Storage</div><div class="pc-stat-value">${formatBytes(r.storage)}</div></div>
-            </div>
-          </div>
-        `;
-      }).join('')}
+      ${desktopRows}
+      ${mobileCards}
     `;
 
     container.querySelectorAll('[data-pid]').forEach(el => {
-      el.addEventListener('click', () => {
-        window.location.href = '/project?pid=' + encodeURIComponent(el.dataset.pid) + '#analytics';
+      const open = () => window.location.href = '/project?pid=' + encodeURIComponent(el.dataset.pid) + '#analytics';
+      el.addEventListener('click', open);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
       });
     });
+  }
+
+  function renderProjectDesktopRow(r) {
+    const p = r.project;
+    const iconHTML = p.iconUrl
+      ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
+      : `<span>${escapeHTML(getInitials(p.name))}</span>`;
+    const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+    const live = !!p.deployment?.url;
+    return `
+      <div class="row-item" data-pid="${escapeAttr(p.pid)}">
+        <div class="project-cell">
+          <div class="row-icon" style="${iconBg}">${iconHTML}</div>
+          <div style="min-width:0;">
+            <div class="row-title">${escapeHTML(p.name || 'Untitled')}</div>
+            <div class="row-sub">@${escapeHTML(p.slug || '')}</div>
+          </div>
+        </div>
+        <div class="row-value">${formatNumber(r.views)}</div>
+        <div class="row-value">${formatNumber(r.dbOps)}</div>
+        <div class="row-value">${formatNumber(r.apiCalls)}</div>
+        <div class="row-value">${formatBytes(r.storage)}</div>
+        <div class="row-badge ${live ? 'live' : 'offline'}">${live ? 'Live' : 'Offline'}</div>
+      </div>
+    `;
+  }
+
+  function renderProjectMobileCard(r) {
+    const p = r.project;
+    const iconHTML = p.iconUrl
+      ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
+      : `<span>${escapeHTML(getInitials(p.name))}</span>`;
+    const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+    const live = !!p.deployment?.url;
+    return `
+      <div class="project-card-mobile" data-pid="${escapeAttr(p.pid)}" role="button" tabindex="0">
+        <div class="pc-header">
+          <div class="row-icon" style="${iconBg}">${iconHTML}</div>
+          <div style="flex:1;min-width:0;">
+            <div class="row-title">${escapeHTML(p.name || 'Untitled')}</div>
+            <div class="row-sub">@${escapeHTML(p.slug || '')} · <span style="color:var(--theme-${live ? 'success' : 'text-tertiary'});">${live ? 'Live' : 'Offline'}</span></div>
+          </div>
+        </div>
+        <div class="pc-stats">
+          <div class="pc-stat"><div class="pc-stat-label">Views</div><div class="pc-stat-value">${formatNumber(r.views)}</div></div>
+          <div class="pc-stat"><div class="pc-stat-label">DB ops</div><div class="pc-stat-value">${formatNumber(r.dbOps)}</div></div>
+          <div class="pc-stat"><div class="pc-stat-label">API calls</div><div class="pc-stat-value">${formatNumber(r.apiCalls)}</div></div>
+          <div class="pc-stat"><div class="pc-stat-label">Storage</div><div class="pc-stat-value">${formatBytes(r.storage)}</div></div>
+        </div>
+      </div>
+    `;
   }
 
   // ═══════════════════════════════════════════════════════════
   // TAB: PROFILE
   // ═══════════════════════════════════════════════════════════
 
-  async function renderProfilePanel(panel) {
+  async function renderProfilePanel(panel, token) {
     panel.innerHTML = `
       <div class="stats-grid" id="profileStats">
         ${[1,2,3].map(() => `<div class="stat-tile"><div class="skeleton" style="height:10px;width:40%;margin-bottom:8px;"></div><div class="skeleton" style="height:22px;width:60%;"></div></div>`).join('')}
@@ -1840,7 +1851,7 @@ wireThemeMediaQuery();
       </div>
       <div class="card">
         <div class="card-body">
-          <a href="/${encodeURIComponent(S.user.profile?.username || '')}" target="_blank" rel="noopener" class="btn btn-secondary btn-block">
+          <a href="/${encodeURIComponent(S.user?.profile?.username || '')}" target="_blank" rel="noopener" class="btn btn-secondary btn-block">
             ${svg('external', 14, 2.2)} Preview your public profile
           </a>
         </div>
@@ -1848,15 +1859,21 @@ wireThemeMediaQuery();
     `;
 
     const data = await loadProfileAnalytics();
+    if (token !== S.renderToken || !$('profileStats')) return;
 
     if (!data) {
-      $('profileStats').innerHTML = `<div class="stat-tile" style="grid-column:1/-1;">
-        <div class="stat-label">Profile views</div>
-        <div class="stat-value">—</div>
-        <div class="stat-hint">No data available</div>
-      </div>`;
-      $('chart7Body').innerHTML = '';
-      $('chart30Body').innerHTML = '';
+      const stats = $('profileStats');
+      if (stats) {
+        stats.innerHTML = `<div class="stat-tile" style="grid-column:1/-1;">
+          <div class="stat-label">Profile views</div>
+          <div class="stat-value">—</div>
+          <div class="stat-hint">No data available</div>
+        </div>`;
+      }
+      const c7 = $('chart7Body');
+      const c30 = $('chart30Body');
+      if (c7) c7.innerHTML = '';
+      if (c30) c30.innerHTML = '';
       return;
     }
 
@@ -1864,66 +1881,73 @@ wireThemeMediaQuery();
     const last7 = data.last7 || 0;
     const last30 = data.last30 || 0;
 
-    $('profileStats').innerHTML = `
-      <div class="stat-tile">
-        <div class="stat-label">Total views</div>
-        <div class="stat-value">${formatNumber(total)}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Last 7 days</div>
-        <div class="stat-value">${formatNumber(last7)}</div>
-      </div>
-      <div class="stat-tile">
-        <div class="stat-label">Last 30 days</div>
-        <div class="stat-value">${formatNumber(last30)}</div>
-      </div>
-    `;
+    const stats = $('profileStats');
+    if (stats) {
+      stats.innerHTML = `
+        <div class="stat-tile">
+          <div class="stat-label">Total views</div>
+          <div class="stat-value">${formatNumber(total)}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Last 7 days</div>
+          <div class="stat-value">${formatNumber(last7)}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Last 30 days</div>
+          <div class="stat-value">${formatNumber(last30)}</div>
+        </div>
+      `;
+    }
 
     const trend30 = data.trend30 || [];
     const last7Data = trend30.slice(-7);
 
-    // 7-day chart
     const max7 = Math.max(1, ...last7Data.map(t => t.count));
-    if (last7Data.length > 0) {
-      $('chart7Body').innerHTML = `
-        <div class="bar-chart">
-          ${last7Data.map(t => {
-            const pct = (t.count / max7) * 100;
-            return `
-              <div class="bar-chart-item" title="${escapeAttr(t.date)} · ${t.count} views">
-                <div class="bar-chart-value">${t.count}</div>
-                <div class="bar-chart-bar" style="height:${Math.max(4, pct)}%;"></div>
-                <div class="bar-chart-label">${escapeHTML(t.date.slice(-5))}</div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
-    } else {
-      $('chart7Body').innerHTML = `<div class="empty-state" style="padding:20px;">
-        <div class="empty-desc">No views in the last 7 days.</div>
-      </div>`;
+    const c7 = $('chart7Body');
+    if (c7) {
+      if (last7Data.length > 0) {
+        c7.innerHTML = `
+          <div class="bar-chart">
+            ${last7Data.map(t => {
+              const pct = (t.count / max7) * 100;
+              return `
+                <div class="bar-chart-item" title="${escapeAttr(t.date)} · ${t.count} views">
+                  <div class="bar-chart-value">${t.count}</div>
+                  <div class="bar-chart-bar" style="height:${Math.max(4, pct)}%;"></div>
+                  <div class="bar-chart-label">${escapeHTML((t.date || '').slice(-5))}</div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      } else {
+        c7.innerHTML = `<div class="empty-state" style="padding:20px;">
+          <div class="empty-desc">No views in the last 7 days.</div>
+        </div>`;
+      }
     }
 
-    // 30-day chart
     const max30 = Math.max(1, ...trend30.map(t => t.count));
-    if (trend30.length > 0) {
-      $('chart30Body').innerHTML = `
-        <div class="bar-chart" style="height:80px;">
-          ${trend30.map(t => {
-            const pct = (t.count / max30) * 100;
-            return `
-              <div class="bar-chart-item" title="${escapeAttr(t.date)} · ${t.count} views">
-                <div class="bar-chart-bar" style="height:${Math.max(2, pct)}%;opacity:0.7;"></div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
-    } else {
-      $('chart30Body').innerHTML = `<div class="empty-state" style="padding:20px;">
-        <div class="empty-desc">No views in the last 30 days.</div>
-      </div>`;
+    const c30 = $('chart30Body');
+    if (c30) {
+      if (trend30.length > 0) {
+        c30.innerHTML = `
+          <div class="bar-chart" style="height:80px;">
+            ${trend30.map(t => {
+              const pct = (t.count / max30) * 100;
+              return `
+                <div class="bar-chart-item" title="${escapeAttr(t.date)} · ${t.count} views">
+                  <div class="bar-chart-bar" style="height:${Math.max(2, pct)}%;opacity:0.7;"></div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      } else {
+        c30.innerHTML = `<div class="empty-state" style="padding:20px;">
+          <div class="empty-desc">No views in the last 30 days.</div>
+        </div>`;
+      }
     }
   }
 
@@ -1931,7 +1955,7 @@ wireThemeMediaQuery();
   // TAB: ACTIVITY
   // ═══════════════════════════════════════════════════════════
 
-  async function renderActivityPanel(panel) {
+  async function renderActivityPanel(panel, token) {
     if (S.projects.length === 0) {
       panel.innerHTML = `
         <div class="card"><div class="card-body">
@@ -1963,11 +1987,14 @@ wireThemeMediaQuery();
       });
     });
 
-    if (!S.activityAggregated || Date.now() - S.activityFetchedAt > CACHE_TTL) {
+    // Refetch if cache is stale (>60s) or missing
+    const stale = !S.activityAggregated || (Date.now() - S.activityFetchedAt) > 60_000;
+    if (stale) {
       S.activityAggregated = await loadAllProjectActivity();
       S.activityFetchedAt = Date.now();
     }
 
+    if (token !== S.renderToken) return;
     renderActivityList();
   }
 
@@ -1979,7 +2006,7 @@ wireThemeMediaQuery();
     if (S.activityFilter !== 'all') {
       items = items.filter(a => a.type === S.activityFilter);
     }
-    items = items.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 50);
+    items = [...items].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 50);
 
     if (items.length === 0) {
       container.innerHTML = `<div class="empty-state" style="padding:24px;">
@@ -1997,15 +2024,18 @@ wireThemeMediaQuery();
   }
 
   function renderActivityRow(a) {
-    const project = S.projects.find(p => p.pid === a.pid);
+    const pid = a.pid || '';
+    const project = pid ? S.projects.find(p => p.pid === pid) : null;
     const projectName = project?.name || 'Project';
     const iconHTML = project?.iconUrl
       ? `<img src="${escapeAttr(project.iconUrl)}" alt="">`
       : `<span>${escapeHTML(getInitials(projectName))}</span>`;
     const iconBg = project?.iconUrl ? '' : `background:${getAvatarColor(projectName)};color:#0a0c10;`;
+    const clickable = !!pid;
 
     return `
-      <div class="activity-row" data-pid="${escapeAttr(a.pid || '')}">
+      <div class="activity-row"
+           ${clickable ? `data-pid="${escapeAttr(pid)}" role="button" tabindex="0"` : ''}>
         <div class="activity-icon" style="${iconBg}">${iconHTML}</div>
         <div class="activity-body">
           <div class="activity-text"><strong>${escapeHTML(a.action || 'Activity')}</strong> <span class="muted">in ${escapeHTML(projectName)}</span></div>
@@ -2017,9 +2047,12 @@ wireThemeMediaQuery();
 
   function wireActivityRows(container) {
     container.querySelectorAll('[data-pid]').forEach(el => {
-      el.addEventListener('click', () => {
-        const pid = el.dataset.pid;
-        if (pid) window.location.href = '/project?pid=' + encodeURIComponent(pid) + '#analytics';
+      const pid = el.dataset.pid;
+      if (!pid) return;
+      const open = () => window.location.href = '/project?pid=' + encodeURIComponent(pid) + '#analytics';
+      el.addEventListener('click', open);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
       });
     });
   }
@@ -2028,7 +2061,7 @@ wireThemeMediaQuery();
   // TAB: LOGS
   // ═══════════════════════════════════════════════════════════
 
-  async function renderLogsPanel(panel) {
+  async function renderLogsPanel(panel, token) {
     panel.innerHTML = `
       <div class="pills-row" id="logFilters">
         ${LOG_FILTERS.map(f => `<button class="pill ${S.logsFilter === f.id ? 'active' : ''}" data-log-filter="${f.id}" type="button">${f.label}</button>`).join('')}
@@ -2041,6 +2074,7 @@ wireThemeMediaQuery();
 
     panel.querySelectorAll('[data-log-filter]').forEach(btn => {
       btn.addEventListener('click', async () => {
+        if (S.logsLoading) return;
         S.logsFilter = btn.dataset.logFilter;
         S.logsOffset = 0;
         S.logs = [];
@@ -2056,12 +2090,29 @@ wireThemeMediaQuery();
 
   async function loadAndRenderLogs() {
     const container = $('logsBody');
-    if (!container) return;
+    if (!container || S.logsLoading) return;
 
-    const result = await loadUserLogs(S.logsOffset, S.logsFilter);
+    S.logsLoading = true;
+
+    // Show loading state inside container
+    container.innerHTML = `<div class="skeleton" style="height:100px;"></div>`;
+
+    const result = await loadUserLogs(0, S.logsFilter);
     S.logs = result.logs;
     S.logsHasMore = result.hasMore;
     S.logsOffset = 0;
+    S.logsLoading = false;
+
+    if (result.error) {
+      container.innerHTML = `<div class="empty-state" style="padding:24px;">
+        <div class="empty-icon" style="background:var(--theme-danger-soft);color:var(--theme-danger);">${svg('alert', 24, 2)}</div>
+        <div class="empty-title">Couldn't load activity</div>
+        <div class="empty-desc">Check your connection and try again.</div>
+      </div>`;
+      toast('Could not load logs', 'error', 3000);
+      return;
+    }
+
     renderLogsList();
   }
 
@@ -2079,14 +2130,17 @@ wireThemeMediaQuery();
     }
 
     container.innerHTML = `
-      ${S.logs.map(log => renderLogRow(log)).join('')}
+      ${S.logs.map((log, idx) => renderLogRow(log, idx)).join('')}
       ${S.logsHasMore ? `<div style="padding:12px;text-align:center;"><button class="btn btn-secondary btn-sm" id="loadMoreLogsBtn">Load more</button></div>` : ''}
     `;
 
     container.querySelectorAll('[data-log-meta]').forEach(btn => {
       btn.addEventListener('click', () => {
         const metaEl = document.getElementById(btn.dataset.logMeta);
-        if (metaEl) metaEl.classList.toggle('hidden');
+        if (metaEl) {
+          metaEl.classList.toggle('hidden');
+          btn.textContent = metaEl.classList.contains('hidden') ? 'Show details' : 'Hide details';
+        }
       });
     });
 
@@ -2127,6 +2181,8 @@ wireThemeMediaQuery();
   // ═══════════════════════════════════════════════════════════
 
   function init() {
+    wireThemeSync();
+    wireThemeMediaQuery();
     boot().catch(err => {
       console.error('[Analytics]', err);
       renderError();

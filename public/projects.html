@@ -22,33 +22,25 @@
 <script>
 (function () {
   try {
-    // 1. Read the raw preference from storage ("dark", "light", "auto", or "system")
     var pref = localStorage.getItem("folio.theme") || "dark";
-
-    // 2. If it's "auto" or "system", resolve it to a concrete value using the OS setting
     var resolved = pref;
     if (pref === "auto" || pref === "system") {
       resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
         ? "light" : "dark";
     }
-
-    // 3. Apply the RESOLVED value (not the raw preference)
     if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
     else document.documentElement.removeAttribute("data-theme");
 
-    // 4. Also apply reduced-motion (Settings slider writes this)
     if (localStorage.getItem("folio.reducedMotion") === "true") {
       document.documentElement.setAttribute("data-reduced-motion", "true");
     }
 
-    // 5. Also apply page scale (Settings text-size slider writes this)
     var scale = Number(localStorage.getItem("folio.pageScale") || 1);
     if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
     if (scale > 1.35) scale = 1.35;
     document.documentElement.style.setProperty("--page-scale", String(scale));
 
-    // 6. Update the mobile browser chrome color bar
-    var meta = document.getElementById("themeColorMeta") || document.getElementById("metaThemeColor");
+    var meta = document.getElementById("themeColorMeta");
     if (meta) meta.setAttribute("content", resolved === "light" ? "#f7f8fa" : "#0a0c10");
   } catch (e) {}
 })();
@@ -63,7 +55,6 @@
   --theme-primary-hover: #fbbf24;
   --theme-primary-glow: rgba(245, 158, 11, 0.40);
   --theme-primary-soft: rgba(245, 158, 11, 0.14);
-
   --theme-bg: #0a0c10;
   --theme-surface: #0f1218;
   --theme-surface-card: rgba(21, 25, 34, 0.72);
@@ -72,14 +63,12 @@
   --theme-text: #e8ecf1;
   --theme-text-secondary: rgba(232, 236, 241, 0.72);
   --theme-text-tertiary: rgba(232, 236, 241, 0.44);
-
   --theme-glass-bg: rgba(255, 255, 255, 0.05);
   --theme-glass-border: rgba(255, 255, 255, 0.09);
   --theme-overlay: rgba(10, 12, 16, 0.85);
   --theme-card-border: rgba(255, 255, 255, 0.08);
   --theme-divider: rgba(255, 255, 255, 0.08);
   --input-bg: rgba(26, 31, 42, 0.88);
-
   --theme-success: #10B981;
   --theme-success-soft: rgba(16, 185, 129, 0.14);
   --theme-danger: #EF4444;
@@ -88,20 +77,16 @@
   --theme-warning-soft: rgba(217, 119, 6, 0.14);
   --theme-info: #3B82F6;
   --theme-info-soft: rgba(59, 130, 246, 0.14);
-
   --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
   --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.10) 0%, transparent 55%);
-
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-
   --rail-w: 60px;
   --header-h: 48px;
   --bottom-nav-h: 56px;
   --content-max: 1200px;
-
   --r-xs: 6px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -138,29 +123,22 @@
   --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
 }
 
-/* Mobile (compact) */
 @media (max-width: 639px) {
   :root {
     --rail-w: 0px;
-    --header-h: 40px;
+    --header-h: 44px;
     --bottom-nav-h: 52px;
   }
   html, body { font-size: 12px; }
 }
-
-/* Tablet */
 @media (min-width: 640px) and (max-width: 1023px) {
-  :root {
-    --rail-w: 52px;
-    --header-h: 44px;
-  }
+  :root { --rail-w: 52px; --header-h: 44px; }
 }
 
 /* ═══════════════════════════════════════════════════════════
    BASE
    ═══════════════════════════════════════════════════════════ */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
 html, body {
   height: 100%;
   background: var(--theme-bg);
@@ -170,13 +148,12 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
+  overscroll-behavior-y: contain;
 }
-
 body {
   background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
   background-attachment: fixed;
 }
-
 button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border: none; background: none; padding: 0; }
 a { color: var(--theme-primary); text-decoration: none; }
@@ -190,6 +167,13 @@ svg { display: block; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+[data-reduced-motion="true"] *,
+[data-reduced-motion="true"] *::before,
+[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }
 
 :focus-visible {
@@ -234,39 +218,30 @@ svg { display: block; }
 }
 
 .rail-logo {
-  width: 36px;
-  height: 36px;
+  width: 36px; height: 36px;
   border-radius: 10px;
   overflow: hidden;
   margin-bottom: 10px;
   background: var(--theme-surface-elevated);
   border: 1px solid var(--theme-glass-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   color: var(--theme-primary);
   text-decoration: none;
 }
 .rail-logo img { width: 100%; height: 100%; object-fit: cover; }
-.rail-logo svg { width: 18px; height: 18px; stroke-width: 2; }
 
 .rail-btn {
-  width: 36px;
-  height: 36px;
+  width: 36px; height: 36px;
   border-radius: 9px;
   color: var(--theme-text-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   transition: all 0.2s var(--ease);
   position: relative;
+  text-decoration: none;
 }
 .rail-btn svg { width: 16px; height: 16px; stroke-width: 2; stroke: currentColor; fill: none; }
 .rail-btn:hover { color: var(--theme-text-secondary); background: var(--theme-glass-bg); }
-.rail-btn.active {
-  color: var(--theme-primary);
-  background: var(--theme-primary-soft);
-}
+.rail-btn.active { color: var(--theme-primary); background: var(--theme-primary-soft); }
 .rail-btn.active::before {
   content: '';
   position: absolute;
@@ -278,13 +253,7 @@ svg { display: block; }
   border-radius: 0 3px 3px 0;
   background: var(--theme-primary);
 }
-
-.rail-divider {
-  width: 22px;
-  height: 1px;
-  background: var(--theme-divider);
-  margin: 5px 0;
-}
+.rail-divider { width: 22px; height: 1px; background: var(--theme-divider); margin: 5px 0; }
 
 /* ═══════════════════════════════════════════════════════════
    MAIN
@@ -338,7 +307,7 @@ svg { display: block; }
 .header-logo-badge {
   width: 28px;
   height: 28px;
-  flex-shrink: 0;          /* don't shrink in a flex row */
+  flex-shrink: 0;
   border-radius: 8px;
   background: var(--theme-surface-elevated);
   border: 1px solid var(--theme-glass-border);
@@ -348,19 +317,13 @@ svg { display: block; }
   justify-content: center;
   color: var(--theme-primary);
 }
-
 .header-logo-badge img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;          /* remove inline baseline gap */
+  display: block;
 }
 
-.header-logo-badge svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
-}
 .page-title {
   font-size: 18px;
   font-weight: 800;
@@ -408,7 +371,6 @@ svg { display: block; }
   stroke-width: 2.2;
   pointer-events: none;
 }
-
 .search-input {
   width: 100%;
   height: 32px;
@@ -504,6 +466,62 @@ svg { display: block; }
 @media (min-width: 640px) { .btn-new .label { display: inline; } }
 
 /* ═══════════════════════════════════════════════════════════
+   STORAGE SUMMARY BAR (plan-wide)
+   ═══════════════════════════════════════════════════════════ */
+.storage-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 9px;
+  font-size: 10.5px;
+  color: var(--theme-text-secondary);
+  flex-wrap: wrap;
+}
+.storage-summary-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-size: 9.5px;
+  flex-shrink: 0;
+}
+.storage-summary-label svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.storage-summary-bar {
+  flex: 1;
+  min-width: 80px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--theme-divider);
+  overflow: hidden;
+}
+.storage-summary-bar-fill {
+  height: 100%;
+  background: var(--theme-success);
+  transition: width 0.3s var(--ease), background 0.3s var(--ease);
+}
+.storage-summary-bar-fill.warn { background: var(--theme-warning); }
+.storage-summary-bar-fill.danger { background: var(--theme-danger); }
+.storage-summary-amount {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--theme-text);
+  flex-shrink: 0;
+}
+.storage-summary-pct {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
    TABS
    ═══════════════════════════════════════════════════════════ */
 .tabs-bar {
@@ -554,9 +572,17 @@ svg { display: block; }
   background: var(--theme-primary-soft);
   color: var(--theme-primary);
 }
+.tab-badge-notif {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--theme-danger);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+}
 
 /* ═══════════════════════════════════════════════════════════
-   ACTIVE FILTERS ROW
+   ACTIVE FILTERS
    ═══════════════════════════════════════════════════════════ */
 .active-filters {
   display: none;
@@ -596,13 +622,14 @@ svg { display: block; }
 .clear-filters-btn:hover { color: var(--theme-text); background: var(--theme-glass-bg); }
 
 /* ═══════════════════════════════════════════════════════════
-   PROJECT GRID / LIST
+   PROJECT GRID
    ═══════════════════════════════════════════════════════════ */
 .projects-container {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
   padding-bottom: 12px;
+  grid-auto-rows: min-content;
 }
 @media (min-width: 640px) {
   .projects-container { grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -611,36 +638,49 @@ svg { display: block; }
   .projects-container { grid-template-columns: repeat(3, 1fr); gap: 12px; }
 }
 
+/* ── Project card ── */
 .project-card {
   background: var(--theme-surface-card);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--theme-card-border);
   border-radius: 10px;
-  padding: 10px;
-  cursor: pointer;
   transition: all 0.2s var(--ease);
   display: flex;
   flex-direction: column;
-  gap: 7px;
   position: relative;
   min-width: 0;
+  overflow: hidden;
 }
 .project-card:hover {
   border-color: var(--theme-primary-glow);
   transform: translateY(-1px);
 }
-.project-card:active { transform: scale(0.99); }
+.project-card.expanded {
+  grid-column: 1 / -1;
+  border-color: var(--theme-primary-glow);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .project-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--theme-surface-card-solid); }
+}
 
-.project-card-header {
+/* Header row — always visible */
+.project-card-row {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  cursor: pointer;
+  user-select: none;
+  min-width: 0;
+}
+@media (max-width: 639px) {
+  .project-card-row { padding: 9px; gap: 9px; }
 }
 
 .project-icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
   overflow: hidden;
   flex-shrink: 0;
@@ -650,32 +690,45 @@ svg { display: block; }
   justify-content: center;
   color: var(--theme-primary);
   font-weight: 800;
-  font-size: 11px;
+  font-size: 12px;
   border: 1px solid var(--theme-glass-border);
 }
-.project-icon img { width: 100%; height: 100%; object-fit: cover; }
+.project-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .project-header-info { flex: 1; min-width: 0; }
 
+.project-name-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+  min-width: 0;
+}
 .project-name {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--theme-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 2px;
+  min-width: 0;
   line-height: 1.3;
+}
+.project-pin-icon {
+  color: var(--theme-primary);
+  flex-shrink: 0;
+  display: inline-flex;
 }
 
 .project-meta {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   flex-wrap: wrap;
   font-size: 9.5px;
   color: var(--theme-text-tertiary);
   font-weight: 600;
+  line-height: 1.3;
 }
 .project-meta .sep { opacity: 0.5; }
 
@@ -695,140 +748,267 @@ svg { display: block; }
 .live-badge {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
-.live-badge .dot {
+.live-badge.live { background: var(--theme-success-soft); color: var(--theme-success); }
+.live-badge.live .dot {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--theme-success);
+  background: currentColor;
 }
-.live-badge.offline { color: var(--theme-text-tertiary); }
-.live-badge.offline .dot { background: var(--theme-text-tertiary); }
+.live-badge.offline { background: var(--theme-divider); color: var(--theme-text-tertiary); }
+.live-badge.offline .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
 
-.project-more-btn {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+/* Chevron button — expands card */
+.project-expand-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--theme-text-tertiary);
   flex-shrink: 0;
   transition: all 0.2s var(--ease);
-  margin-top: -2px;
-  margin-right: -3px;
 }
-.project-more-btn:hover { color: var(--theme-text); background: var(--theme-glass-bg); }
-.project-more-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.4; }
-
-.project-desc {
-  font-size: 10.5px;
-  color: var(--theme-text-secondary);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  min-height: 0;
-}
-
-.lang-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-}
-.lang-badge {
-  font-size: 8.5px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 4px;
+.project-expand-btn:hover {
   background: var(--theme-glass-bg);
-  color: var(--theme-text-tertiary);
+  color: var(--theme-text);
+}
+.project-expand-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.4;
+  transition: transform 0.25s var(--ease);
+}
+.project-card.expanded .project-expand-btn svg {
+  transform: rotate(180deg);
 }
 
-.project-stats {
+/* Stats row — always visible below header */
+.project-stats-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 0 10px 10px;
+  flex-wrap: wrap;
   font-size: 9.5px;
   color: var(--theme-text-tertiary);
   font-weight: 600;
-  flex-wrap: wrap;
-  margin-top: auto;
 }
-.project-stats .stat-item {
+@media (max-width: 639px) {
+  .project-stats-row { padding: 0 9px 9px; font-size: 9px; }
+}
+.project-stat-item {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
 }
-.project-stats svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.2; }
-/* ═══════════════════════════════════════════════════════════
-   CARD LAYOUT — row alignment + edit button
-   ═══════════════════════════════════════════════════════════ */
-.projects-container {
-  grid-auto-rows: min-content;
+.project-stat-item svg {
+  width: 9px;
+  height: 9px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+  opacity: 0.8;
 }
-.project-card {
-  min-height: 96px;
+.project-stat-warn { color: var(--theme-warning); }
+.project-stat-danger { color: var(--theme-danger); }
+
+/* Expanded detail — slides in */
+.project-card-detail {
+  display: none;
+  padding: 0 10px 10px;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--theme-divider);
+  padding-top: 10px;
+  animation: expandIn 0.25s var(--ease);
 }
-.project-card-actions {
+.project-card.expanded .project-card-detail {
   display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-  align-self: center;
-  margin-right: -4px;
 }
-.project-edit-btn {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+@keyframes expandIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Detail — description */
+.detail-desc {
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+.detail-desc.empty {
+  color: var(--theme-text-tertiary);
+  font-style: italic;
+}
+
+/* Detail — language badges */
+.lang-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.lang-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--theme-glass-bg);
+  color: var(--theme-text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.lang-badge .lang-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--theme-primary);
+}
+
+/* Detail — storage bar */
+.detail-storage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.detail-storage-header {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  font-size: 9.5px;
+  font-weight: 700;
   color: var(--theme-text-tertiary);
-  transition: all 0.15s var(--ease);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.detail-storage-header span:last-child {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--theme-text-secondary);
+  font-weight: 600;
+}
+.detail-storage-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--theme-divider);
+  overflow: hidden;
+}
+.detail-storage-fill {
+  height: 100%;
+  background: var(--theme-success);
+  transition: width 0.3s var(--ease), background 0.3s var(--ease);
+}
+.detail-storage-fill.warn { background: var(--theme-warning); }
+.detail-storage-fill.danger { background: var(--theme-danger); }
+
+/* Detail — warning */
+.detail-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--theme-warning-soft);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  font-size: 10px;
+  color: var(--theme-warning);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.detail-warning svg {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
   flex-shrink: 0;
 }
-.project-edit-btn:hover {
-  color: var(--theme-primary);
-  background: var(--theme-primary-soft);
+
+.detail-warning.danger {
+  background: var(--theme-danger-soft);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: var(--theme-danger);
 }
-.project-edit-btn svg {
-  width: 12px;
-  height: 12px;
+
+/* Detail — action buttons (horizontal grid) */
+.detail-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding-top: 4px;
+}
+.detail-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border-radius: 8px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  transition: all 0.15s var(--ease);
+  text-align: center;
+  min-height: 54px;
+}
+.detail-action-btn:hover {
+  color: var(--theme-text);
+  border-color: var(--theme-primary-glow);
+  background: var(--theme-surface-elevated);
+}
+.detail-action-btn:active { transform: scale(0.97); }
+.detail-action-btn svg {
+  width: 16px;
+  height: 16px;
   stroke: currentColor;
   fill: none;
   stroke-width: 2.2;
 }
-.project-name {
-  font-size: 13px;
-  line-height: 1.3;
+.detail-action-btn .label {
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.2;
 }
-@media (max-width: 639px) {
-  .project-card-actions {
-    gap: 0;
-    margin-right: -6px;
-  }
+.detail-action-btn.primary {
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  border-color: var(--theme-primary-glow);
 }
-/* Mobile list mode */
-@media (max-width: 639px) {
-  .project-card {
-    padding: 10px;
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
-    min-height: 0; 
-  }
-  .project-card-header {
-    flex: 1;
-    min-width: 0;
-  }
-  .project-desc, .lang-badges, .project-stats { display: none; }
-  .project-name { margin-bottom: 1px; font-size: 12px; }
-  .project-meta { font-size: 9px; }
-  .project-more-btn { margin-top: 0; margin-right: 0; }
+.detail-action-btn.primary:hover {
+  background: var(--theme-primary);
+  color: #0a0c10;
+  border-color: var(--theme-primary);
+}
+[data-theme="light"] .detail-action-btn.primary:hover { color: #fff; }
+.detail-action-btn.danger {
+  color: var(--theme-danger);
+}
+.detail-action-btn.danger:hover {
+  background: var(--theme-danger-soft);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: var(--theme-danger);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -844,7 +1024,6 @@ svg { display: block; }
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }
 }
-
 .skeleton-card {
   background: var(--theme-surface-card);
   border: 1px solid var(--theme-card-border);
@@ -854,12 +1033,10 @@ svg { display: block; }
   flex-direction: column;
   gap: 7px;
 }
-.skeleton-card-row { display: flex; align-items: flex-start; gap: 8px; }
-.skeleton-icon { width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; }
+.skeleton-card-row { display: flex; align-items: center; gap: 10px; }
+.skeleton-icon { width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0; }
 .skeleton-title { width: 60%; height: 12px; }
 .skeleton-sub { width: 40%; height: 8px; margin-top: 3px; }
-.skeleton-line { height: 9px; }
-.skeleton-line.short { width: 50%; }
 
 /* ═══════════════════════════════════════════════════════════
    EMPTY STATE
@@ -942,7 +1119,7 @@ svg { display: block; }
 .btn-block { width: 100%; }
 
 /* ═══════════════════════════════════════════════════════════
-   FULLSCREEN OVERLAY (filters / stats / storage)
+   FULLSCREEN OVERLAY (filters / stats)
    ═══════════════════════════════════════════════════════════ */
 .fullscreen-overlay {
   position: fixed;
@@ -1063,7 +1240,7 @@ svg { display: block; }
 .overlay-footer .btn { flex: 1; }
 
 /* ═══════════════════════════════════════════════════════════
-   FILTER / STATS BLOCKS
+   FILTERS / STATS BLOCKS
    ═══════════════════════════════════════════════════════════ */
 .filter-section {
   display: flex;
@@ -1091,6 +1268,8 @@ svg { display: block; }
   font-size: 11px;
   font-weight: 700;
   transition: all 0.2s var(--ease);
+  cursor: pointer;
+  font-family: inherit;
 }
 .filter-pill:hover { border-color: var(--theme-primary-glow); color: var(--theme-text); }
 .filter-pill.active {
@@ -1283,7 +1462,7 @@ svg { display: block; }
 @media (min-width: 640px) {
   .modal {
     border-radius: 16px;
-    max-width: 440px;
+    max-width: 460px;
     padding: 20px;
     transform: scale(0.94);
   }
@@ -1347,150 +1526,6 @@ svg { display: block; }
 .input:focus, .textarea:focus { border-color: var(--theme-primary); }
 .input::placeholder, .textarea::placeholder { color: var(--theme-text-tertiary); }
 .textarea { min-height: 64px; resize: vertical; line-height: 1.5; }
-
-/* ═══════════════════════════════════════════════════════════
-   STEPPER / CREATE FLOW
-   ═══════════════════════════════════════════════════════════ */
-.stepper {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-bottom: 12px;
-}
-.step {
-  flex: 1;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--theme-divider);
-  transition: background 0.25s var(--ease);
-}
-.step.active, .step.done { background: var(--theme-primary); }
-
-.step-label {
-  font-size: 9.5px;
-  font-weight: 700;
-  color: var(--theme-text-tertiary);
-  margin-bottom: 10px;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   ICON PICKER
-   ═══════════════════════════════════════════════════════════ */
-.icon-tabs {
-  display: flex;
-  gap: 3px;
-  padding: 3px;
-  background: var(--theme-glass-bg);
-  border-radius: 8px;
-  margin-bottom: 10px;
-}
-.icon-tab {
-  flex: 1;
-  padding: 6px;
-  border-radius: 6px;
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--theme-text-tertiary);
-  transition: all 0.2s var(--ease);
-}
-.icon-tab.active {
-  background: var(--theme-surface-elevated);
-  color: var(--theme-text);
-}
-
-.icon-mode-panel { display: none; }
-.icon-mode-panel.active { display: block; }
-
-.icon-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
-  margin-bottom: 10px;
-  min-height: 50px;
-}
-@media (max-width: 480px) {
-  .icon-grid { grid-template-columns: repeat(3, 1fr); }
-}
-
-.icon-option {
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: 8px;
-  background: var(--theme-surface-elevated);
-  border: 2px solid transparent;
-  overflow: hidden;
-  transition: border-color 0.2s var(--ease), transform 0.15s var(--ease);
-  cursor: pointer;
-  padding: 0;
-}
-.icon-option:hover { transform: scale(1.04); }
-.icon-option.selected {
-  border-color: var(--theme-primary);
-  box-shadow: 0 0 0 2px var(--theme-primary-soft);
-}
-.icon-option img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-.icon-skeleton {
-  aspect-ratio: 1;
-  border-radius: 8px;
-  background: linear-gradient(90deg, var(--theme-divider) 0%, var(--theme-glass-border) 50%, var(--theme-divider) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite linear;
-}
-
-.icon-placeholder {
-  aspect-ratio: 1;
-  border-radius: 8px;
-  background: var(--theme-glass-bg);
-  border: 1px dashed var(--theme-card-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--theme-text-tertiary);
-  font-size: 9px;
-  text-align: center;
-  padding: 3px;
-  line-height: 1.2;
-}
-
-.icon-generate-btn {
-  width: 100%;
-  padding: 8px;
-  border-radius: 8px;
-  background: var(--theme-glass-bg);
-  border: 1px solid var(--theme-card-border);
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  transition: all 0.2s var(--ease);
-}
-.icon-generate-btn:hover { border-color: var(--theme-primary-glow); color: var(--theme-primary); }
-.icon-generate-btn svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; }
-.icon-generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.icon-upload-btn {
-  width: 100%;
-  padding: 14px;
-  border-radius: 8px;
-  background: var(--theme-glass-bg);
-  border: 1.5px dashed var(--theme-card-border);
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  transition: all 0.2s var(--ease);
-}
-.icon-upload-btn:hover { border-color: var(--theme-primary); color: var(--theme-primary); }
-.icon-upload-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
-.icon-upload-btn .sub { font-size: 9.5px; font-weight: 500; color: var(--theme-text-tertiary); }
 
 /* ═══════════════════════════════════════════════════════════
    ACTION MENU
@@ -1589,7 +1624,6 @@ svg { display: block; }
 .action-item.danger { color: var(--theme-danger); }
 .action-item.danger svg { stroke: var(--theme-danger); }
 .action-item.danger:hover { background: var(--theme-danger-soft); }
-
 .action-divider {
   height: 1px;
   background: var(--theme-divider);
@@ -1725,12 +1759,6 @@ svg { display: block; }
   align-items: center;
   justify-content: center;
   color: var(--theme-primary);
-  animation: popIn 0.6s var(--ease-spring);
-}
-@keyframes popIn {
-  0% { transform: scale(0.4); opacity: 0; }
-  60% { transform: scale(1.1); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
 }
 .celebration-icon svg { width: 26px; height: 26px; stroke-width: 2.4; }
 
@@ -1796,7 +1824,7 @@ svg { display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   OFFLINE BANNER
+   OFFLINE
    ═══════════════════════════════════════════════════════════ */
 .offline-banner {
   display: none;
@@ -1835,6 +1863,151 @@ svg { display: block; }
 .sort-btn svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; }
 .sort-btn .label { display: none; }
 @media (min-width: 640px) { .sort-btn .label { display: inline; } }
+
+/* ═══════════════════════════════════════════════════════════
+   NOTIFICATION BANNER
+   ═══════════════════════════════════════════════════════════ */
+.notif-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  border-radius: 9px;
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+}
+.notif-banner strong { color: var(--theme-text); font-weight: 700; }
+.notif-banner > svg { width: 14px; height: 14px; stroke: var(--theme-primary); fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.notif-banner .nb-text { flex: 1; min-width: 0; line-height: 1.35; }
+.notif-banner .nb-link {
+  color: var(--theme-primary);
+  font-weight: 700;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ICON PICKER (create flow reuse)
+   ═══════════════════════════════════════════════════════════ */
+.icon-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--theme-glass-bg);
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+.icon-tab {
+  flex: 1;
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  transition: all 0.2s var(--ease);
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+}
+.icon-tab.active {
+  background: var(--theme-surface-elevated);
+  color: var(--theme-text);
+}
+.icon-mode-panel { display: none; }
+.icon-mode-panel.active { display: block; }
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+  min-height: 50px;
+}
+@media (max-width: 480px) {
+  .icon-grid { grid-template-columns: repeat(3, 1fr); }
+}
+.icon-option {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: var(--theme-surface-elevated);
+  border: 2px solid transparent;
+  overflow: hidden;
+  transition: border-color 0.2s var(--ease), transform 0.15s var(--ease);
+  cursor: pointer;
+  padding: 0;
+}
+.icon-option:hover { transform: scale(1.04); }
+.icon-option.selected {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 2px var(--theme-primary-soft);
+}
+.icon-option img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.icon-skeleton {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--theme-divider) 0%, var(--theme-glass-border) 50%, var(--theme-divider) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+.icon-placeholder {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: var(--theme-glass-bg);
+  border: 1px dashed var(--theme-card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  font-size: 9px;
+  text-align: center;
+  padding: 3px;
+  line-height: 1.2;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DELETE CONFIRM (typed name)
+   ═══════════════════════════════════════════════════════════ */
+.delete-confirm-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 8px;
+  color: var(--theme-text);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color 0.2s;
+  margin-top: 8px;
+}
+.delete-confirm-input:focus { border-color: var(--theme-danger); }
+.delete-confirm-input.matched { border-color: var(--theme-success); }
+
+.delete-danger-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--theme-danger-soft);
+  color: var(--theme-danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+}
+.delete-danger-icon svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE TWEAKS
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 639px) {
+  .detail-actions { gap: 5px; }
+  .detail-action-btn { padding: 9px 4px; min-height: 50px; }
+  .detail-action-btn svg { width: 15px; height: 15px; }
+  .detail-action-btn .label { font-size: 9px; }
+}
 </style>
 </head>
 <body>
@@ -1845,25 +2018,27 @@ svg { display: block; }
   <aside class="rail" aria-label="Main navigation">
     <div class="rail-top">
       <a class="rail-logo" href="/" aria-label="Folio">
-        <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
+        <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none'">
       </a>
-
-      <a class="rail-btn" href="/" data-rail="editor" aria-label="Editor">
+      <a class="rail-btn" href="/" aria-label="Editor">
         <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
       </a>
-      <a class="rail-btn active" href="/projects" data-rail="projects" aria-label="Projects">
+      <a class="rail-btn active" href="/projects" aria-label="Projects">
         <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       </a>
-      <a class="rail-btn" href="/analytics" data-rail="analytics" aria-label="Analytics">
+      <a class="rail-btn" href="/tools" aria-label="Tools">
+        <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      </a>
+      <a class="rail-btn" href="/analytics" aria-label="Analytics">
         <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
       </a>
-      <a class="rail-btn" href="/settings" data-rail="settings" aria-label="Settings">
+      <a class="rail-btn" href="/settings" aria-label="Settings">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </a>
     </div>
     <div class="rail-bottom">
       <div class="rail-divider"></div>
-      <a class="rail-btn" href="/profile" data-rail="profile" aria-label="Profile">
+      <a class="rail-btn" href="/profile" aria-label="Profile">
         <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       </a>
     </div>
@@ -1875,10 +2050,10 @@ svg { display: block; }
 
       <header class="page-header">
         <a class="header-logo" href="/">
-  <div class="header-logo-badge">
-    <img src="/icons/icon-192.png" alt="Folio">
-  </div>
-</a>
+          <div class="header-logo-badge">
+            <img src="/icons/icon-192.png" alt="Folio">
+          </div>
+        </a>
         <h1 class="page-title">Projects</h1>
         <span class="page-count" id="pageCount">—</span>
         <div class="header-spacer"></div>
@@ -1890,9 +2065,15 @@ svg { display: block; }
             <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-<button class="icon-btn search-trigger" id="searchTrigger" type="button" aria-label="Search">
-  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-</button>
+        <button class="icon-btn search-trigger" id="searchTrigger" type="button" aria-label="Search">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+
+        <button class="icon-btn" id="bellBtn" type="button" aria-label="Notifications" title="Notifications" style="display:none;">
+          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="filter-badge hidden" id="bellBadge">0</span>
+        </button>
+
         <button class="sort-btn" id="sortBtn" type="button">
           <svg viewBox="0 0 24 24"><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="15" y2="18"/></svg>
           <span class="label" id="sortLabel">Modified</span>
@@ -1909,9 +2090,24 @@ svg { display: block; }
         </button>
       </header>
 
+      <div id="notifBannerMount"></div>
+
       <div class="offline-banner" id="offlineBanner">
         <svg viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/></svg>
         <span>Offline — showing cached projects</span>
+      </div>
+
+      <!-- Storage summary bar (always visible) -->
+      <div class="storage-summary" id="storageSummary">
+        <span class="storage-summary-label">
+          <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Storage
+        </span>
+        <div class="storage-summary-bar">
+          <div class="storage-summary-bar-fill" id="storageBarFill" style="width:0%"></div>
+        </div>
+        <span class="storage-summary-amount" id="storageAmount">— / —</span>
+        <span class="storage-summary-pct" id="storagePct">—</span>
       </div>
 
       <nav class="tabs-bar" id="tabsBar"></nav>
@@ -1933,6 +2129,10 @@ svg { display: block; }
     <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
     <span>Projects</span>
   </a>
+  <a class="nav-btn" href="/tools">
+    <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+    <span>Tools</span>
+  </a>
   <a class="nav-btn" href="/profile">
     <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
     <span>Profile</span>
@@ -1943,7 +2143,7 @@ svg { display: block; }
   </a>
 </nav>
 
-<!-- ═══════════ FULLSCREEN OVERLAY ═══════════ -->
+<!-- ═══════════ FILTERS OVERLAY ═══════════ -->
 <div class="fullscreen-overlay" id="filtersOverlay" role="dialog" aria-modal="true">
   <div class="overlay-inner">
     <div class="overlay-header">
@@ -1962,6 +2162,7 @@ svg { display: block; }
     </div>
   </div>
 </div>
+
 <!-- ═══════════ SEARCH SHEET ═══════════ -->
 <div class="fullscreen-overlay" id="searchOverlay" role="dialog" aria-modal="true">
   <div class="overlay-inner" style="max-width:600px;height:auto;">
@@ -1975,10 +2176,10 @@ svg { display: block; }
     </div>
     <div class="overlay-body">
       <input class="input" id="searchSheetInput" type="text" placeholder="Search projects…" autocomplete="off" spellcheck="false">
+      <div id="searchRecentMount" style="margin-top:12px;"></div>
     </div>
   </div>
 </div>
-
 
 <!-- ═══════════ ACTION MENU ═══════════ -->
 <div class="action-menu" id="actionMenu" role="dialog" aria-modal="true">
@@ -2023,81 +2224,82 @@ svg { display: block; }
 <script>
 (function () {
   'use strict';
-function wireThemeSync() {
-  window.addEventListener('storage', function (e) {
-    try {
-      // Theme changed in another tab
-      if (e.key === 'folio.theme') {
-        var pref = e.newValue || 'dark';
-        var resolved = pref;
-        if (pref === 'auto' || pref === 'system') {
-          resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
-            ? 'light' : 'dark';
+
+  function wireThemeSync() {
+    window.addEventListener('storage', function (e) {
+      try {
+        if (e.key === 'folio.theme') {
+          var pref = e.newValue || 'dark';
+          var resolved = pref;
+          if (pref === 'auto' || pref === 'system') {
+            resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+              ? 'light' : 'dark';
+          }
+          if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+          else document.documentElement.removeAttribute('data-theme');
+          var meta = document.getElementById('themeColorMeta');
+          if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
         }
+        if (e.key === 'folio.reducedMotion') {
+          if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
+          else document.documentElement.removeAttribute('data-reduced-motion');
+        }
+        if (e.key === 'folio.pageScale') {
+          var scale = Number(e.newValue || 1);
+          if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
+          if (scale > 1.35) scale = 1.35;
+          document.documentElement.style.setProperty('--page-scale', String(scale));
+        }
+      } catch (err) {}
+    });
+  }
+
+  function wireThemeMediaQuery() {
+    if (!window.matchMedia) return;
+    var mq = window.matchMedia('(prefers-color-scheme: light)');
+    var handler = function () {
+      try {
+        var pref = localStorage.getItem('folio.theme') || 'dark';
+        if (pref !== 'auto' && pref !== 'system') return;
+        var resolved = mq.matches ? 'light' : 'dark';
         if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
         else document.documentElement.removeAttribute('data-theme');
-
-        var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
+        var meta = document.getElementById('themeColorMeta');
         if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
-      }
+      } catch (e) {}
+    };
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else if (mq.addListener) mq.addListener(handler);
+  }
 
-      // Reduced-motion toggled in another tab
-      if (e.key === 'folio.reducedMotion') {
-        if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
-        else document.documentElement.removeAttribute('data-reduced-motion');
-      }
-
-      // Page scale changed in another tab
-      if (e.key === 'folio.pageScale') {
-        var scale = Number(e.newValue || 1);
-        if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
-        if (scale > 1.35) scale = 1.35;
-        document.documentElement.style.setProperty('--page-scale', String(scale));
-      }
-    } catch (err) {}
-  });
-}
-function wireThemeMediaQuery() {
-  if (!window.matchMedia) return;
-  var mq = window.matchMedia('(prefers-color-scheme: light)');
-  var handler = function () {
-    try {
-      var pref = localStorage.getItem('folio.theme') || 'dark';
-      if (pref !== 'auto' && pref !== 'system') return;   // only react when theme is auto
-      var resolved = mq.matches ? 'light' : 'dark';
-      if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
-      else document.documentElement.removeAttribute('data-theme');
-      var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
-      if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
-    } catch (e) {}
-  };
-  if (mq.addEventListener) mq.addEventListener('change', handler);
-  else if (mq.addListener) mq.addListener(handler);
-}
   // ═══════════════════════════════════════════════════════════
-  // CONFIG — must match index.html & project.html
+  // CONFIG
   // ═══════════════════════════════════════════════════════════
 
   const API_BASE = 'https://foliostudios.vercel.app/api';
   const API_HOST = API_BASE + '/host';
   const API_AUTH = API_BASE + '/auth';
   const API_FLIER = API_BASE + '/flier';
-  const API_ANALYTICS = API_BASE + '/analytics';
+  const API_NOTIFY = API_BASE + '/notify';
 
   const STORAGE = {
     session: 'folio.session',
     user: 'folio.user',
-    lastProject: 'folio.lastProject',
     theme: 'folio.theme',
     autoClean: 'folio.projects.autoClean',
     lastTab: 'folio.projects.lastTab',
+    recentSearches: 'folio.projects.recentSearches',
+    pinned: 'folio.projects.pinned',
   };
 
   const DB_NAME = 'folio';
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
+
+  const DEFAULT_PROJECT_STORAGE_LIMIT = 10 * 1024 * 1024;
 
   const TABS = [
     { id: 'all', label: 'All' },
+    { id: 'pinned', label: 'Pinned' },
     { id: 'owned', label: 'Owned' },
     { id: 'shared', label: 'Shared' },
     { id: 'public', label: 'Public' },
@@ -2105,8 +2307,9 @@ function wireThemeMediaQuery() {
   ];
 
   const FILTERS_BY_TAB = {
-    all: ['deployed', 'notDeployed', 'expired'],
-    owned: ['deployed', 'notDeployed', 'expired'],
+    all: ['deployed', 'notDeployed', 'storageWarning', 'recentlyEdited', 'neverDeployed', 'expired'],
+    pinned: ['deployed', 'notDeployed', 'storageWarning'],
+    owned: ['deployed', 'notDeployed', 'storageWarning', 'recentlyEdited'],
     shared: ['editor', 'viewer', 'commenter'],
     public: ['deployed'],
     archived: [],
@@ -2115,6 +2318,8 @@ function wireThemeMediaQuery() {
   const FILTER_LABELS = {
     deployed: 'Deployed', notDeployed: 'Not deployed', expired: 'Expired deploys',
     editor: 'Editor', viewer: 'Viewer', commenter: 'Commenter',
+    storageWarning: 'Storage > 70%', recentlyEdited: 'Recently edited',
+    neverDeployed: 'Never deployed',
   };
 
   const SORTS = [
@@ -2122,9 +2327,9 @@ function wireThemeMediaQuery() {
     { id: 'created', label: 'Created', fn: (a, b) => (b.createdAt || 0) - (a.createdAt || 0) },
     { id: 'name', label: 'Name', fn: (a, b) => String(a.name || '').localeCompare(String(b.name || '')) },
     { id: 'storage', label: 'Storage', fn: (a, b) => (b.storageUsed || 0) - (a.storageUsed || 0) },
+    { id: 'deployed', label: 'Recently deployed', fn: (a, b) => (b.deployment?.deployedAt || 0) - (a.deployment?.deployedAt || 0) },
+    { id: 'visits', label: 'Most visits', fn: (a, b) => (b.viewCount || 0) - (a.viewCount || 0) },
   ];
-
-  const OWNER_TABS = ['all', 'owned', 'shared', 'public', 'archived'];
 
   // ═══════════════════════════════════════════════════════════
   // SVG
@@ -2162,13 +2367,20 @@ function wireThemeMediaQuery() {
     file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
     edit3: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
     wifiOff: '<line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>',
+    'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
+    'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
+    bookmark: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+    archive: '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>',
+    unlock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+    bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    dashboard: '<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
   };
 
   const svg = (name, size = 14, sw = 2.2) =>
     `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${SVG[name] || ''}</svg>`;
 
   // ═══════════════════════════════════════════════════════════
-  // SHARED IDB (must match index.html & project.html)
+  // IDB v3
   // ═══════════════════════════════════════════════════════════
 
   let dbConn = null;
@@ -2191,9 +2403,14 @@ function wireThemeMediaQuery() {
         }
         if (!conn.objectStoreNames.contains('projectMeta')) conn.createObjectStore('projectMeta', { keyPath: 'pid' });
         if (!conn.objectStoreNames.contains('syncQueue')) conn.createObjectStore('syncQueue', { keyPath: 'id', autoIncrement: true });
+        if (!conn.objectStoreNames.contains('folders')) {
+          const store = conn.createObjectStore('folders', { keyPath: ['pid', 'path'] });
+          store.createIndex('pid', 'pid');
+        }
       };
     });
   }
+
   function dbWrap(req) { return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
   function dbTx(store, mode = 'readonly') { return dbConn.transaction(store, mode).objectStore(store); }
 
@@ -2210,9 +2427,14 @@ function wireThemeMediaQuery() {
       for (const f of files) await dbWrap(dbTx('files', 'readwrite').delete([f.pid, f.path]));
       const versions = await dbWrap(dbTx('versions').index('pid').getAll(pid));
       for (const v of versions) await dbWrap(dbTx('versions', 'readwrite').delete(v.vid));
+      const folders = await dbWrap(dbTx('folders').index('pid').getAll(pid));
+      for (const fo of folders) await dbWrap(dbTx('folders', 'readwrite').delete([fo.pid, fo.path]));
     },
     async putFile(pid, path, content) {
       return dbWrap(dbTx('files', 'readwrite').put({ pid, path, content, updatedAt: Date.now() }));
+    },
+    async listFiles(pid) {
+      return dbWrap(dbTx('files').index('pid').getAll(pid));
     },
   };
 
@@ -2225,8 +2447,11 @@ function wireThemeMediaQuery() {
       iconUrl: p.iconUrl || null,
       createdAt: p.createdAt ? new Date(p.createdAt).getTime() : Date.now(),
       updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
+      storageUsed: p.storageUsed || 0,
+      storageLimit: p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT,
+      viewCount: p.viewCount || 0,
+      deployment: p.deployment || null,
       _server: true,
-      _serverData: p,
     };
   }
 
@@ -2258,6 +2483,13 @@ function wireThemeMediaQuery() {
     deploymentCache: new Map(), expiredDeployments: [],
     autoCleanEnabled: true, activeMenuProject: null,
     online: navigator.onLine,
+    expandedProjects: new Set(),
+    pinnedProjects: new Set(),
+    notifStats: null,
+    notifBellTimer: null,
+    analytics: new Map(),
+    lastSyncedAt: 0,
+    recentSearches: [],
   };
 
   const $ = id => document.getElementById(id);
@@ -2316,6 +2548,22 @@ function wireThemeMediaQuery() {
     let t;
     return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
   }
+  function copyToClipboard(text) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {});
+        return true;
+      }
+    } catch {}
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch { return false; }
+  }
 
   function toast(msg, type = 'info', duration = 2400) {
     const el = document.createElement('div');
@@ -2368,6 +2616,14 @@ function wireThemeMediaQuery() {
       S.user = raw ? JSON.parse(raw) : null;
     } catch {}
     if (S.user) S.uid = S.user.uid || null;
+    try {
+      const pinRaw = localStorage.getItem(STORAGE.pinned);
+      if (pinRaw) S.pinnedProjects = new Set(JSON.parse(pinRaw));
+    } catch {}
+    try {
+      const rsRaw = localStorage.getItem(STORAGE.recentSearches);
+      if (rsRaw) S.recentSearches = JSON.parse(rsRaw).slice(0, 5);
+    } catch {}
   }
 
   async function apiFetch(url, opts = {}) {
@@ -2378,7 +2634,9 @@ function wireThemeMediaQuery() {
       let data = {};
       try { data = await res.json(); } catch {}
       return { ok: res.ok, status: res.status, data };
-    } catch { return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } }; }
+    } catch (err) {
+      return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2406,18 +2664,70 @@ function wireThemeMediaQuery() {
   function goEditor(pid) { window.location.href = '/?pid=' + encodeURIComponent(pid); }
   function goDashboard(pid) { window.location.href = '/project?pid=' + encodeURIComponent(pid); }
 
+  function readUrlParams() {
+    const params = new URLSearchParams(location.search);
+    const pid = params.get('pid');
+    if (pid) {
+      // Direct deep-link → navigate to project page
+      window.location.replace('/project?pid=' + encodeURIComponent(pid));
+      return false;
+    }
+    const tab = params.get('tab');
+    if (tab && TABS.some(t => t.id === tab)) S.activeTab = tab;
+    const q = params.get('q');
+    if (q) S.searchQuery = q;
+    return true;
+  }
+
   // ═══════════════════════════════════════════════════════════
-  // LOAD PROJECTS — IDB first, then server (hydrate into IDB)
+  // PIN / UNPIN
+  // ═══════════════════════════════════════════════════════════
+
+  function togglePin(pid) {
+    if (S.pinnedProjects.has(pid)) S.pinnedProjects.delete(pid);
+    else S.pinnedProjects.add(pid);
+    try { localStorage.setItem(STORAGE.pinned, JSON.stringify([...S.pinnedProjects])); } catch {}
+    toast(S.pinnedProjects.has(pid) ? 'Pinned' : 'Unpinned', 'success', 1200);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ARCHIVE
+  // ═══════════════════════════════════════════════════════════
+
+  async function toggleArchive(project) {
+    const wasArchived = !!project.archived;
+    project.archived = !wasArchived;
+    project.archivedAt = wasArchived ? null : Date.now();
+    project.updatedAt = Date.now();
+    try {
+      await IDB.putProject({
+        pid: project.pid,
+        name: project.name,
+        slug: project.slug || '',
+        description: project.description || '',
+        iconUrl: project.iconUrl || null,
+        createdAt: project.createdAt || Date.now(),
+        updatedAt: Date.now(),
+        archived: project.archived,
+        archivedAt: project.archivedAt,
+      });
+      toast(wasArchived ? 'Unarchived' : 'Archived', 'success', 1200);
+      await loadProjects();
+    } catch (err) {
+      toast('Could not update', 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOAD PROJECTS
   // ═══════════════════════════════════════════════════════════
 
   async function loadProjects() {
     renderSkeletons();
 
-    // 1. Local IDB
     let local = [];
     try { local = await IDB.listProjects(); } catch {}
 
-    // 2. Server (signed in + online) — merge server metadata into IDB
     let serverMap = new Map();
     if (S.session && S.online) {
       try {
@@ -2427,6 +2737,7 @@ function wireThemeMediaQuery() {
           serverMap = new Map(serverProjects.map(p => [p.pid, p]));
           await hydrateProjectsFromServer(serverProjects);
           local = await IDB.listProjects();
+          S.lastSyncedAt = Date.now();
         } else if (res.status === 401) {
           S.session = null;
           try { localStorage.removeItem(STORAGE.session); } catch {}
@@ -2434,7 +2745,6 @@ function wireThemeMediaQuery() {
       } catch {}
     }
 
-    // Merge: local wins on timestamps, server adds deployment/role/etc.
     S.projects = local.map(lp => {
       const server = serverMap.get(lp.pid);
       return {
@@ -2466,6 +2776,7 @@ function wireThemeMediaQuery() {
     }
 
     updateHeaderCount();
+    renderStorageSummary();
     applyFiltersAndRender();
   }
 
@@ -2514,26 +2825,108 @@ function wireThemeMediaQuery() {
         });
       }
       S.expiredDeployments = [];
-      toast(`Cleaned ${count} expired deployment${count === 1 ? '' : 's'}`, 'success', 2000);
+      toast(`Auto-cleaned ${count} expired deployment${count === 1 ? '' : 's'}`, 'success', 2600);
       updateHeaderCount();
       applyFiltersAndRender();
     } catch {}
   }
 
   // ═══════════════════════════════════════════════════════════
-  // RENDER: TABS
+  // STORAGE SUMMARY
+  // ═══════════════════════════════════════════════════════════
+
+  function renderStorageSummary() {
+    let totalUsed = 0;
+    for (const p of S.projects) {
+      totalUsed += p.storageUsed || 0;
+    }
+    const limit = S.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+    const pct = Math.min(100, (totalUsed / limit) * 100);
+    const barCls = pct > 90 ? 'danger' : pct > 70 ? 'warn' : '';
+
+    const barFill = $('storageBarFill');
+    const amount = $('storageAmount');
+    const pctEl = $('storagePct');
+
+    if (barFill) {
+      barFill.style.width = pct + '%';
+      barFill.className = 'storage-summary-bar-fill ' + barCls;
+    }
+    if (amount) amount.textContent = `${formatBytes(totalUsed)} / ${formatBytes(limit)}`;
+    if (pctEl) pctEl.textContent = `${Math.round(pct)}%`;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // NOTIFICATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  async function loadNotificationStats() {
+    if (!S.session || !S.online) return;
+    try {
+      const res = await apiFetch(API_NOTIFY + '?action=stats');
+      if (res.ok && res.data?.success && res.data.stats) {
+        S.notifStats = res.data.stats;
+        updateBell(S.notifStats.unread || 0);
+        renderNotifBanner();
+      }
+    } catch {}
+  }
+
+  function updateBell(count) {
+    const bell = $('bellBtn');
+    const badge = $('bellBadge');
+    if (!bell || !badge) return;
+    bell.style.display = S.session ? '' : 'none';
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+
+  function renderNotifBanner() {
+    const mount = $('notifBannerMount');
+    if (!mount) return;
+    if (!S.session || !S.notifStats) { mount.innerHTML = ''; return; }
+    const unread = S.notifStats.unread || 0;
+    const inviteCount = S.notifStats.invite || 0;
+    if (unread === 0 && inviteCount === 0) { mount.innerHTML = ''; return; }
+
+    let text = '';
+    if (inviteCount > 0 && unread > 0) text = `${unread} new notification${unread === 1 ? '' : 's'} including ${inviteCount} invite${inviteCount === 1 ? '' : 's'}`;
+    else if (inviteCount > 0) text = `You have ${inviteCount} new invite${inviteCount === 1 ? '' : 's'}`;
+    else text = `${unread} new notification${unread === 1 ? '' : 's'}`;
+
+    mount.innerHTML = `
+      <div class="notif-banner">
+        ${svg('bell', 14, 2.2)}
+        <div class="nb-text"><strong>${escapeHTML(text)}</strong></div>
+        <a href="/notifications" class="nb-link">View</a>
+      </div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER: HEADER + STORAGE + TABS
   // ═══════════════════════════════════════════════════════════
 
   function getCountForTab(tabId) { return S.projects.filter(p => matchesTab(p, tabId)).length; }
 
   function renderTabs() {
     const tabsEl = $('tabsBar');
-    tabsEl.innerHTML = TABS.map(t => `
-      <button class="tab ${t.id === S.activeTab ? 'active' : ''}" data-tab="${escapeAttr(t.id)}" type="button">
-        <span>${escapeHTML(t.label)}</span>
-        <span class="tab-count">${getCountForTab(t.id)}</span>
-      </button>
-    `).join('');
+    const inviteCount = (S.notifStats?.invite || 0);
+    tabsEl.innerHTML = TABS.map(t => {
+      const count = getCountForTab(t.id);
+      const showNotifBadge = t.id === 'shared' && inviteCount > 0;
+      return `
+        <button class="tab ${t.id === S.activeTab ? 'active' : ''}" data-tab="${escapeAttr(t.id)}" type="button">
+          <span>${escapeHTML(t.label)}</span>
+          <span class="tab-count">${count}</span>
+          ${showNotifBadge ? `<span class="tab-badge-notif">${inviteCount}</span>` : ''}
+        </button>
+      `;
+    }).join('');
     tabsEl.querySelectorAll('[data-tab]').forEach(btn => {
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
@@ -2556,7 +2949,7 @@ function wireThemeMediaQuery() {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // RENDER: ACTIVE FILTERS
+  // ACTIVE FILTERS
   // ═══════════════════════════════════════════════════════════
 
   function renderActiveFilters() {
@@ -2615,18 +3008,22 @@ function wireThemeMediaQuery() {
   // ═══════════════════════════════════════════════════════════
 
   function matchesTab(p, tabId) {
-    if (tabId === 'all') return !p.archived;
-    if (tabId === 'owned') return p.myRole === 'owner' && !p.archived;
-    if (tabId === 'shared') return p.myRole && p.myRole !== 'owner' && !p.archived;
-    if (tabId === 'public') return p.visibility?.profile === 'public' && !p.archived;
     if (tabId === 'archived') return p.archived === true;
+    if (p.archived) return false;
+    if (tabId === 'all') return true;
+    if (tabId === 'pinned') return S.pinnedProjects.has(p.pid);
+    if (tabId === 'owned') return p.myRole === 'owner';
+    if (tabId === 'shared') return p.myRole && p.myRole !== 'owner';
+    if (tabId === 'public') return p.visibility?.profile === 'public';
     return true;
   }
+
   function matchesFilters(p) {
     if (S.activeFilters.size === 0) return true;
     for (const f of S.activeFilters) {
       if (f === 'deployed' && !p.deployment?.url) return false;
       if (f === 'notDeployed' && p.deployment?.url) return false;
+      if (f === 'neverDeployed' && p.deployment?.url) return false;
       if (f === 'expired') {
         const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
         if (!hasExpired) return false;
@@ -2634,9 +3031,19 @@ function wireThemeMediaQuery() {
       if (f === 'editor' && p.myRole !== 'editor') return false;
       if (f === 'viewer' && p.myRole !== 'viewer') return false;
       if (f === 'commenter' && p.myRole !== 'commenter') return false;
+      if (f === 'storageWarning') {
+        const limit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+        const pct = (p.storageUsed || 0) / limit * 100;
+        if (pct < 70) return false;
+      }
+      if (f === 'recentlyEdited') {
+        const sevenDays = 7 * 24 * 60 * 60 * 1000;
+        if (!p.updatedAt || Date.now() - p.updatedAt > sevenDays) return false;
+      }
     }
     return true;
   }
+
   function matchesSearch(p) {
     if (!S.searchQuery) return true;
     const q = S.searchQuery.toLowerCase();
@@ -2649,13 +3056,22 @@ function wireThemeMediaQuery() {
     let list = S.projects.filter(p => matchesTab(p, S.activeTab) && matchesFilters(p) && matchesSearch(p));
     const sorter = SORTS.find(s => s.id === S.sortId) || SORTS[0];
     list.sort(sorter.fn);
+
+    // Pinned first
+    list.sort((a, b) => {
+      const aPin = S.pinnedProjects.has(a.pid) ? 1 : 0;
+      const bPin = S.pinnedProjects.has(b.pid) ? 1 : 0;
+      if (aPin !== bPin) return bPin - aPin;
+      return 0;
+    });
+
     S.filtered = list;
     renderProjects();
     updateHeaderCount();
   }
 
   // ═══════════════════════════════════════════════════════════
-  // RENDER: PROJECT CARDS
+  // RENDER: SKELETONS + PROJECT CARDS
   // ═══════════════════════════════════════════════════════════
 
   function renderSkeletons() {
@@ -2669,8 +3085,6 @@ function wireThemeMediaQuery() {
             <div class="skeleton skeleton-sub"></div>
           </div>
         </div>
-        <div class="skeleton skeleton-line"></div>
-        <div class="skeleton skeleton-line short"></div>
       </div>
     `).join('');
   }
@@ -2704,6 +3118,16 @@ function wireThemeMediaQuery() {
         <div class="empty-title">No shared projects</div>
         <div class="empty-desc">When someone invites you, it will appear here.</div></div>`;
     }
+    if (S.activeTab === 'pinned') {
+      return `<div class="empty-state"><div class="empty-icon">${svg('bookmark', 22, 2)}</div>
+        <div class="empty-title">No pinned projects</div>
+        <div class="empty-desc">Tap the star icon on a project to pin it here.</div></div>`;
+    }
+    if (S.activeTab === 'archived') {
+      return `<div class="empty-state"><div class="empty-icon">${svg('archive', 22, 2)}</div>
+        <div class="empty-title">No archived projects</div>
+        <div class="empty-desc">Archived projects will appear here.</div></div>`;
+    }
     if (S.activeTab === 'owned') {
       return `<div class="empty-state"><div class="empty-icon">${svg('folder', 22, 2)}</div>
         <div class="empty-title">You don't own any projects</div>
@@ -2723,7 +3147,6 @@ function wireThemeMediaQuery() {
 
   function bindEmptyStateActions() {
     document.querySelector('[data-empty-new]')?.addEventListener('click', openCreateFlow);
-    document.querySelector('[data-empty-import]')?.addEventListener('click', openImportFlow);
     document.querySelector('[data-empty-clear-filters]')?.addEventListener('click', () => {
       S.activeFilters.clear(); S.searchQuery = '';
       $('searchInput').value = ''; $('searchClear').classList.remove('visible');
@@ -2732,77 +3155,241 @@ function wireThemeMediaQuery() {
   }
 
   function renderProjectCard(p) {
+    const isExpanded = S.expandedProjects.has(p.pid);
+    const isPinned = S.pinnedProjects.has(p.pid);
+
     const iconHTML = p.iconUrl
       ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
-      : `<span>${escapeHTML(getInitials(p.name))}</span>`;
-    const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+      : `<span style="background:${getAvatarColor(p.name)};color:#0a0c10;">${escapeHTML(getInitials(p.name))}</span>`;
+
     const roleBadge = p.myRole === 'owner'
       ? '<span class="role-badge owner">Owner</span>'
       : p.myRole === 'editor'
-      ? '<span class="role-badge editor">Editor</span>'
-      : p.myRole ? `<span class="role-badge">${escapeHTML(p.myRole)}</span>` : '';
-    const liveBadge = p.deployment?.url
-      ? '<span class="live-badge"><span class="dot"></span>Live</span>'
-      : p.deployment?.state === 'OFFLINE'
-      ? '<span class="live-badge offline"><span class="dot"></span>Offline</span>'
-      : '<span class="live-badge offline">Local</span>';
-    const langBadges = p.languages?.breakdown
-      ? Object.entries(p.languages.breakdown).slice(0, 3)
-          .map(([name, pct]) => `<span class="lang-badge">${escapeHTML(name)} ${pct}%</span>`).join('')
-      : '';
-    const viewCount = p.viewCount || 0;
-    const fileCount = p.fileCount;
-    const statsHTML = [
-      viewCount > 0 ? `<span class="stat-item">${svg('eye', 9, 2.2)}${formatNumber(viewCount)}</span>` : '',
-      fileCount != null ? `<span class="stat-item">${svg('file', 9, 2.2)}${fileCount}</span>` : '',
-      p.updatedAt ? `<span class="stat-item">${timeAgo(p.updatedAt)}</span>` : '',
-    ].filter(Boolean).join('');
-    const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
+        ? '<span class="role-badge editor">Editor</span>'
+        : p.myRole ? `<span class="role-badge">${escapeHTML(p.myRole)}</span>` : '';
 
-    return `
-  <div class="project-card" data-pid="${escapeAttr(p.pid)}">
-    <div class="project-card-header">
-      <div class="project-icon" style="${iconBg}">${iconHTML}</div>
-      <div class="project-header-info">
-        <div class="project-name">${escapeHTML(p.name || 'Untitled project')}</div>
-        <div class="project-meta">
-          ${roleBadge}${liveBadge}
-          ${hasExpired ? `<span style="color:var(--theme-warning);display:inline-flex;align-items:center;gap:2px;">${svg('alertTriangle', 9, 2.4)}</span>` : ''}
+    const deployState = p.deployment?.url
+      ? '<span class="live-badge live"><span class="dot"></span>Live</span>'
+      : p.deployment?.state === 'OFFLINE'
+        ? '<span class="live-badge offline"><span class="dot"></span>Offline</span>'
+        : '';
+
+    const lastDeployText = p.deployment?.deployedAt
+      ? `Deployed ${timeAgo(p.deployment.deployedAt)}`
+      : 'Never deployed';
+
+    const langBadges = p.languages?.breakdown
+      ? Object.entries(p.languages.breakdown).slice(0, 3).map(([name, pct]) =>
+          `<span class="lang-badge"><span class="lang-dot"></span>${escapeHTML(name)} ${pct}%</span>`
+        ).join('')
+      : '';
+
+    const storageUsed = p.storageUsed || 0;
+    const storageLimit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+    const storagePct = Math.min(100, (storageUsed / storageLimit) * 100);
+    const storageCls = storagePct > 90 ? 'danger' : storagePct > 70 ? 'warn' : '';
+
+    const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
+    const storageWarn = storagePct > 70;
+
+    // Stats row (always visible)
+    const statsRow = `
+      <div class="project-stats-row">
+        <span class="project-stat-item ${storageWarn ? 'project-stat-warn' : ''}">
+          ${svg('database', 9, 2.2)}
+          ${formatBytes(storageUsed)}
+        </span>
+        <span class="project-stat-item">
+          ${svg('eye', 9, 2.2)}
+          ${formatNumber(p.viewCount || 0)}
+        </span>
+        <span class="project-stat-item">
+          ${svg('clock', 9, 2.2)}
+          ${timeAgo(p.updatedAt)}
+        </span>
+        ${hasExpired ? `<span class="project-stat-item project-stat-warn">${svg('alertTriangle', 9, 2.4)} expired</span>` : ''}
+      </div>
+    `;
+
+    // Expanded detail
+    const detail = isExpanded ? `
+      <div class="project-card-detail">
+        ${p.description ? `<div class="detail-desc">${escapeHTML(p.description)}</div>` : `<div class="detail-desc empty">No description</div>`}
+
+        ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
+
+        <div class="detail-storage">
+          <div class="detail-storage-header">
+            <span>Storage</span>
+            <span>${formatBytes(storageUsed)} / ${formatBytes(storageLimit)}</span>
+          </div>
+          <div class="detail-storage-bar">
+            <div class="detail-storage-fill ${storageCls}" style="width:${storagePct}%"></div>
+          </div>
+        </div>
+
+        ${hasExpired ? `
+          <div class="detail-warning">
+            ${svg('alertTriangle', 11, 2.4)}
+            <span>Some deployments are expired. Clean them to free space.</span>
+          </div>
+        ` : ''}
+
+        ${storagePct > 90 ? `
+          <div class="detail-warning danger">
+            ${svg('alert', 11, 2.4)}
+            <span>Storage nearly full — delete files to avoid issues.</span>
+          </div>
+        ` : ''}
+
+        <div style="font-size:10px;color:var(--theme-text-tertiary);line-height:1.4;">
+          ${escapeHTML(lastDeployText)} · ${p.slug ? '@' + escapeHTML(p.slug) : escapeHTML(p.pid.slice(-8))}
+        </div>
+
+        <div class="detail-actions">
+          <button class="detail-action-btn primary" data-card-action="editor" data-pid="${escapeAttr(p.pid)}" type="button">
+            ${svg('edit3', 16, 2.2)}
+            <span class="label">Editor</span>
+          </button>
+          <button class="detail-action-btn" data-card-action="view" data-pid="${escapeAttr(p.pid)}" type="button">
+            ${svg('dashboard', 16, 2.2)}
+            <span class="label">View</span>
+          </button>
+          <button class="detail-action-btn danger" data-card-action="delete" data-pid="${escapeAttr(p.pid)}" type="button">
+            ${svg('trash', 16, 2.2)}
+            <span class="label">Delete</span>
+          </button>
         </div>
       </div>
-      <div class="project-card-actions">
-        <button class="project-edit-btn" data-edit="${escapeAttr(p.pid)}" aria-label="Open in editor" title="Open in editor">${svg('edit3', 12, 2.2)}</button>
-        <button class="project-more-btn" data-more="${escapeAttr(p.pid)}" aria-label="More actions" title="More">${svg('more', 13, 2.4)}</button>
+    ` : '';
+
+    return `
+      <div class="project-card${isExpanded ? ' expanded' : ''}" data-pid="${escapeAttr(p.pid)}">
+        <div class="project-card-row" data-card-expand="${escapeAttr(p.pid)}">
+          <div class="project-icon">${iconHTML}</div>
+          <div class="project-header-info">
+            <div class="project-name-row">
+              ${isPinned ? `<span class="project-pin-icon">${svg('bookmark', 10, 2.4)}</span>` : ''}
+              <div class="project-name">${escapeHTML(p.name || 'Untitled project')}</div>
+            </div>
+            <div class="project-meta">
+              ${roleBadge}${deployState}
+              <span class="sep">·</span>
+              <span>${escapeHTML(lastDeployText)}</span>
+            </div>
+          </div>
+          <button class="project-expand-btn" data-card-expand="${escapeAttr(p.pid)}" type="button" aria-label="Expand details" aria-expanded="${isExpanded}">
+            ${svg('chevron-down', 14, 2.4)}
+          </button>
+        </div>
+        ${statsRow}
+        ${detail}
       </div>
-    </div>
-    ${p.description ? `<div class="project-desc">${escapeHTML(p.description)}</div>` : ''}
-    ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
-    ${statsHTML ? `<div class="project-stats">${statsHTML}</div>` : ''}
-  </div>
-`;
+    `;
   }
 
   function bindProjectCardEvents() {
-  document.querySelectorAll('.project-card').forEach(card => {
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('[data-more]') || e.target.closest('[data-edit]')) return;
-      goDashboard(card.dataset.pid);
+    // Expand toggle
+    document.querySelectorAll('[data-card-expand]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const pid = btn.dataset.cardExpand;
+        if (S.expandedProjects.has(pid)) S.expandedProjects.delete(pid);
+        else S.expandedProjects.add(pid);
+        // Update DOM in place
+        const card = document.querySelector(`.project-card[data-pid="${pid}"]`);
+        if (card) {
+          const p = S.filtered.find(x => x.pid === pid);
+          if (p) card.outerHTML = renderProjectCard(p);
+          bindProjectCardEvents();
+        }
+      });
     });
-  });
-  document.querySelectorAll('[data-edit]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      goEditor(btn.dataset.edit);
+
+    // Detail action buttons
+    document.querySelectorAll('[data-card-action]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const pid = btn.dataset.pid;
+        const action = btn.dataset.cardAction;
+        const p = S.projects.find(x => x.pid === pid);
+        if (!p) return;
+        if (action === 'editor') goEditor(pid);
+        else if (action === 'view') goDashboard(pid);
+        else if (action === 'delete') openDeleteProjectModal(p);
+      });
     });
-  });
-  document.querySelectorAll('[data-more]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const p = S.projects.find(proj => proj.pid === btn.dataset.more);
-      if (p) openActionMenu(p);
+
+    // Prevent row click from doing anything besides expand
+    document.querySelectorAll('.project-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('[data-card-expand]') || e.target.closest('[data-card-action]')) return;
+        // Clicking elsewhere on card also expands
+        const pid = card.dataset.pid;
+        if (S.expandedProjects.has(pid)) S.expandedProjects.delete(pid);
+        else S.expandedProjects.add(pid);
+        const p = S.filtered.find(x => x.pid === pid);
+        if (p) {
+          card.outerHTML = renderProjectCard(p);
+          bindProjectCardEvents();
+        }
+      });
     });
-  });
-}
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // DELETE PROJECT (typed confirm)
+  // ═══════════════════════════════════════════════════════════
+
+  function openDeleteProjectModal(p) {
+    openModal(`
+      <div class="delete-danger-icon">
+        ${svg('trash', 22, 2.4)}
+      </div>
+      <div class="modal-title" style="text-align:center;">Delete project?</div>
+      <div class="modal-desc" style="text-align:center;">
+        This deletes all files, versions, and data. Cannot be undone.
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label class="field-label">Type "${escapeHTML(p.name || 'Untitled project')}" to confirm</label>
+        <input class="delete-confirm-input" id="deleteConfirmInput" type="text" placeholder="Project name" autocomplete="off">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn btn-danger" id="deleteConfirmBtn" disabled>Delete project</button>
+      </div>
+    `);
+
+    const input = $('deleteConfirmInput');
+    const confirmBtn = $('deleteConfirmBtn');
+    input.addEventListener('input', () => {
+      const matched = input.value === p.name;
+      confirmBtn.disabled = !matched;
+      input.classList.toggle('matched', matched);
+    });
+    setTimeout(() => input.focus(), 100);
+
+    confirmBtn.addEventListener('click', async () => {
+      showLoading('Deleting', 'Removing project and all data…');
+      try {
+        if (S.session && S.online && p._serverData) {
+          const res = await apiFetch(API_HOST + '?action=projects/delete', {
+            method: 'POST', body: JSON.stringify({ pid: p.pid }),
+          });
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        }
+        await IDB.deleteProject(p.pid);
+        hideLoading();
+        closeModal();
+        toast('Project deleted', 'success');
+        S.projects = S.projects.filter(proj => proj.pid !== p.pid);
+        applyFiltersAndRender();
+      } catch (err) {
+        hideLoading();
+        toast(err.message || 'Delete failed', 'error');
+      }
+    });
+  }
 
   // ═══════════════════════════════════════════════════════════
   // ACTION MENU
@@ -2811,10 +3398,12 @@ function wireThemeMediaQuery() {
   function openActionMenu(p) {
     S.activeMenuProject = p;
     const isOwner = p.myRole === 'owner';
+    const isArchived = !!p.archived;
     const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
     const expiredCount = S.expiredDeployments.filter(d => d.pid === p.pid).length;
     const shareUrl = p.visibility?.profile === 'public'
-      ? `${location.origin}/${S.user?.username || ''}/${p.slug || ''}` : null;
+      ? `${location.origin}/${S.user?.profile?.username || S.user?.username || ''}/${p.slug || ''}`
+      : null;
     const iconHTML = p.iconUrl
       ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
       : `<span>${escapeHTML(getInitials(p.name))}</span>`;
@@ -2830,13 +3419,17 @@ function wireThemeMediaQuery() {
         </div>
       </div>
       <div class="action-list">
+        <button class="action-item" data-action="dashboard">${svg('dashboard', 14, 2.2)}<span>Open dashboard</span></button>
         <button class="action-item" data-action="editor">${svg('edit3', 14, 2.2)}<span>Open in editor</span></button>
-        
+        ${p.deployment?.url ? `<button class="action-item" data-action="openLive">${svg('external', 14, 2.2)}<span>Open live site</span></button>` : ''}
+        ${p.deployment?.url ? `<button class="action-item" data-action="copyLive">${svg('copy', 14, 2.2)}<span>Copy live URL</span></button>` : ''}
         ${shareUrl ? `<button class="action-item" data-action="share">${svg('share', 14, 2.2)}<span>Copy share link</span></button>` : ''}
         <div class="action-divider"></div>
         <button class="action-item" data-action="download">${svg('download', 14, 2.2)}<span>Download .folio</span></button>
         <button class="action-item" data-action="duplicate">${svg('copy', 14, 2.2)}<span>Duplicate</span></button>
+        <button class="action-item" data-action="pin">${svg('bookmark', 14, 2.2)}<span>${S.pinnedProjects.has(p.pid) ? 'Unpin' : 'Pin'}</span></button>
         ${isOwner ? `<button class="action-item" data-action="rename">${svg('edit', 14, 2.2)}<span>Rename</span></button>` : ''}
+        <button class="action-item" data-action="archive">${svg(isArchived ? 'unlock' : 'archive', 14, 2.2)}<span>${isArchived ? 'Unarchive' : 'Archive'}</span></button>
         ${hasExpired ? `<button class="action-item" data-action="cleanExpired">${svg('alertTriangle', 14, 2.2)}<span>Clean ${expiredCount} expired deploy${expiredCount === 1 ? '' : 's'}</span></button>` : ''}
         <div class="action-divider"></div>
         <button class="action-item danger" data-action="delete">${svg('trash', 14, 2.2)}<span>Delete project</span></button>
@@ -2859,16 +3452,27 @@ function wireThemeMediaQuery() {
     switch (action) {
       case 'editor': goEditor(p.pid); break;
       case 'dashboard': goDashboard(p.pid); break;
+      case 'openLive': if (p.deployment?.url) window.open(p.deployment.url, '_blank', 'noopener'); break;
+      case 'copyLive':
+        if (p.deployment?.url && copyToClipboard(p.deployment.url)) toast('Live URL copied', 'success', 1200);
+        else toast('Copy failed', 'error');
+        break;
       case 'share': {
-        const shareUrl = `${location.origin}/${S.user?.username || ''}/${p.slug || ''}`;
-        navigator.clipboard.writeText(shareUrl).then(() => toast('Link copied', 'success', 1200)).catch(() => toast('Copy failed', 'error'));
+        const shareUrl = `${location.origin}/${S.user?.profile?.username || S.user?.username || ''}/${p.slug || ''}`;
+        if (copyToClipboard(shareUrl)) toast('Link copied', 'success', 1200);
+        else toast('Copy failed', 'error');
         break;
       }
       case 'download': downloadProject(p); break;
       case 'duplicate': duplicateProject(p); break;
+      case 'pin':
+        togglePin(p.pid);
+        applyFiltersAndRender();
+        break;
       case 'rename': openRenameModal(p); break;
+      case 'archive': toggleArchive(p); break;
       case 'cleanExpired': cleanExpiredForProject(p); break;
-      case 'delete': confirmDeleteProject(p); break;
+      case 'delete': openDeleteProjectModal(p); break;
     }
   }
 
@@ -2893,33 +3497,81 @@ function wireThemeMediaQuery() {
 
   async function duplicateProject(p) {
     if (!S.online) { toast('Requires internet', 'warning'); return; }
-    confirmModal('Duplicate project?', 'A new project will be created with a copy of the files.', 'Duplicate', false, async () => {
-      showLoading('Duplicating', 'Copying files…');
+
+    openModal(`
+      <div class="modal-title">Duplicate project</div>
+      <div class="modal-desc">A new project will be created with a copy of the files.</div>
+      <div class="field">
+        <label class="field-label">New name</label>
+        <input class="input" id="duplicateName" value="${escapeAttr((p.name || 'Untitled') + ' (copy)')}" maxlength="100">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn btn-primary" id="duplicateSubmit">${svg('copy', 12, 2.2)} Duplicate</button>
+      </div>
+    `);
+    $('duplicateName').select();
+    $('duplicateSubmit').addEventListener('click', async () => {
+      const newName = ($('duplicateName').value || '').trim();
+      if (!newName) { toast('Name required', 'error'); return; }
+      const btn = $('duplicateSubmit');
+      btn.disabled = true;
+      btn.innerHTML = 'Duplicating…';
       try {
         const res = await apiFetch(API_HOST + '?action=project/copy', {
-          method: 'POST', body: JSON.stringify({ pid: p.pid, newName: `${p.name} (copy)` }),
+          method: 'POST', body: JSON.stringify({ pid: p.pid, newName }),
         });
-        hideLoading();
         if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+        closeModal();
         toast('Duplicated', 'success');
         await loadProjects();
-      } catch (err) { hideLoading(); toast(err.message || 'Duplicate failed', 'error'); }
+      } catch (err) {
+        toast(err.message || 'Duplicate failed', 'error');
+        btn.disabled = false;
+        btn.innerHTML = `${svg('copy', 12, 2.2)} Duplicate`;
+      }
     });
   }
 
   function openRenameModal(p) {
+    const oldSlug = p.slug || '';
+    const newSlugPreview = (name) => (name || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+
     openModal(`
       <div class="modal-title">Rename project</div>
       <div class="field">
         <label class="field-label">Project name</label>
-        <input class="input" id="renameInput" value="${escapeAttr(p.name || '')}" maxlength="100" autofocus>
+        <input class="input" id="renameInput" value="${escapeAttr(p.name || '')}" maxlength="100">
+      </div>
+      <div class="field">
+        <label class="field-label">Slug (auto-generated)</label>
+        <input class="input mono" id="renameSlug" value="${escapeAttr(oldSlug)}" readonly>
+        <div class="field-hint" id="renameSlugHint" style="margin-top:4px;font-size:10px;">This changes your share URL.</div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" data-modal-close>Cancel</button>
         <button class="btn btn-primary" id="renameSubmit">Save</button>
       </div>
     `);
-    $('renameInput').focus(); $('renameInput').select();
+
+    $('renameInput').focus();
+    $('renameInput').select();
+
+    const updateSlug = () => {
+      const newName = $('renameInput').value.trim();
+      const slug = newSlugPreview(newName);
+      $('renameSlug').value = slug;
+      const hint = $('renameSlugHint');
+      if (slug !== oldSlug && oldSlug) {
+        hint.textContent = `Share URL will change from /${oldSlug} to /${slug}`;
+        hint.style.color = 'var(--theme-warning)';
+      } else {
+        hint.textContent = 'This changes your share URL.';
+        hint.style.color = '';
+      }
+    };
+    $('renameInput').addEventListener('input', updateSlug);
+
     $('renameSubmit').addEventListener('click', async () => {
       const name = $('renameInput').value.trim();
       if (!name) { toast('Name required', 'error'); return; }
@@ -2937,51 +3589,17 @@ function wireThemeMediaQuery() {
         await IDB.putProject({
           pid: p.pid, name, slug: p.slug || '', description: p.description || '',
           createdAt: p.createdAt, updatedAt: Date.now(), iconUrl: p.iconUrl || null,
+          archived: p.archived || false, archivedAt: p.archivedAt || null,
         });
         closeModal();
         toast('Renamed', 'success');
-        renderProjects();
+        applyFiltersAndRender();
       } catch (err) {
         toast(err.message || 'Rename failed', 'error');
         $('renameSubmit').disabled = false;
       }
     });
     $('renameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('renameSubmit').click(); });
-  }
-
-  function confirmDeleteProject(p) {
-    openModal(`
-      <div class="modal-title">Delete project?</div>
-      <div class="modal-desc">This deletes all files, versions, and data. Cannot be undone.</div>
-      <div class="field">
-        <label class="field-label">Type "${escapeHTML(p.name || 'Untitled project')}" to confirm</label>
-        <input class="input" id="deleteConfirmInput" placeholder="Project name">
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" data-modal-close>Cancel</button>
-        <button class="btn btn-danger" id="deleteConfirmBtn" disabled>Delete</button>
-      </div>
-    `);
-    $('deleteConfirmInput').addEventListener('input', (e) => {
-      $('deleteConfirmBtn').disabled = e.target.value !== p.name;
-    });
-    $('deleteConfirmBtn').addEventListener('click', async () => {
-      showLoading('Deleting', 'Removing project and all data…');
-      try {
-        if (S.session && S.online && p._serverData) {
-          const res = await apiFetch(API_HOST + '?action=projects/delete', {
-            method: 'POST', body: JSON.stringify({ pid: p.pid }),
-          });
-          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
-        }
-        await IDB.deleteProject(p.pid);
-        hideLoading();
-        closeModal();
-        toast('Project deleted', 'success');
-        S.projects = S.projects.filter(proj => proj.pid !== p.pid);
-        applyFiltersAndRender();
-      } catch (err) { hideLoading(); toast(err.message || 'Delete failed', 'error'); }
-    });
   }
 
   async function cleanExpiredForProject(p) {
@@ -3016,227 +3634,200 @@ function wireThemeMediaQuery() {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // CREATE FLOW
+  // CREATE FLOW (single screen)
   // ═══════════════════════════════════════════════════════════
 
   function openCreateFlow() {
-    S.createStep = 1; S.createName = ''; S.createDescription = '';
-    S.createIconMode = 'name'; S.createIconUrl = null; S.createIconDataUrl = null;
-    S.createIconVariants = []; S.createImageUrlInput = '';
-    renderCreateStep();
+    S.createName = '';
+    S.createDescription = '';
+    S.createIconMode = 'name';
+    S.createIconUrl = null;
+    S.createIconDataUrl = null;
+    S.createIconVariants = [];
+
+    renderCreateModal();
   }
 
-  function renderCreateStep() {
-    const content = $('modalBody');
-    $('modalOverlay').classList.add('active');
-    const steps = ['Basics', 'Icon', 'Review'];
-    const stepperHTML = steps.map((_, i) => `<div class="step ${i < S.createStep ? 'active' : ''}"></div>`).join('');
+  function renderCreateModal() {
+    const templates = [
+      { id: 'blank', label: 'Blank', icon: 'file' },
+      { id: 'landing', label: 'Landing', icon: 'layout' },
+      { id: 'todo', label: 'Todo', icon: 'check' },
+      { id: 'blog', label: 'Blog', icon: 'edit3' },
+    ];
 
-    if (S.createStep === 1) {
-      content.innerHTML = `
-        <div class="modal-handle"></div>
-        <div class="stepper">${stepperHTML}</div>
-        <div class="step-label">Step 1 of 3 · Basics</div>
-        <div class="modal-title">New project</div>
-        <div class="modal-desc">Give it a name and short description.</div>
-        <div class="field">
-          <label class="field-label">Name *</label>
-          <input class="input" id="createName" value="${escapeAttr(S.createName)}" placeholder="My project" maxlength="100" autofocus>
+    const body = `
+      <div class="modal-title">New project</div>
+      <div class="modal-desc">Give it a name and start coding.</div>
+      <div class="field">
+        <label class="field-label">Name</label>
+        <input class="input" id="createName" placeholder="My project" maxlength="100" autofocus>
+      </div>
+      <div class="field">
+        <label class="field-label">Description (optional)</label>
+        <textarea class="textarea" id="createDesc" placeholder="What's this project about?" maxlength="500" style="min-height:60px;"></textarea>
+      </div>
+      <div class="field">
+        <label class="field-label">Template</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${templates.map((t, i) => `
+            <button class="filter-pill ${i === 0 ? 'active' : ''}" data-template="${t.id}" type="button">${escapeHTML(t.label)}</button>
+          `).join('')}
         </div>
-        <div class="field">
-          <label class="field-label">Description (optional)</label>
-          <textarea class="textarea" id="createDesc" placeholder="What's this project about?" maxlength="500">${escapeHTML(S.createDescription)}</textarea>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" data-modal-close>Cancel</button>
-          <button class="btn btn-primary" id="createNext">Next</button>
-        </div>
-      `;
-      $('createName').focus();
-      $('createNext').addEventListener('click', () => {
-        const name = $('createName').value.trim();
-        if (!name) { toast('Project name required', 'error'); return; }
-        S.createName = name;
-        S.createDescription = $('createDesc').value.trim();
-        S.createStep = 2; renderCreateStep();
-      });
-    } else if (S.createStep === 2) {
-      content.innerHTML = `
-        <div class="modal-handle"></div>
-        <div class="stepper">${stepperHTML}</div>
-        <div class="step-label">Step 2 of 3 · Icon (optional)</div>
-        <div class="modal-title">Choose an icon</div>
-        <div class="modal-desc">Generated by Flier from your project name.</div>
-        <div class="icon-tabs">
-          <button class="icon-tab ${S.createIconMode === 'name' ? 'active' : ''}" data-icon-mode="name">From name</button>
-          <button class="icon-tab ${S.createIconMode === 'url' ? 'active' : ''}" data-icon-mode="url">From URL</button>
-          <button class="icon-tab ${S.createIconMode === 'upload' ? 'active' : ''}" data-icon-mode="upload">Upload</button>
-        </div>
-        <div class="icon-mode-panel ${S.createIconMode === 'name' ? 'active' : ''}" data-panel="name">
-          <div class="icon-grid" id="iconGrid"><div class="icon-placeholder" style="grid-column:1/-1;">Tap "Generate" below</div></div>
-          <button class="icon-generate-btn" id="iconGenName">${svg('refresh', 11, 2.2)} Generate from "${escapeHTML(S.createName)}"</button>
-        </div>
-        <div class="icon-mode-panel ${S.createIconMode === 'url' ? 'active' : ''}" data-panel="url">
-          <div class="field">
-            <label class="field-label">Image URL</label>
-            <input class="input" id="iconUrlInput" placeholder="https://example.com/image.jpg" value="${escapeAttr(S.createImageUrlInput)}">
-            <div class="field-hint">HTTPS only.</div>
+      </div>
+      <details style="margin-top:8px;">
+        <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--theme-text-tertiary);padding:6px 0;">Customize icon (optional)</summary>
+        <div style="padding-top:8px;">
+          <div class="icon-tabs">
+            <button class="icon-tab active" data-icon-tab="presets" type="button">Presets</button>
+            <button class="icon-tab" data-icon-tab="upload" type="button">Upload</button>
           </div>
-          <div class="icon-grid" id="iconGridUrl"><div class="icon-placeholder" style="grid-column:1/-1;">Paste URL and tap Generate</div></div>
-          <button class="icon-generate-btn" id="iconGenUrl">${svg('image', 11, 2.2)} Generate from URL</button>
+          <div class="icon-mode-panel active" data-icon-panel="presets">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-size:10px;font-weight:700;color:var(--theme-text-tertiary);text-transform:uppercase;">Presets</span>
+              <button class="btn btn-sm btn-ghost" id="iconShuffleBtn" type="button">${svg('refresh', 10, 2.2)} Shuffle</button>
+            </div>
+            <div id="iconPickerGrid" class="icon-grid"></div>
+          </div>
+          <div class="icon-mode-panel" data-icon-panel="upload">
+            <input type="file" id="iconUploadFile" accept="image/*" style="display:none;">
+            <button class="btn btn-secondary btn-block" id="iconUploadBtn" type="button">${svg('upload', 12, 2.2)} Choose image</button>
+            <div class="field-hint" style="margin-top:6px;">PNG, JPG, WebP. Max 1 MB.</div>
+            <div id="iconUploadStatus" style="font-size:11px;color:var(--theme-text-tertiary);text-align:center;padding:8px;"></div>
+          </div>
         </div>
-        <div class="icon-mode-panel ${S.createIconMode === 'upload' ? 'active' : ''}" data-panel="upload">
-          <input type="file" id="iconUploadFile" accept="image/*" style="display:none;">
-          <div class="icon-upload-btn" id="iconUploadBtn">${svg('upload', 20, 2)}<span>Upload image</span><span class="sub">JPG, PNG, WebP · max 5 MB</span></div>
-          <div class="icon-grid" id="iconGridUpload" style="margin-top:10px;"></div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" id="createBack">Back</button>
-          <button class="btn btn-primary" id="createNext">Next</button>
-        </div>
-      `;
+      </details>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" data-modal-close>Cancel</button>
+        <button class="btn btn-primary" id="createSubmit">${svg('check', 12, 2.4)} Create project</button>
+      </div>
+    `;
+    openModal(body);
 
-      content.querySelectorAll('[data-icon-mode]').forEach(btn => {
-        btn.addEventListener('click', () => { S.createIconMode = btn.dataset.iconMode; renderCreateStep(); });
+    let selectedTemplate = 'blank';
+
+    document.querySelectorAll('[data-template]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-template]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedTemplate = btn.dataset.template;
       });
-      $('iconGenName').addEventListener('click', generateIconFromName);
-      $('iconGenUrl').addEventListener('click', generateIconFromUrl);
-      $('iconUploadBtn').addEventListener('click', () => $('iconUploadFile').click());
-      $('iconUploadFile').addEventListener('change', handleIconUpload);
+    });
 
-      if (S.createIconVariants.length > 0) {
-        const gridId = S.createIconMode === 'name' ? 'iconGrid' : S.createIconMode === 'url' ? 'iconGridUrl' : 'iconGridUpload';
-        renderIconVariants(gridId);
+    document.querySelectorAll('[data-icon-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-icon-tab]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('[data-icon-panel]').forEach(p => {
+          p.classList.toggle('active', p.dataset.iconPanel === btn.dataset.iconTab);
+        });
+      });
+    });
+
+    generateIcons();
+    $('iconShuffleBtn')?.addEventListener('click', () => {
+      S.createIconVariants = [];
+      generateIcons({ shuffle: true });
+    });
+
+    $('iconUploadBtn')?.addEventListener('click', () => $('iconUploadFile')?.click());
+    $('iconUploadFile')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      if (file.size > 1024 * 1024) { toast('Image too large (max 1 MB)', 'error'); return; }
+      const status = $('iconUploadStatus');
+      if (status) status.textContent = 'Uploading…';
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result);
+          r.onerror = reject;
+          r.readAsDataURL(file);
+        });
+        const upRes = await fetch(API_FLIER + '?action=avatar/upload', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dataUrl,
+            username: (($('createName')?.value || 'project')).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
+          }),
+        });
+        const data = await upRes.json();
+        if (!data.success || !data.url) throw new Error(data.error || 'Upload failed');
+        S.createIconUrl = data.url;
+        if (status) status.textContent = 'Uploaded ✓';
+        toast('Icon ready', 'success', 1200);
+      } catch (err) {
+        if (status) status.textContent = '';
+        toast(err.message || 'Upload failed', 'error');
       }
-      $('createBack').addEventListener('click', () => { S.createStep = 1; renderCreateStep(); });
-      $('createNext').addEventListener('click', async () => {
-        if (S.createIconDataUrl) await uploadSelectedIcon();
-        S.createStep = 3; renderCreateStep();
-      });
-    } else if (S.createStep === 3) {
-      const iconPreview = S.createIconUrl
-        ? `<img src="${escapeAttr(S.createIconUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;">`
-        : `<span style="color:var(--theme-primary);font-weight:800;">${escapeHTML(getInitials(S.createName))}</span>`;
-      const iconBg = S.createIconUrl ? '' : `background:${getAvatarColor(S.createName)};`;
+    });
 
-      content.innerHTML = `
-        <div class="modal-handle"></div>
-        <div class="stepper">${stepperHTML}</div>
-        <div class="step-label">Step 3 of 3 · Review</div>
-        <div class="modal-title">Create project</div>
-        <div class="modal-desc">Review and confirm.</div>
-        <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--theme-glass-bg);border-radius:8px;margin-bottom:12px;">
-          <div style="width:40px;height:40px;border-radius:9px;overflow:hidden;background:var(--theme-surface-elevated);display:flex;align-items:center;justify-content:center;flex-shrink:0;${iconBg}">${iconPreview}</div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:12px;font-weight:700;color:var(--theme-text);">${escapeHTML(S.createName)}</div>
-            <div style="font-size:10.5px;color:var(--theme-text-tertiary);">${S.createDescription ? escapeHTML(S.createDescription) : 'No description'}</div>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" id="createBack">Back</button>
-          <button class="btn btn-primary" id="createSubmit">${svg('check', 12, 2.4)} Create project</button>
-        </div>
-      `;
-      $('createBack').addEventListener('click', () => { S.createStep = 2; renderCreateStep(); });
-      $('createSubmit').addEventListener('click', submitCreateProject);
+    $('createName').focus();
+    $('createName').addEventListener('input', () => {
+      const name = $('createName').value.trim();
+      if (name && S.createIconVariants.length === 0 && !S.createIconUrl) {
+        // Reset preview initials for the fallback icon
+      }
+    });
+
+    $('createSubmit').addEventListener('click', () => submitCreateProject(selectedTemplate));
+  }
+
+  async function generateIcons({ shuffle = false } = {}) {
+    const grid = $('iconPickerGrid');
+    if (!grid) return;
+    if (S.createIconVariants.length > 0 && !shuffle) {
+      renderIconOptions(grid);
+      return;
     }
-  }
-
-  async function generateIconFromName() {
-    const grid = $('iconGrid'); if (!grid) return;
     grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
-    $('iconGenName').disabled = true;
+
+    const projectName = $('createName')?.value.trim() || 'Project';
+    const baseSeed = projectName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project';
+    const suffix = shuffle ? Math.random().toString(36).slice(2, 6) : '';
+
     try {
       const res = await fetch(API_FLIER + '?action=avatar/preview', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: S.createName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
-          displayName: S.createName,
-        }),
-      });
-      const data = await res.json();
-      if (!data.success || !Array.isArray(data.variants)) throw new Error(data.error || 'Failed');
-      S.createIconVariants = data.variants;
-      renderIconVariants('iconGrid');
-    } catch {
-      grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;aspect-ratio:auto;padding:14px;">Could not generate</div>';
-      toast('Icon generation failed', 'error');
-    } finally { $('iconGenName').disabled = false; }
-  }
-
-  async function generateIconFromUrl() {
-    const url = $('iconUrlInput').value.trim();
-    if (!url) { toast('Paste an image URL', 'error'); return; }
-    if (!url.startsWith('https://')) { toast('URL must start with https://', 'error'); return; }
-    S.createImageUrlInput = url;
-    const grid = $('iconGridUrl');
-    grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
-    $('iconGenUrl').disabled = true;
-    try {
-      const res = await fetch(API_FLIER + '?action=avatar/preview', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: S.createName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
-          displayName: S.createName, imageUrl: url,
-        }),
+        body: JSON.stringify({ username: baseSeed + suffix, displayName: projectName }),
       });
       const data = await res.json();
       if (!data.success || !Array.isArray(data.variants)) throw new Error('Failed');
       S.createIconVariants = data.variants;
-      renderIconVariants('iconGridUrl');
+      renderIconOptions(grid);
     } catch {
-      grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;aspect-ratio:auto;padding:14px;">Could not fetch image</div>';
-      toast('Could not fetch image', 'error');
-    } finally { $('iconGenUrl').disabled = false; }
+      grid.innerHTML = `<div class="icon-placeholder" style="grid-column:1/-1;aspect-ratio:auto;padding:14px;">Could not generate</div>`;
+    }
   }
 
-  async function handleIconUpload(e) {
-    const file = e.target.files?.[0]; if (!file) return;
-    if (!file.type.startsWith('image/')) { toast('Not an image', 'error'); return; }
-    if (file.size > 5 * 1024 * 1024) { toast('Image too large', 'error'); return; }
-    const dataUrl = await fileToDataUrl(file);
-    S.createIconDataUrl = dataUrl;
-    const grid = $('iconGridUpload');
-    grid.innerHTML = `<button class="icon-option selected" data-selected="1" type="button"><img src="${escapeAttr(dataUrl)}" alt=""></button>`;
-  }
-
-  function renderIconVariants(gridId) {
-    const grid = document.getElementById(gridId); if (!grid) return;
-    grid.innerHTML = S.createIconVariants.map((v, idx) => `
-      <button class="icon-option ${S.createIconDataUrl === v.dataUrl ? 'selected' : ''}" data-icon-idx="${idx}" type="button">
-        <img src="${escapeAttr(v.dataUrl)}" alt="">
-      </button>
-    `).join('');
-    grid.querySelectorAll('[data-icon-idx]').forEach(btn => {
+  function renderIconOptions(grid) {
+    grid.innerHTML = '';
+    if (S.createIconVariants.length === 0) {
+      grid.innerHTML = `<div class="icon-placeholder" style="grid-column:1/-1;aspect-ratio:auto;padding:14px;">No presets. Tap Shuffle.</div>`;
+      return;
+    }
+    S.createIconVariants.forEach(v => {
+      const btn = document.createElement('button');
+      btn.className = 'icon-option';
+      btn.type = 'button';
+      btn.innerHTML = `<img src="${escapeAttr(v.dataUrl)}" alt="">`;
       btn.addEventListener('click', () => {
-        const v = S.createIconVariants[parseInt(btn.dataset.iconIdx, 10)]; if (!v) return;
         S.createIconDataUrl = v.dataUrl;
         grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
         btn.classList.add('selected');
       });
+      grid.appendChild(btn);
     });
   }
 
-  async function uploadSelectedIcon() {
-    if (!S.createIconDataUrl) return;
-    try {
-      const res = await fetch(API_FLIER + '?action=avatar/upload', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dataUrl: S.createIconDataUrl,
-          username: S.createName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
-        }),
-      });
-      const data = await res.json();
-      if (data.success && data.url) S.createIconUrl = data.url;
-    } catch {}
-  }
+  async function submitCreateProject(template) {
+    const name = ($('createName').value || '').trim();
+    const description = ($('createDesc').value || '').trim();
+    if (!name) { toast('Project name required', 'error'); return; }
 
-  async function submitCreateProject() {
     showLoading('Creating project', 'Setting up…');
     try {
-      const name = S.createName;
-      const description = S.createDescription || '';
       const iconUrl = S.createIconUrl || null;
       let pid;
 
@@ -3253,16 +3844,219 @@ function wireThemeMediaQuery() {
       }
 
       const slug = name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
-      await IDB.putProject({ pid, name, slug, description, iconUrl, createdAt: Date.now(), updatedAt: Date.now() });
-      await IDB.putFile(pid, 'index.html',
-        `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>${name}</title>\n</head>\n<body>\n  <h1>${name}</h1>\n  <p>Edit this file to get started.</p>\n</body>\n</html>`);
-      await IDB.putFile(pid, 'style.css', 'body { font-family: system-ui, sans-serif; margin: 2rem; }\n');
-      await IDB.putFile(pid, 'app.js', `console.log('Hello from ${name}');\n`);
+      await IDB.putProject({
+        pid, name, slug, description, iconUrl,
+        createdAt: Date.now(), updatedAt: Date.now(),
+        archived: false,
+      });
+
+      // Template seed files
+      const seedFiles = getTemplateSeedFiles(template, name);
+      for (const [path, content] of Object.entries(seedFiles)) {
+        await IDB.putFile(pid, path, content);
+      }
+
+      if (!S.isGuest && S.online) {
+        try {
+          await apiFetch(API_HOST + '?action=project/sync-back', {
+            method: 'POST',
+            body: JSON.stringify({ pid, files: seedFiles }),
+          });
+        } catch {}
+      }
 
       hideLoading();
       closeModal();
       showCelebration(pid, name);
-    } catch (err) { hideLoading(); toast(err.message || 'Create failed', 'error'); }
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Create failed', 'error');
+    }
+  }
+
+  function getTemplateSeedFiles(template, name) {
+    const esc = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const baseIndex = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${esc(name)}</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>${esc(name)}</h1>
+  <p>Edit this file to get started.</p>
+  <script src="app.js"><\/script>
+</body>
+</html>`;
+    const baseStyle = `body {
+  font-family: system-ui, sans-serif;
+  margin: 2rem;
+  background: #0a0c10;
+  color: #e8ecf1;
+  line-height: 1.6;
+}
+h1 { font-size: 2.2rem; margin-bottom: 1rem; }
+a { color: #F59E0B; }
+`;
+    const baseJs = `console.log('Hello from ${name.replace(/'/g, "\\'")}');`;
+
+    if (template === 'blank') {
+      return { 'index.html': baseIndex, 'style.css': baseStyle, 'app.js': baseJs };
+    }
+    if (template === 'landing') {
+      return {
+        'index.html': `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${esc(name)}</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <div class="logo">${esc(name)}</div>
+    <a href="#cta">Get started</a>
+  </nav>
+  <section class="hero">
+    <h1>${esc(name)}</h1>
+    <p>Build something amazing today.</p>
+    <button id="cta-btn">Get started free</button>
+  </section>
+  <section class="features">
+    <div class="feature"><h3>Fast</h3><p>Runs in your browser.</p></div>
+    <div class="feature"><h3>Simple</h3><p>No setup required.</p></div>
+    <div class="feature"><h3>Free</h3><p>Start in seconds.</p></div>
+  </section>
+  <script src="app.js"><\/script>
+</body>
+</html>`,
+        'style.css': `* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; background: #0a0c10; color: #e8ecf1; min-height: 100vh; }
+nav { padding: 1.5rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1a1f2a; }
+.logo { font-weight: 800; color: #F59E0B; }
+nav a { color: #e8ecf1; text-decoration: none; }
+.hero { padding: 5rem 2rem; text-align: center; }
+.hero h1 { font-size: 3rem; margin-bottom: 1rem; letter-spacing: -0.03em; }
+.hero p { color: rgba(232,236,241,0.7); margin-bottom: 2rem; font-size: 1.2rem; }
+button { background: #F59E0B; color: #0a0c10; border: none; padding: 0.9rem 1.8rem; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer; }
+button:hover { background: #fbbf24; }
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; padding: 3rem 2rem; max-width: 900px; margin: 0 auto; }
+.feature { padding: 1.5rem; background: #151922; border-radius: 12px; border: 1px solid #1a1f2a; }
+.feature h3 { color: #F59E0B; margin-bottom: 0.5rem; }
+.feature p { color: rgba(232,236,241,0.6); font-size: 0.9rem; }
+`,
+        'app.js': `document.getElementById('cta-btn').addEventListener('click', () => {
+  alert('Welcome!');
+});`,
+      };
+    }
+    if (template === 'todo') {
+      return {
+        'index.html': `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${esc(name)}</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <h1>${esc(name)}</h1>
+    <form id="new-todo">
+      <input type="text" id="new-todo-input" placeholder="What needs doing?" required>
+      <button type="submit">Add</button>
+    </form>
+    <ul id="todo-list"></ul>
+  </div>
+  <script src="app.js"><\/script>
+</body>
+</html>`,
+        'style.css': `* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; background: #0a0c10; color: #e8ecf1; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; }
+.app { max-width: 400px; width: 100%; background: #151922; padding: 2rem; border-radius: 16px; border: 1px solid #1a1f2a; }
+h1 { font-size: 1.8rem; margin-bottom: 1.5rem; color: #F59E0B; }
+form { display: flex; gap: 8px; margin-bottom: 1rem; }
+input[type="text"] { flex: 1; padding: 0.7rem 1rem; background: #0a0c10; border: 1px solid #1a1f2a; border-radius: 8px; color: #e8ecf1; font-size: 0.95rem; outline: none; }
+input[type="text"]:focus { border-color: #F59E0B; }
+button { background: #F59E0B; color: #0a0c10; border: none; padding: 0.7rem 1.2rem; border-radius: 8px; font-weight: 700; cursor: pointer; }
+ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+li { display: flex; align-items: center; gap: 8px; padding: 0.7rem 1rem; background: #0a0c10; border-radius: 8px; }
+li.done span { text-decoration: line-through; opacity: 0.5; }
+li span { flex: 1; }
+li button { background: transparent; color: #EF4444; padding: 0.3rem; font-size: 1.2rem; }
+`,
+        'app.js': `const form = document.getElementById('new-todo');
+const input = document.getElementById('new-todo-input');
+const list = document.getElementById('todo-list');
+
+function addTodo(text) {
+  const li = document.createElement('li');
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.addEventListener('change', () => li.classList.toggle('done', cb.checked));
+  const span = document.createElement('span');
+  span.textContent = text;
+  const del = document.createElement('button');
+  del.textContent = '×';
+  del.addEventListener('click', () => li.remove());
+  li.appendChild(cb);
+  li.appendChild(span);
+  li.appendChild(del);
+  list.appendChild(li);
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  addTodo(text);
+  input.value = '';
+});`,
+      };
+    }
+    if (template === 'blog') {
+      return {
+        'index.html': `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${esc(name)}</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>${esc(name)}</h1>
+    <p>Thoughts and writing</p>
+  </header>
+  <main>
+    <article>
+      <h2>First post</h2>
+      <p class="meta">Published today</p>
+      <p>Your first blog post goes here. Write something meaningful.</p>
+    </article>
+  </main>
+  <script src="app.js"><\/script>
+</body>
+</html>`,
+        'style.css': `* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Georgia, serif; background: #f5f1e8; color: #1a1f2a; min-height: 100vh; }
+header { text-align: center; padding: 4rem 2rem 2rem; border-bottom: 1px solid #d4cfc4; }
+header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
+header p { color: #6b7280; font-style: italic; }
+main { max-width: 700px; margin: 0 auto; padding: 3rem 2rem; }
+article h2 { font-size: 1.6rem; margin-bottom: 0.5rem; }
+.meta { color: #6b7280; font-size: 0.85rem; font-style: italic; margin-bottom: 1rem; }
+article p { line-height: 1.7; font-size: 1.05rem; }
+`,
+        'app.js': `console.log('Blog loaded');`,
+      };
+    }
+    return { 'index.html': baseIndex, 'style.css': baseStyle, 'app.js': baseJs };
   }
 
   function showCelebration(pid, name) {
@@ -3282,62 +4076,7 @@ function wireThemeMediaQuery() {
         $('celebration').classList.remove('active');
         goEditor(pid);
       }
-    }, 4000);
-  }
-
-  function openImportFlow() {
-    openModal(`
-      <div class="modal-title">Import project</div>
-      <div class="modal-desc">Load a .folio backup file to create a new project.</div>
-      <input type="file" id="importFile" accept=".folio,.zip" style="display:none;">
-      <div class="icon-upload-btn" id="importUploadBtn" style="margin-bottom:12px;">
-        ${svg('upload', 20, 2)}<span>Choose .folio file</span><span class="sub">Or .zip archive</span>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" data-modal-close>Cancel</button>
-      </div>
-    `);
-    $('importUploadBtn').addEventListener('click', () => $('importFile').click());
-    $('importFile').addEventListener('change', handleImportFile);
-  }
-
-  async function handleImportFile(e) {
-    const file = e.target.files?.[0]; if (!file) return;
-    closeModal();
-    showLoading('Importing', 'Reading file…');
-    try {
-      const text = await file.text();
-      let data = null;
-      try { data = JSON.parse(text); } catch { hideLoading(); toast('Only JSON .folio files supported', 'info'); return; }
-      if (!data.name) throw new Error('Invalid file');
-
-      const pid = S.session && S.online ? null : `local_${Date.now()}`;
-      let newPid = pid;
-      if (!newPid) {
-        const createRes = await apiFetch(API_HOST + '?action=projects/create', {
-          method: 'POST', body: JSON.stringify({ name: data.name || 'Imported project', description: data.description || '' }),
-        });
-        if (!createRes.ok || !createRes.data?.success) throw new Error(createRes.data?.error || 'Create failed');
-        newPid = createRes.data.pid;
-      }
-      await IDB.putProject({
-        pid: newPid, name: data.name || 'Imported project',
-        slug: (data.name || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project',
-        description: data.description || '', createdAt: Date.now(), updatedAt: Date.now(),
-      });
-      hideLoading();
-      toast('Project imported', 'success');
-      await loadProjects();
-    } catch (err) { hideLoading(); toast(err.message || 'Import failed', 'error'); }
-  }
-
-  function fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result);
-      r.onerror = reject;
-      r.readAsDataURL(file);
-    });
+    }, 5000);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -3379,7 +4118,7 @@ function wireThemeMediaQuery() {
           <div class="stat-tile"><div class="stat-label">Total</div><div class="stat-value">${S.projects.length}</div></div>
           <div class="stat-tile"><div class="stat-label">Public</div><div class="stat-value">${stats.publicCount}</div></div>
           <div class="stat-tile"><div class="stat-label">Deployed</div><div class="stat-value">${stats.deployedCount}</div></div>
-          <div class="stat-tile"><div class="stat-label">Expired deploys</div><div class="stat-value ${expiredCount > 0 ? 'warn' : ''}">${expiredCount}</div></div>
+          <div class="stat-tile"><div class="stat-label">Expired</div><div class="stat-value ${expiredCount > 0 ? 'warn' : ''}">${expiredCount}</div></div>
         </div>
       </div>
       <div class="storage-block">
@@ -3492,6 +4231,35 @@ function wireThemeMediaQuery() {
     });
   }
 
+  function saveRecentSearch(q) {
+    if (!q) return;
+    S.recentSearches = [q, ...S.recentSearches.filter(x => x !== q)].slice(0, 5);
+    try { localStorage.setItem(STORAGE.recentSearches, JSON.stringify(S.recentSearches)); } catch {}
+  }
+
+  function renderRecentSearches() {
+    const mount = $('searchRecentMount');
+    if (!mount) return;
+    if (S.recentSearches.length === 0) { mount.innerHTML = ''; return; }
+    mount.innerHTML = `
+      <div class="filter-label" style="margin-bottom:8px;">Recent searches</div>
+      <div class="filter-pills">
+        ${S.recentSearches.map(q => `<button class="filter-pill" data-recent="${escapeAttr(q)}" type="button">${escapeHTML(q)}</button>`).join('')}
+      </div>
+    `;
+    mount.querySelectorAll('[data-recent]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        $('searchSheetInput').value = btn.dataset.recent;
+        S.searchQuery = btn.dataset.recent;
+        $('searchInput').value = btn.dataset.recent;
+        $('searchClear').classList.add('visible');
+        renderActiveFilters();
+        applyFiltersAndRender();
+        $('searchOverlay').classList.remove('active');
+      });
+    });
+  }
+
   // ═══════════════════════════════════════════════════════════
   // WIRING
   // ═══════════════════════════════════════════════════════════
@@ -3518,44 +4286,53 @@ function wireThemeMediaQuery() {
       if (e.target === $('filtersOverlay')) closeFiltersOverlay();
     });
     $('newBtn').addEventListener('click', openCreateFlow);
-    // Search trigger → sheet (below 900px)
-$('searchTrigger')?.addEventListener('click', () => {
-  $('searchSheetInput').value = S.searchQuery;
-  $('searchOverlay').classList.add('active');
-  setTimeout(() => $('searchSheetInput').focus(), 250);
-});
-$('searchSheetClose')?.addEventListener('click', () => {
-  $('searchOverlay').classList.remove('active');
-});
-$('searchOverlay')?.addEventListener('click', (e) => {
-  if (e.target === $('searchOverlay')) $('searchOverlay').classList.remove('active');
-});
-$('searchSheetInput')?.addEventListener('input', debounce((e) => {
-  S.searchQuery = e.target.value.trim();
-  const inline = $('searchInput');
-  if (inline) inline.value = S.searchQuery;
-  const clearBtn = $('searchClear');
-  if (clearBtn) clearBtn.classList.toggle('visible', S.searchQuery.length > 0);
-  renderActiveFilters();
-  applyFiltersAndRender();
-}, 300));
+
+    $('searchTrigger')?.addEventListener('click', () => {
+      $('searchSheetInput').value = S.searchQuery;
+      $('searchOverlay').classList.add('active');
+      renderRecentSearches();
+      setTimeout(() => $('searchSheetInput').focus(), 250);
+    });
+    $('searchSheetClose')?.addEventListener('click', () => {
+      $('searchOverlay').classList.remove('active');
+    });
+    $('searchOverlay')?.addEventListener('click', (e) => {
+      if (e.target === $('searchOverlay')) $('searchOverlay').classList.remove('active');
+    });
+    $('searchSheetInput')?.addEventListener('input', debounce((e) => {
+      S.searchQuery = e.target.value.trim();
+      const inline = $('searchInput');
+      if (inline) inline.value = S.searchQuery;
+      const clearBtn = $('searchClear');
+      if (clearBtn) clearBtn.classList.toggle('visible', S.searchQuery.length > 0);
+      renderActiveFilters();
+      applyFiltersAndRender();
+    }, 300));
     $('searchSheetInput')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    $('searchOverlay').classList.remove('active');
-  }
-});
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveRecentSearch(S.searchQuery);
+        $('searchOverlay').classList.remove('active');
+      }
+    });
+
     $('sortBtn').addEventListener('click', openFiltersOverlay);
+    $('bellBtn')?.addEventListener('click', () => {
+      window.open('/notifications', '_blank', 'noopener');
+    });
+
     wireSearch();
+
     document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    if ($('celebration').classList.contains('active')) return;
-    if ($('searchOverlay')?.classList.contains('active')) return $('searchOverlay').classList.remove('active');
-    if ($('actionMenu').classList.contains('active')) return closeActionMenu();
-    if ($('modalOverlay').classList.contains('active')) return closeModal();
-    if ($('filtersOverlay').classList.contains('active')) return closeFiltersOverlay();
-  }
-});
+      if (e.key === 'Escape') {
+        if ($('celebration').classList.contains('active')) return;
+        if ($('searchOverlay')?.classList.contains('active')) return $('searchOverlay').classList.remove('active');
+        if ($('actionMenu').classList.contains('active')) return closeActionMenu();
+        if ($('modalOverlay').classList.contains('active')) return closeModal();
+        if ($('filtersOverlay').classList.contains('active')) return closeFiltersOverlay();
+      }
+    });
+
     const updateOnline = () => {
       S.online = navigator.onLine;
       $('offlineBanner').classList.toggle('visible', !S.online);
@@ -3563,6 +4340,7 @@ $('searchSheetInput')?.addEventListener('input', debounce((e) => {
     window.addEventListener('online', () => { updateOnline(); loadProjects(); });
     window.addEventListener('offline', updateOnline);
     updateOnline();
+
     window.addEventListener('hashchange', () => {
       const t = getHashTab();
       if (t && t !== S.activeTab) {
@@ -3570,6 +4348,19 @@ $('searchSheetInput')?.addEventListener('input', debounce((e) => {
         renderTabs(); renderActiveFilters(); applyFiltersAndRender();
       }
     });
+
+    // Auto-refresh every 60s if visible
+    setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadNotificationStats();
+      }
+    }, 60000);
+
+    // Notification polling
+    if (S.notifBellTimer) clearInterval(S.notifBellTimer);
+    S.notifBellTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') loadNotificationStats();
+    }, 60000);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -3578,8 +4369,12 @@ $('searchSheetInput')?.addEventListener('input', debounce((e) => {
 
   async function boot() {
     wireThemeSync();
-wireThemeMediaQuery();
+    wireThemeMediaQuery();
     readSession();
+
+    // Deep-link ?pid=
+    if (!readUrlParams()) return;
+
     try { await openDB(); } catch (err) {
       console.error('[Projects] DB failed:', err);
       toast('Storage failed', 'error');
@@ -3598,11 +4393,21 @@ wireThemeMediaQuery();
     wireGlobalEvents();
     renderTabs();
     await loadProjects();
+
+    // Notifications
+    loadNotificationStats().catch(() => {});
+
+    // Update sort label / search input to reflect URL state
+    if (S.searchQuery) {
+      $('searchInput').value = S.searchQuery;
+      $('searchClear').classList.add('visible');
+      renderActiveFilters();
+      applyFiltersAndRender();
+    }
   }
 
   document.addEventListener('DOMContentLoaded', boot);
 
-  // Expose for inline modal handlers
   window.closeModal = closeModal;
 })();
 </script>

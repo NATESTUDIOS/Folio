@@ -1,0 +1,3436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Folio — The Complete Guide</title>
+<meta name="description" content="The complete guide to Folio — a mobile-first, offline-first code editor in your pocket. Learn every feature, page, and workflow.">
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Folio Guide">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === "system") pref = "auto";
+    var resolved = pref;
+    if (pref === "auto") {
+      resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
+        ? "light" : "dark";
+    }
+    if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
+    else document.documentElement.removeAttribute("data-theme");
+
+    if (localStorage.getItem("folio.reducedMotion") === "true") {
+      document.documentElement.setAttribute("data-reduced-motion", "true");
+    }
+
+    var scale = Number(localStorage.getItem("folio.pageScale") || 1);
+    if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
+    if (scale > 1.35) scale = 1.35;
+    document.documentElement.style.setProperty("--page-scale", String(scale));
+
+    var meta = document.getElementById("themeColorMeta");
+    if (meta) meta.setAttribute("content", resolved === "light" ? "#f7f8fa" : "#0a0c10");
+  } catch (e) {}
+})();
+</script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   THEME
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --theme-primary: #F59E0B;
+  --theme-primary-hover: #fbbf24;
+  --theme-primary-glow: rgba(245, 158, 11, 0.40);
+  --theme-primary-soft: rgba(245, 158, 11, 0.14);
+
+  --theme-bg: #0a0c10;
+  --theme-surface: #0f1218;
+  --theme-surface-card: rgba(21, 25, 34, 0.72);
+  --theme-surface-card-solid: #151922;
+  --theme-surface-elevated: #1a1f2a;
+  --theme-text: #e8ecf1;
+  --theme-text-secondary: rgba(232, 236, 241, 0.72);
+  --theme-text-tertiary: rgba(232, 236, 241, 0.44);
+
+  --theme-glass-bg: rgba(255, 255, 255, 0.05);
+  --theme-glass-border: rgba(255, 255, 255, 0.09);
+  --theme-overlay: rgba(10, 12, 16, 0.85);
+  --theme-card-border: rgba(255, 255, 255, 0.08);
+  --theme-divider: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(26, 31, 42, 0.88);
+
+  --theme-success: #10B981;
+  --theme-success-soft: rgba(16, 185, 129, 0.14);
+  --theme-danger: #EF4444;
+  --theme-danger-soft: rgba(239, 68, 68, 0.12);
+  --theme-warning: #D97706;
+  --theme-warning-soft: rgba(217, 119, 6, 0.14);
+  --theme-info: #3B82F6;
+
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.10) 0%, transparent 55%);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  --content-max: 780px;
+  --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Monaco, monospace;
+}
+
+[data-theme="light"] {
+  --theme-primary: #D97706;
+  --theme-primary-hover: #B45309;
+  --theme-primary-glow: rgba(217, 119, 6, 0.28);
+  --theme-primary-soft: rgba(217, 119, 6, 0.10);
+  --theme-bg: #f7f8fa;
+  --theme-surface: #ffffff;
+  --theme-surface-card: rgba(255, 255, 255, 0.85);
+  --theme-surface-card-solid: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-text: #121316;
+  --theme-text-secondary: rgba(18, 19, 22, 0.72);
+  --theme-text-tertiary: rgba(18, 19, 22, 0.48);
+  --theme-glass-bg: rgba(255, 255, 255, 0.75);
+  --theme-glass-border: rgba(0, 0, 0, 0.08);
+  --theme-overlay: rgba(18, 19, 22, 0.55);
+  --theme-card-border: rgba(0, 0, 0, 0.07);
+  --theme-divider: rgba(0, 0, 0, 0.06);
+  --input-bg: #ffffff;
+  --theme-success: #059669;
+  --theme-success-soft: rgba(5, 150, 105, 0.12);
+  --theme-danger: #DC2626;
+  --theme-danger-soft: rgba(220, 38, 38, 0.10);
+  --theme-warning: #B45309;
+  --theme-warning-soft: rgba(180, 83, 9, 0.10);
+  --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(217, 119, 6, 0.08) 0%, transparent 60%);
+  --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
+}
+
+html { font-size: calc(16px * var(--page-scale, 1)); scroll-behavior: smooth; }
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  background: var(--theme-bg);
+  font-family: var(--font);
+  color: var(--theme-text);
+  font-size: 1rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background: var(--bg-gradient-1), var(--bg-gradient-2), var(--theme-bg);
+  background-attachment: fixed;
+  position: fixed;
+  inset: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+a { color: var(--theme-primary); text-decoration: none; }
+a:hover { color: var(--theme-primary-hover); }
+svg { display: block; }
+
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BOOK SHELL
+   ═══════════════════════════════════════════════════════════ */
+.book {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Top bar */
+.book-topbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: calc(0.65rem + var(--safe-top)) calc(1rem + var(--safe-left)) 0.65rem calc(1rem + var(--safe-right));
+  border-bottom: 1px solid var(--theme-glass-border);
+  background: var(--theme-glass-bg);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  z-index: 40;
+  position: relative;
+}
+.book-topbar::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--theme-primary-glow), transparent);
+  opacity: 0.6;
+}
+
+.book-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.book-brand-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+.book-brand-icon::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(245,158,11,0.18), transparent 60%);
+}
+.book-brand-icon img { width: 100%; height: 100%; object-fit: cover; }
+.book-brand-icon svg {
+  width: 16px; height: 16px;
+  stroke: var(--theme-primary);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  position: relative;
+  z-index: 1;
+}
+
+.book-brand-text { min-width: 0; }
+.book-brand-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.1;
+}
+.book-brand-sub {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--theme-text-tertiary);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.book-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.book-counter {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  padding: 0.32rem 0.65rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.book-counter strong { color: var(--theme-primary); }
+
+.search-trigger {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--theme-glass-border);
+  background: var(--theme-glass-bg);
+  color: var(--theme-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  position: relative;
+  overflow: hidden;
+}
+.search-trigger::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(from 180deg, transparent, var(--theme-primary-glow), transparent, var(--theme-primary-glow), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  animation: rotateGlow 4s linear infinite;
+}
+@keyframes rotateGlow { to { transform: rotate(360deg); } }
+.search-trigger:hover {
+  border-color: var(--theme-primary-glow);
+  color: var(--theme-primary);
+  background: var(--theme-primary-soft);
+}
+.search-trigger:hover::before { opacity: 0.5; }
+.search-trigger svg {
+  width: 16px; height: 16px;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+  position: relative;
+  z-index: 1;
+}
+
+/* Progress bar */
+.book-progress {
+  flex-shrink: 0;
+  height: 3px;
+  background: var(--theme-divider);
+  position: relative;
+  z-index: 39;
+}
+.book-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #F59E0B, #f97316, #F59E0B);
+  background-size: 200% 100%;
+  box-shadow: 0 0 14px var(--theme-primary-glow);
+  transition: width 0.5s var(--ease);
+  border-radius: 0 2px 2px 0;
+  animation: shimmerBar 2.5s linear infinite;
+}
+@keyframes shimmerBar {
+  0% { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Pages viewport */
+.book-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  perspective: 2200px;
+}
+
+.book-track {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  transition: transform 0.6s var(--ease);
+  will-change: transform;
+}
+
+.book-page {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: calc(1.5rem + var(--safe-top)) calc(1.25rem + var(--safe-left)) calc(7rem + var(--safe-bottom)) calc(1.25rem + var(--safe-right));
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--theme-glass-border) transparent;
+}
+
+.book-page::-webkit-scrollbar { width: 5px; }
+.book-page::-webkit-scrollbar-track { background: transparent; }
+.book-page::-webkit-scrollbar-thumb {
+  background: var(--theme-glass-border);
+  border-radius: 3px;
+}
+.book-page::-webkit-scrollbar-thumb:hover { background: var(--theme-primary-glow); }
+
+/* Page flip animation */
+@keyframes pageFlipIn {
+  from { opacity: 0; transform: perspective(1400px) rotateY(14deg) scale(0.95); filter: blur(4px); }
+  to { opacity: 1; transform: perspective(1400px) rotateY(0deg) scale(1); filter: blur(0); }
+}
+.book-page.flipping {
+  animation: pageFlipIn 0.55s var(--ease) forwards;
+}
+
+/* Book navigation — glass buttons */
+.book-nav {
+  position: absolute;
+  bottom: calc(1.1rem + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  z-index: 50;
+  padding: 0.4rem 0.5rem;
+  border-radius: 999px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-glass-border);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.08) inset,
+    0 0 0 1px rgba(245,158,11,0.06),
+    0 20px 60px rgba(0,0,0,0.35);
+  position: absolute;
+}
+[data-theme="light"] .book-nav {
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.9) inset,
+    0 0 0 1px rgba(217,119,6,0.06),
+    0 20px 60px rgba(0,0,0,0.10);
+}
+.book-nav::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(245,158,11,0.3), transparent 40%, transparent 60%, rgba(245,158,11,0.2));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.book-nav-btn {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--theme-glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--theme-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.28s var(--ease-spring);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+[data-theme="light"] .book-nav-btn {
+  background: rgba(255, 255, 255, 0.65);
+}
+.book-nav-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, var(--theme-primary-glow), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.book-nav-btn:hover:not(:disabled) {
+  background: var(--theme-primary-soft);
+  border-color: var(--theme-primary-glow);
+  transform: scale(1.07);
+  color: var(--theme-primary);
+}
+.book-nav-btn:hover:not(:disabled)::after { opacity: 1; }
+.book-nav-btn:active:not(:disabled) { transform: scale(0.93); }
+.book-nav-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+.book-nav-btn svg {
+  width: 19px;
+  height: 19px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  position: relative;
+  z-index: 1;
+}
+
+.book-nav-btn.primary {
+  width: 54px;
+  height: 54px;
+  background: linear-gradient(135deg, #F59E0B, #f97316);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #0a0c10;
+  box-shadow: 0 6px 24px rgba(245, 158, 11, 0.35);
+}
+[data-theme="light"] .book-nav-btn.primary { color: #ffffff; }
+.book-nav-btn.primary:hover:not(:disabled) {
+  transform: scale(1.09);
+  color: #0a0c10;
+  background: linear-gradient(135deg, #fbbf24, #f97316);
+  box-shadow: 0 8px 32px rgba(245, 158, 11, 0.55);
+}
+[data-theme="light"] .book-nav-btn.primary:hover:not(:disabled) { color: #ffffff; }
+.book-nav-btn.primary svg { width: 22px; height: 22px; stroke-width: 2.6; }
+
+/* Chapter dots */
+.book-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 0.35rem;
+  max-width: 0;
+  overflow: hidden;
+  transition: max-width 0.45s var(--ease);
+}
+@media (min-width: 640px) {
+  .book-dots { max-width: 220px; }
+}
+
+.book-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--theme-glass-border);
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s var(--ease);
+  flex-shrink: 0;
+  padding: 0;
+  position: relative;
+}
+.book-dot.active {
+  background: var(--theme-primary);
+  width: 22px;
+  border-radius: 4px;
+  box-shadow: 0 0 10px var(--theme-primary-glow);
+}
+.book-dot:hover:not(.active) { background: var(--theme-text-tertiary); transform: scale(1.3); }
+
+/* ═══════════════════════════════════════════════════════════
+   CONTENT STYLES (inside pages)
+   ═══════════════════════════════════════════════════════════ */
+.page-inner {
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+
+/* Hero (first page special) */
+.hero-page {
+  text-align: center;
+  padding-top: 1rem;
+}
+.hero-logo {
+  width: 76px;
+  height: 76px;
+  border-radius: 20px;
+  margin: 0 auto 1.5rem;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  animation: floaty 4s ease-in-out infinite;
+}
+.hero-logo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(245,158,11,0.25), transparent 60%);
+  pointer-events: none;
+}
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+.hero-logo img { width: 100%; height: 100%; object-fit: cover; position: relative; z-index: 1; }
+
+.hero-page h1 {
+  font-size: clamp(2rem, 6vw, 3rem);
+  font-weight: 900;
+  letter-spacing: -1.2px;
+  line-height: 1.05;
+  margin-bottom: 0.9rem;
+}
+.hero-page h1 span {
+  background: linear-gradient(135deg, #F59E0B, #f97316, #F59E0B);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmerText 4s linear infinite;
+}
+@keyframes shimmerText {
+  0% { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
+.hero-page p.lead {
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+  color: var(--theme-text-secondary);
+  line-height: 1.55;
+  max-width: 540px;
+  margin: 0 auto 1.75rem;
+}
+
+.hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 1.9rem;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #F59E0B, #f97316);
+  color: #0a0c10;
+  font-size: 0.9rem;
+  font-weight: 700;
+  transition: all 0.28s var(--ease-spring);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+[data-theme="light"] .hero-cta { color: #ffffff; }
+.hero-cta::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.35), transparent 70%);
+  transform: translateX(-100%);
+  transition: transform 0.6s var(--ease);
+}
+.hero-cta:hover {
+  transform: translateY(-2px) scale(1.02);
+  color: #0a0c10;
+}
+[data-theme="light"] .hero-cta:hover { color: #ffffff; }
+.hero-cta:hover::before { transform: translateX(100%); }
+.hero-cta svg {
+  width: 16px; height: 16px;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+  position: relative; z-index: 1;
+}
+.hero-cta span { position: relative; z-index: 1; }
+
+.hero-meta {
+  margin-top: 1.5rem;
+  font-size: 0.74rem;
+  color: var(--theme-text-tertiary);
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.hero-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.hero-meta svg {
+  width: 12px; height: 12px;
+  stroke: var(--theme-success); fill: none;
+  stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* TOC grid on hero page */
+.hero-toc {
+  margin-top: 2.75rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--theme-divider);
+}
+.hero-toc-title {
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--theme-text-tertiary);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  justify-content: center;
+}
+.hero-toc-title::before, .hero-toc-title::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  max-width: 60px;
+  background: var(--theme-divider);
+}
+.hero-toc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+  text-align: left;
+}
+.hero-toc-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--r-sm);
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  transition: all 0.18s var(--ease);
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.hero-toc-item:hover {
+  background: var(--theme-primary-soft);
+  border-color: var(--theme-primary-glow);
+  color: var(--theme-text);
+  transform: translateY(-2px);
+}
+.hero-toc-item svg {
+  width: 13px; height: 13px;
+  stroke: var(--theme-primary); fill: none;
+  stroke-width: 2.2; flex-shrink: 0;
+}
+
+/* Section header */
+.section-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--theme-divider);
+  position: relative;
+}
+.section-header::after {
+  content: '';
+  position: absolute;
+  left: 0; bottom: -1px;
+  width: 48px; height: 2px;
+  background: linear-gradient(90deg, var(--theme-primary), transparent);
+  border-radius: 2px;
+}
+.section-number {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: var(--theme-primary);
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
+  font-family: var(--font-mono);
+}
+.section-header h2 {
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  line-height: 1.15;
+  color: var(--theme-text);
+  margin-bottom: 0.5rem;
+}
+.section-header p {
+  font-size: 0.92rem;
+  color: var(--theme-text-secondary);
+  line-height: 1.6;
+}
+
+h3 {
+  font-size: clamp(1.1rem, 2.6vw, 1.25rem);
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--theme-text);
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+h3:first-child { margin-top: 0; }
+
+h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--theme-text);
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+p {
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: var(--theme-text-secondary);
+  margin-bottom: 1rem;
+}
+p:last-child { margin-bottom: 0; }
+
+strong { color: var(--theme-text); font-weight: 700; }
+em { font-style: italic; color: var(--theme-text); }
+
+ul, ol {
+  margin: 0.75rem 0 1rem 1.25rem;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: var(--theme-text-secondary);
+}
+li { margin-bottom: 0.4rem; }
+li:last-child { margin-bottom: 0; }
+li::marker { color: var(--theme-primary); }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 4px;
+  color: var(--theme-text);
+}
+
+pre {
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-sm);
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+pre code {
+  background: none; border: none; padding: 0;
+  font-size: inherit; color: var(--theme-text-secondary);
+}
+
+blockquote {
+  padding: 1rem 1.25rem;
+  margin: 1.25rem 0;
+  background: var(--theme-primary-soft);
+  border-left: 3px solid var(--theme-primary);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-style: italic;
+  color: var(--theme-text);
+  line-height: 1.6;
+}
+blockquote p { color: var(--theme-text); margin-bottom: 0; font-size: 0.9rem; }
+
+/* Screenshot */
+.screenshot {
+  margin: 1.5rem 0;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  border: 1px solid var(--theme-glass-border);
+  background: var(--theme-surface);
+  position: relative;
+}
+.screenshot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(245,158,11,0.25), transparent 50%, transparent 70%, rgba(245,158,11,0.15));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.screenshot img { width: 100%; display: block; height: auto; }
+.screenshot-caption {
+  padding: 0.7rem 1rem;
+  font-size: 0.76rem;
+  color: var(--theme-text-tertiary);
+  text-align: center;
+  border-top: 1px solid var(--theme-divider);
+  background: var(--theme-surface-card-solid);
+  font-weight: 500;
+}
+
+/* Callout */
+.callout {
+  padding: 1rem 1.25rem;
+  margin: 1.25rem 0;
+  border-radius: var(--r-sm);
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  position: relative;
+  overflow: hidden;
+}
+.callout::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 40%, rgba(255,255,255,0.06), transparent 60%);
+  transform: translateX(-100%);
+  animation: calloutShimmer 6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes calloutShimmer {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}
+.callout svg {
+  width: 18px; height: 18px;
+  flex-shrink: 0; margin-top: 0.1rem;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+  position: relative; z-index: 1;
+}
+.callout-body { flex: 1; position: relative; z-index: 1; }
+.callout-body strong { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; }
+
+.callout.info {
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  color: var(--theme-primary);
+}
+.callout.info .callout-body { color: var(--theme-text-secondary); }
+.callout.info .callout-body strong { color: var(--theme-primary); }
+
+.callout.success {
+  background: var(--theme-success-soft);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--theme-success);
+}
+.callout.success .callout-body { color: var(--theme-text-secondary); }
+.callout.success .callout-body strong { color: var(--theme-success); }
+
+.callout.warning {
+  background: var(--theme-warning-soft);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  color: var(--theme-warning);
+}
+.callout.warning .callout-body { color: var(--theme-text-secondary); }
+.callout.warning .callout-body strong { color: var(--theme-warning); }
+
+.callout.danger {
+  background: var(--theme-danger-soft);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--theme-danger);
+}
+.callout.danger .callout-body { color: var(--theme-text-secondary); }
+.callout.danger .callout-body strong { color: var(--theme-danger); }
+
+/* Story card */
+.story {
+  padding: 1.25rem 1.5rem;
+  margin: 1.5rem 0;
+  background: var(--theme-surface-card);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-lg);
+  position: relative;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.story::before {
+  content: '"';
+  position: absolute;
+  top: 0.5rem; left: 1rem;
+  font-size: 3rem; line-height: 1;
+  color: var(--theme-primary);
+  opacity: 0.3;
+  font-family: Georgia, serif;
+  font-weight: 700;
+}
+.story-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--theme-primary);
+  margin-bottom: 0.75rem;
+  padding-left: 2rem;
+}
+.story p {
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: var(--theme-text);
+  margin-bottom: 0.75rem;
+}
+.story p:last-child { margin-bottom: 0; }
+
+/* Feature grid */
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+@media (min-width: 540px) {
+  .feature-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.feature-card {
+  padding: 1rem 1.15rem;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-md);
+  transition: all 0.22s var(--ease);
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: conic-gradient(from 0deg, transparent, var(--theme-primary-glow), transparent 30%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  animation: rotateGlow 6s linear infinite;
+  pointer-events: none;
+}
+.feature-card:hover {
+  border-color: var(--theme-primary-glow);
+  background: var(--theme-surface-elevated);
+  transform: translateY(-2px);
+}
+.feature-card:hover::before { opacity: 0.15; }
+.feature-card > * { position: relative; z-index: 1; }
+
+.feature-card-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.6rem;
+}
+.feature-card-icon svg {
+  width: 16px; height: 16px;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+}
+.feature-card h4 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--theme-text);
+  margin-bottom: 0.3rem;
+  margin-top: 0;
+}
+.feature-card p {
+  font-size: 0.82rem;
+  color: var(--theme-text-tertiary);
+  line-height: 1.5;
+  margin-bottom: 0;
+}
+
+/* Steps */
+.steps {
+  counter-reset: step;
+  list-style: none;
+  margin: 1.25rem 0;
+  padding: 0;
+}
+.steps li {
+  counter-increment: step;
+  padding: 0.9rem 0 0.9rem 3rem;
+  position: relative;
+  border-left: 2px solid var(--theme-primary-soft);
+  margin-left: 1rem;
+  margin-bottom: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--theme-text-secondary);
+}
+.steps li:last-child { border-left-color: transparent; }
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: -1.1rem; top: 0.75rem;
+  width: 2rem; height: 2rem;
+  border-radius: 50%;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  font-size: 0.78rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+}
+[data-theme="light"] .steps li::before { color: #ffffff; }
+
+/* Table */
+.table-wrap {
+  overflow-x: auto;
+  margin: 1.25rem 0;
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-md);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+th, td {
+  padding: 0.7rem 0.9rem;
+  text-align: left;
+  border-bottom: 1px solid var(--theme-divider);
+}
+th {
+  font-weight: 800;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--theme-text-tertiary);
+  background: var(--theme-glass-bg);
+}
+td { color: var(--theme-text-secondary); }
+tr:last-child td { border-bottom: none; }
+
+/* Keyboard */
+.kbd {
+  display: inline-block;
+  padding: 0.1em 0.4em;
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+  font-weight: 600;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--theme-text);
+  line-height: 1.4;
+}
+
+hr {
+  border: none;
+  height: 1px;
+  background: var(--theme-divider);
+  margin: 2.5rem 0;
+}
+
+/* Footer page */
+.footer-page {
+  text-align: center;
+  padding-top: 2rem;
+}
+.footer-page h2 {
+  font-size: clamp(1.8rem, 5vw, 2.5rem);
+  font-weight: 900;
+  letter-spacing: -1px;
+  line-height: 1.1;
+  margin-bottom: 1rem;
+}
+.footer-page h2 span {
+  background: linear-gradient(135deg, #F59E0B, #f97316);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.footer-page p {
+  font-size: 0.95rem;
+  color: var(--theme-text-secondary);
+  max-width: 480px;
+  margin: 0 auto 1.5rem;
+}
+.footer-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 2rem;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #F59E0B, #f97316);
+  color: #0a0c10;
+  font-size: 1rem;
+  font-weight: 800;
+  transition: all 0.28s var(--ease-spring);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  margin: 0.5rem;
+}
+[data-theme="light"] .footer-cta { color: #ffffff; }
+.footer-cta::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.4), transparent 70%);
+  transform: translateX(-100%);
+  transition: transform 0.6s var(--ease);
+}
+.footer-cta:hover {
+  transform: translateY(-3px) scale(1.03);
+  color: #0a0c10;
+}
+[data-theme="light"] .footer-cta:hover { color: #ffffff; }
+.footer-cta:hover::before { transform: translateX(100%); }
+.footer-cta svg {
+  width: 18px; height: 18px;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+  position: relative; z-index: 1;
+}
+.footer-cta span { position: relative; z-index: 1; }
+
+.footer-logo-large {
+  width: 88px; height: 88px;
+  border-radius: 22px;
+  margin: 0 auto 1.75rem;
+  overflow: hidden;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  animation: floaty 4s ease-in-out infinite;
+}
+.footer-logo-large::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(245,158,11,0.25), transparent 60%);
+}
+.footer-logo-large img { width: 100%; height: 100%; object-fit: cover; position: relative; z-index: 1; }
+
+.footer-links {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--theme-divider);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  font-size: 0.8rem;
+}
+.footer-links a {
+  color: var(--theme-text-tertiary);
+  font-weight: 600;
+  transition: color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.footer-links a:hover { color: var(--theme-primary); }
+.footer-links svg {
+  width: 12px; height: 12px;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+}
+
+.footer-copy {
+  margin-top: 1.5rem;
+  font-size: 0.72rem;
+  color: var(--theme-text-tertiary);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SEARCH OVERLAY — fullscreen
+   ═══════════════════════════════════════════════════════════ */
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  background: rgba(10, 12, 16, 0.65);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+}
+[data-theme="light"] .search-overlay {
+  background: rgba(247, 248, 250, 0.7);
+}
+.search-overlay.open {
+  display: flex;
+  animation: overlayIn 0.32s var(--ease) forwards;
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: calc(1rem + var(--safe-top)) calc(1rem + var(--safe-left)) calc(1rem + var(--safe-bottom)) calc(1rem + var(--safe-right));
+}
+
+.search-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+.search-header::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(245,158,11,0.4), transparent 40%, transparent 60%, rgba(245,158,11,0.25));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.search-icon {
+  width: 20px; height: 20px;
+  stroke: var(--theme-text-tertiary); fill: none;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--theme-text);
+  padding: 0.25rem 0;
+  min-width: 0;
+}
+.search-input::placeholder { color: var(--theme-text-tertiary); font-weight: 400; }
+
+.search-close {
+  width: 32px; height: 32px;
+  border-radius: 9px;
+  border: 1px solid var(--theme-glass-border);
+  background: var(--theme-glass-bg);
+  color: var(--theme-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  flex-shrink: 0;
+}
+.search-close:hover {
+  border-color: var(--theme-primary-glow);
+  color: var(--theme-primary);
+  background: var(--theme-primary-soft);
+}
+.search-close svg {
+  width: 15px; height: 15px;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+}
+
+.search-hint {
+  margin-top: 0.75rem;
+  font-size: 0.7rem;
+  color: var(--theme-text-tertiary);
+  text-align: center;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.search-hint kbd {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 0.1em 0.4em;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 4px;
+  color: var(--theme-text-secondary);
+}
+
+.search-results {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 1rem;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--theme-glass-border) transparent;
+}
+.search-results::-webkit-scrollbar { width: 5px; }
+.search-results::-webkit-scrollbar-thumb {
+  background: var(--theme-glass-border);
+  border-radius: 3px;
+}
+
+.search-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--theme-text-tertiary);
+  font-size: 0.85rem;
+}
+.search-empty svg {
+  width: 32px; height: 32px;
+  stroke: var(--theme-text-tertiary); fill: none;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  margin: 0 auto 0.75rem;
+  opacity: 0.6;
+}
+
+.search-group {
+  margin-bottom: 1rem;
+}
+.search-group-label {
+  font-size: 0.64rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--theme-text-tertiary);
+  padding: 0.5rem 0.75rem 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.search-group-label svg {
+  width: 12px; height: 12px;
+  stroke: var(--theme-primary); fill: none;
+  stroke-width: 2.2;
+}
+
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  background: none;
+  color: var(--theme-text);
+}
+.search-result:hover, .search-result.active {
+  background: var(--theme-glass-bg);
+  border-color: var(--theme-primary-glow);
+}
+.search-result-icon {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.search-result-icon svg {
+  width: 14px; height: 14px;
+  stroke: currentColor; fill: none;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+}
+.search-result-body {
+  flex: 1;
+  min-width: 0;
+}
+.search-result-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--theme-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+.search-result-title mark {
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  font-weight: 800;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.search-result-sub {
+  font-size: 0.7rem;
+  color: var(--theme-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+.search-result-arrow {
+  width: 14px; height: 14px;
+  stroke: var(--theme-text-tertiary); fill: none;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.search-result:hover .search-result-arrow,
+.search-result.active .search-result-arrow { opacity: 1; }
+
+/* Highlight animation when navigating from search */
+@keyframes highlightPulse {
+  0% { box-shadow: 0 0 0 0 var(--theme-primary-glow); }
+  50% { box-shadow: 0 0 0 4px var(--theme-primary-glow); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.highlight-pulse {
+  animation: highlightPulse 1.2s ease-out;
+  border-radius: 6px;
+}
+
+/* Reduced motion */
+[data-reduced-motion="true"] .book-track { transition: none; }
+[data-reduced-motion="true"] .hero-logo,
+[data-reduced-motion="true"] .footer-logo-large { animation: none; }
+[data-reduced-motion="true"] .book-page.flipping { animation: none; }
+[data-reduced-motion="true"] .callout::before { animation: none; }
+[data-reduced-motion="true"] .hero-page h1 span { animation: none; }
+[data-reduced-motion="true"] .book-progress-bar { animation: none; }
+[data-reduced-motion="true"] .feature-card::before { animation: none; }
+[data-reduced-motion="true"] .search-trigger::before { animation: none; }
+
+/* Responsive */
+@media (min-width: 640px) {
+  .book-page {
+    padding: calc(2rem + var(--safe-top)) 2.5rem calc(7.5rem + var(--safe-bottom));
+  }
+  .book-topbar {
+    padding: calc(0.7rem + var(--safe-top)) 2rem 0.7rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .book-page {
+    padding: calc(2.5rem + var(--safe-top)) 3rem calc(8rem + var(--safe-bottom));
+  }
+  .book-nav { bottom: calc(1.5rem + var(--safe-bottom)); }
+}
+</style>
+</head>
+<body>
+
+<div class="book">
+
+  <!-- TOP BAR -->
+  <div class="book-topbar">
+    <div class="book-brand">
+      <div class="book-brand-icon">
+        <img src="/icons/icon-192.png" alt="Folio"
+          onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
+      </div>
+      <div class="book-brand-text">
+        <div class="book-brand-title">Folio — The Guide</div>
+        <div class="book-brand-sub">Code in your pocket</div>
+      </div>
+    </div>
+    <div class="book-actions">
+      <div class="book-counter"><strong id="pageCurrent">1</strong> / <span id="pageTotal">18</span></div>
+      <button class="search-trigger" id="searchTrigger" aria-label="Search the guide">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- PROGRESS BAR -->
+  <div class="book-progress">
+    <div class="book-progress-bar" id="progressBar"></div>
+  </div>
+
+  <!-- PAGES VIEWPORT -->
+  <div class="book-viewport">
+    <div class="book-track" id="bookTrack">
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 0 — HERO / COVER
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="0">
+        <div class="page-inner hero-page">
+          <div class="hero-logo">
+            <img src="/icons/icon-192.png" alt="Folio"
+              onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\' style=\'width:36px;height:36px;stroke:#F59E0B;fill:none;stroke-width:2;\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
+          </div>
+          <h1>Code in your <span>pocket</span></h1>
+          <p class="lead">Folio is a mobile-first, offline-first code editor that lets you build, preview, and deploy real projects from anywhere — no laptop required.</p>
+          <a href="https://foliostudios.vercel.app" class="hero-cta">
+            <span>Open Folio</span>
+            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+          <div class="hero-meta">
+            <span><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Free to start</span>
+            <span><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Works offline</span>
+            <span><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Installable</span>
+          </div>
+
+          <div class="hero-toc">
+            <div class="hero-toc-title">What's inside</div>
+            <div class="hero-toc-grid" id="heroTocGrid">
+              <!-- populated by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 1 — GETTING STARTED
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="1" data-chapter="Getting started">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">01 / Getting started</div>
+            <h2>Your first project in under a minute</h2>
+            <p>Folio is designed to feel like an app — not a website. Everything works on a phone, everything is offline-ready, and there's no setup step between you and writing code.</p>
+          </div>
+
+          <div class="screenshot">
+            <img src="/screenshots/screenshot1.png" alt="Folio editor with an empty project state">
+            <div class="screenshot-caption">The editor on first load — pick a project or start a new one.</div>
+          </div>
+
+          <h3>What Folio is</h3>
+          <p>Folio is a <strong>code editor that runs entirely in your browser</strong>. There's nothing to install before you start using it, no dependencies to configure, and no build pipeline to break. Open the site, sign in (or skip that and stay a guest), and start coding.</p>
+
+          <p>Every project you create lives in two places at once:</p>
+          <ul>
+            <li><strong>On your device</strong>, inside IndexedDB — this is what lets Folio work without internet, and it's what makes saving instantaneous.</li>
+            <li><strong>On the server</strong>, when you're signed in — this is what makes sync, deploy, and collaboration possible.</li>
+          </ul>
+
+          <p>If you're a guest, everything still works — but only locally. Nothing leaves your browser, so nothing can be deployed, shared, or recovered if you clear site data.</p>
+
+          <h3>Sign in vs. guest</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Feature</th><th>Guest</th><th>Signed in</th></tr></thead>
+              <tbody>
+                <tr><td>Create & edit projects</td><td>✓ Local only</td><td>✓ Synced</td></tr>
+                <tr><td>Preview projects</td><td>✓</td><td>✓</td></tr>
+                <tr><td>Deploy to a live URL</td><td>—</td><td>✓</td></tr>
+                <tr><td>Invite collaborators</td><td>—</td><td>✓</td></tr>
+                <tr><td>Analytics</td><td>—</td><td>✓</td></tr>
+                <tr><td>Push notifications</td><td>—</td><td>✓</td></tr>
+                <tr><td>Access projects from another device</td><td>—</td><td>✓</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout info">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div class="callout-body">
+              <strong>Try it without signing up</strong>
+              You can use Folio as a guest forever. When you're ready to keep your work safe across devices, sign in from the profile icon in the rail.
+            </div>
+          </div>
+
+          <h3>The very first thing you'll see</h3>
+          <p>If you've never used Folio before, the editor loads to an empty state with a clear invitation: <em>create a project or open an existing one</em>. If you have projects from a previous session, the most recent ones are listed below so you can jump straight back in.</p>
+
+          <p>Tap <strong>New project</strong>. A short modal asks for a name and gives you a choice of starter templates:</p>
+
+          <div class="feature-grid">
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <h4>Blank</h4>
+              <p>An empty <code>index.html</code>, <code>style.css</code>, and <code>app.js</code>. Nothing else. Pure start.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+              </div>
+              <h4>Landing</h4>
+              <p>A hero section, feature grid, and CTA. Perfect for a quick marketing page.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <h4>Todo</h4>
+              <p>A working todo list with add, toggle, delete. Ready to show someone.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              </div>
+              <h4>Blog</h4>
+              <p>A clean typographic blog page with an article layout.</p>
+            </div>
+          </div>
+
+          <p>Pick one, tap <strong>Create</strong>, and you're in. Folio opens <code>index.html</code> automatically.</p>
+
+          <div class="callout success">
+            <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <div class="callout-body">
+              <strong>You don't need to save manually</strong>
+              Folio auto-saves 2 seconds after you stop typing. The <kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">S</kbd> shortcut exists if you want to force it, but you'll rarely need it.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 2 — THE EDITOR
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="2" data-chapter="The Editor">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">02 / The Editor</div>
+            <h2>Where you write the code</h2>
+            <p>A full-featured code editor built on CodeMirror 6, tuned for touch first and thumb-typing second.</p>
+          </div>
+
+          <div class="screenshot">
+            <img src="/screenshots/screenshot2.png" alt="Folio editor with a file open">
+            <div class="screenshot-caption">The editor with syntax highlighting, line numbers, and active-line highlight.</div>
+          </div>
+
+          <h3>What's included out of the box</h3>
+          <p>Folio's editor isn't a textarea with monospace text. It's a real code editor — with syntax highlighting for HTML, CSS, JavaScript, TypeScript, JSON, Markdown, Python, and more. It auto-indents, matches brackets, and highlights the line you're on.</p>
+
+          <div class="feature-grid">
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              </div>
+              <h4>Syntax highlighting</h4>
+              <p>Real color for real languages. HTML tags, CSS selectors, JS keywords, JSON keys.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+              </div>
+              <h4>Undo & redo</h4>
+              <p>Unlimited history. No "you can only undo 10 edits" limits.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </div>
+              <h4>Find & replace</h4>
+              <p>Full-document search with regex, case-sensitive, and whole-word options.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="3" y2="12"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
+              </div>
+              <h4>Auto-format</h4>
+              <p>One tap formats HTML, CSS, JS, JSON, and Markdown with Prettier.</p>
+            </div>
+          </div>
+
+          <h3>The toolbar</h3>
+          <p>Below the editor sits a persistent toolbar that puts the most-used actions one thumb-tap away. It's designed for a phone — you shouldn't have to reach for keyboard shortcuts or hidden menus.</p>
+
+          <p>The primary row has:</p>
+          <ul>
+            <li><strong>Save</strong> — force a save right now. Rarely needed but reassuring.</li>
+            <li><strong>Undo / Redo</strong> — as expected.</li>
+            <li><strong>Ctrl</strong> — a modifier latch (see below).</li>
+            <li><strong>Find</strong> — opens the CodeMirror search panel.</li>
+            <li><strong>Format</strong> — formats the current file.</li>
+            <li><strong>More</strong> — reveals the secondary row.</li>
+          </ul>
+
+          <p>The secondary row (revealed by <strong>More</strong>) has:</p>
+          <ul>
+            <li><strong>New</strong> — create a new file inline.</li>
+            <li><strong>Copy / Cut / Paste</strong> — clipboard actions that work with selection.</li>
+            <li><strong>Select</strong> — select the entire document.</li>
+            <li><strong>Symbols</strong> — a compact symbol keyboard.</li>
+            <li><strong>Commit</strong> — save a version snapshot.</li>
+            <li><strong>Preview</strong> — run the project.</li>
+            <li><strong>Host</strong> — deploy to a live URL.</li>
+          </ul>
+
+          <h3>The Ctrl latch — a phone-first invention</h3>
+          <p>Physical keyboards have a <kbd class="kbd">Ctrl</kbd> key. Phones don't. Folio fixes this with a <strong>Ctrl latch</strong> — a tap on the Ctrl button that "arms" the next key you type.</p>
+
+          <p>Tap <strong>Ctrl</strong>, then tap <kbd class="kbd">Z</kbd>. That's undo. Tap <strong>Ctrl</strong>, then <kbd class="kbd">S</kbd> — save. The same shortcut you'd use on a laptop, but with the modifier as a sticky toggle instead of a held key.</p>
+
+          <p>Supported latch combinations:</p>
+          <ul>
+            <li><code>Ctrl</code> + <code>Z</code> — undo</li>
+            <li><code>Ctrl</code> + <code>Y</code> — redo</li>
+            <li><code>Ctrl</code> + <code>S</code> — save</li>
+            <li><code>Ctrl</code> + <code>F</code> — find</li>
+            <li><code>Ctrl</code> + <code>A</code> — select all</li>
+            <li><code>Ctrl</code> + <code>C</code> / <code>V</code> / <code>X</code> — copy, paste, cut</li>
+          </ul>
+
+          <div class="callout info">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div class="callout-body">
+              <strong>The latch cancels itself</strong>
+              If you tap Ctrl and then don't tap a valid key, the latch clears. Or tap Escape. Either way, it won't get stuck.
+            </div>
+          </div>
+
+          <h3>Symbols — the ones phones hide</h3>
+          <p>Every phone keyboard hides the symbols that code needs most: <code>{</code> <code>}</code> <code>&lt;</code> <code>&gt;</code> <code>;</code> <code>=</code> <code>&amp;</code> <code>|</code> <code>$</code> <code>#</code>. Folio solves that with a symbol sheet that appears above the toolbar — 32 of them, all one tap away.</p>
+
+          <p>Open it with the <strong>Symbols</strong> button. Tap any symbol to insert it at your cursor. The sheet stays open so you can insert several in a row without re-opening it.</p>
+
+          <h3>Editor preferences</h3>
+          <p>Everything about how the editor looks and behaves is adjustable in <strong>Settings → Editor</strong>:</p>
+          <ul>
+            <li><strong>Font size</strong> (10–24px) and <strong>line height</strong> (1.2–2.0)</li>
+            <li><strong>Tab size</strong> — 1, 2, 3, 4, or 8 spaces</li>
+            <li><strong>Soft tabs</strong> — spaces instead of tab characters</li>
+            <li><strong>Line numbers</strong> — show or hide the gutter</li>
+            <li><strong>Word wrap</strong> — wrap or scroll horizontally</li>
+            <li><strong>Active line highlight</strong> — subtle amber tint on the current line</li>
+            <li><strong>Bracket matching</strong> — highlight matching pairs</li>
+            <li><strong>Autosave delay</strong> — off, 1s, 2s, or 5s</li>
+            <li><strong>Format on save</strong> — auto-run Prettier when saving</li>
+            <li><strong>Emmet expansion</strong> — HTML abbreviation shortcuts</li>
+          </ul>
+
+          <p>If you're signed in, editor preferences sync across every device you use.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 3 — FILES & FOLDERS
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="3" data-chapter="Files & folders">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">03 / Files & folders</div>
+            <h2>Structured like a real project</h2>
+            <p>Folio's file tree behaves like your laptop's — except it fits in your thumb.</p>
+          </div>
+
+          <h3>The sidebar</h3>
+          <p>On the left (or behind the menu button on mobile) sits the sidebar. It has seven panels:</p>
+
+          <div class="feature-grid">
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              </div>
+              <h4>Files</h4>
+              <p>Your full project tree. Drag to scroll, tap to open, expand folders inline.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              </div>
+              <h4>Info</h4>
+              <p>The project's dashboard — health, stats, deployments, meta tags, storage.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </div>
+              <h4>Search</h4>
+              <p>Find text across every file. Shows the line, the match, and how many per file.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/></svg>
+              </div>
+              <h4>Versions</h4>
+              <p>Your commit history. Every save-point you've committed, with diffs.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              </div>
+              <h4>Changes</h4>
+              <p>Files you've edited since the last commit. Save all with one tap.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+              </div>
+              <h4>Outline</h4>
+              <p>Every heading, class, or function in the current file. Tap to jump.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <h4>Notes</h4>
+              <p>Your project's notebook. Multiple notes, coloured, pinnable, autosaved.</p>
+            </div>
+          </div>
+
+          <h3>Creating files and folders</h3>
+          <p>Inside the Files panel there's a small action bar at the top with four buttons: <strong>New file</strong>, <strong>New folder</strong>, <strong>Import</strong>, and <strong>Collapse/Expand all</strong>.</p>
+
+          <p>You can create files with paths — <code>src/app.js</code> creates a folder called <code>src</code> and a file called <code>app.js</code> inside it. You never have to make folders manually before creating files inside them.</p>
+
+          <p>Nested folders work too: <code>src/components/Button.jsx</code> creates three levels in one shot.</p>
+
+          <h3>Renaming and deleting</h3>
+          <p>Hover (or long-press on mobile) any file or folder to reveal the inline actions: <strong>Rename</strong> and <strong>Delete</strong>. Deleting a folder deletes everything inside it, with a confirmation showing how many files will be affected.</p>
+
+          <div class="callout warning">
+            <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="callout-body">
+              <strong>Deletes are permanent</strong>
+              There's no trash bin. If you want a safety net, commit before you delete anything — that way you can restore the file from version history.
+            </div>
+          </div>
+
+          <h3>Importing files</h3>
+          <p>You don't need to retype your existing code. Tap <strong>Import</strong> and Folio opens your device's file picker — pick one file or several at once. Text files are imported as-is. Images, PDFs, and other binaries are stored as data URLs so they live alongside your code and count toward storage.</p>
+
+          <p>Every imported file lands in the root of your project. If you want it nested, rename it after import or create it fresh with a path.</p>
+
+          <h3>Filtering and expanding</h3>
+          <p>Above the tree there's a filter input. Type any substring and the tree prunes to matching files — it searches the full path, so typing <code>css</code> finds <code>style.css</code> and <code>src/main.css</code> alike. The <strong>Expand all</strong> button opens every folder; <strong>Collapse all</strong> closes them all.</p>
+
+          <h3>How notes work behind the scenes</h3>
+          <p>Notes are stored as a special file called <code>notes.json</code>. It's hidden from the file tree — you never see it in the sidebar, so you can't accidentally edit raw JSON and break it. But it lives alongside everything else, counts toward your storage, syncs to the server, and comes along when you export the project.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 4 — PREVIEW
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="4" data-chapter="Preview">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">04 / Preview</div>
+            <h2>See your project run</h2>
+            <p>Three ways to preview, each designed for a different moment.</p>
+          </div>
+
+          <div class="screenshot">
+            <img src="/screenshots/screenshot3.png" alt="Folio fullscreen preview">
+            <div class="screenshot-caption">Fullscreen preview with an in-app console at the bottom.</div>
+          </div>
+
+          <h3>The three preview modes</h3>
+          <p>Tap the <strong>Preview</strong> button to run your project. But the caret next to it opens a menu with three modes:</p>
+
+          <div class="feature-grid">
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+              </div>
+              <h4>Fullscreen</h4>
+              <p>A dedicated full-screen view with an in-app console that shows <code>console.log</code> output. Best for testing.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </div>
+              <h4>New tab</h4>
+              <p>Opens in your browser's own tab. Best when you want the real browser environment.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="8" x2="22" y2="8"/></svg>
+              </div>
+              <h4>Mini panel</h4>
+              <p>A floating mini-window in the corner. Best for live-updating while you edit.</p>
+            </div>
+          </div>
+
+          <p>Your choice is remembered. The next time you tap Preview, it uses the same mode.</p>
+
+          <h3>What happens under the hood</h3>
+          <p>When you preview, Folio:</p>
+          <ol class="steps">
+            <li>Finds your HTML file — preferring <code>index.html</code> at the root, then any <code>index.html</code> nested deeper, then any HTML file at all.</li>
+            <li>Inlines every linked CSS file directly into a <code>&lt;style&gt;</code> tag.</li>
+            <li>Inlines every linked JS file directly into a <code>&lt;script&gt;</code> tag.</li>
+            <li>Injects a small console bridge that forwards <code>console.log</code>, <code>console.warn</code>, and <code>console.error</code> to the preview pane.</li>
+            <li>Injects any meta tags you've set for the project.</li>
+          </ol>
+
+          <p>The result is a single self-contained HTML document that runs identically to how it would if deployed. This is why preview is a genuinely reliable check — it's not a simulation, it's the real thing.</p>
+
+          <div class="callout success">
+            <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <div class="callout-body">
+              <strong>Console logs appear in fullscreen preview</strong>
+              If something isn't working, open fullscreen preview and watch the bottom pane. Your <code>console.log("here")</code> debug statements show up exactly as they would in devtools.
+            </div>
+          </div>
+
+          <h3>Multiple HTML files</h3>
+          <p>If your project has more than one HTML file — say <code>index.html</code> and <code>about.html</code> — Folio previews the one you've chosen as "primary." You can set that in the Info panel.</p>
+
+          <p>If you haven't set a primary file, Folio prefers <code>index.html</code> at the root. That's usually what you want. If your entry point is named something else (<code>home.html</code>, <code>main.html</code>), set it explicitly.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 5 — PROJECTS
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="5" data-chapter="Projects">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">05 / Projects</div>
+            <h2>The home for everything you build</h2>
+            <p>Every project you create lives here — organised, searchable, and filtered for the way you actually work.</p>
+          </div>
+
+          <div class="screenshot">
+            <img src="/screenshots/screenshot4.png" alt="Folio projects page with a grid of projects">
+            <div class="screenshot-caption">The projects page — sortable, filterable, expandable per project.</div>
+          </div>
+
+          <h3>Six tabs for six mindsets</h3>
+          <p>At the top of the projects page sit six tabs, each showing a subset of your work:</p>
+
+          <ul>
+            <li><strong>All</strong> — every project that isn't archived.</li>
+            <li><strong>Pinned</strong> — the ones you've starred.</li>
+            <li><strong>Owned</strong> — projects you're the owner of.</li>
+            <li><strong>Shared</strong> — projects someone else owns but has invited you to.</li>
+            <li><strong>Public</strong> — projects whose profile visibility is set to public.</li>
+            <li><strong>Archived</strong> — projects you've set aside.</li>
+          </ul>
+
+          <p>Shared projects show a notification badge if you have pending invites. Pinned projects float to the top of every tab.</p>
+
+          <h3>The storage bar</h3>
+          <p>Below the header sits a compact bar showing your plan-wide storage:</p>
+          <ul>
+            <li>Total used / total limit</li>
+            <li>Percentage</li>
+            <li>Colour-coded: green (healthy), amber (getting full), red (nearly full)</li>
+          </ul>
+          <p>It updates every time you return to the page. No need to dig through settings to see how much space you have.</p>
+
+          <h3>The project card</h3>
+          <p>Each project appears as a compact card. The card always shows:</p>
+          <ul>
+            <li>Project icon and name</li>
+            <li>Your role (Owner / Editor / Viewer)</li>
+            <li>Live status (deployed or not)</li>
+            <li>Storage used</li>
+            <li>View count</li>
+            <li>Last modified time</li>
+          </ul>
+
+          <p>Tap the <strong>chevron</strong> on the right side of any card and it expands inline to show:</p>
+          <ul>
+            <li>Full description</li>
+            <li>Language breakdown (e.g. "HTML 45%, CSS 30%, JS 25%")</li>
+            <li>A detailed storage bar with used/limit</li>
+            <li>Warnings for expired deployments or near-full storage</li>
+            <li>Three action buttons: <strong>Editor</strong>, <strong>View</strong>, <strong>Delete</strong></li>
+          </ul>
+
+          <h3>The three actions</h3>
+          <p>When you expand a card, three buttons line up horizontally:</p>
+
+          <p><strong>Editor</strong> opens the project in the code editor. Fast path if you just want to write code.</p>
+
+          <p><strong>View</strong> opens the project dashboard — health, deployments, commits, meta tags, and everything else. Fast path if you want to manage rather than edit.</p>
+
+          <p><strong>Delete</strong> opens a typed confirmation dialog where you must retype the project name exactly. This prevents accidental deletion — you can't just tap "delete" and lose a project forever.</p>
+
+          <h3>Search and sort</h3>
+          <p>A search box in the header searches across project names, slugs, descriptions, and languages. It filters live as you type.</p>
+
+          <p>The sort button opens a filter panel with these sort options:</p>
+          <ul>
+            <li><strong>Modified</strong> — most recently edited first</li>
+            <li><strong>Created</strong> — newest first</li>
+            <li><strong>Name</strong> — alphabetical</li>
+            <li><strong>Storage</strong> — biggest first</li>
+            <li><strong>Recently deployed</strong> — newest deploys first</li>
+            <li><strong>Most visits</strong> — highest traffic first</li>
+          </ul>
+
+          <h3>Filters</h3>
+          <p>The same panel has filter toggles that narrow the list:</p>
+          <ul>
+            <li><strong>Deployed / Not deployed</strong></li>
+            <li><strong>Storage &gt; 70%</strong></li>
+            <li><strong>Recently edited</strong> (last 7 days)</li>
+            <li><strong>Never deployed</strong></li>
+            <li><strong>Expired deploys</strong></li>
+            <li><strong>Editor / Viewer / Commenter</strong> (for shared projects)</li>
+          </ul>
+
+          <p>Active filters show as removable chips below the search bar. A <strong>Clear all</strong> button resets everything.</p>
+
+          <h3>Creating projects — the simple way</h3>
+          <p>The <strong>New</strong> button opens a single-screen modal. You give the project a name, optionally a description, pick a template, and tap Create. That's it.</p>
+
+          <p>If you want to customize the icon at creation time, expand the "Customize icon" section and pick from five generated presets, or upload your own image. If you skip it, the project gets initials with a coloured gradient — perfectly good as a starting point, changeable later.</p>
+
+          <h3>Archiving</h3>
+          <p>Every project's action menu has an <strong>Archive</strong> option. Archiving moves a project out of All / Owned / Shared / Public and into the Archived tab.</p>
+
+          <p>Archives are local-only — they don't sync to the server. That means archiving a project on your phone doesn't hide it on your laptop. It's a personal "out of sight" toggle, not a shared state change.</p>
+
+          <p>Unarchiving is the same button, now labelled <strong>Unarchive</strong>, from the Archived tab.</p>
+
+          <h3>Pinning</h3>
+          <p>Pin up to 3 projects you're actively working on. Pinned projects appear at the top of every tab (except Archived). Tap the bookmark icon on any project card or in the action menu to pin or unpin.</p>
+
+          <div class="callout info">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div class="callout-body">
+              <strong>Pins are stored locally</strong>
+              Like archives, pins don't sync across devices. Each device has its own pinned set.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 6 — DASHBOARD
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="6" data-chapter="Dashboard">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">06 / Project dashboard</div>
+            <h2>One project, all its details</h2>
+            <p>Every project has a full dashboard behind it. Health, deployments, commits, meta tags, collaborators, storage — organised into tabs you can navigate from anywhere.</p>
+          </div>
+
+          <div class="screenshot">
+            <img src="/screenshots/screenshot5.png" alt="Folio project dashboard showing health and overview">
+            <div class="screenshot-caption">The project dashboard — health card, live URL, and quick actions at a glance.</div>
+          </div>
+
+          <h3>The health card</h3>
+          <p>At the top of every dashboard is a single card that tells you how healthy the project is. It's colour-coded and shows at a glance:</p>
+          <ul>
+            <li>Whether the project is synced to the server</li>
+            <li>Whether it's deployed (and when it was last deployed)</li>
+            <li>How much storage it's using</li>
+            <li>Whether traffic is flowing</li>
+          </ul>
+
+          <p>Green means healthy. Amber means something to watch — a warning that's not critical yet. Red means something is broken or full.</p>
+
+          <h3>Overview tab</h3>
+          <p>The default landing shows:</p>
+          <ul>
+            <li>The health card</li>
+            <li>Four stat tiles: files, commits, storage, last modified</li>
+            <li>An analytics strip: today's visits, 7-day total, all-time total, top page, and a tiny bar chart</li>
+            <li>A live URL card with a page selector</li>
+            <li>A details card with the project icon, name, slug, ID</li>
+            <li>Recent activity from the project's log</li>
+            <li>A meta tags form (collapsible)</li>
+          </ul>
+
+          <h3>The live URL card</h3>
+          <p>Once your project is deployed, this card lets you jump to any page in it. The dropdown lists every HTML file in your project; pick one and the URL below updates to that page's specific address. A copy button puts the URL in your clipboard; an Open button opens it in a new tab.</p>
+
+          <p>For projects with only <code>index.html</code>, the selector shows one entry. For projects with several pages, you get a full navigator.</p>
+
+          <h3>Deployment list</h3>
+          <p>The Deploys tab lists every deployment your project has ever had. Each row shows the deployment's version, state (Live / Offline / Ready), timestamp, and actions:</p>
+          <ul>
+            <li><strong>Open</strong> — visit the deployment's URL</li>
+            <li><strong>Copy URL</strong> — copy the deployment's specific URL</li>
+            <li><strong>Redeploy</strong> — switch the live site back to this version</li>
+            <li><strong>Delete</strong> — remove this deployment record</li>
+          </ul>
+
+          <p>Deployments more than 30 days old are eligible for cleanup — Folio can auto-clean them periodically to keep your history tidy. You can also clean them manually.</p>
+
+          <h3>Meta tags — social sharing that works</h3>
+          <p>When someone shares your deployed project on Twitter, Slack, WhatsApp, or Discord, those apps look for specific HTML meta tags to build a preview card. Folio lets you set them without writing HTML manually.</p>
+
+          <p>The Meta Tags card has fields for:</p>
+          <ul>
+            <li><strong>Title</strong> — page title, also used for OG</li>
+            <li><strong>Description</strong> — page description, also used for OG</li>
+            <li><strong>OG image URL</strong> — the image shown in link previews (must be HTTPS)</li>
+            <li><strong>OG type</strong> — <code>website</code>, <code>article</code>, or <code>profile</code></li>
+            <li><strong>Twitter card</strong> — <code>summary</code> or <code>summary_large_image</code></li>
+          </ul>
+
+          <p>When you save these, they're stored server-side and injected into every preview and every deployment automatically. You don't need to touch your HTML — Folio handles the injection.</p>
+
+          <h3>The Info panel in the editor</h3>
+          <p>You don't have to leave the editor to see any of this. The Info panel in the sidebar mirrors the dashboard's key data — health, stats, deployments, storage, meta tags — so you can check status while editing without losing your place.</p>
+
+          <p>There's also an <strong>Open dashboard</strong> button at the top of the Info panel — tap it and you jump to the full dashboard in one action.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 7 — COMMITS
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="7" data-chapter="Commits">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">07 / Commits</div>
+            <h2>Version history without git</h2>
+            <p>Folio gives you the safety net of version control without the complexity of branches, remotes, or merge conflicts.</p>
+          </div>
+
+          <h3>What a commit is</h3>
+          <p>A commit is a snapshot of your entire project at a moment in time. Every file, captured together, so you can always come back to exactly what the project looked like at that point.</p>
+
+          <p>Unlike git, Folio's commits are linear — there's no branching, no merge conflicts, no "detached head." You commit, you keep working, you can restore any past commit if you need to.</p>
+
+          <h3>Making a commit</h3>
+          <p>There are two ways:</p>
+          <ol class="steps">
+            <li>Tap the <strong>Commit</strong> button in the editor toolbar. A modal opens showing all files changed since your last commit, with line counts.</li>
+            <li>Folio auto-generates a commit message based on what changed (e.g. "edit: app.js (+12, −3)"). You can edit it or accept it.</li>
+            <li>Tap <strong>Commit</strong> and the snapshot is saved.</li>
+          </ol>
+
+          <p>You can also open the Commits tab on the project dashboard and tap <strong>Commit now</strong> if you have uncommitted changes.</p>
+
+          <h3>Browsing history</h3>
+          <p>Every commit is listed newest-first with:</p>
+          <ul>
+            <li>The commit message</li>
+            <li>Files changed count</li>
+            <li>Additions and deletions</li>
+            <li>When it was committed</li>
+          </ul>
+
+          <p>Auto-snapshots (created before a restore) are marked with a distinct badge so you can tell them apart from your own commits.</p>
+
+          <h3>Comparing two commits</h3>
+          <p>Tap <strong>Diff</strong> on any commit to see what changed between it and the previous one. Folio shows file-by-file diffs with colour-coded additions and deletions — green lines added, red lines removed, amber lines changed.</p>
+
+          <h3>Redeploying an old commit</h3>
+          <p>Tap <strong>Redeploy</strong> on any commit and Folio switches your live site back to that exact version. Perfect for rolling back a bad deploy in seconds.</p>
+
+          <h3>Restoring to your editor</h3>
+          <p>Tap <strong>Restore</strong> and Folio rewrites your entire project to that commit's snapshot. Before it does, it automatically creates a snapshot of your current state — so even restoring is reversible.</p>
+
+          <div class="callout warning">
+            <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="callout-body">
+              <strong>Restoring affects the whole project</strong>
+              Restore replaces every file with the snapshot version. Files created after that commit are removed. Files deleted after that commit come back.
+            </div>
+          </div>
+
+          <h3>Clearing all versions</h3>
+          <p>If you want a clean slate, the Danger zone in the dashboard has a "Clear all versions" button. Files stay; only the snapshot history is deleted.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 8 — NOTES
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="8" data-chapter="Notes">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">08 / Notes</div>
+            <h2>A notebook inside every project</h2>
+            <p>Every project has its own notes panel — not one giant text field, but a proper list of individual notes you can write, colour, pin, edit, and delete.</p>
+          </div>
+
+          <h3>Why multi-note</h3>
+          <p>Most "project notes" features give you a single text field. That works for one paragraph. But real projects have many thoughts: a README draft, a TODO list, a snippet you'll want later, a design decision you need to remember.</p>
+
+          <p>Folio's notes system treats each idea as its own note — colour-coded, timestamped, pinnable, searchable.</p>
+
+          <h3>Creating and editing</h3>
+          <p>Open the Notes panel from the editor sidebar. Tap <strong>New note</strong>. A fullscreen editor opens with:</p>
+          <ul>
+            <li>A title field at the top</li>
+            <li>A monospace body for writing</li>
+            <li>A word counter in the footer</li>
+            <li>Pin, colour, and delete actions in the header</li>
+          </ul>
+
+          <p>Notes auto-save 800ms after you stop typing. The footer shows "Editing…" while typing, then "Saved" when the save completes.</p>
+
+          <h3>Titles derive from content</h3>
+          <p>If you don't give a note a title, Folio looks for the first line starting with <code>#</code> and uses that as the title. So a note that starts with <code># Meeting notes</code> shows up in the list as "Meeting notes" — without you having to fill in a separate field.</p>
+
+          <h3>Six accent colours</h3>
+          <p>Notes can be tinted to help you sort by type:</p>
+          <ul>
+            <li>Amber — general notes</li>
+            <li>Sky — reference</li>
+            <li>Violet — ideas</li>
+            <li>Emerald — done / archived thoughts</li>
+            <li>Rose — warnings</li>
+            <li>Cyan — snippets</li>
+          </ul>
+
+          <p>Each note's colour shows as an accent bar down the left of its card in the list. Easy visual scanning without reading every title.</p>
+
+          <h3>Pinning</h3>
+          <p>Pin the most important note to the top of the list. Unpinned notes sort by last modified below pinned ones.</p>
+
+          <h3>Storage implications</h3>
+          <p>Notes count toward your project's storage — but as data, not as files. The notes.json file is small. A thousand notes of a few hundred words each would be under 100 KB total.</p>
+
+          <h3>Notes survive export</h3>
+          <p>When you export a project as <code>.folio</code> or <code>.zip</code>, your notes come with it. They're also excluded from the deployment payload — meaning your private notes never end up on your public live URL.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 9 — FILE VIEWERS
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="9" data-chapter="File viewers">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">09 / File viewers</div>
+            <h2>Every file type, rendered properly</h2>
+            <p>Folio doesn't dump binary into a textarea. Every common file type gets a viewer that makes sense for it.</p>
+          </div>
+
+          <h3>The viewers</h3>
+          <div class="feature-grid">
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </div>
+              <h4>Images</h4>
+              <p>PNG, JPG, WebP, GIF, SVG. Displayed at full size, scaled to fit, with the file size shown above.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <h4>PDFs</h4>
+              <p>Embedded in an inline reader. Scroll through the document without leaving Folio.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </div>
+              <h4>Video</h4>
+              <p>MP4, WebM, OGV. Full player controls, plays inline.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              </div>
+              <h4>Audio</h4>
+              <p>MP3, WAV, OGG, M4A. Compact player with play/pause and seek.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </div>
+              <h4>Text</h4>
+              <p>Plain text files rendered in a readable monospace view — no syntax highlighting clutter.</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-card-icon">
+                <svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+              </div>
+              <h4>Fonts</h4>
+              <p>WOFF, WOFF2, TTF, OTF. Shown as an info card with the font's name and a download link.</p>
+            </div>
+          </div>
+
+          <h3>Code files open in the editor</h3>
+          <p>All source code files — HTML, CSS, JS, TS, JSX, TSX, JSON, Markdown, Python, and dozens more — open in CodeMirror with full editing capability. The viewers above are for everything else.</p>
+
+          <h3>Uploading media</h3>
+          <p>You can import any of these file types. Images, PDFs, videos, and audio are stored as data URLs inside your project, which means they're available offline, sync with your project, and work identically on the deployed site.</p>
+
+          <div class="callout info">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div class="callout-body">
+              <strong>Upload limits</strong>
+              Individual files can be up to 5 MB. Total project storage is 10 MB (or higher depending on plan). If you're adding a large image or video, you'll see the storage bar rise immediately in the project Info panel.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 10 — COLLABORATION
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="10" data-chapter="Collaboration">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">10 / Collaboration</div>
+            <h2>Share a project with someone else</h2>
+            <p>Folio's sharing system lets you invite other people to work on a project with granular roles.</p>
+          </div>
+
+          <h3>Three roles</h3>
+          <p>When you invite someone to a project, you pick a role:</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Role</th><th>Can do</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><strong>Viewer</strong></td>
+                  <td>Read files, see project info, download public assets. Cannot edit.</td>
+                </tr>
+                <tr>
+                  <td><strong>Commenter</strong></td>
+                  <td>Everything a viewer can, plus leave comments. Cannot edit code.</td>
+                </tr>
+                <tr>
+                  <td><strong>Editor</strong></td>
+                  <td>Read and write. Can edit files, commit, deploy, change settings.</td>
+                </tr>
+                <tr>
+                  <td><strong>Owner</strong></td>
+                  <td>Everything an editor can, plus delete the project, manage collaborators, transfer ownership.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Inviting someone</h3>
+          <p>From the Sharing tab in the dashboard, tap <strong>Invite</strong>. Enter:</p>
+          <ul>
+            <li><strong>Usernames</strong> — comma-separated for bulk invites</li>
+            <li><strong>Role</strong> — viewer, commenter, or editor</li>
+          </ul>
+
+          <p>Tap <strong>Send</strong>. Folio sends each invited user a notification. If you invited one person, you get a success modal with a direct invite link you can copy and share via any channel. If you invited several, you get a summary with copyable links per user.</p>
+
+          <h3>Pending invites</h3>
+          <p>The Sharing tab lists pending invites you've sent that haven't been accepted yet. Each shows:</p>
+          <ul>
+            <li>The invited user's ID (truncated)</li>
+            <li>The role you assigned</li>
+            <li>Days until expiry (default: 7 days)</li>
+            <li>Buttons to copy the invite link or cancel the invite</li>
+          </ul>
+
+          <p>Pending invites refresh automatically every 30 seconds while you're viewing this tab.</p>
+
+          <h3>Removing a collaborator</h3>
+          <p>Below the pending invites list sits every active collaborator. Tap the trash icon next to any of them to remove their access. They're notified immediately.</p>
+
+          <h3>Visibility axes</h3>
+          <p>The Sharing tab also has five visibility toggles for making parts of your project public:</p>
+          <ul>
+            <li><strong>Show in profile</strong> — appear on your public profile page</li>
+            <li><strong>Live site link</strong> — show a "Visit live site" button on the shared link</li>
+            <li><strong>Code viewer</strong> — let anyone read your source files</li>
+            <li><strong>Language breakdown</strong> — show language percentages</li>
+            <li><strong>JSON database API</strong> — let external apps read your JSON data</li>
+          </ul>
+
+          <p>Each is independent — you can have a public site with private code, or public code with a private site. Whatever fits the project.</p>
+
+          <h3>API keys</h3>
+          <p>Every project can generate an API key. This key lets external services call the project's JSON database or trigger deploys without a user session. Generate one from the Sharing tab. The key is shown once — copy it immediately. Regenerating invalidates the old key.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 11 — DEPLOY & HOST
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="11" data-chapter="Deploy & host">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">11 / Deploy & host</div>
+            <h2>Your project, on the internet</h2>
+            <p>Deploy any project to a live URL with one tap. No build steps, no configuration, no CI.</p>
+          </div>
+
+          <div class="screenshot">
+            <img src="/screenshots/screenshot6.png" alt="Folio deployment success state">
+            <div class="screenshot-caption">A deployed project with its live URL and history visible.</div>
+          </div>
+
+          <h3>What deploy does</h3>
+          <p>When you tap <strong>Deploy</strong>, Folio:</p>
+          <ol class="steps">
+            <li>Collects every file in your project.</li>
+            <li>Applies your meta tags to the primary HTML file.</li>
+            <li>Uploads everything to a hosting server.</li>
+            <li>Returns a live URL that serves your project.</li>
+          </ol>
+
+          <p>The whole thing takes a few seconds. When it's done, you have a real URL that loads your project exactly as it does in preview.</p>
+
+          <h3>Where the URL lives</h3>
+          <p>Every deploy gets a URL on Folio's hosting infrastructure. If you want a specific path, your project's slug becomes the path — so a project called "Coffee Shop" with slug <code>coffee-shop</code> gets a URL at <code>your-subdomain.foliostudios.vercel.app/coffee-shop</code>.</p>
+
+          <p>You can always find the exact URL in the project dashboard's live URL card, or in the Deploys tab.</p>
+
+          <h3>Redeploying</h3>
+          <p>Deploy as many times as you want. Each deploy creates a new deployment record. The previous deployments stay in history — you can roll back to any of them from the Deploys tab.</p>
+
+          <h3>Taking offline</h3>
+          <p>If you want to take a project offline temporarily without deleting it, use <strong>Take offline</strong>. This removes the live URL but keeps your files, deployments, and everything else. Redeploy any time.</p>
+
+          <div class="callout warning">
+            <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div class="callout-body">
+              <strong>Deploying requires an account</strong>
+              Guests can build and preview but not deploy. Every deployed URL is tied to your account.
+            </div>
+          </div>
+
+          <h3>Deploy limits</h3>
+          <p>Each project can be deployed up to 10 times per hour. That's plenty for normal use — but if you're rapidly iterating, you'll hit the ceiling. Wait a bit and try again.</p>
+
+          <h3>Automatic meta tags</h3>
+          <p>When you deploy, Folio injects your meta tags into the primary HTML file automatically. So the deployed site always has correct OG title, description, and image — even if you never touched the HTML.</p>
+
+          <p>This is different from preview injection (which is in-memory only). Deploy writes the tags into the actual file that's served, so social media crawlers see them.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 12 — TOOLS
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="12" data-chapter="Tools">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">12 / Tools</div>
+            <h2>A workshop next to your editor</h2>
+            <p>Folio includes a suite of small web-dev utilities — image generation, colour tools, QR codes, JSON formatting, and more.</p>
+          </div>
+
+          <h3>The tool grid</h3>
+          <p>Visit <code>/tools</code> and you'll see every tool as a card in a searchable grid. Tools are organised by category:</p>
+          <ul>
+            <li><strong>Images</strong> — image generator, QR codes, colour tools</li>
+            <li><strong>Text</strong> — font preview, markdown preview, base64</li>
+            <li><strong>Data</strong> — JSON formatter</li>
+            <li><strong>Network</strong> — API tester</li>
+          </ul>
+
+          <p>Use the search bar to filter by name, or click any tool card to jump straight to it.</p>
+
+          <h3>Deep links</h3>
+          <p>Every tool has a direct URL: <code>/tools?tool=qr</code>, <code>/tools?tool=color</code>, <code>/tools?tool=json</code>. Share the URL with someone and they'll land on that specific tool.</p>
+
+          <h3>The image generator</h3>
+          <p>Folio's image generator is powered by Flier and produces polished images from templates. You can use it to create:</p>
+          <ul>
+            <li>Social media graphics</li>
+            <li>Quote cards</li>
+            <li>Event posters</li>
+            <li>Feature blocks</li>
+            <li>Product grids</li>
+            <li>Anything with a title and a background</li>
+          </ul>
+
+          <p>Pick a template, enter text, choose a size, set colours, and download a PNG. Everything renders server-side so the output is crisp regardless of your device.</p>
+
+          <h3>QR codes</h3>
+          <p>Generate a QR code for any URL or text. Pick a size, pick error correction level, pick colours, and download. Works offline — the QR renderer runs in your browser.</p>
+
+          <h3>JSON formatter</h3>
+          <p>Paste any JSON and get it formatted, validated, or minified. Errors are shown inline with line numbers.</p>
+
+          <h3>API tester</h3>
+          <p>Send HTTP requests to any CORS-enabled API. See the status code, response time, and full response body. Perfect for debugging an endpoint before wiring it into your project.</p>
+
+          <h3>Color tools</h3>
+          <p>Pick any colour, see its hex/RGB/HSL values. Check WCAG contrast between any two colours. Browse Material and Tailwind palettes with one tap to copy any swatch.</p>
+
+          <div class="callout success">
+            <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <div class="callout-body">
+              <strong>Insert directly into your project</strong>
+              Most tools have an "Insert" button that pushes their output into the editor. Generate a QR code, insert it, done — no download-then-upload dance.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 13 — ANALYTICS
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="13" data-chapter="Analytics">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">13 / Analytics</div>
+            <h2>See who's visiting what</h2>
+            <p>Every deployed project tracks anonymous visits, page views, and API usage. It's private, aggregated, and never sold.</p>
+          </div>
+
+          <h3>How tracking works</h3>
+          <p>When your project is deployed and someone visits it, Folio's analytics script fires once. It sends:</p>
+          <ul>
+            <li>The project ID</li>
+            <li>The page path they visited</li>
+            <li>The referring URL (where they came from)</li>
+          </ul>
+
+          <p>Nothing else. No fingerprinting, no IP storage, no personal data. The visit is counted, aggregated into daily buckets, and that's it.</p>
+
+          <h3>What you see</h3>
+          <p>The project's Overview tab shows an analytics strip with:</p>
+          <ul>
+            <li>Today's visit count</li>
+            <li>7-day total</li>
+            <li>All-time total</li>
+            <li>Top page (the URL with the most views)</li>
+            <li>A tiny sparkline chart of the last 7 days</li>
+          </ul>
+
+          <p>Open the Analytics tab for the full picture: 7-day trend chart, top pages list, DB operations count, API call count. All refresh on demand.</p>
+
+          <h3>The account-wide analytics page</h3>
+          <p>Visit <code>/analytics</code> from the rail to see:</p>
+          <ul>
+            <li><strong>Overview</strong> — total views across all projects, top projects, storage summary, recent activity</li>
+            <li><strong>Projects</strong> — per-project breakdown with views, DB ops, API calls, storage</li>
+            <li><strong>Profile</strong> — your public profile page views (7-day and 30-day charts)</li>
+            <li><strong>Activity</strong> — recent events across all projects</li>
+            <li><strong>Logs</strong> — your own action history (logins, edits, deploys, settings changes)</li>
+          </ul>
+
+          <h3>Rate limits</h3>
+          <p>Analytics fetches are cached for 5 minutes. The Projects and Overview tabs only fetch the first 10 projects' data to avoid hammering the server. If you have more, they don't affect the displayed totals but you can scroll to see individual projects in the Projects tab.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 14 — PROFILE
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="14" data-chapter="Profile">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">14 / Profile</div>
+            <h2>Your public page</h2>
+            <p>Every signed-in user has a public profile page at <code>foliostudios.vercel.app/your-username</code>. It's a personal landing page that lists your public projects.</p>
+          </div>
+
+          <h3>What's on your profile</h3>
+          <ul>
+            <li>Your avatar and display name</li>
+            <li>Your username</li>
+            <li>Your bio</li>
+            <li>Your links (GitHub, Twitter, personal site, and any custom labels)</li>
+            <li>Public projects you've marked as visible</li>
+            <li>Language breakdown of each public project</li>
+          </ul>
+
+          <h3>Editing your profile</h3>
+          <p>Visit <code>/profile</code> from the rail or the bottom nav. You can edit:</p>
+          <ul>
+            <li><strong>Display name</strong> — what shows on your profile</li>
+            <li><strong>Bio</strong> — a short paragraph about you</li>
+            <li><strong>Links</strong> — add any number of labelled URLs</li>
+            <li><strong>Avatar</strong> — via the avatar studio (see below)</li>
+          </ul>
+
+          <h3>The avatar studio</h3>
+          <p>Tap your profile picture and a full-screen studio opens. You can design an avatar from scratch:</p>
+          <ul>
+            <li><strong>Template</strong> — 15 visual styles to start from</li>
+            <li><strong>Content type</strong> — initials, text, image, or emoji</li>
+            <li><strong>Variant</strong> — dark, light, or auto</li>
+            <li><strong>Pattern</strong> — dots, grid, diagonal, noise</li>
+            <li><strong>Align</strong> — left, center, right</li>
+            <li><strong>Radius</strong> — corner roundness</li>
+            <li><strong>Colours</strong> — primary and accent</li>
+            <li><strong>Background</strong> — solid colour or gradient</li>
+            <li><strong>Size</strong> — square, portrait, or landscape</li>
+          </ul>
+
+          <p>Every change updates the live preview instantly. When you're happy, tap <strong>Save</strong> to upload it to your profile, or <strong>Download</strong> to keep the PNG.</p>
+
+          <h3>Your public URL</h3>
+          <p>Your profile lives at <code>foliostudios.vercel.app/your-username</code>. Share it anywhere. Old usernames redirect — if you change your username, previous links still work.</p>
+
+          <div class="callout info">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div class="callout-body">
+              <strong>Profile visibility is separate from project visibility</strong>
+              Making your profile public doesn't make any project public. Each project's visibility is controlled independently from its Sharing tab.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 15 — SETTINGS
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="15" data-chapter="Settings">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">15 / Settings</div>
+            <h2>Every switch, every preference</h2>
+            <p>One page for appearance, editor defaults, account security, notifications, and everything else.</p>
+          </div>
+
+          <h3>Ten sections</h3>
+          <p>The Settings page has ten tabs across the top:</p>
+
+          <ul>
+            <li><strong>Appearance</strong> — theme, text size, reduced motion, font family</li>
+            <li><strong>Editor</strong> — typography, indentation, display, behaviour, diagnostics</li>
+            <li><strong>Account</strong> — email, username, password, sessions</li>
+            <li><strong>Notifications</strong> — push settings, what to get notified about</li>
+            <li><strong>Storage</strong> — per-project usage, cache management</li>
+            <li><strong>Database</strong> — IndexedDB diagnostics, export, reset</li>
+            <li><strong>PWA</strong> — install, update, cache</li>
+            <li><strong>Data</strong> — export/import settings, about your data</li>
+            <li><strong>Advanced</strong> — debug mode, sync queue</li>
+            <li><strong>Danger</strong> — clear cache, reset all settings, sign out</li>
+          </ul>
+
+          <h3>Appearance</h3>
+          <p><strong>Theme</strong> switches between dark, light, or auto (follows your OS setting). <strong>Text size</strong> scales the entire app from 85% to 135% — useful on small phones or when you want to see more code at once. <strong>Reduced motion</strong> disables animations across the app. <strong>Font family</strong> switches between Inter and the system UI font.</p>
+
+          <h3>Editor</h3>
+          <p>Every editor preference discussed earlier — font size, line height, tab size, soft tabs, line numbers, word wrap, active line highlight, bracket matching, autosave delay, format on save, emmet, JSON lint, JS lint. Each has a live preview so you can see what you're configuring.</p>
+
+          <h3>Account</h3>
+          <p>Change your email, username, and password. Each change requires your current password and generates a security notification to your device — so if someone else got into your account, you'd know immediately.</p>
+
+          <h3>Notifications</h3>
+          <p>Enable push notifications, then choose what categories you want to receive:</p>
+          <ul>
+            <li>System alerts — maintenance, feature announcements</li>
+            <li>Analytics thresholds — traffic spikes, milestones</li>
+            <li>Database writes — when your JSON DB is modified</li>
+            <li>Storage limits — when projects approach their limits</li>
+            <li>Project activity — commits, deploys, offline state</li>
+            <li>Invites — when someone invites you to collaborate</li>
+            <li>Security events — password changes, new logins, blocked requests</li>
+          </ul>
+
+          <p>Each toggle is independent. You can have deploy alerts but not analytics, invites but not storage, whatever fits.</p>
+
+          <h3>Storage</h3>
+          <p>Shows your browser storage breakdown: how much space your projects are using, what quota you have, whether persistent storage is granted. Lists each project with its individual usage. A cleanup section helps you find projects over 90% and either delete files or archive the project.</p>
+
+          <h3>Database</h3>
+          <p>A diagnostics panel for power users. Shows:</p>
+          <ul>
+            <li>Schema version (code vs actual)</li>
+            <li>All six stores: projects, files, versions, projectMeta, syncQueue, folders</li>
+            <li>Record count and size per store</li>
+            <li>Export button — download a JSON snapshot of everything</li>
+            <li>Reset button — wipe the local database entirely</li>
+          </ul>
+
+          <p>You'll rarely need this. But if a project ever fails to load, or a stale record hides somewhere, this panel is where you can inspect and fix it.</p>
+
+          <h3>PWA</h3>
+          <p>Install Folio to your home screen. Check for updates. Clear the app cache. Every PWA thing in one place.</p>
+
+          <h3>Data</h3>
+          <p>Export your settings as a JSON file, or import them on another device. Import project backups from the Projects page. Read about how your data is stored.</p>
+
+          <h3>Danger</h3>
+          <p>Clear local cache (removes offline copies but not server data). Reset all settings (back to defaults — you stay signed in). Sign out. Every destructive action here requires explicit confirmation.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 16 — REAL STORIES
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="16" data-chapter="Real stories">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">16 / Real stories</div>
+            <h2>What people actually do with it</h2>
+            <p>Folio isn't a demo. Here are real workflows that people use it for every day.</p>
+          </div>
+
+          <div class="story">
+            <div class="story-label">Story 01</div>
+            <p><strong>The midnight idea.</strong> It's 11pm and you've got an idea for a landing page for a friend's business. No laptop in reach — but your phone is on the nightstand.</p>
+            <p>You open Folio, pick the Landing template, edit the headline, change the primary colour, swap in a photo from your camera roll, tap <strong>Deploy</strong>. By 11:04pm the URL is live and you've sent it to your friend. They see it in the morning.</p>
+          </div>
+
+          <div class="story">
+            <div class="story-label">Story 02</div>
+            <p><strong>The bug that had to wait.</strong> You're on the train. Offline. You've been chasing a bug in your portfolio site for two days and it's finally clicked — the CSS grid is collapsing because one child has a minimum width.</p>
+            <p>You open Folio (works offline), find the CSS file, fix the grid property, commit the change. You don't have service but the commit is local. When you arrive home and the phone connects to WiFi, the change syncs. You deploy from the laptop. Done.</p>
+          </div>
+
+          <div class="story">
+            <div class="story-label">Story 03</div>
+            <p><strong>The collaborator.</strong> Your friend is a designer. You're not. They want to tweak the colours of your side project. You don't want to give them your editor and let them touch the JS.</p>
+            <p>You go to the Sharing tab, invite them as <strong>Editor</strong>. They accept the invite, open the project on their laptop, change the CSS. You get a notification. You review the diff in the Versions tab. Everything looks fine. You deploy.</p>
+          </div>
+
+          <div class="story">
+            <div class="story-label">Story 04</div>
+            <p><strong>The regression.</strong> A deployment went out and now the site looks broken. You're not sure which change broke it. You have 12 commits and no time to read all of them.</p>
+            <p>You open the Commits tab on the dashboard. You find the last commit that was clearly working — the one from yesterday morning. You tap <strong>Redeploy</strong>. Live site is restored to yesterday's version in seconds. Now you have time to actually debug.</p>
+          </div>
+
+          <div class="story">
+            <div class="story-label">Story 05</div>
+            <p><strong>The reference dump.</strong> You're building a small web app and you keep looking things up — the exact syntax for CSS Grid, the em-based breakpoint pattern, the JSON structure for a todo item.</p>
+            <p>You create a project called "Reference", make 20 notes with titles like "CSS Grid layout", "Flexbox centering", "JSON schema example". Each note has a <code># heading</code> at the top and the code below. Now every time you need to look something up, you open Reference and scan the note list. No more googling.</p>
+          </div>
+
+          <div class="story">
+            <div class="story-label">Story 06</div>
+            <p><strong>The email invite.</strong> You're building something with a friend who lives in another city. You don't have their phone number but you have their Folio username. You invite them. They get a push notification on their phone within seconds. They accept. Your project now has two collaborators.</p>
+            <p>Every commit either of you makes generates a notification. Every deploy gets announced. You stay in sync without ever having a real-time video call.</p>
+          </div>
+
+          <div class="story">
+            <div class="story-label">Story 07</div>
+            <p><strong>The image drop.</strong> You're building a recipe card layout. You want a photo of the actual dish. You take the photo with your phone, import it into Folio, and reference it in the HTML as a data URL. The project still lives entirely in one place, still previews identically to how it deploys, still syncs across devices.</p>
+            <p>No CDN. No image host. No separate upload step.</p>
+          </div>
+
+          <div class="story">
+            <div class="story-label">Story 08</div>
+            <p><strong>The shareable link.</strong> You've built a small calculator. You want to send it to someone. You don't send the code — you send the live URL from the Deploys tab. They tap it on their phone. It opens. It works. Nothing about their environment matters because it's just HTML, CSS, and JS.</p>
+          </div>
+
+          <div class="story">
+            <div class="story-label">Story 09</div>
+            <p><strong>The backup.</strong> You're about to try something risky — a big refactor. Instead of worrying about whether you can undo it, you commit first. Then you make the changes. If it works, great, commit again. If not, restore. Either way, you're never more than one tap from yesterday's version of your project.</p>
+          </div>
+
+          <div class="story">
+            <div class="story-label">Story 10</div>
+            <p><strong>The JSON backend.</strong> You're building a small app that needs to store data — user preferences, todo state, whatever. You don't want to run a real backend. Folio gives each project a JSON database with a simple HTTP API. You write 4 lines of JavaScript to save and load data. It works. It's live. Total time from idea to working app: 20 minutes.</p>
+          </div>
+
+          <div class="callout success">
+            <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <div class="callout-body">
+              <strong>The common thread</strong>
+              Every one of these stories is possible because Folio works offline-first, deploys in one tap, and never loses your work. That's the whole point — remove the friction between wanting to build something and having it live on the internet.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 17 — KEYBOARD SHORTCUTS
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="17" data-chapter="Shortcuts">
+        <div class="page-inner">
+          <div class="section-header">
+            <div class="section-number">17 / Keyboard shortcuts</div>
+            <h2>Every shortcut, in one list</h2>
+            <p>Works on desktop browsers, tablets with physical keyboards, and phones via the Ctrl latch.</p>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">S</kbd></td><td>Save current file</td></tr>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">Shift</kbd> + <kbd class="kbd">S</kbd></td><td>Save all files</td></tr>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">F</kbd></td><td>Find in current file</td></tr>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">Shift</kbd> + <kbd class="kbd">F</kbd></td><td>Find across all files</td></tr>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">Z</kbd></td><td>Undo</td></tr>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">Y</kbd></td><td>Redo</td></tr>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">A</kbd></td><td>Select all</td></tr>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">C</kbd></td><td>Copy selection</td></tr>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">V</kbd></td><td>Paste</td></tr>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">X</kbd></td><td>Cut selection</td></tr>
+                <tr><td><kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">B</kbd></td><td>Toggle sidebar</td></tr>
+                <tr><td><kbd class="kbd">Esc</kbd></td><td>Close panel, dismiss modal, or cancel Ctrl latch</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Using the Ctrl latch</h3>
+          <p>On a phone or tablet, tap the <strong>Ctrl</strong> button in the toolbar to latch the modifier, then tap the key you want to combine it with. The latch clears itself automatically after one shortcut.</p>
+
+          <p>Examples:</p>
+          <ul>
+            <li>Tap Ctrl, then tap <code>Z</code> → undo</li>
+            <li>Tap Ctrl, then tap <code>S</code> → save</li>
+            <li>Tap Ctrl, then tap <code>F</code> → find</li>
+          </ul>
+
+          <h3>Search focus</h3>
+          <p>On the Search tab of the sidebar, the search input autofocuses when you open it. Type to filter across every file in the project. Click any result to jump directly to that line.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE 18 — FINAL: LET'S BUILD
+           ═══════════════════════════════════════════════════ -->
+      <div class="book-page" data-page="18" data-chapter="Let's build">
+        <div class="page-inner footer-page">
+          <div class="footer-logo-large">
+            <img src="/icons/icon-192.png" alt="Folio"
+              onerror="this.style.display='none';this.parentNode.innerHTML='<svg viewBox=\'0 0 24 24\' style=\'width:42px;height:42px;stroke:#F59E0B;fill:none;stroke-width:2;\'><path d=\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\'/><polyline points=\'14 2 14 8 20 8\'/></svg>'">
+          </div>
+
+          <h2>Let's <span>build</span></h2>
+          <p>You've read the guide. You know the editor, the files, the preview, the deploy. There's nothing left between you and the thing you want to make.</p>
+          <p style="color:var(--theme-text);font-weight:600;font-size:1.02rem;">Open Folio. Create a project. Ship it. The rest is up to you.</p>
+
+          <div style="margin-top:2rem;">
+            <a href="https://foliostudios.vercel.app" class="footer-cta">
+              <span>Open Folio</span>
+              <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </a>
+          </div>
+
+          <div class="footer-links">
+            <a href="https://foliostudios.vercel.app">
+              <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              The app
+            </a>
+            <a href="/projects">
+              <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              Projects
+            </a>
+            <a href="/tools">
+              <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              Tools
+            </a>
+          </div>
+
+          <div class="footer-copy">
+            Folio — code in your pocket. Made for the web. Works offline. Free to start.
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /book-track -->
+  </div><!-- /book-viewport -->
+
+  <!-- BOOK NAVIGATION -->
+  <div class="book-nav">
+    <button class="book-nav-btn" id="prevBtn" aria-label="Previous page" disabled>
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="book-dots" id="bookDots"></div>
+    <button class="book-nav-btn primary" id="nextBtn" aria-label="Next page">
+      <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </div>
+
+</div><!-- /book -->
+
+<!-- SEARCH OVERLAY -->
+<div class="search-overlay" id="searchOverlay" role="dialog" aria-modal="true" aria-label="Search the guide">
+  <div class="search-panel">
+    <div class="search-header">
+      <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search chapters, topics, terms…" autocomplete="off" spellcheck="false">
+      <button class="search-close" id="searchClose" aria-label="Close search">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="search-hint">
+      <kbd>↑</kbd> <kbd>↓</kbd> to navigate · <kbd>Enter</kbd> to open · <kbd>Esc</kbd> to close
+    </div>
+    <div class="search-results" id="searchResults">
+      <!-- populated by JS -->
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Theme sync across tabs ──────────────────────────────────
+  window.addEventListener('storage', function (e) {
+    try {
+      if (e.key === 'folio.theme') {
+        var pref = e.newValue || 'dark';
+        if (pref === 'system') pref = 'auto';
+        var resolved = pref;
+        if (pref === 'auto') {
+          resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+        }
+        if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        else document.documentElement.removeAttribute('data-theme');
+        var meta = document.getElementById('themeColorMeta');
+        if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
+      }
+      if (e.key === 'folio.reducedMotion') {
+        if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
+        else document.documentElement.removeAttribute('data-reduced-motion');
+      }
+      if (e.key === 'folio.pageScale') {
+        var scale = Number(e.newValue || 1);
+        if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
+        if (scale > 1.35) scale = 1.35;
+        document.documentElement.style.setProperty('--page-scale', String(scale));
+      }
+    } catch (err) {}
+  });
+
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: light)');
+    var handler = function () {
+      try {
+        var pref = localStorage.getItem('folio.theme') || 'dark';
+        if (pref === 'system') pref = 'auto';
+        if (pref !== 'auto') return;
+        var resolved = mq.matches ? 'light' : 'dark';
+        if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        else document.documentElement.removeAttribute('data-theme');
+        var meta = document.getElementById('themeColorMeta');
+        if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
+      } catch (e) {}
+    };
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else if (mq.addListener) mq.addListener(handler);
+  }
+
+  // ── Book state ──────────────────────────────────────────────
+  const track = document.getElementById('bookTrack');
+  const pages = Array.from(document.querySelectorAll('.book-page'));
+  const total = pages.length;
+  let current = 0;
+  let animating = false;
+
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const dotsContainer = document.getElementById('bookDots');
+  const pageCurrentEl = document.getElementById('pageCurrent');
+  const pageTotalEl = document.getElementById('pageTotal');
+  const progressBar = document.getElementById('progressBar');
+
+  pageTotalEl.textContent = String(total);
+
+  // ── Build dots ──────────────────────────────────────────────
+  pages.forEach(function (page, i) {
+    const dot = document.createElement('button');
+    dot.className = 'book-dot' + (i === 0 ? ' active' : '');
+    dot.setAttribute('aria-label', 'Go to page ' + (i + 1));
+    dot.dataset.index = String(i);
+    dot.addEventListener('click', function () {
+      goToPage(i);
+    });
+    dotsContainer.appendChild(dot);
+  });
+  const dots = Array.from(dotsContainer.querySelectorAll('.book-dot'));
+
+  // ── Build hero TOC grid dynamically from pages ──────────────
+  const heroTocGrid = document.getElementById('heroTocGrid');
+  const tocIcons = {
+    'Getting started': '<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>',
+    'The Editor': '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+    'Files & folders': '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    'Preview': '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    'Projects': '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    'Dashboard': '<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
+    'Commits': '<circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/>',
+    'Notes': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    'File viewers': '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    'Collaboration': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>',
+    'Deploy & host': '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>',
+    'Tools': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    'Analytics': '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+    'Profile': '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    'Settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    'Real stories': '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>',
+    'Shortcuts': '<rect x="3" y="8" width="18" height="8" rx="2"/><line x1="7" y1="12" x2="7.01" y2="12"/><line x1="12" y1="12" x2="12.01" y2="12"/><line x1="17" y1="12" x2="17.01" y2="12"/>'
+  };
+
+  pages.forEach(function (page, i) {
+    const chapter = page.dataset.chapter;
+    if (!chapter) return;
+    const btn = document.createElement('button');
+    btn.className = 'hero-toc-item';
+    btn.type = 'button';
+    btn.innerHTML = '<svg viewBox="0 0 24 24">' + (tocIcons[chapter] || tocIcons['Getting started']) + '</svg>' + chapter;
+    btn.addEventListener('click', function () {
+      goToPage(i);
+    });
+    heroTocGrid.appendChild(btn);
+  });
+
+  // ── Go to page ──────────────────────────────────────────────
+  function goToPage(index) {
+    if (animating || index === current) return;
+    if (index < 0) index = 0;
+    if (index > total - 1) index = total - 1;
+
+    animating = true;
+    current = index;
+
+    // Slide track
+    track.style.transform = 'translateX(-' + (current * 100) + '%)';
+
+    // Scroll top of the new page
+    setTimeout(function () {
+      pages[current].scrollTop = 0;
+      pages[current].classList.add('flipping');
+      setTimeout(function () {
+        pages[current].classList.remove('flipping');
+      }, 600);
+    }, 50);
+
+    updateUI();
+    setTimeout(function () { animating = false; }, 620);
+  }
+
+  function updateUI() {
+    pageCurrentEl.textContent = String(current + 1);
+    prevBtn.disabled = current === 0;
+    nextBtn.disabled = current === total - 1;
+
+    dots.forEach(function (d, i) {
+      d.classList.toggle('active', i === current);
+    });
+
+    const pct = total > 1 ? (current / (total - 1)) * 100 : 100;
+    progressBar.style.width = pct + '%';
+  }
+
+  prevBtn.addEventListener('click', function () { goToPage(current - 1); });
+  nextBtn.addEventListener('click', function () { goToPage(current + 1); });
+
+  // Keyboard navigation (global)
+  document.addEventListener('keydown', function (e) {
+    // Only if search not open
+    if (searchOverlay.classList.contains('open')) return;
+    // If focus is in an input/textarea, skip
+    var tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+      // Only flip if not scrolling a long page? Let's allow it — user asked for horizontal flip
+      goToPage(current + 1);
+      e.preventDefault();
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      goToPage(current - 1);
+      e.preventDefault();
+    } else if (e.key === 'Home') {
+      goToPage(0);
+      e.preventDefault();
+    } else if (e.key === 'End') {
+      goToPage(total - 1);
+      e.preventDefault();
+    }
+  });
+
+  // Touch swipe for horizontal navigation
+  let touchStartX = 0, touchStartY = 0, touchActive = false;
+  const viewport = document.querySelector('.book-viewport');
+
+  viewport.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchActive = true;
+  }, { passive: true });
+
+  viewport.addEventListener('touchend', function (e) {
+    if (!touchActive) return;
+    touchActive = false;
+    if (!e.changedTouches.length) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    // Only treat as horizontal swipe if clearly horizontal
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < 0) goToPage(current + 1);
+      else goToPage(current - 1);
+    }
+  }, { passive: true });
+
+  // ── SEARCH ──────────────────────────────────────────────────
+  const searchTrigger = document.getElementById('searchTrigger');
+  const searchOverlay = document.getElementById('searchOverlay');
+  const searchInput = document.getElementById('searchInput');
+  const searchClose = document.getElementById('searchClose');
+  const searchResults = document.getElementById('searchResults');
+
+  // Build index of every page's searchable text
+  const searchIndex = pages.map(function (page, i) {
+    const chapter = page.dataset.chapter || ('Page ' + (i + 1));
+    const text = page.innerText || '';
+    // Also grab headings for better preview
+    const headings = Array.from(page.querySelectorAll('h2, h3, h4')).map(function (h) { return h.innerText.trim(); }).filter(Boolean);
+    return {
+      pageIndex: i,
+      chapter: chapter,
+      text: text,
+      headings: headings,
+      title: chapter === 'Getting started' ? 'Cover & Getting Started' :
+             chapter === "Let's build" ? "Let's build" :
+             chapter
+    };
+  });
+
+  let searchActiveIndex = 0;
+  let searchFiltered = [];
+
+  function openSearch() {
+    searchOverlay.classList.add('open');
+    searchInput.value = '';
+    document.body.style.overflow = 'hidden';
+    renderSearchResults('');
+    setTimeout(function () { searchInput.focus(); }, 60);
+    searchActiveIndex = 0;
+  }
+
+  function closeSearch() {
+    searchOverlay.classList.remove('open');
+    searchInput.blur();
+    document.body.style.overflow = '';
+  }
+
+  searchTrigger.addEventListener('click', openSearch);
+  searchClose.addEventListener('click', closeSearch);
+
+  searchOverlay.addEventListener('click', function (e) {
+    if (e.target === searchOverlay) closeSearch();
+  });
+
+  // Escape key closes
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && searchOverlay.classList.contains('open')) {
+      closeSearch();
+      e.preventDefault();
+    }
+  });
+
+  // Also Ctrl/Cmd+K opens search
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      if (!searchOverlay.classList.contains('open')) {
+        openSearch();
+        e.preventDefault();
+      }
+    }
+  });
+
+  function escapeRegex(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function highlightText(text, query) {
+    if (!query) return escapeHtml(text);
+    const re = new RegExp('(' + escapeRegex(query) + ')', 'gi');
+    return escapeHtml(text).replace(re, '<mark>$1</mark>');
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function findSnippet(text, query) {
+    if (!query) return '';
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return '';
+    const start = Math.max(0, idx - 40);
+    const end = Math.min(text.length, idx + query.length + 60);
+    let snippet = text.slice(start, end).replace(/\s+/g, ' ').trim();
+    if (start > 0) snippet = '…' + snippet;
+    if (end < text.length) snippet = snippet + '…';
+    return snippet;
+  }
+
+  function renderSearchResults(query) {
+    const q = query.trim().toLowerCase();
+
+    if (!q) {
+      // Show all chapters as a directory
+      searchFiltered = searchIndex.map(function (item) { return { item: item, score: 0 }; });
+      searchResults.innerHTML = renderGroup('All chapters', searchIndex.map(function (item) {
+        return renderResult(item.pageIndex, item.chapter, item.headings[0] || (item.text.slice(0, 80) + '…'), '');
+      }).join(''));
+      return;
+    }
+
+    // Score each page
+    const scored = [];
+    searchIndex.forEach(function (item) {
+      let score = 0;
+      const titleLower = item.title.toLowerCase();
+      const chapterLower = item.chapter.toLowerCase();
+      const textLower = item.text.toLowerCase();
+
+      if (titleLower === q) score += 100;
+      if (chapterLower === q) score += 100;
+      if (titleLower.indexOf(q) !== -1) score += 60;
+      if (chapterLower.indexOf(q) !== -1) score += 50;
+
+      // Headings
+      item.headings.forEach(function (h) {
+        if (h.toLowerCase().indexOf(q) !== -1) score += 25;
+      });
+
+      // Count occurrences in text
+      let count = 0;
+      let pos = 0;
+      while ((pos = textLower.indexOf(q, pos)) !== -1 && count < 30) {
+        count++;
+        pos += q.length;
+      }
+      score += Math.min(count * 4, 40);
+
+      if (score > 0) {
+        scored.push({ item: item, score: score });
+      }
+    });
+
+    scored.sort(function (a, b) { return b.score - a.score; });
+    searchFiltered = scored;
+    searchActiveIndex = 0;
+
+    if (scored.length === 0) {
+      searchResults.innerHTML = '<div class="search-empty">' +
+        '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+        'No results for "' + escapeHtml(query) + '". Try a different word or phrase.' +
+        '</div>';
+      return;
+    }
+
+    // Group by chapter
+    const groups = {};
+    scored.forEach(function (s) {
+      const key = s.item.chapter;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(s);
+    });
+
+    let html = '';
+    Object.keys(groups).forEach(function (key) {
+      const items = groups[key];
+      const rows = items.map(function (s) {
+        const item = s.item;
+        const sub = item.headings[0] || (item.text.slice(0, 90).replace(/\s+/g, ' ') + '…');
+        return renderResult(item.pageIndex, highlightText(item.chapter, query), highlightText(sub, query), findSnippet(item.text, query));
+      }).join('');
+      html += renderGroup('Page ' + (items[0].item.pageIndex + 1) + ' · ' + escapeHtml(items[0].item.chapter), rows);
+    });
+
+    searchResults.innerHTML = html;
+    attachResultHandlers();
+    setActiveResult(0);
+  }
+
+  function renderGroup(label, content) {
+    return '<div class="search-group">' +
+      '<div class="search-group-label">' +
+        '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' +
+        label +
+      '</div>' + content +
+    '</div>';
+  }
+
+  function renderResult(pageIndex, titleHtml, subHtml, snippet) {
+    return '<button class="search-result" data-page="' + pageIndex + '" type="button">' +
+      '<div class="search-result-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>' +
+      '<div class="search-result-body">' +
+        '<div class="search-result-title">' + titleHtml + '</div>' +
+        '<div class="search-result-sub">' + (snippet ? highlightSnippet(snippet, '') : subHtml) + '</div>' +
+      '</div>' +
+      '<svg class="search-result-arrow" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>' +
+    '</button>';
+  }
+
+  function highlightSnippet(snippet, query) {
+    // snippet is plain text; just escape
+    return escapeHtml(snippet);
+  }
+
+  function attachResultHandlers() {
+    searchResults.querySelectorAll('.search-result').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const idx = parseInt(btn.dataset.page, 10);
+        closeSearch();
+        goToPage(idx);
+      });
+    });
+  }
+
+  function setActiveResult(idx) {
+    const all = searchResults.querySelectorAll('.search-result');
+    all.forEach(function (b) { b.classList.remove('active'); });
+    if (all[idx]) {
+      all[idx].classList.add('active');
+      all[idx].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  searchInput.addEventListener('input', function () {
+    renderSearchResults(searchInput.value);
+  });
+
+  searchInput.addEventListener('keydown', function (e) {
+    const all = searchResults.querySelectorAll('.search-result');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (all.length === 0) return;
+      searchActiveIndex = Math.min(searchActiveIndex + 1, all.length - 1);
+      setActiveResult(searchActiveIndex);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (all.length === 0) return;
+      searchActiveIndex = Math.max(searchActiveIndex - 1, 0);
+      setActiveResult(searchActiveIndex);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (all[searchActiveIndex]) {
+        all[searchActiveIndex].click();
+      }
+    }
+  });
+
+  // ── Init UI ─────────────────────────────────────────────────
+  updateUI();
+
+  // ── Handle back button / anchor jumps from TOC if any remain ─
+  // (all TOC is now JS-driven, but let's be safe)
+  document.querySelectorAll('a[href^="#"]').forEach(function (link) {
+    link.addEventListener('click', function (e) {
+      const href = link.getAttribute('href');
+      const target = document.querySelector(href);
+      if (target) {
+        // Find which page contains it
+        const page = target.closest('.book-page');
+        if (page) {
+          e.preventDefault();
+          const idx = parseInt(page.dataset.page, 10);
+          if (!isNaN(idx)) goToPage(idx);
+        }
+      }
+    });
+  });
+
+  // ── Reduced motion respect ──────────────────────────────────
+  if (document.documentElement.hasAttribute('data-reduced-motion')) {
+    track.style.transition = 'none';
+  }
+
+})();
+</script>
+
+</body>
+</html>

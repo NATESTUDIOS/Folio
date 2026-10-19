@@ -1236,57 +1236,58 @@ svg { display: block; }
 <script>
 (function () {
   'use strict';
-function wireThemeSync() {
-  window.addEventListener('storage', function (e) {
-    try {
-      // Theme changed in another tab
-      if (e.key === 'folio.theme') {
-        var pref = e.newValue || 'dark';
-        var resolved = pref;
-        if (pref === 'auto' || pref === 'system') {
-          resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
-            ? 'light' : 'dark';
+
+  // ═══════════════════════════════════════════════════════════
+  // THEME SYNC
+  // ═══════════════════════════════════════════════════════════
+
+  function wireThemeSync() {
+    window.addEventListener('storage', function (e) {
+      try {
+        if (e.key === 'folio.theme') {
+          var pref = e.newValue || 'dark';
+          var resolved = pref;
+          if (pref === 'auto' || pref === 'system') {
+            resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+              ? 'light' : 'dark';
+          }
+          if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+          else document.documentElement.removeAttribute('data-theme');
+          var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
+          if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
         }
+        if (e.key === 'folio.reducedMotion') {
+          if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
+          else document.documentElement.removeAttribute('data-reduced-motion');
+        }
+        if (e.key === 'folio.pageScale') {
+          var scale = Number(e.newValue || 1);
+          if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
+          if (scale > 1.35) scale = 1.35;
+          document.documentElement.style.setProperty('--page-scale', String(scale));
+        }
+      } catch (err) {}
+    });
+  }
+
+  function wireThemeMediaQuery() {
+    if (!window.matchMedia) return;
+    var mq = window.matchMedia('(prefers-color-scheme: light)');
+    var handler = function () {
+      try {
+        var pref = localStorage.getItem('folio.theme') || 'dark';
+        if (pref !== 'auto' && pref !== 'system') return;
+        var resolved = mq.matches ? 'light' : 'dark';
         if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
         else document.documentElement.removeAttribute('data-theme');
-
         var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
         if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
-      }
+      } catch (e) {}
+    };
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else if (mq.addListener) mq.addListener(handler);
+  }
 
-      // Reduced-motion toggled in another tab
-      if (e.key === 'folio.reducedMotion') {
-        if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
-        else document.documentElement.removeAttribute('data-reduced-motion');
-      }
-
-      // Page scale changed in another tab
-      if (e.key === 'folio.pageScale') {
-        var scale = Number(e.newValue || 1);
-        if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
-        if (scale > 1.35) scale = 1.35;
-        document.documentElement.style.setProperty('--page-scale', String(scale));
-      }
-    } catch (err) {}
-  });
-}
-function wireThemeMediaQuery() {
-  if (!window.matchMedia) return;
-  var mq = window.matchMedia('(prefers-color-scheme: light)');
-  var handler = function () {
-    try {
-      var pref = localStorage.getItem('folio.theme') || 'dark';
-      if (pref !== 'auto' && pref !== 'system') return;   // only react when theme is auto
-      var resolved = mq.matches ? 'light' : 'dark';
-      if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
-      else document.documentElement.removeAttribute('data-theme');
-      var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
-      if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
-    } catch (e) {}
-  };
-  if (mq.addEventListener) mq.addEventListener('change', handler);
-  else if (mq.addListener) mq.addListener(handler);
-}
   // ═══════════════════════════════════════════════════════════
   // CONFIG
   // ═══════════════════════════════════════════════════════════
@@ -1296,7 +1297,6 @@ function wireThemeMediaQuery() {
   const API_HOST = API_BASE + '/host';
   const API_FLIER = API_BASE + '/flier';
   const API_NOTIFY = API_BASE + '/notify';
-  const API_ANALYTICS = API_BASE + '/analytics';
 
   const STORAGE = {
     session: 'folio.session',
@@ -1304,6 +1304,9 @@ function wireThemeMediaQuery() {
     theme: 'folio.theme',
     lastTab: 'folio.profile.lastTab',
     avatarPrefs: 'folio.profile.avatarPrefs',
+    projectsCache: 'folio.profile.projectsCache',
+    notifsCache: 'folio.profile.notifsCache',
+    activityCache: 'folio.profile.activityCache',
   };
 
   const TABS = [
@@ -1329,7 +1332,6 @@ function wireThemeMediaQuery() {
     { id: 'image-shadow-bottom', label: 'Shadow' },
     { id: 'image-blur-text', label: 'Blur' },
     { id: 'image-card-side-text', label: 'Card' },
-    { id: 'poster-centered', label: 'Classic' },
   ];
 
   // ═══════════════════════════════════════════════════════════
@@ -1422,6 +1424,7 @@ function wireThemeMediaQuery() {
     studioPreviewUrl: null,
     studioLoading: false,
     studioTab: 'templates',
+    online: navigator.onLine,
   };
 
   const $ = id => document.getElementById(id);
@@ -1512,6 +1515,22 @@ function wireThemeMediaQuery() {
     } catch { return false; }
   }
 
+  function readCache(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && 'data' in parsed) {
+        if (Date.now() - (parsed.at || 0) < 24 * 60 * 60 * 1000) return parsed.data;
+      }
+      return fallback;
+    } catch { return fallback; }
+  }
+
+  function writeCache(key, data) {
+    try { localStorage.setItem(key, JSON.stringify({ data, at: Date.now() })); } catch {}
+  }
+
   // ═══════════════════════════════════════════════════════════
   // TOAST
   // ═══════════════════════════════════════════════════════════
@@ -1535,18 +1554,27 @@ function wireThemeMediaQuery() {
   // ═══════════════════════════════════════════════════════════
 
   function showLoading(title, desc) {
+    const el = $('loadingOverlay');
+    if (!el) return;
     $('loadingTitle').textContent = title || 'Loading…';
     $('loadingDesc').textContent = desc || '';
-    $('loadingOverlay').classList.add('active');
+    el.classList.add('active');
   }
-  function hideLoading() { $('loadingOverlay').classList.remove('active'); }
+  function hideLoading() {
+    const el = $('loadingOverlay');
+    if (el) el.classList.remove('active');
+  }
 
   function openModal(html) {
+    const el = $('modalOverlay');
+    if (!el) return;
     $('modalBody').innerHTML = html;
-    $('modalOverlay').classList.add('active');
+    el.classList.add('active');
   }
   function closeModal() {
-    $('modalOverlay').classList.remove('active');
+    const el = $('modalOverlay');
+    if (!el) return;
+    el.classList.remove('active');
     setTimeout(() => { $('modalBody').innerHTML = ''; }, 250);
   }
   window.closeModal = closeModal;
@@ -1612,7 +1640,6 @@ function wireThemeMediaQuery() {
     if (id === 'notifications') loadNotifications();
     if (id === 'activity') loadActivity();
     if (id === 'projects') loadProjects();
-    // Scroll body to top
     setTimeout(() => {
       const bodyEl = $('pageBody');
       if (bodyEl) bodyEl.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1624,8 +1651,6 @@ function wireThemeMediaQuery() {
   // ═══════════════════════════════════════════════════════════
 
   async function boot() {
-    wireThemeSync();
-wireThemeMediaQuery();
     readSession();
 
     if (!S.session) {
@@ -1674,8 +1699,8 @@ wireThemeMediaQuery();
       } catch {}
     }
 
-    $('bootLoader').classList.add('hidden');
-    $('content').classList.remove('hidden');
+    $('bootLoader')?.classList.add('hidden');
+    $('content')?.classList.remove('hidden');
     renderProfilePage();
 
     loadProjects();
@@ -1688,9 +1713,11 @@ wireThemeMediaQuery();
   }
 
   function renderGuest() {
-    $('bootLoader').classList.add('hidden');
-    $('content').classList.remove('hidden');
-    $('content').innerHTML = `
+    $('bootLoader')?.classList.add('hidden');
+    const content = $('content');
+    if (!content) return;
+    content.classList.remove('hidden');
+    content.innerHTML = `
       <div class="card" style="max-width:480px;margin:40px auto;">
         <div class="card-body">
           <div class="empty-state">
@@ -1708,9 +1735,11 @@ wireThemeMediaQuery();
   }
 
   function renderError() {
-    $('bootLoader').classList.add('hidden');
-    $('content').classList.remove('hidden');
-    $('content').innerHTML = `
+    $('bootLoader')?.classList.add('hidden');
+    const content = $('content');
+    if (!content) return;
+    content.classList.remove('hidden');
+    content.innerHTML = `
       <div class="card" style="max-width:480px;margin:40px auto;">
         <div class="card-body">
           <div class="empty-state">
@@ -1730,6 +1759,7 @@ wireThemeMediaQuery();
 
   function renderProfilePage() {
     const content = $('content');
+    if (!content) return;
     content.innerHTML = `
       <div id="profileHeaderMount"></div>
       <nav class="top-tabs-bar" id="topTabsBar" role="tablist" aria-label="Profile sections"></nav>
@@ -1796,12 +1826,18 @@ wireThemeMediaQuery();
       </div>
     `;
 
-    $('profileAvatarBtn').addEventListener('click', openAvatarStudio);
-    $('profileAvatarBtn').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAvatarStudio(); }
-    });
-    $('editProfileBtn').addEventListener('click', openEditProfileModal);
-    $('copyProfileLinkBtn').addEventListener('click', copyProfileLink);
+    // Re-bind after every render — safe because innerHTML replaced old nodes
+    const avatarBtn = $('profileAvatarBtn');
+    if (avatarBtn) {
+      avatarBtn.addEventListener('click', openAvatarStudio);
+      avatarBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAvatarStudio(); }
+      });
+    }
+    const editBtn = $('editProfileBtn');
+    if (editBtn) editBtn.addEventListener('click', openEditProfileModal);
+    const copyBtn = $('copyProfileLinkBtn');
+    if (copyBtn) copyBtn.addEventListener('click', copyProfileLink);
   }
 
   function copyProfileLink() {
@@ -1852,7 +1888,6 @@ wireThemeMediaQuery();
       btn.addEventListener('click', () => switchTab(btn.dataset.topTab));
     });
 
-    // Auto-scroll active into view
     const active = el.querySelector('.top-tab-btn.active');
     if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }
@@ -1862,6 +1897,7 @@ wireThemeMediaQuery();
     if (!mount) return;
     mount.innerHTML = `<div class="panel active" id="panel-${S.activeTab}"></div>`;
     const panel = $('panel-' + S.activeTab);
+    if (!panel) return;
     const renderers = {
       profile: renderProfileTab,
       projects: renderProjectsTab,
@@ -1891,7 +1927,7 @@ wireThemeMediaQuery();
           <div class="field">
             <label class="field-label">Username</label>
             <div class="mono" style="font-size:13px;color:var(--theme-primary);">@${escapeHTML(p.username || '—')}</div>
-            <div class="field-hint">Change from <a href="/settings" class="inline-link">Settings</a></div>
+            <div class="field-hint">Change from <a href="/settings.html" class="inline-link">Settings</a></div>
           </div>
           <div class="field">
             <label class="field-label">Bio</label>
@@ -2082,7 +2118,6 @@ wireThemeMediaQuery();
       }
     });
 
-    // Autofocus
     setTimeout(() => $('editDisplayName')?.focus(), 200);
   }
 
@@ -2118,11 +2153,10 @@ wireThemeMediaQuery();
     loadAvatarPrefs();
     S.studioOpen = true;
     S.studioTab = 'templates';
-    // Prefill content text with current initials if empty
     if (!S.studioContentText) {
       S.studioContentText = getInitials(S.profile.displayName || S.profile.username || '');
     }
-    $('avatarStudio').classList.add('active');
+    $('avatarStudio')?.classList.add('active');
     document.body.style.overflow = 'hidden';
     renderStudio();
     refreshStudioPreview();
@@ -2130,9 +2164,12 @@ wireThemeMediaQuery();
 
   function closeAvatarStudio() {
     S.studioOpen = false;
-    $('avatarStudio').classList.remove('active');
+    $('avatarStudio')?.classList.remove('active');
     document.body.style.overflow = '';
   }
+
+  // Debounced preview refresh
+  const refreshStudioPreviewDebounced = debounce(() => refreshStudioPreview(), 350);
 
   function renderStudio() {
     const body = $('studioBody');
@@ -2231,7 +2268,14 @@ wireThemeMediaQuery();
               <input type="range" class="range-input" min="0" max="360" value="${S.studioStyle.bgAngle}" data-style-range="bgAngle" style="flex:1;">
             </div>
           </div>
-        ` : ''}
+        ` : `
+          <div class="studio-row">
+            <div class="studio-row-label">Solid color</div>
+            <div class="studio-row-inputs">
+              <input type="color" class="color-input" value="${escapeAttr(S.studioStyle.bgFrom)}" data-bg="from" title="Solid background">
+            </div>
+          </div>
+        `}
         <div class="studio-row">
           <div class="studio-row-label">Watermark</div>
           <div class="studio-row-inputs">
@@ -2296,10 +2340,10 @@ wireThemeMediaQuery();
       btn.addEventListener('click', () => { S.studioTab = btn.dataset.studioTab; renderStudio(); });
     });
     body.querySelectorAll('[data-template]').forEach(btn => {
-      btn.addEventListener('click', () => { S.studioTemplate = btn.dataset.template; renderStudio(); refreshStudioPreview(); });
+      btn.addEventListener('click', () => { S.studioTemplate = btn.dataset.template; renderStudio(); refreshStudioPreviewDebounced(); });
     });
 
-    const refresh = () => { saveAvatarPrefs(); refreshStudioPreview(); };
+    const refresh = () => { saveAvatarPrefs(); refreshStudioPreviewDebounced(); };
 
     body.querySelectorAll('[data-variant]').forEach(btn => btn.addEventListener('click', () => { S.studioStyle.variant = btn.dataset.variant; renderStudio(); refresh(); }));
     body.querySelectorAll('[data-pattern]').forEach(btn => btn.addEventListener('click', () => { S.studioStyle.pattern = btn.dataset.pattern; renderStudio(); refresh(); }));
@@ -2403,7 +2447,18 @@ wireThemeMediaQuery();
         method: 'POST',
         body: JSON.stringify(buildStudioBody()),
       });
-      if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Render failed');
+
+      if (res.status === 429) {
+        const retryAfter = res.data?.retryAfter || 60;
+        const mins = Math.max(1, Math.ceil(retryAfter / 60));
+        toast(`Rate limit — try again in ${mins} minute${mins === 1 ? '' : 's'}`, 'warning', 4000);
+        return;
+      }
+
+      if (!res.ok || !res.data?.success) {
+        throw new Error(res.data?.error || 'Render failed');
+      }
+
       S.studioPreviewUrl = res.data.preview;
       const imgWrap = document.querySelector('.studio-preview');
       if (imgWrap) {
@@ -2413,9 +2468,6 @@ wireThemeMediaQuery();
       }
     } catch (err) {
       console.warn('[Studio preview]', err);
-      if (err.message && /rate limit/i.test(err.message)) {
-        toast('Rate limit — try again in a minute', 'warning', 2400);
-      }
     } finally {
       S.studioLoading = false;
       if (loadingEl) loadingEl.classList.remove('visible');
@@ -2428,6 +2480,14 @@ wireThemeMediaQuery();
         method: 'POST',
         body: JSON.stringify(buildStudioBody()),
       });
+
+      if (res.status === 429) {
+        const retryAfter = res.data?.retryAfter || 60;
+        const mins = Math.max(1, Math.ceil(retryAfter / 60));
+        toast(`Rate limit — try again in ${mins} minute${mins === 1 ? '' : 's'}`, 'warning', 4000);
+        return;
+      }
+
       if (!res.ok || !res.data?.preview) throw new Error('Download failed');
       const base64 = res.data.preview.split(',')[1];
       const byteChars = atob(base64);
@@ -2461,12 +2521,20 @@ wireThemeMediaQuery();
           upload: { name: `avatar_${S.uid?.slice(0, 8)}_${Date.now()}` },
         }),
       });
+
+      if (uploadRes.status === 429) {
+        const retryAfter = uploadRes.data?.retryAfter || 60;
+        const mins = Math.max(1, Math.ceil(retryAfter / 60));
+        hideLoading();
+        toast(`Rate limit — try again in ${mins} minute${mins === 1 ? '' : 's'}`, 'warning', 4000);
+        return;
+      }
+
       if (!uploadRes.ok || !uploadRes.data?.success || !uploadRes.data.url) {
         throw new Error(uploadRes.data?.error || 'Upload failed');
       }
       uploadedUrl = uploadRes.data.url;
 
-      // Retry profile update once if it fails
       let updateOk = false;
       for (let attempt = 0; attempt < 2 && !updateOk; attempt++) {
         const updateRes = await apiFetch(API_AUTH + '?action=profile/update', {
@@ -2508,9 +2576,15 @@ wireThemeMediaQuery();
     const res = await apiFetch(API_HOST + '?action=projects/list');
     if (res.ok && res.data?.success) {
       S.projects = res.data.projects || [];
-      renderTabs();
-      if (S.activeTab === 'projects') renderPanel();
+      writeCache(STORAGE.projectsCache, S.projects);
+    } else {
+      const cached = readCache(STORAGE.projectsCache, []);
+      if (Array.isArray(cached) && cached.length > 0) {
+        S.projects = cached;
+      }
     }
+    renderTabs();
+    if (S.activeTab === 'projects') renderPanel();
   }
 
   function renderProjectsTab(panel) {
@@ -2540,7 +2614,7 @@ wireThemeMediaQuery();
                 : `<span>${escapeHTML(getInitials(p.name))}</span>`;
               const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
               return `
-                <div class="project-card" data-pid="${escapeAttr(p.pid)}">
+                <div class="project-card" data-pid="${escapeAttr(p.pid)}" role="button" tabindex="0" aria-label="Open project ${escapeAttr(p.name || 'Untitled')}">
                   <div class="project-card-icon" style="${iconBg}">${iconHTML}</div>
                   <div class="project-card-info">
                     <div class="project-card-name">${escapeHTML(p.name || 'Untitled')}</div>
@@ -2558,8 +2632,12 @@ wireThemeMediaQuery();
     `;
 
     panel.querySelectorAll('.project-card').forEach(card => {
-      card.addEventListener('click', () => {
+      const open = () => {
         window.location.href = '/project.html?pid=' + encodeURIComponent(card.dataset.pid);
+      };
+      card.addEventListener('click', open);
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
       });
     });
   }
@@ -2569,11 +2647,18 @@ wireThemeMediaQuery();
   // ═══════════════════════════════════════════════════════════
 
   async function loadNotifications() {
+    const filterParam = S.notificationFilter === 'all' ? '' : '&type=' + encodeURIComponent(S.notificationFilter);
     const [listRes, statsRes] = await Promise.all([
-      apiFetch(API_NOTIFY + '?action=list&limit=50&type=' + S.notificationFilter),
+      apiFetch(API_NOTIFY + '?action=list&limit=50' + filterParam),
       apiFetch(API_NOTIFY + '?action=stats'),
     ]);
-    if (listRes.ok && listRes.data?.success) S.notifications = listRes.data.notifications || [];
+    if (listRes.ok && listRes.data?.success) {
+      S.notifications = listRes.data.notifications || [];
+      writeCache(STORAGE.notifsCache, S.notifications);
+    } else {
+      const cached = readCache(STORAGE.notifsCache, []);
+      if (Array.isArray(cached)) S.notifications = cached;
+    }
     if (statsRes.ok && statsRes.data?.success) S.notificationStats = statsRes.data.stats;
     renderTabs();
     if (S.activeTab === 'notifications') renderPanel();
@@ -2668,7 +2753,10 @@ wireThemeMediaQuery();
     });
     if (res.ok && res.data?.success) {
       S.notifications = S.notifications.filter(n => n.id !== id);
-      if (S.notificationStats) S.notificationStats.unread = Math.max(0, (S.notificationStats.unread || 1) - 1);
+      writeCache(STORAGE.notifsCache, S.notifications);
+      // Refresh stats from server to stay in sync
+      const statsRes = await apiFetch(API_NOTIFY + '?action=stats');
+      if (statsRes.ok && statsRes.data?.success) S.notificationStats = statsRes.data.stats;
       renderTabs();
       if (S.activeTab === 'notifications') renderPanel();
     }
@@ -2678,6 +2766,7 @@ wireThemeMediaQuery();
     const res = await apiFetch(API_NOTIFY + '?action=mark_all_read', { method: 'POST', body: '{}' });
     if (res.ok && res.data?.success) {
       S.notifications.forEach(n => n.read = true);
+      writeCache(STORAGE.notifsCache, S.notifications);
       if (S.notificationStats) S.notificationStats.unread = 0;
       renderTabs();
       renderPanel();
@@ -2689,6 +2778,7 @@ wireThemeMediaQuery();
     const res = await apiFetch(API_NOTIFY + '?action=dismiss_all_read', { method: 'POST', body: '{}' });
     if (res.ok && res.data?.success) {
       S.notifications = S.notifications.filter(n => !n.read);
+      writeCache(STORAGE.notifsCache, S.notifications);
       renderTabs();
       renderPanel();
       toast(`${res.data.dismissed || 0} dismissed`, 'success');
@@ -2701,12 +2791,17 @@ wireThemeMediaQuery();
 
   async function loadActivity() {
     S.logsOffset = 0;
-    const res = await apiFetch(API_AUTH + '?action=logs&limit=50&offset=0&type=' + S.logsFilter);
+    const filterParam = S.logsFilter === 'all' ? '' : '&type=' + encodeURIComponent(S.logsFilter);
+    const res = await apiFetch(API_AUTH + '?action=logs&limit=50&offset=0' + filterParam);
     if (res.ok && res.data?.success) {
       S.logs = res.data.logs || [];
       S.logsHasMore = res.data.hasMore || false;
-      if (S.activeTab === 'activity') renderPanel();
+      writeCache(STORAGE.activityCache, S.logs);
+    } else {
+      const cached = readCache(STORAGE.activityCache, []);
+      if (Array.isArray(cached)) S.logs = cached;
     }
+    if (S.activeTab === 'activity') renderPanel();
   }
 
   function renderActivityTab(panel) {
@@ -2756,15 +2851,16 @@ wireThemeMediaQuery();
     $('refreshActivityBtn')?.addEventListener('click', loadActivity);
     $('loadMoreLogsBtn')?.addEventListener('click', async () => {
       S.logsOffset += 50;
-      const res = await apiFetch(API_AUTH + '?action=logs&limit=50&offset=' + S.logsOffset + '&type=' + S.logsFilter);
+      const filterParam = S.logsFilter === 'all' ? '' : '&type=' + encodeURIComponent(S.logsFilter);
+      const res = await apiFetch(API_AUTH + '?action=logs&limit=50&offset=' + S.logsOffset + filterParam);
       if (res.ok && res.data?.success) {
         S.logs = [...S.logs, ...(res.data.logs || [])];
         S.logsHasMore = res.data.hasMore || false;
+        writeCache(STORAGE.activityCache, S.logs);
         renderPanel();
       }
     });
 
-    // Single-wire the meta toggles
     panel.querySelectorAll('[data-log-toggle]').forEach(btn => {
       btn.addEventListener('click', () => {
         const idx = btn.dataset.logToggle;
@@ -2811,6 +2907,9 @@ wireThemeMediaQuery();
         try {
           localStorage.removeItem(STORAGE.session);
           localStorage.removeItem(STORAGE.user);
+          localStorage.removeItem(STORAGE.projectsCache);
+          localStorage.removeItem(STORAGE.notifsCache);
+          localStorage.removeItem(STORAGE.activityCache);
         } catch {}
         hideLoading();
         window.location.href = '/register.html';
@@ -2823,29 +2922,44 @@ wireThemeMediaQuery();
   // ═══════════════════════════════════════════════════════════
 
   function wireGlobal() {
-    $('modalOverlay').addEventListener('click', (e) => {
-      if (e.target === $('modalOverlay')) closeModal();
-    });
+    const modalOverlay = $('modalOverlay');
+    if (modalOverlay) {
+      modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) closeModal();
+      });
+    }
     document.addEventListener('click', (e) => {
       if (e.target.matches('[data-modal-close]')) closeModal();
     });
 
-    $('avatarStudio').addEventListener('click', (e) => {
-      if (e.target === $('avatarStudio')) closeAvatarStudio();
-    });
-    $('studioClose').addEventListener('click', closeAvatarStudio);
-    $('studioSave').addEventListener('click', studioSave);
-    $('studioDownload').addEventListener('click', studioDownload);
+    const studio = $('avatarStudio');
+    if (studio) {
+      studio.addEventListener('click', (e) => {
+        if (e.target === studio) closeAvatarStudio();
+      });
+    }
+    $('studioClose')?.addEventListener('click', closeAvatarStudio);
+    $('studioSave')?.addEventListener('click', studioSave);
+    $('studioDownload')?.addEventListener('click', studioDownload);
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        if ($('avatarStudio').classList.contains('active')) return closeAvatarStudio();
-        if ($('modalOverlay').classList.contains('active')) return closeModal();
+        if ($('avatarStudio')?.classList.contains('active')) return closeAvatarStudio();
+        if ($('modalOverlay')?.classList.contains('active')) return closeModal();
       }
     });
+
+    const updateOnline = () => {
+      S.online = navigator.onLine;
+    };
+    window.addEventListener('online', () => { updateOnline(); });
+    window.addEventListener('offline', updateOnline);
+    updateOnline();
   }
 
   function init() {
+    wireThemeSync();
+    wireThemeMediaQuery();
     wireGlobal();
     boot();
   }

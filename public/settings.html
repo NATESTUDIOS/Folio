@@ -20,38 +20,32 @@
 <script>
 (function () {
   try {
-    // 1. Read the raw preference from storage ("dark", "light", "auto", or "system")
     var pref = localStorage.getItem("folio.theme") || "dark";
-
-    // 2. If it's "auto" or "system", resolve it to a concrete value using the OS setting
+    if (pref === 'system') pref = 'auto';
     var resolved = pref;
-    if (pref === "auto" || pref === "system") {
+    if (pref === "auto") {
       resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
         ? "light" : "dark";
     }
-
-    // 3. Apply the RESOLVED value (not the raw preference)
     if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
     else document.documentElement.removeAttribute("data-theme");
 
-    // 4. Also apply reduced-motion (Settings slider writes this)
     if (localStorage.getItem("folio.reducedMotion") === "true") {
       document.documentElement.setAttribute("data-reduced-motion", "true");
     }
 
-    // 5. Also apply page scale (Settings text-size slider writes this)
     var scale = Number(localStorage.getItem("folio.pageScale") || 1);
     if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
     if (scale > 1.35) scale = 1.35;
     document.documentElement.style.setProperty("--page-scale", String(scale));
 
-    // 6. Update the mobile browser chrome color bar
-    var meta = document.getElementById("themeColorMeta") || document.getElementById("metaThemeColor");
+    var meta = document.getElementById("themeColorMeta");
     if (meta) meta.setAttribute("content", resolved === "light" ? "#f7f8fa" : "#0a0c10");
   } catch (e) {}
 })();
 </script>
 <script src="/fcm-client.js" defer></script>
+
 <style>
 /* ═══════════════════════════════════════════════════════════
    THEME
@@ -61,7 +55,6 @@
   --theme-primary-hover: #fbbf24;
   --theme-primary-glow: rgba(245, 158, 11, 0.40);
   --theme-primary-soft: rgba(245, 158, 11, 0.14);
-
   --theme-bg: #0a0c10;
   --theme-surface: #0f1218;
   --theme-surface-card: rgba(21, 25, 34, 0.72);
@@ -70,14 +63,12 @@
   --theme-text: #e8ecf1;
   --theme-text-secondary: rgba(232, 236, 241, 0.72);
   --theme-text-tertiary: rgba(232, 236, 241, 0.44);
-
   --theme-glass-bg: rgba(255, 255, 255, 0.05);
   --theme-glass-border: rgba(255, 255, 255, 0.09);
   --theme-overlay: rgba(10, 12, 16, 0.85);
   --theme-card-border: rgba(255, 255, 255, 0.08);
   --theme-divider: rgba(255, 255, 255, 0.08);
   --input-bg: rgba(26, 31, 42, 0.88);
-
   --theme-success: #10B981;
   --theme-success-soft: rgba(16, 185, 129, 0.14);
   --theme-danger: #EF4444;
@@ -85,17 +76,14 @@
   --theme-warning: #D97706;
   --theme-warning-soft: rgba(217, 119, 6, 0.14);
   --theme-info: #3B82F6;
-
   --bg-gradient-1: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
   --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.10) 0%, transparent 55%);
-
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --rail-w: 60px;
   --header-h: 44px;
   --tabs-h: 48px;
   --content-max: 1080px;
-
   --r-xs: 6px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -132,11 +120,8 @@
   --bg-gradient-2: radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.06) 0%, transparent 55%);
 }
 
-/* Full-page text scale — driven by the Appearance slider */
 html { font-size: calc(16px * var(--page-scale, 1)); }
 body { font-size: 1rem; }
-
-  
 
 @media (max-width: 639px) {
   :root { --rail-w: 0px; --header-h: 40px; --tabs-h: 44px; }
@@ -169,7 +154,6 @@ body {
   overflow: hidden;
 }
 
-/* Reduce motion — respects user pref AND explicit setting */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -186,6 +170,10 @@ html[data-reduced-motion="true"] *::after {
   scroll-behavior: auto !important;
 }
 
+@media (prefers-reduced-transparency: reduce) {
+  .card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--theme-surface-card-solid); }
+}
+
 button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; border: none; background: none; padding: 0; }
 a { color: var(--theme-primary); text-decoration: none; }
@@ -200,7 +188,7 @@ svg { display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SHELL — 3 rows: header / tabs / body
+   SHELL
    ═══════════════════════════════════════════════════════════ */
 .app {
   display: grid;
@@ -272,7 +260,7 @@ svg { display: block; }
 .rail-divider { width: 24px; height: 1px; background: var(--theme-divider); margin: 6px 0; }
 
 /* ═══════════════════════════════════════════════════════════
-   HEADER (minimal — back + title + save indicator)
+   HEADER
    ═══════════════════════════════════════════════════════════ */
 .header {
   grid-area: header;
@@ -333,12 +321,32 @@ svg { display: block; }
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
   transition: all 0.15s var(--ease);
+  position: relative;
 }
 .header-icon-btn:hover { background: var(--theme-glass-bg); color: var(--theme-text); }
 .header-icon-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; }
 
+.header-bell-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--theme-danger);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--theme-surface);
+}
+.header-bell-badge.hidden { display: none; }
+
 /* ═══════════════════════════════════════════════════════════
-   TOP TABS BAR — the section nav
+   TABS
    ═══════════════════════════════════════════════════════════ */
 .top-tabs-bar {
   grid-area: tabs;
@@ -393,7 +401,6 @@ svg { display: block; }
   transition: transform 0.25s var(--ease);
 }
 .top-tab-btn.active::after { transform: scaleX(1); }
-
 .top-tab-btn svg {
   width: 14px; height: 14px;
   stroke: currentColor;
@@ -401,18 +408,14 @@ svg { display: block; }
   stroke-width: 2.2;
   flex-shrink: 0;
 }
-
-.top-tab-btn.locked {
-  opacity: 0.65;
-}
-
+.top-tab-btn.locked { opacity: 0.65; }
 @media (max-width: 639px) {
   .top-tab-btn { font-size: 12px; padding: 11px 3px; gap: 4px; }
   .top-tab-btn svg { width: 13px; height: 13px; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   BODY (scroll container)
+   BODY
    ═══════════════════════════════════════════════════════════ */
 .body {
   grid-area: body;
@@ -426,7 +429,6 @@ svg { display: block; }
   scroll-behavior: smooth;
   scroll-padding-top: calc(var(--tabs-h) + 12px);
 }
-
 .body-inner {
   width: 100%;
   max-width: var(--content-max);
@@ -443,7 +445,7 @@ svg { display: block; }
 @media (min-width: 1024px) { .body-inner { padding: 24px 24px calc(40px + var(--safe-bottom)); } }
 
 /* ═══════════════════════════════════════════════════════════
-   GUEST BANNER (compact inline strip)
+   GUEST BANNER
    ═══════════════════════════════════════════════════════════ */
 .guest-banner {
   display: flex;
@@ -494,7 +496,6 @@ svg { display: block; }
   scroll-margin-top: calc(var(--tabs-h) + 12px);
   min-width: 0;
 }
-
 .section-heading {
   font-size: 15px;
   font-weight: 800;
@@ -545,6 +546,12 @@ svg { display: block; }
   border-color: rgba(245, 158, 11, 0.25);
   background: rgba(245, 158, 11, 0.04);
 }
+.card-danger {
+  border-color: rgba(239, 68, 68, 0.25);
+}
+.card-danger .card-header { border-bottom-color: rgba(239, 68, 68, 0.15); }
+.card-danger .card-title { color: var(--theme-danger); }
+.card-danger .card-title svg { stroke: var(--theme-danger); }
 
 /* ═══════════════════════════════════════════════════════════
    LOCKED CARD
@@ -614,11 +621,9 @@ svg { display: block; }
 .switch:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ═══════════════════════════════════════════════════════════
-   RADIO / PILL GROUPS
+   RADIO PILLS
    ═══════════════════════════════════════════════════════════ */
-.radio-group {
-  display: flex; gap: 6px; flex-wrap: wrap;
-}
+.radio-group { display: flex; gap: 6px; flex-wrap: wrap; }
 .radio-pill {
   padding: 7px 14px;
   border-radius: 8px;
@@ -753,6 +758,13 @@ svg { display: block; }
 .btn-block { width: 100%; }
 .btn-icon { padding: 8px; min-width: 34px; }
 
+.btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.btn-row .btn { flex: 1; min-width: 120px; }
+
 /* ═══════════════════════════════════════════════════════════
    INFO ROWS
    ═══════════════════════════════════════════════════════════ */
@@ -771,6 +783,9 @@ svg { display: block; }
   text-align: right; overflow-wrap: anywhere; min-width: 0;
 }
 .info-row-value.mono { font-family: var(--font-mono); font-size: 11px; }
+.info-row-value.ok { color: var(--theme-success); }
+.info-row-value.warn { color: var(--theme-warning); }
+.info-row-value.danger { color: var(--theme-danger); }
 
 /* ═══════════════════════════════════════════════════════════
    PROGRESS BAR
@@ -787,7 +802,6 @@ svg { display: block; }
 }
 .progress-fill.warn { background: var(--theme-warning); }
 .progress-fill.danger { background: var(--theme-danger); }
-
 .progress-row {
   display: flex; justify-content: space-between;
   font-size: 11px; color: var(--theme-text-tertiary);
@@ -879,7 +893,7 @@ svg { display: block; }
 .modal-actions .btn { flex: 1; }
 
 /* ═══════════════════════════════════════════════════════════
-   SEARCH OVERLAY (Cmd+K section jump)
+   SEARCH OVERLAY
    ═══════════════════════════════════════════════════════════ */
 .search-overlay {
   position: fixed; inset: 0; z-index: 880;
@@ -996,13 +1010,194 @@ svg { display: block; }
 .loading-desc { font-size: 12.5px; color: var(--theme-text-secondary); text-align: center; max-width: 320px; line-height: 1.5; }
 
 /* ═══════════════════════════════════════════════════════════
-   MISC
+   DATABASE — custom styles
    ═══════════════════════════════════════════════════════════ */
-.text-muted { color: var(--theme-text-tertiary); }
-.divider { height: 1px; background: var(--theme-divider); margin: 10px 0; }
+.db-version-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+@media (min-width: 640px) {
+  .db-version-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.db-version-tile {
+  padding: 10px 12px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 9px;
+}
+.db-version-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 3px;
+}
+.db-version-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.3px;
+  line-height: 1.1;
+  font-family: var(--font-mono);
+}
+.db-version-value.ok { color: var(--theme-success); }
+.db-version-value.warn { color: var(--theme-warning); }
+.db-version-value.danger { color: var(--theme-danger); }
+
+.db-mismatch-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background: var(--theme-danger-soft);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  color: var(--theme-danger);
+}
+.db-mismatch-banner svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; margin-top: 1px; }
+.db-mismatch-banner .db-mismatch-text { flex: 1; }
+.db-mismatch-banner .db-mismatch-title { font-size: 12px; font-weight: 800; margin-bottom: 3px; }
+.db-mismatch-banner .db-mismatch-desc { font-size: 11px; line-height: 1.4; opacity: 0.9; }
+
+.db-stores {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.db-store-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--theme-divider);
+  font-size: 12px;
+}
+.db-store-row:last-child { border-bottom: none; }
+.db-store-icon {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  background: var(--theme-glass-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+}
+.db-store-icon svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.db-store-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--theme-text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-store-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.db-store-size {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--theme-text-tertiary);
+  min-width: 60px;
+  text-align: right;
+  flex-shrink: 0;
+}
 
 /* ═══════════════════════════════════════════════════════════
-   MOBILE OVERSTRETCH HARDENING
+   NOTIFICATION PREVIEW SHEET
+   ═══════════════════════════════════════════════════════════ */
+.notif-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--theme-divider);
+  font-size: 12px;
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item.unread { background: var(--theme-primary-soft); }
+.notif-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--theme-glass-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-primary);
+  flex-shrink: 0;
+}
+.notif-icon svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.notif-content { flex: 1; min-width: 0; }
+.notif-title { font-weight: 700; color: var(--theme-text); margin-bottom: 2px; font-size: 12px; }
+.notif-body { font-size: 11px; color: var(--theme-text-secondary); line-height: 1.4; margin-bottom: 3px; }
+.notif-time { font-size: 10px; color: var(--theme-text-tertiary); font-family: var(--font-mono); }
+
+/* ═══════════════════════════════════════════════════════════
+   PASSWORD STRENGTH METER
+   ═══════════════════════════════════════════════════════════ */
+.pw-strength {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.pw-strength-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--theme-divider);
+  transition: background 0.2s;
+}
+.pw-strength-bar.weak { background: var(--theme-danger); }
+.pw-strength-bar.fair { background: var(--theme-warning); }
+.pw-strength-bar.good { background: var(--theme-success); }
+.pw-strength-label {
+  font-size: 10.5px;
+  color: var(--theme-text-tertiary);
+  margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SYNC QUEUE ITEMS
+   ═══════════════════════════════════════════════════════════ */
+.sync-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--theme-glass-bg);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.sync-queue-item .sq-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--theme-text-secondary);
+}
+.sync-queue-item .sq-time {
+  font-size: 10px;
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE HARDENING
    ═══════════════════════════════════════════════════════════ */
 .header,
 .top-tabs-bar,
@@ -1014,7 +1209,9 @@ svg { display: block; }
 .card-body,
 .toggle-row,
 .info-row,
-.slider-row {
+.slider-row,
+.db-version-grid,
+.db-stores {
   min-width: 0;
   max-width: 100%;
 }
@@ -1035,6 +1232,9 @@ svg { display: block; }
       </a>
       <a class="rail-btn" href="/projects" aria-label="Projects">
         <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </a>
+      <a class="rail-btn" href="/tools" aria-label="Tools">
+        <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       </a>
       <a class="rail-btn" href="/analytics" aria-label="Analytics">
         <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
@@ -1061,12 +1261,16 @@ svg { display: block; }
       <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
       Saved
     </span>
+    <button class="header-icon-btn" id="bellBtn" aria-label="Notifications" type="button" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="header-bell-badge hidden" id="bellBadge">0</span>
+    </button>
     <button class="header-icon-btn" id="btnSectionSearch" aria-label="Jump to section" type="button">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     </button>
   </header>
 
-  <!-- ═══════════ TOP TABS — section nav ═══════════ -->
+  <!-- ═══════════ TABS ═══════════ -->
   <nav class="top-tabs-bar" id="topTabsBar" role="tablist" aria-label="Settings sections"></nav>
 
   <!-- ═══════════ BODY ═══════════ -->
@@ -1078,7 +1282,7 @@ svg { display: block; }
   </div>
 </div>
 
-<!-- ═══════════ MODAL ═══════════ -->
+<!-- MODAL -->
 <div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
   <div class="modal" id="modalContent">
     <div class="modal-handle"></div>
@@ -1086,7 +1290,7 @@ svg { display: block; }
   </div>
 </div>
 
-<!-- ═══════════ SEARCH OVERLAY ═══════════ -->
+<!-- SEARCH OVERLAY -->
 <div class="search-overlay" id="searchOverlay" role="dialog" aria-modal="true" aria-label="Jump to section">
   <div class="search-panel">
     <div class="search-input-wrap">
@@ -1098,70 +1302,68 @@ svg { display: block; }
   </div>
 </div>
 
-<!-- ═══════════ LOADING ═══════════ -->
+<!-- LOADING -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
   <div class="loading-title" id="loadingTitle">Loading…</div>
   <div class="loading-desc" id="loadingDesc"></div>
 </div>
 
-<!-- ═══════════ TOAST ═══════════ -->
+<!-- TOAST -->
 <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
 <script>
 (function () {
   'use strict';
+
   function wireThemeSync() {
-  window.addEventListener('storage', function (e) {
-    try {
-      // Theme changed in another tab
-      if (e.key === 'folio.theme') {
-        var pref = e.newValue || 'dark';
-        var resolved = pref;
-        if (pref === 'auto' || pref === 'system') {
-          resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
-            ? 'light' : 'dark';
+    window.addEventListener('storage', function (e) {
+      try {
+        if (e.key === 'folio.theme') {
+          var pref = e.newValue || 'dark';
+          if (pref === 'system') pref = 'auto';
+          var resolved = pref;
+          if (pref === 'auto') {
+            resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+              ? 'light' : 'dark';
+          }
+          if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+          else document.documentElement.removeAttribute('data-theme');
+          var meta = document.getElementById('themeColorMeta');
+          if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
         }
+        if (e.key === 'folio.reducedMotion') {
+          if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
+          else document.documentElement.removeAttribute('data-reduced-motion');
+        }
+        if (e.key === 'folio.pageScale') {
+          var scale = Number(e.newValue || 1);
+          if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
+          if (scale > 1.35) scale = 1.35;
+          document.documentElement.style.setProperty('--page-scale', String(scale));
+        }
+      } catch (err) {}
+    });
+  }
+
+  function wireThemeMediaQuery() {
+    if (!window.matchMedia) return;
+    var mq = window.matchMedia('(prefers-color-scheme: light)');
+    var handler = function () {
+      try {
+        var pref = localStorage.getItem('folio.theme') || 'dark';
+        if (pref === 'system') pref = 'auto';
+        if (pref !== 'auto') return;
+        var resolved = mq.matches ? 'light' : 'dark';
         if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
         else document.documentElement.removeAttribute('data-theme');
-
-        var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
+        var meta = document.getElementById('themeColorMeta');
         if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
-      }
-
-      // Reduced-motion toggled in another tab
-      if (e.key === 'folio.reducedMotion') {
-        if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
-        else document.documentElement.removeAttribute('data-reduced-motion');
-      }
-
-      // Page scale changed in another tab
-      if (e.key === 'folio.pageScale') {
-        var scale = Number(e.newValue || 1);
-        if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
-        if (scale > 1.35) scale = 1.35;
-        document.documentElement.style.setProperty('--page-scale', String(scale));
-      }
-    } catch (err) {}
-  });
-}
-function wireThemeMediaQuery() {
-  if (!window.matchMedia) return;
-  var mq = window.matchMedia('(prefers-color-scheme: light)');
-  var handler = function () {
-    try {
-      var pref = localStorage.getItem('folio.theme') || 'dark';
-      if (pref !== 'auto' && pref !== 'system') return;   // only react when theme is auto
-      var resolved = mq.matches ? 'light' : 'dark';
-      if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
-      else document.documentElement.removeAttribute('data-theme');
-      var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
-      if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
-    } catch (e) {}
-  };
-  if (mq.addEventListener) mq.addEventListener('change', handler);
-  else if (mq.addListener) mq.addListener(handler);
-}
+      } catch (e) {}
+    };
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else if (mq.addListener) mq.addListener(handler);
+  }
 
   // ═══════════════════════════════════════════════════════════
   // CONFIG
@@ -1171,6 +1373,10 @@ function wireThemeMediaQuery() {
   const API_AUTH = API_BASE + '/auth';
   const API_HOST = API_BASE + '/host';
   const API_NOTIFY = API_BASE + '/notify';
+
+  const DB_NAME = 'folio';
+  const DB_VERSION = 3;
+  const DB_STORES = ['projects', 'files', 'versions', 'projectMeta', 'syncQueue', 'folders'];
 
   const STORAGE = {
     session: 'folio.session',
@@ -1191,6 +1397,12 @@ function wireThemeMediaQuery() {
     autoClean: 'folio.autoCleanDeployments',
     autoCleanDays: 'folio.autoCleanDays',
     guestBannerDismissed: 'folio.settings.guestBannerDismissed',
+    pinnedProjects: 'folio.projects.pinned',
+    recentSearches: 'folio.projects.recentSearches',
+    lastTab: 'folio.projects.lastTab',
+    lastProject: 'folio.lastProject',
+    lastFile: 'folio.lastFile',
+    previewMode: 'folio.previewMode',
   };
 
   const SECTIONS = [
@@ -1199,6 +1411,7 @@ function wireThemeMediaQuery() {
     { id: 'account', label: 'Account', icon: 'user', lockedForGuest: true },
     { id: 'notifications', label: 'Notifications', icon: 'bell', lockedForGuest: true },
     { id: 'storage', label: 'Storage', icon: 'database', lockedForGuest: false },
+    { id: 'database', label: 'Database', icon: 'database', lockedForGuest: false },
     { id: 'pwa', label: 'PWA', icon: 'download', lockedForGuest: false },
     { id: 'data', label: 'Data', icon: 'folder', lockedForGuest: false },
     { id: 'advanced', label: 'Advanced', icon: 'shield', lockedForGuest: false },
@@ -1209,7 +1422,7 @@ function wireThemeMediaQuery() {
   const PAGE_SCALE_MAX = 1.35;
 
   // ═══════════════════════════════════════════════════════════
-  // SVG BANK
+  // SVG
   // ═══════════════════════════════════════════════════════════
 
   const SVG = {
@@ -1242,6 +1455,7 @@ function wireThemeMediaQuery() {
     image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
     chevronRight: '<polyline points="9 18 15 12 9 6"/>',
     type: '<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>',
+    layout: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>',
   };
 
   const svg = (name, size = 16, sw = 2.2) =>
@@ -1280,12 +1494,14 @@ function wireThemeMediaQuery() {
     },
     notificationSettings: null,
     notificationStats: null,
+    notificationsList: null,
     projects: [],
     storageEstimate: null,
     storageLimit: 10 * 1024 * 1024,
     storagePersisted: false,
     installPrompt: null,
     swRegistration: null,
+    swVersion: null,
     activeSection: 'appearance',
     guestBannerDismissed: false,
     prefsSaveTimer: null,
@@ -1294,6 +1510,8 @@ function wireThemeMediaQuery() {
     searchSelectedIndex: 0,
     searchMatches: [],
     themeMediaQuery: null,
+    dbInfo: null,
+    notificationBellTimer: null,
   };
 
   const $ = id => document.getElementById(id);
@@ -1310,6 +1528,17 @@ function wireThemeMediaQuery() {
     let i = 0;
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
     return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+  }
+
+  function estimateBytes(content) {
+    if (!content) return 0;
+    if (typeof content !== 'string') content = String(content);
+    if (content.startsWith('data:')) {
+      const comma = content.indexOf(',');
+      const b64 = comma >= 0 ? content.slice(comma + 1) : content;
+      return Math.floor(b64.length * 0.75);
+    }
+    try { return new Blob([content]).size; } catch { return content.length; }
   }
 
   function timeAgo(ts) {
@@ -1423,7 +1652,7 @@ function wireThemeMediaQuery() {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // PREFS — LOAD / SAVE / APPLY
+  // PREFS
   // ═══════════════════════════════════════════════════════════
 
   function loadPrefs() {
@@ -1444,7 +1673,9 @@ function wireThemeMediaQuery() {
       return Number.isFinite(n) ? n : fallback;
     };
 
-    S.prefs.theme = get(STORAGE.theme, 'dark');
+    let theme = get(STORAGE.theme, 'dark');
+    if (theme === 'system') theme = 'auto';
+    S.prefs.theme = theme;
     S.prefs.pageScale = Math.max(PAGE_SCALE_MIN, Math.min(PAGE_SCALE_MAX, getNum(STORAGE.pageScale, 1)));
     S.prefs.reducedMotion = getBool(STORAGE.reducedMotion, false);
     S.prefs.fontFamily = get(STORAGE.fontFamily, 'Inter');
@@ -1470,7 +1701,6 @@ function wireThemeMediaQuery() {
         if (typeof parsed.softTabs === 'boolean') S.prefs.softTabs = parsed.softTabs;
         if (typeof parsed.lineNumbers === 'boolean') S.prefs.lineNumbers = parsed.lineNumbers;
         if (typeof parsed.wordWrap === 'boolean') S.prefs.wordWrap = parsed.wordWrap;
-        else if (typeof parsed.wrap === 'boolean') S.prefs.wordWrap = parsed.wrap;
       }
     } catch {}
   }
@@ -1527,19 +1757,8 @@ function wireThemeMediaQuery() {
     document.documentElement.style.setProperty('--editor-lh', String(S.prefs.lineHeight));
   }
 
-  function wireThemeMediaQuery() {
-    if (!window.matchMedia) return;
-    if (S.themeMediaQuery) return;
-    S.themeMediaQuery = window.matchMedia('(prefers-color-scheme: light)');
-    const handler = () => {
-      if (S.prefs.theme === 'auto' || S.prefs.theme === 'system') applyTheme(S.prefs.theme);
-    };
-    if (S.themeMediaQuery.addEventListener) S.themeMediaQuery.addEventListener('change', handler);
-    else if (S.themeMediaQuery.addListener) S.themeMediaQuery.addListener(handler);
-  }
-
   // ═══════════════════════════════════════════════════════════
-  // NAV — only the active section renders
+  // NAV
   // ═══════════════════════════════════════════════════════════
 
   function setActiveSection(id, opts = {}) {
@@ -1577,7 +1796,7 @@ function wireThemeMediaQuery() {
 
   async function boot() {
     wireThemeSync();
-wireThemeMediaQuery();
+    wireThemeMediaQuery();
     readSession();
     loadPrefs();
     applyTheme(S.prefs.theme);
@@ -1585,7 +1804,6 @@ wireThemeMediaQuery();
     applyReducedMotion(S.prefs.reducedMotion);
     applyFontFamily(S.prefs.fontFamily);
     applyEditorPreviewVars();
-    wireThemeMediaQuery();
 
     if (S.session) {
       const me = await apiFetch(API_AUTH + '?action=me');
@@ -1613,6 +1831,12 @@ wireThemeMediaQuery();
 
     if ('serviceWorker' in navigator) {
       try { S.swRegistration = await navigator.serviceWorker.getRegistration(); } catch {}
+      if (S.swRegistration?.active) {
+        try {
+          const result = await sendSWMessage({ type: 'GET_VERSION' });
+          if (result && result.version) S.swVersion = result.version;
+        } catch {}
+      }
     }
 
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -1628,6 +1852,7 @@ wireThemeMediaQuery();
 
     if (S.isAuthed) {
       await Promise.all([loadNotifications(), loadProjects()]);
+      updateBellVisibility();
     }
 
     const urlSection = (location.hash || '').replace(/^#\/?/, '');
@@ -1643,6 +1868,11 @@ wireThemeMediaQuery();
         setActiveSection(id, { updateUrl: false });
       }
     });
+
+    if (S.notificationBellTimer) clearInterval(S.notificationBellTimer);
+    S.notificationBellTimer = setInterval(() => {
+      if (document.visibilityState === 'visible' && S.isAuthed) loadNotificationStats();
+    }, 60000);
   }
 
   async function loadNotifications() {
@@ -1652,7 +1882,35 @@ wireThemeMediaQuery();
       apiFetch(API_NOTIFY + '?action=stats'),
     ]);
     if (settingsRes.ok && settingsRes.data?.success) S.notificationSettings = settingsRes.data.settings;
-    if (statsRes.ok && statsRes.data?.success) S.notificationStats = statsRes.data.stats;
+    if (statsRes.ok && statsRes.data?.success) {
+      S.notificationStats = statsRes.data.stats;
+      updateBellBadge(S.notificationStats.unread || 0);
+    }
+  }
+
+  async function loadNotificationStats() {
+    if (!S.isAuthed || !S.online) return;
+    const res = await apiFetch(API_NOTIFY + '?action=stats');
+    if (res.ok && res.data?.success && res.data.stats) {
+      S.notificationStats = res.data.stats;
+      updateBellBadge(S.notificationStats.unread || 0);
+    }
+  }
+
+  function updateBellVisibility() {
+    const bell = $('bellBtn');
+    if (bell) bell.style.display = S.isAuthed ? '' : 'none';
+  }
+
+  function updateBellBadge(count) {
+    const badge = $('bellBadge');
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
   }
 
   async function loadProjects() {
@@ -1661,8 +1919,21 @@ wireThemeMediaQuery();
     if (res.ok && res.data?.success) S.projects = res.data.projects || [];
   }
 
+  async function sendSWMessage(msg) {
+    return new Promise((resolve) => {
+      try {
+        const reg = S.swRegistration;
+        if (!reg?.active) { resolve(null); return; }
+        const channel = new MessageChannel();
+        channel.port1.onmessage = (e) => resolve(e.data);
+        reg.active.postMessage(msg, [channel.port2]);
+        setTimeout(() => resolve(null), 2000);
+      } catch { resolve(null); }
+    });
+  }
+
   // ═══════════════════════════════════════════════════════════
-  // RENDER — only the active section
+  // RENDER
   // ═══════════════════════════════════════════════════════════
 
   function renderAll() {
@@ -1706,7 +1977,7 @@ wireThemeMediaQuery();
       <div class="guest-banner">
         ${svg('lock', 16, 2.2)}
         <div class="gb-text"><strong>Browsing as guest.</strong> Some settings need an account.</div>
-        <a href="/register?next=${encodeURIComponent('/settings')}" class="gb-cta">Sign in</a>
+        <a href="/register?next=${encodeURIComponent('/settings' + (S.activeSection ? '#' + S.activeSection : ''))}" class="gb-cta">Sign in</a>
         <button class="gb-close" id="dismissGuestBanner" aria-label="Dismiss">${svg('x', 11, 2.4)}</button>
       </div>
     `;
@@ -1723,6 +1994,7 @@ wireThemeMediaQuery();
     account: renderAccountSection,
     notifications: renderNotificationsSection,
     storage: renderStorageSection,
+    database: renderDatabaseSection,
     pwa: renderPwaSection,
     data: renderDataSection,
     advanced: renderAdvancedSection,
@@ -1743,7 +2015,7 @@ wireThemeMediaQuery();
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SECTION: APPEARANCE (now with page text size slider)
+  // SECTION: APPEARANCE
   // ═══════════════════════════════════════════════════════════
 
   function renderAppearanceSection() {
@@ -1826,7 +2098,7 @@ wireThemeMediaQuery();
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SECTION: EDITOR (with working font size preview)
+  // SECTION: EDITOR
   // ═══════════════════════════════════════════════════════════
 
   function renderEditorSection() {
@@ -1969,6 +2241,14 @@ wireThemeMediaQuery();
             </div>
           </div>
         </div>
+
+        <div class="card">
+          <div class="card-header"><div class="card-title">${svg('refresh', 15, 2.2)} Reset editor prefs</div></div>
+          <div class="card-body">
+            <div class="field-hint" style="margin-bottom:10px;">Reset only editor preferences. Appearance and account untouched.</div>
+            <button class="btn btn-outline-danger btn-block" id="resetEditorPrefsBtn">${svg('refresh', 14, 2.2)} Reset editor prefs</button>
+          </div>
+        </div>
       </section>
     `;
   }
@@ -1997,6 +2277,10 @@ wireThemeMediaQuery();
     const p = S.user.profile || {};
     const email = S.user.email || '';
     const unverified = !S.user.emailVerified;
+    const initials = getInitials(p.displayName || p.username || '?');
+    const avatarHtml = p.avatarUrl
+      ? `<img src="${escapeAttr(p.avatarUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+      : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:linear-gradient(135deg,#F59E0B,#f97316);color:#0a0c10;font-weight:800;font-size:16px;">${escapeHTML(initials)}</span>`;
 
     return `
       <section class="settings-section" id="section-account">
@@ -2005,8 +2289,13 @@ wireThemeMediaQuery();
         <div class="card">
           <div class="card-header"><div class="card-title">${svg('user', 15, 2.2)} Profile</div></div>
           <div class="card-body">
-            <div class="info-row"><span class="info-row-label">Display name</span><span class="info-row-value">${escapeHTML(p.displayName || p.username || '—')}</span></div>
-            <div class="info-row"><span class="info-row-label">Username</span><span class="info-row-value mono">@${escapeHTML(p.username || '—')}</span></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+              <div style="width:52px;height:52px;border-radius:50%;overflow:hidden;flex-shrink:0;border:2px solid var(--theme-glass-border);">${avatarHtml}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:14px;font-weight:700;color:var(--theme-text);margin-bottom:2px;">${escapeHTML(p.displayName || p.username || '—')}</div>
+                <div style="font-size:11px;color:var(--theme-text-tertiary);font-family:var(--font-mono);">@${escapeHTML(p.username || '—')}</div>
+              </div>
+            </div>
             <div class="info-row"><span class="info-row-label">Bio</span><span class="info-row-value" style="text-align:right;max-width:60%;">${escapeHTML(p.bio || '—')}</span></div>
             <a href="/profile" class="btn btn-secondary btn-block" style="margin-top:12px;">${svg('edit', 14, 2.2)} Edit profile</a>
           </div>
@@ -2024,7 +2313,11 @@ wireThemeMediaQuery();
                   : `<span class="badge success" style="margin-left:6px;">${svg('check', 10, 2.6)} Verified</span>`}
               </span>
             </div>
-            <button class="btn btn-secondary btn-block" style="margin-top:12px;" id="changeEmailBtn">${svg('edit', 14, 2.2)} Change email</button>
+            ${unverified ? `
+              <div class="field-hint" style="margin-top:8px;margin-bottom:10px;">Resend verification email to confirm ownership.</div>
+              <button class="btn btn-secondary btn-block" style="margin-bottom:8px;" id="resendVerificationBtn">${svg('mail', 14, 2.2)} Resend verification</button>
+            ` : ''}
+            <button class="btn btn-secondary btn-block" id="changeEmailBtn">${svg('edit', 14, 2.2)} Change email</button>
           </div>
         </div>
 
@@ -2055,6 +2348,14 @@ wireThemeMediaQuery();
         </div>
       </section>
     `;
+  }
+
+  function getInitials(name) {
+    const s = String(name || '').trim();
+    if (!s) return '?';
+    const parts = s.split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2128,10 +2429,11 @@ wireThemeMediaQuery();
                   { id: 'storageAlerts', label: 'Storage limits' },
                   { id: 'projectAlerts', label: 'Project activity' },
                   { id: 'inviteAlerts', label: 'Invites' },
+                  { id: 'securityAlerts', label: 'Security events' },
                 ].map(o => `
                   <div class="toggle-row">
                     <div class="toggle-row-info"><div class="toggle-row-title">${escapeHTML(o.label)}</div></div>
-                    <button class="switch ${ns[o.id] ? 'on' : ''}" data-notif-toggle="${escapeAttr(o.id)}" aria-label="Toggle ${escapeAttr(o.id)}"></button>
+                    <button class="switch ${ns[o.id] !== false ? 'on' : ''}" data-notif-toggle="${escapeAttr(o.id)}" aria-label="Toggle ${escapeAttr(o.id)}"></button>
                   </div>
                 `).join('')}
               </div>
@@ -2140,14 +2442,60 @@ wireThemeMediaQuery();
         `}
 
         <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('bell', 15, 2.2)} Recent notifications</div>
+            ${stats.unread > 0 ? `<button class="btn btn-sm btn-ghost" id="markAllReadBtn" type="button">Mark all read</button>` : ''}
+          </div>
+          <div class="card-body tight" id="notifPreviewBody">
+            <div style="padding:16px;text-align:center;font-size:11px;color:var(--theme-text-tertiary);">Loading…</div>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="card-body">
-            <a href="/profile#/notifications" class="btn btn-secondary btn-block">
-              ${svg('bell', 14, 2.2)} View notification history ${stats.unread > 0 ? `(${stats.unread} unread)` : ''}
-            </a>
+            <button class="btn btn-secondary btn-block" id="viewAllNotificationsBtn">
+              ${svg('bell', 14, 2.2)} View all notifications ${stats.unread > 0 ? `(${stats.unread} unread)` : ''}
+            </button>
           </div>
         </div>
       </section>
     `;
+  }
+
+  async function loadNotificationPreview() {
+    const mount = $('notifPreviewBody');
+    if (!mount || !S.isAuthed) return;
+    try {
+      const res = await apiFetch(API_NOTIFY + '?action=list&limit=5');
+      if (!res.ok || !res.data?.success) {
+        mount.innerHTML = `<div style="padding:16px;text-align:center;font-size:11px;color:var(--theme-text-tertiary);">Couldn't load notifications.</div>`;
+        return;
+      }
+      const list = res.data.notifications || [];
+      if (list.length === 0) {
+        mount.innerHTML = `<div style="padding:20px;text-align:center;font-size:12px;color:var(--theme-text-tertiary);">No notifications yet.</div>`;
+        return;
+      }
+      mount.innerHTML = list.map(n => `
+        <div class="notif-item ${!n.read ? 'unread' : ''}">
+          <div class="notif-icon">${svg(notifIconForType(n.type), 14, 2.2)}</div>
+          <div class="notif-content">
+            <div class="notif-title">${escapeHTML(n.title || '')}</div>
+            <div class="notif-body">${escapeHTML(n.body || '')}</div>
+            <div class="notif-time">${timeAgo(n.createdAt)}</div>
+          </div>
+        </div>
+      `).join('');
+    } catch {
+      mount.innerHTML = `<div style="padding:16px;text-align:center;font-size:11px;color:var(--theme-text-tertiary);">Couldn't load notifications.</div>`;
+    }
+  }
+
+  function notifIconForType(type) {
+    return {
+      system: 'info', analytics: 'chart', db: 'database', storage: 'database',
+      project: 'folder', invite: 'user', security: 'shield',
+    }[type] || 'bell';
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2190,9 +2538,7 @@ wireThemeMediaQuery();
               </span>
             </div>
             <div class="field-hint" style="margin-top:8px;margin-bottom:10px;">Persistent storage prevents your browser from auto-clearing cached data under disk pressure.</div>
-            ${!S.storagePersisted ? `
-              <button class="btn btn-secondary btn-block" id="requestPersistBtn">${svg('shield', 14, 2.2)} Request persistent storage</button>
-            ` : ''}
+            <button class="btn btn-secondary btn-block" id="requestPersistBtn" ${S.storagePersisted ? 'disabled' : ''}>${svg('shield', 14, 2.2)} ${S.storagePersisted ? 'Already persistent' : 'Request persistent storage'}</button>
           </div>
         </div>
 
@@ -2200,12 +2546,22 @@ wireThemeMediaQuery();
           <div class="card">
             <div class="card-header"><div class="card-title">${svg('folder', 15, 2.2)} Projects (${S.projects.length})</div></div>
             <div class="card-body flat">
-              ${S.projects.slice(0, 10).map(p => `
-                <div class="info-row" style="padding:10px 16px;">
-                  <span class="info-row-label" style="color:var(--theme-text-secondary);font-weight:600;">${escapeHTML(p.name || 'Untitled')}</span>
-                  <span class="info-row-value mono" style="font-size:11px;">${p.fileCount || 0} files · ${p.versionCount || 0} versions</span>
-                </div>
-              `).join('')}
+              ${S.projects.slice(0, 8).map(p => {
+                const used = p.storageUsed || 0;
+                const limit = p.storageLimit || S.storageLimit;
+                const pPct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+                const cls = pPct > 90 ? 'danger' : pPct > 70 ? 'warn' : '';
+                return `
+                  <div class="info-row" style="padding:10px 16px;">
+                    <span class="info-row-label" style="color:var(--theme-text-secondary);font-weight:600;">${escapeHTML(p.name || 'Untitled')}</span>
+                    <span class="info-row-value mono" style="font-size:11px;">
+                      ${formatBytes(used)} / ${formatBytes(limit)}
+                      ${pPct > 0 ? `<span style="color:var(--theme-${cls || 'success'});margin-left:4px;">${Math.round(pPct)}%</span>` : ''}
+                    </span>
+                  </div>
+                `;
+              }).join('')}
+              ${S.projects.length > 8 ? `<div class="info-row" style="padding:10px 16px;"><span class="info-row-label">+ ${S.projects.length - 8} more</span><a href="/projects" class="info-row-value inline-link">View all</a></div>` : ''}
             </div>
           </div>
         ` : ''}
@@ -2229,12 +2585,164 @@ wireThemeMediaQuery();
         <div class="card">
           <div class="card-header"><div class="card-title">${svg('trash', 15, 2.2)} Clear local cache</div></div>
           <div class="card-body">
-            <div class="field-hint" style="margin-bottom:10px;">Removes offline copies of your projects from this browser. Server data is not affected.</div>
+            <div class="field-hint" style="margin-bottom:10px;">Removes offline copies of your projects from this browser (projects, files, versions, folders). Server data is not affected.</div>
             <button class="btn btn-outline-danger btn-block" id="clearLocalCacheBtn">${svg('trash', 14, 2.2)} Clear local cache</button>
           </div>
         </div>
       </section>
     `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION: DATABASE (NEW)
+  // ═══════════════════════════════════════════════════════════
+
+  function renderDatabaseSection() {
+    const info = S.dbInfo || { actual: null, code: DB_VERSION, stores: {} };
+    const mismatch = info.actual !== null && info.actual !== info.code;
+
+    const storeRows = DB_STORES.map(store => {
+      const data = info.stores[store] || { count: 0, bytes: 0 };
+      return `
+        <div class="db-store-row">
+          <div class="db-store-icon">${svg('database', 12, 2.2)}</div>
+          <span class="db-store-name">${escapeHTML(store)}</span>
+          <span class="db-store-count">${data.count} record${data.count === 1 ? '' : 's'}</span>
+          <span class="db-store-size">${data.bytes > 0 ? formatBytes(data.bytes) : ''}</span>
+        </div>
+      `;
+    }).join('');
+
+    const totalBytes = Object.values(info.stores).reduce((sum, s) => sum + (s.bytes || 0), 0);
+    const totalCount = Object.values(info.stores).reduce((sum, s) => sum + (s.count || 0), 0);
+
+    return `
+      <section class="settings-section" id="section-database">
+        <h2 class="section-heading">${svg('database', 17, 2.2)} Database</h2>
+
+        ${mismatch ? `
+          <div class="db-mismatch-banner">
+            ${svg('alertTriangle', 16, 2.4)}
+            <div class="db-mismatch-text">
+              <div class="db-mismatch-title">Schema mismatch</div>
+              <div class="db-mismatch-desc">
+                Code expects version <strong>${info.code}</strong>, browser has version <strong>${info.actual}</strong>.
+                This can cause errors on other pages. Reload or reset the database below.
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('database', 15, 2.2)} Overview</div>
+            <button class="btn btn-sm btn-ghost" id="dbRefreshBtn" type="button">${svg('refresh', 10, 2.2)} Refresh</button>
+          </div>
+          <div class="card-body">
+            <div class="db-version-grid">
+              <div class="db-version-tile">
+                <div class="db-version-label">Code version</div>
+                <div class="db-version-value">${info.code}</div>
+              </div>
+              <div class="db-version-tile">
+                <div class="db-version-label">Actual version</div>
+                <div class="db-version-value ${mismatch ? 'danger' : (info.actual === null ? 'warn' : 'ok')}">${info.actual === null ? '—' : info.actual}${!mismatch && info.actual !== null ? ' ✓' : ''}</div>
+              </div>
+              <div class="db-version-tile">
+                <div class="db-version-label">Total records</div>
+                <div class="db-version-value">${totalCount}</div>
+              </div>
+              <div class="db-version-tile">
+                <div class="db-version-label">Total size</div>
+                <div class="db-version-value">${formatBytes(totalBytes)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><div class="card-title">${svg('database', 15, 2.2)} Stores (${DB_STORES.length})</div></div>
+          <div class="card-body tight">
+            <div class="db-stores">
+              ${storeRows}
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><div class="card-title">${svg('download', 15, 2.2)} Export database</div></div>
+          <div class="card-body">
+            <div class="field-hint" style="margin-bottom:10px;">Download a JSON snapshot of all local data.</div>
+            <button class="btn btn-secondary btn-block" id="dbExportBtn">${svg('download', 14, 2.2)} Export DB as JSON</button>
+          </div>
+        </div>
+
+        <div class="card card-danger">
+          <div class="card-header"><div class="card-title">${svg('alertTriangle', 15, 2.2)} Danger</div></div>
+          <div class="card-body">
+            <div class="field-hint" style="margin-bottom:10px;">Reset local database. Deletes all local data. Server is unaffected. Cannot be undone.</div>
+            <button class="btn btn-outline-danger btn-block" id="dbResetBtn">${svg('trash', 14, 2.2)} Reset local DB</button>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  async function loadDatabaseInfo() {
+    const info = { actual: null, code: DB_VERSION, stores: {} };
+
+    // Actual version
+    try {
+      if (indexedDB.databases) {
+        const dbs = await indexedDB.databases();
+        const folio = dbs.find(d => d.name === DB_NAME);
+        if (folio) info.actual = folio.version;
+      } else {
+        const req = indexedDB.open(DB_NAME);
+        info.actual = await new Promise((resolve) => {
+          req.onsuccess = () => {
+            const v = req.result.version;
+            req.result.close();
+            resolve(v);
+          };
+          req.onerror = () => resolve(null);
+          req.onupgradeneeded = () => {
+            req.result.close();
+            resolve(DB_VERSION);
+          };
+        });
+      }
+    } catch { info.actual = null; }
+
+    // Store counts
+    try {
+      const conn = await new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+
+      for (const store of DB_STORES) {
+        if (!conn.objectStoreNames.contains(store)) {
+          info.stores[store] = { count: 0, bytes: 0 };
+          continue;
+        }
+        const tx = conn.transaction(store, 'readonly').objectStore(store);
+        const all = await new Promise((resolve) => {
+          const r = tx.getAll();
+          r.onsuccess = () => resolve(r.result || []);
+          r.onerror = () => resolve([]);
+        });
+        let bytes = 0;
+        for (const rec of all) {
+          try { bytes += estimateBytes(JSON.stringify(rec)); } catch {}
+        }
+        info.stores[store] = { count: all.length, bytes };
+      }
+      conn.close();
+    } catch {}
+
+    S.dbInfo = info;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2246,10 +2754,22 @@ wireThemeMediaQuery();
       || window.navigator.standalone === true;
     const canInstall = !!S.installPrompt && !isStandalone;
     const browserStorageUsed = formatBytes(S.storageEstimate?.usage || 0);
+    const swVersion = S.swVersion || '—';
+    const hasUpdate = !!S.swRegistration?.waiting;
 
     return `
       <section class="settings-section" id="section-pwa">
         <h2 class="section-heading">${svg('download', 17, 2.2)} PWA & install</h2>
+
+        ${hasUpdate ? `
+          <div class="card" style="border-color:var(--theme-primary-glow);">
+            <div class="card-body" style="display:flex;align-items:center;gap:10px;">
+              <div style="color:var(--theme-primary);">${svg('refresh', 18, 2.2)}</div>
+              <div style="flex:1;font-size:11.5px;color:var(--theme-text-secondary);">A new version of Folio is available.</div>
+              <button class="btn btn-sm btn-primary" id="updateNowBtn">Update now</button>
+            </div>
+          </div>
+        ` : ''}
 
         <div class="card">
           <div class="card-header"><div class="card-title">${svg('download', 15, 2.2)} Install</div></div>
@@ -2269,7 +2789,7 @@ wireThemeMediaQuery();
         <div class="card">
           <div class="card-header"><div class="card-title">${svg('info', 15, 2.2)} Version</div></div>
           <div class="card-body">
-            <div class="info-row"><span class="info-row-label">App version</span><span class="info-row-value mono">2.2.0-folio</span></div>
+            <div class="info-row"><span class="info-row-label">App version</span><span class="info-row-value mono">${escapeHTML(swVersion)}</span></div>
             <div class="info-row"><span class="info-row-label">Browser storage used</span><span class="info-row-value mono">${browserStorageUsed}</span></div>
           </div>
         </div>
@@ -2324,7 +2844,7 @@ wireThemeMediaQuery();
         <div class="card">
           <div class="card-header"><div class="card-title">${svg('info', 15, 2.2)} About your data</div></div>
           <div class="card-body">
-            <div class="text-muted" style="font-size:12.5px;line-height:1.55;">Projects are stored on our servers. Local cache is stored in your browser's IndexedDB. Analytics data is aggregated daily and retained for 365 days.</div>
+            <div class="text-muted" style="font-size:12.5px;line-height:1.55;">Projects are stored on our servers. Local cache is stored in your browser's IndexedDB (projects, files, versions, folders, notes). Analytics data is aggregated daily and retained for 365 days.</div>
           </div>
         </div>
       </section>
@@ -2364,7 +2884,17 @@ wireThemeMediaQuery();
             ${S.isAuthed ? `<div class="info-row"><span class="info-row-label">User ID</span><span class="info-row-value mono" style="font-size:10.5px;">${escapeHTML(uid.slice(0, 20))}${uid.length > 20 ? '…' : ''}</span></div>` : ''}
             <div class="info-row"><span class="info-row-label">API base</span><span class="info-row-value mono" style="font-size:10.5px;">${escapeHTML(API_BASE)}</span></div>
             <div class="info-row"><span class="info-row-label">Database</span><span class="info-row-value mono">IndexedDB folio</span></div>
+            <div class="info-row"><span class="info-row-label">DB version</span><span class="info-row-value mono">${DB_VERSION}</span></div>
             <div class="info-row"><span class="info-row-label">SW status</span><span class="info-row-value">${escapeHTML(swStatus)}</span></div>
+            ${S.swVersion ? `<div class="info-row"><span class="info-row-label">SW version</span><span class="info-row-value mono" style="font-size:10.5px;">${escapeHTML(S.swVersion)}</span></div>` : ''}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><div class="card-title">${svg('copy', 15, 2.2)} Copy debug info</div></div>
+          <div class="card-body">
+            <div class="field-hint" style="margin-bottom:10px;">Copy environment details for support requests.</div>
+            <button class="btn btn-secondary btn-block" id="copyDebugBtn">${svg('copy', 14, 2.2)} Copy debug info</button>
           </div>
         </div>
 
@@ -2373,6 +2903,7 @@ wireThemeMediaQuery();
             <div class="card-header"><div class="card-title">${svg('refresh', 15, 2.2)} Sync queue</div></div>
             <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
               <div class="field-hint" id="syncQueueInfo">Checking pending items…</div>
+              <div id="syncQueueDetails"></div>
               <button class="btn btn-secondary btn-block" id="drainSyncBtn">${svg('refresh', 14, 2.2)} Drain sync queue</button>
               <button class="btn btn-outline-danger btn-block" id="clearSyncBtn">${svg('trash', 14, 2.2)} Clear sync queue</button>
             </div>
@@ -2391,31 +2922,36 @@ wireThemeMediaQuery();
       <section class="settings-section" id="section-danger">
         <h2 class="section-heading">${svg('alertTriangle', 17, 2.2)} Danger zone</h2>
 
-        <div class="card" style="border-color:rgba(239,68,68,0.25);">
-          <div class="card-header" style="border-bottom-color:rgba(239,68,68,0.15);">
-            <div class="card-title" style="color:var(--theme-danger);">${svg('trash', 15, 2.2)} Clear local cache</div>
-          </div>
+        <div class="card card-danger">
+          <div class="card-header"><div class="card-title">${svg('trash', 15, 2.2)} Clear local cache</div></div>
           <div class="card-body">
             <div class="field-hint" style="margin-bottom:10px;">Removes all offline copies of your projects. Server data untouched. Cannot be undone.</div>
             <button class="btn btn-outline-danger btn-block" id="clearCacheDangerBtn">${svg('trash', 14, 2.2)} Clear local cache</button>
           </div>
         </div>
 
-        <div class="card" style="border-color:rgba(239,68,68,0.25);">
-          <div class="card-header" style="border-bottom-color:rgba(239,68,68,0.15);">
-            <div class="card-title" style="color:var(--theme-danger);">${svg('refresh', 15, 2.2)} Reset all settings</div>
-          </div>
+        <div class="card card-danger">
+          <div class="card-header"><div class="card-title">${svg('refresh', 15, 2.2)} Reset all settings</div></div>
           <div class="card-body">
-            <div class="field-hint" style="margin-bottom:10px;">Wipes all app preferences (theme, editor prefs). You stay signed in. Cannot be undone.</div>
+            <details style="margin-bottom:10px;">
+              <summary style="font-size:11px;font-weight:700;color:var(--theme-text-tertiary);cursor:pointer;">What gets reset?</summary>
+              <ul style="list-style:none;padding:8px 0 0;font-size:11px;color:var(--theme-text-tertiary);line-height:1.6;">
+                <li>• Theme, appearance, text size</li>
+                <li>• Editor preferences</li>
+                <li>• Auto-clean settings</li>
+                <li>• Pinned projects</li>
+                <li>• Recent searches</li>
+                <li>• Last-opened project tracking</li>
+              </ul>
+            </details>
+            <div class="field-hint" style="margin-bottom:10px;">You stay signed in. Cannot be undone.</div>
             <button class="btn btn-outline-danger btn-block" id="resetSettingsBtn">${svg('refresh', 14, 2.2)} Reset all settings</button>
           </div>
         </div>
 
         ${S.isAuthed ? `
-          <div class="card" style="border-color:rgba(239,68,68,0.25);">
-            <div class="card-header" style="border-bottom-color:rgba(239,68,68,0.15);">
-              <div class="card-title" style="color:var(--theme-danger);">${svg('logout', 15, 2.2)} Sign out</div>
-            </div>
+          <div class="card card-danger">
+            <div class="card-header"><div class="card-title">${svg('logout', 15, 2.2)} Sign out</div></div>
             <div class="card-body">
               <div class="field-hint" style="margin-bottom:10px;">You'll need to sign in again. Local projects stay on this device.</div>
               <button class="btn btn-danger btn-block" id="signOutDangerBtn">${svg('logout', 14, 2.2)} Sign out</button>
@@ -2427,7 +2963,7 @@ wireThemeMediaQuery();
   }
 
   // ═══════════════════════════════════════════════════════════
-  // WIRE ALL SECTIONS
+  // WIRE
   // ═══════════════════════════════════════════════════════════
 
   function wireAllSections() {
@@ -2441,7 +2977,6 @@ wireThemeMediaQuery();
         renderSection('appearance');
       });
     });
-
     document.querySelectorAll('[data-font-family]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.prefs.fontFamily = btn.dataset.fontFamily;
@@ -2451,8 +2986,6 @@ wireThemeMediaQuery();
         renderSection('appearance');
       });
     });
-
-    // Page scale preset buttons
     document.querySelectorAll('[data-page-scale]').forEach(btn => {
       btn.addEventListener('click', () => {
         const v = parseFloat(btn.dataset.pageScale);
@@ -2463,12 +2996,9 @@ wireThemeMediaQuery();
         renderSection('appearance');
       });
     });
-
     document.querySelectorAll('[data-toggle]').forEach(btn => {
       btn.addEventListener('click', () => handleToggle(btn.dataset.toggle, btn));
     });
-
-    // Sliders — live update, save on release
     document.querySelectorAll('[data-slider]').forEach(inp => {
       inp.addEventListener('input', () => {
         const key = inp.dataset.slider;
@@ -2483,7 +3013,6 @@ wireThemeMediaQuery();
           S.prefs[key] = val;
           const valEl = $(key + 'Val');
           if (valEl) valEl.textContent = key === 'fontSize' ? `${val}px` : val;
-          // Live-update the preview block via CSS vars
           if (key === 'fontSize' || key === 'lineHeight') applyEditorPreviewVars();
         }
       });
@@ -2498,7 +3027,6 @@ wireThemeMediaQuery();
         showSaveIndicator();
       });
     });
-
     document.querySelectorAll('[data-tab-size]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.prefs.tabSize = parseInt(btn.dataset.tabSize, 10);
@@ -2508,7 +3036,6 @@ wireThemeMediaQuery();
         renderSection('editor');
       });
     });
-
     document.querySelectorAll('[data-autosave]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.prefs.autosaveDelay = parseInt(btn.dataset.autosave, 10);
@@ -2517,6 +3044,7 @@ wireThemeMediaQuery();
         renderSection('editor');
       });
     });
+    $('resetEditorPrefsBtn')?.addEventListener('click', confirmResetEditorPrefs);
 
     // Account
     $('changeEmailBtn')?.addEventListener('click', openChangeEmailModal);
@@ -2524,17 +3052,40 @@ wireThemeMediaQuery();
     $('changePasswordBtn')?.addEventListener('click', openChangePasswordModal);
     $('signOutBtn')?.addEventListener('click', confirmSignOut);
     $('signOutDangerBtn')?.addEventListener('click', confirmSignOut);
+    $('resendVerificationBtn')?.addEventListener('click', handleResendVerification);
+
+    // Notifications
+    document.querySelectorAll('[data-notif-toggle]').forEach(btn => {
+      btn.addEventListener('click', () => handleNotifToggle(btn.dataset.notifToggle, btn));
+    });
+    $('markAllReadBtn')?.addEventListener('click', markAllNotificationsRead);
+    $('viewAllNotificationsBtn')?.addEventListener('click', () => {
+      window.open('/notifications', '_blank', 'noopener');
+    });
+    if (S.isAuthed) loadNotificationPreview();
 
     // Storage
     $('requestPersistBtn')?.addEventListener('click', requestPersistStorage);
     $('clearLocalCacheBtn')?.addEventListener('click', confirmClearLocalCache);
-    $('clearCacheDangerBtn')?.addEventListener('click', confirmClearLocalCache);
-    $('resetSettingsBtn')?.addEventListener('click', confirmResetSettings);
+
+    // Database
+    if (S.activeSection === 'database') {
+      loadDatabaseInfo().then(() => {
+        if (S.activeSection === 'database') renderSection('database');
+      });
+    }
+    $('dbRefreshBtn')?.addEventListener('click', async () => {
+      await loadDatabaseInfo();
+      renderSection('database');
+    });
+    $('dbExportBtn')?.addEventListener('click', exportDatabase);
+    $('dbResetBtn')?.addEventListener('click', confirmResetDB);
 
     // PWA
     $('installAppBtn')?.addEventListener('click', triggerInstall);
     $('checkUpdatesBtn')?.addEventListener('click', checkForUpdates);
     $('clearCacheBtn')?.addEventListener('click', confirmClearCache);
+    $('updateNowBtn')?.addEventListener('click', applyUpdateNow);
 
     // Data
     $('exportSettingsBtn')?.addEventListener('click', exportSettings);
@@ -2542,14 +3093,14 @@ wireThemeMediaQuery();
     $('importSettingsFile')?.addEventListener('change', importSettings);
 
     // Advanced
+    $('copyDebugBtn')?.addEventListener('click', copyDebugInfo);
     $('drainSyncBtn')?.addEventListener('click', drainSync);
     $('clearSyncBtn')?.addEventListener('click', confirmClearSync);
-
-    document.querySelectorAll('[data-notif-toggle]').forEach(btn => {
-      btn.addEventListener('click', () => handleNotifToggle(btn.dataset.notifToggle, btn));
-    });
-
     if ($('syncQueueInfo')) updateSyncQueueInfo();
+
+    // Danger
+    $('clearCacheDangerBtn')?.addEventListener('click', confirmClearLocalCache);
+    $('resetSettingsBtn')?.addEventListener('click', confirmResetSettings);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2591,62 +3142,65 @@ wireThemeMediaQuery();
   }
 
   async function handlePushToggle(btn) {
-  if (!('Notification' in window)) { toast('Push not supported', 'warning'); return; }
-  if (Notification.permission === 'denied') { toast('Notifications blocked in browser', 'error'); return; }
+    if (!('Notification' in window)) { toast('Push not supported', 'warning'); return; }
+    if (Notification.permission === 'denied') { toast('Notifications blocked in browser', 'error'); return; }
 
-  const current = S.notificationSettings?.pushEnabled || false;
-  const next = !current;
+    const current = S.notificationSettings?.pushEnabled || false;
+    const next = !current;
 
-  // ── Disabling: unsubscribe FCM first, then update server ──
-  if (!next) {
-    try {
-      if (window.FOLIO?.fcm?.unsubscribe) {
-        await window.FOLIO.fcm.unsubscribe().catch(() => {});
+    if (!next) {
+      try {
+        if (window.FOLIO?.fcm?.unsubscribe) {
+          await window.FOLIO.fcm.unsubscribe().catch(() => {});
+        }
+        const res = await apiFetch(API_NOTIFY + '?action=update_settings', {
+          method: 'POST',
+          body: JSON.stringify({ pushEnabled: false }),
+        });
+        if (!res.ok || !res.data?.success) throw new Error('Save failed');
+        S.notificationSettings = res.data.settings;
+        toast('Push disabled', 'success', 1400);
+        renderSection('notifications');
+      } catch (err) {
+        toast(err.message || 'Couldn\'t disable push', 'error');
       }
+      return;
+    }
+
+    try {
+      if (Notification.permission === 'default') {
+        const result = await Notification.requestPermission();
+        if (result !== 'granted') { toast('Permission not granted', 'warning'); return; }
+      }
+
+      if (!window.FOLIO?.fcm?.waitReady) {
+        toast('Notifications not ready — try again shortly', 'warning');
+        return;
+      }
+      const ready = await window.FOLIO.fcm.waitReady(3000);
+      if (!ready) {
+        toast('Notifications not available on this device', 'error');
+        return;
+      }
+      await window.FOLIO.fcm.subscribe();
+
       const res = await apiFetch(API_NOTIFY + '?action=update_settings', {
         method: 'POST',
-        body: JSON.stringify({ pushEnabled: false }),
+        body: JSON.stringify({ pushEnabled: true }),
       });
       if (!res.ok || !res.data?.success) throw new Error('Save failed');
       S.notificationSettings = res.data.settings;
-      toast('Push disabled', 'success', 1400);
+      toast('Push enabled', 'success', 1400);
       renderSection('notifications');
     } catch (err) {
-      toast(err.message || 'Couldn\'t disable push', 'error');
+      toast(err.message || 'Couldn\'t enable push', 'error');
+      btn.classList.toggle('on', current);
     }
-    return;
   }
-
-  // ── Enabling: permission → waitReady → subscribe → update server ──
-  try {
-    if (Notification.permission === 'default') {
-      const result = await Notification.requestPermission();
-      if (result !== 'granted') { toast('Permission not granted', 'warning'); return; }
-    }
-
-    const ready = await window.FOLIO?.fcm?.waitReady?.(3000);
-    if (!ready) {
-      throw new Error('Notifications not available on this device');
-    }
-    await window.FOLIO.fcm.subscribe();
-
-    const res = await apiFetch(API_NOTIFY + '?action=update_settings', {
-      method: 'POST',
-      body: JSON.stringify({ pushEnabled: true }),
-    });
-    if (!res.ok || !res.data?.success) throw new Error('Save failed');
-    S.notificationSettings = res.data.settings;
-    toast('Push enabled', 'success', 1400);
-    renderSection('notifications');
-  } catch (err) {
-    toast(err.message || 'Couldn\'t enable push', 'error');
-    btn.classList.toggle('on', current); // revert UI
-  }
-}
 
   async function handleNotifToggle(key, btn) {
     if (!S.notificationSettings) return;
-    const current = S.notificationSettings[key] || false;
+    const current = S.notificationSettings[key] !== false;
     const next = !current;
     S.notificationSettings[key] = next;
     btn.classList.toggle('on', next);
@@ -2657,12 +3211,36 @@ wireThemeMediaQuery();
       });
       if (!res.ok || !res.data?.success) throw new Error('Save failed');
       S.notificationSettings = res.data.settings;
-      btn.classList.toggle('on', !!S.notificationSettings[key]);
       showSaveIndicator();
     } catch {
       S.notificationSettings[key] = current;
       btn.classList.toggle('on', current);
       toast('Couldn\'t save — reverted', 'error');
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    try {
+      const res = await apiFetch(API_NOTIFY + '?action=mark_all_read', { method: 'POST', body: '{}' });
+      if (!res.ok || !res.data?.success) throw new Error('Failed');
+      toast('All read', 'success');
+      await loadNotifications();
+      renderSection('notifications');
+    } catch {
+      toast('Couldn\'t mark as read', 'error');
+    }
+  }
+
+  async function handleResendVerification() {
+    try {
+      const res = await apiFetch(API_AUTH + '?action=resend-verification', { method: 'POST', body: '{}' });
+      if (!res.ok || !res.data?.success) {
+        toast('Not available yet — contact support', 'info', 4000);
+        return;
+      }
+      toast('Verification email sent', 'success');
+    } catch {
+      toast('Not available yet', 'info');
     }
   }
 
@@ -2789,13 +3367,48 @@ wireThemeMediaQuery();
       <div class="modal-title">Change password</div>
       <div class="modal-desc">Use at least 8 characters with letters and numbers.</div>
       <div class="field"><label class="field-label">Current password</label><input class="input" type="password" id="passCurrent" placeholder="Your current password"></div>
-      <div class="field"><label class="field-label">New password</label><input class="input" type="password" id="passNew" placeholder="At least 8 characters"></div>
+      <div class="field">
+        <label class="field-label">New password</label>
+        <input class="input" type="password" id="passNew" placeholder="At least 8 characters">
+        <div class="pw-strength" id="pwStrength">
+          <div class="pw-strength-bar"></div>
+          <div class="pw-strength-bar"></div>
+          <div class="pw-strength-bar"></div>
+          <div class="pw-strength-bar"></div>
+        </div>
+        <div class="pw-strength-label" id="pwStrengthLabel"></div>
+      </div>
       <div class="field"><label class="field-label">Confirm new password</label><input class="input" type="password" id="passConfirm" placeholder="Repeat new password"></div>
       <div class="modal-actions">
         <button class="btn btn-secondary" data-modal-close>Cancel</button>
         <button class="btn btn-primary" id="savePasswordBtn">Save</button>
       </div>
     `);
+
+    const passInput = $('passNew');
+    const strengthBars = $('pwStrength')?.querySelectorAll('.pw-strength-bar');
+    const strengthLabel = $('pwStrengthLabel');
+
+    function scorePassword(pw) {
+      let score = 0;
+      if (pw.length >= 8) score++;
+      if (pw.length >= 12) score++;
+      if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+      if (/[0-9]/.test(pw)) score++;
+      if (/[^A-Za-z0-9]/.test(pw)) score++;
+      return Math.min(score, 4);
+    }
+
+    passInput.addEventListener('input', () => {
+      const s = scorePassword(passInput.value);
+      const labels = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'];
+      const classes = ['weak', 'weak', 'fair', 'good', 'good'];
+      strengthBars.forEach((bar, i) => {
+        bar.className = 'pw-strength-bar' + (i < s ? ' ' + classes[s] : '');
+      });
+      if (strengthLabel) strengthLabel.textContent = passInput.value ? labels[s] : '';
+    });
+
     $('savePasswordBtn').addEventListener('click', async () => {
       const currentPassword = $('passCurrent').value;
       const newPassword = $('passNew').value;
@@ -2803,6 +3416,7 @@ wireThemeMediaQuery();
       if (!currentPassword || !newPassword) { toast('Fill all fields', 'error'); return; }
       if (newPassword !== confirm) { toast('Passwords don\'t match', 'error'); return; }
       if (newPassword.length < 8) { toast('Password must be at least 8 chars', 'error'); return; }
+      if (newPassword === currentPassword) { toast('Password must be different', 'error'); return; }
       $('savePasswordBtn').disabled = true;
       try {
         const res = await apiFetch(API_AUTH + '?action=change-password', {
@@ -2819,7 +3433,7 @@ wireThemeMediaQuery();
     });
   }
 
-  function confirmSignOut() {
+  async function confirmSignOut() {
     confirmModal(
       'Sign out?',
       'You will need to sign in again to access your projects. Local projects stay on this device.',
@@ -2827,6 +3441,11 @@ wireThemeMediaQuery();
       true,
       async () => {
         showLoading('Signing out', '');
+        try {
+          if (window.FOLIO?.fcm?.unsubscribe) {
+            await window.FOLIO.fcm.unsubscribe().catch(() => {});
+          }
+        } catch {}
         try { await apiFetch(API_AUTH + '?action=logout', { method: 'POST', body: '{}' }); } catch {}
         try {
           localStorage.removeItem(STORAGE.session);
@@ -2834,6 +3453,30 @@ wireThemeMediaQuery();
         } catch {}
         hideLoading();
         window.location.href = '/register';
+      }
+    );
+  }
+
+  function confirmResetEditorPrefs() {
+    confirmModal(
+      'Reset editor prefs?',
+      'Restore all editor preferences to defaults. Appearance and account untouched.',
+      'Reset',
+      true,
+      () => {
+        try {
+          localStorage.removeItem(STORAGE.editorPrefs);
+          localStorage.removeItem(STORAGE.autosaveDelay);
+          localStorage.removeItem(STORAGE.formatOnSave);
+          localStorage.removeItem(STORAGE.emmetEnabled);
+          localStorage.removeItem(STORAGE.activeLine);
+          localStorage.removeItem(STORAGE.bracketMatching);
+          localStorage.removeItem(STORAGE.jsLint);
+          localStorage.removeItem(STORAGE.jsonLint);
+          localStorage.removeItem(STORAGE.debug);
+        } catch {}
+        toast('Editor prefs reset — reloading', 'success');
+        setTimeout(() => location.reload(), 600);
       }
     );
   }
@@ -2855,7 +3498,7 @@ wireThemeMediaQuery();
   function confirmClearLocalCache() {
     confirmModal(
       'Clear local cache?',
-      'All offline copies of your projects will be removed from this browser. Server data is not affected.',
+      'All offline copies of your projects (projects, files, versions, folders) will be removed from this browser. Server data is not affected.',
       'Clear cache',
       true,
       async () => {
@@ -2865,7 +3508,7 @@ wireThemeMediaQuery();
             const dbs = await indexedDB.databases();
             for (const db of dbs) if (db.name) indexedDB.deleteDatabase(db.name);
           } else {
-            indexedDB.deleteDatabase('folio');
+            indexedDB.deleteDatabase(DB_NAME);
           }
         } catch {}
         hideLoading();
@@ -2878,19 +3521,90 @@ wireThemeMediaQuery();
   function confirmResetSettings() {
     confirmModal(
       'Reset all settings?',
-      'All app preferences will be wiped. You\'ll stay signed in.',
+      'All app preferences will be wiped including pinned projects and recent searches. You\'ll stay signed in.',
       'Reset',
       true,
       () => {
         try {
-          Object.values(STORAGE).forEach(k => {
-            if (k && k.startsWith('folio.') && k !== STORAGE.session && k !== STORAGE.user) {
-              localStorage.removeItem(k);
-            }
-          });
+          const keysToReset = [
+            STORAGE.theme, STORAGE.pageScale, STORAGE.editorPrefs, STORAGE.reducedMotion,
+            STORAGE.fontFamily, STORAGE.formatOnSave, STORAGE.emmetEnabled, STORAGE.activeLine,
+            STORAGE.bracketMatching, STORAGE.autosaveDelay, STORAGE.jsLint, STORAGE.jsonLint,
+            STORAGE.debug, STORAGE.autoClean, STORAGE.autoCleanDays, STORAGE.guestBannerDismissed,
+            STORAGE.pinnedProjects, STORAGE.recentSearches, STORAGE.lastTab,
+            STORAGE.lastProject, STORAGE.lastFile, STORAGE.previewMode,
+          ];
+          keysToReset.forEach(k => { try { localStorage.removeItem(k); } catch {} });
         } catch {}
         toast('Settings reset', 'success');
         setTimeout(() => location.reload(), 600);
+      }
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // DATABASE ACTIONS
+  // ═══════════════════════════════════════════════════════════
+
+  async function exportDatabase() {
+    try {
+      const conn = await new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+
+      const dump = {};
+      for (const store of DB_STORES) {
+        if (!conn.objectStoreNames.contains(store)) continue;
+        const tx = conn.transaction(store, 'readonly').objectStore(store);
+        dump[store] = await new Promise((resolve) => {
+          const r = tx.getAll();
+          r.onsuccess = () => resolve(r.result || []);
+          r.onerror = () => resolve([]);
+        });
+      }
+      conn.close();
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        dbVersion: DB_VERSION,
+        stores: dump,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `folio-db-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('Database exported', 'success');
+    } catch (err) {
+      toast('Export failed: ' + (err.message || 'error'), 'error');
+    }
+  }
+
+  function confirmResetDB() {
+    confirmModal(
+      'Reset local database?',
+      'Deletes all local data (projects, files, versions, folders, sync queue). Server data is not affected. Cannot be undone.',
+      'Reset DB',
+      true,
+      async () => {
+        showLoading('Resetting database', '');
+        try {
+          if (indexedDB.databases) {
+            const dbs = await indexedDB.databases();
+            for (const db of dbs) if (db.name) indexedDB.deleteDatabase(db.name);
+          } else {
+            indexedDB.deleteDatabase(DB_NAME);
+          }
+        } catch {}
+        hideLoading();
+        toast('Database reset — reloading', 'success');
+        setTimeout(() => location.reload(), 800);
       }
     );
   }
@@ -2913,9 +3627,24 @@ wireThemeMediaQuery();
     if (!S.swRegistration) { toast('Service worker not registered', 'warning'); return; }
     try {
       await S.swRegistration.update();
-      if (S.swRegistration.waiting) toast('Update available — reload to apply', 'info', 4000);
-      else toast('You\'re up to date', 'success');
+      if (S.swRegistration.waiting) {
+        toast('Update available — reload to apply', 'info', 4000);
+        renderSection('pwa');
+      } else {
+        toast('You\'re up to date', 'success');
+      }
     } catch { toast('Update check failed', 'error'); }
+  }
+
+  function applyUpdateNow() {
+    const reg = S.swRegistration;
+    if (!reg?.waiting) return;
+    try {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      window.location.reload();
+    } catch {
+      window.location.reload();
+    }
   }
 
   function confirmClearCache() {
@@ -3037,23 +3766,27 @@ wireThemeMediaQuery();
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SYNC QUEUE (real IDB store from index.html)
+  // SYNC QUEUE (fixed: no hardcoded v2)
   // ═══════════════════════════════════════════════════════════
 
   async function readSyncQueue() {
     return new Promise((resolve) => {
       try {
-        const req = indexedDB.open('folio', 2);
+        const req = indexedDB.open(DB_NAME);
         req.onerror = () => resolve([]);
         req.onsuccess = () => {
           const conn = req.result;
-          if (!conn.objectStoreNames.contains('syncQueue')) { resolve([]); return; }
+          if (!conn.objectStoreNames.contains('syncQueue')) { conn.close(); resolve([]); return; }
           try {
             const tx = conn.transaction('syncQueue', 'readonly').objectStore('syncQueue');
             const all = tx.getAll();
-            all.onsuccess = () => resolve(all.result || []);
-            all.onerror = () => resolve([]);
-          } catch { resolve([]); }
+            all.onsuccess = () => {
+              const res = all.result || [];
+              conn.close();
+              resolve(res);
+            };
+            all.onerror = () => { conn.close(); resolve([]); };
+          } catch { conn.close(); resolve([]); }
         };
       } catch { resolve([]); }
     });
@@ -3061,10 +3794,26 @@ wireThemeMediaQuery();
 
   async function updateSyncQueueInfo() {
     const info = $('syncQueueInfo');
+    const details = $('syncQueueDetails');
     if (!info) return;
     const items = await readSyncQueue();
-    if (items.length === 0) info.textContent = 'Sync queue is empty.';
-    else info.textContent = `${items.length} pending item${items.length === 1 ? '' : 's'} waiting to sync.`;
+    if (items.length === 0) {
+      info.textContent = 'Sync queue is empty.';
+      if (details) details.innerHTML = '';
+    } else {
+      info.textContent = `${items.length} pending item${items.length === 1 ? '' : 's'} waiting to sync.`;
+      if (details) {
+        details.innerHTML = items.slice(0, 5).map(it => `
+          <div class="sync-queue-item">
+            <span class="sq-path">${escapeHTML(it.path || it.action || 'unknown')}</span>
+            <span class="sq-time">${timeAgo(it.ts)}</span>
+          </div>
+        `).join('');
+        if (items.length > 5) {
+          details.innerHTML += `<div class="field-hint" style="margin-top:4px;">+ ${items.length - 5} more</div>`;
+        }
+      }
+    }
   }
 
   async function drainSync() {
@@ -3100,12 +3849,14 @@ wireThemeMediaQuery();
       true,
       async () => {
         try {
-          const req = indexedDB.open('folio', 2);
+          const req = indexedDB.open(DB_NAME);
           req.onsuccess = () => {
             const conn = req.result;
+            if (!conn.objectStoreNames.contains('syncQueue')) { conn.close(); return; }
             const tx = conn.transaction('syncQueue', 'readwrite');
             tx.objectStore('syncQueue').clear();
             tx.oncomplete = () => {
+              conn.close();
               toast('Sync queue cleared', 'success');
               updateSyncQueueInfo();
             };
@@ -3116,7 +3867,45 @@ wireThemeMediaQuery();
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SECTION SEARCH (Cmd/Ctrl+K)
+  // COPY DEBUG INFO
+  // ═══════════════════════════════════════════════════════════
+
+  function copyDebugInfo() {
+    const info = [
+      `Folio Settings Debug`,
+      `-------------------`,
+      `Date: ${new Date().toISOString()}`,
+      `DB version: ${DB_VERSION}`,
+      `Actual DB version: ${S.dbInfo?.actual ?? 'unknown'}`,
+      `User: ${S.isAuthed ? 'signed in' : 'guest'}`,
+      `UID: ${S.uid || '—'}`,
+      `SW: ${S.swRegistration?.active ? 'active' : S.swRegistration?.waiting ? 'waiting' : 'none'}`,
+      `SW version: ${S.swVersion || '—'}`,
+      `Storage: ${formatBytes(S.storageEstimate?.usage || 0)}`,
+      `Projects: ${S.projects.length}`,
+      `Preferences:`,
+      ...Object.entries(S.prefs).map(([k, v]) => `  ${k}: ${v}`),
+    ].join('\n');
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(info).then(() => toast('Debug info copied', 'success'));
+        return;
+      }
+    } catch {}
+    const ta = document.createElement('textarea');
+    ta.value = info;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); toast('Debug info copied', 'success'); }
+    catch { toast('Copy failed', 'error'); }
+    document.body.removeChild(ta);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SEARCH (Cmd+K)
   // ═══════════════════════════════════════════════════════════
 
   function openSearchOverlay() {
@@ -3202,6 +3991,7 @@ wireThemeMediaQuery();
       }
     });
     $('btnSectionSearch').addEventListener('click', openSearchOverlay);
+    $('bellBtn')?.addEventListener('click', () => window.open('/notifications', '_blank', 'noopener'));
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
