@@ -28,7 +28,7 @@
   } catch (e) {}
 })();
 </script>
-
+<script src="/fcm-client.js" defer></script>
 <style>
 /* ═══════════════════════════════════════════════════════════
    THEME
@@ -2515,29 +2515,58 @@ svg { display: block; }
   }
 
   async function handlePushToggle(btn) {
-    if (!('Notification' in window)) { toast('Push not supported', 'warning'); return; }
-    if (Notification.permission === 'denied') { toast('Notifications blocked in browser', 'error'); return; }
+  if (!('Notification' in window)) { toast('Push not supported', 'warning'); return; }
+  if (Notification.permission === 'denied') { toast('Notifications blocked in browser', 'error'); return; }
 
+  const current = S.notificationSettings?.pushEnabled || false;
+  const next = !current;
+
+  // ── Disabling: unsubscribe FCM first, then update server ──
+  if (!next) {
+    try {
+      if (window.FOLIO?.fcm?.unsubscribe) {
+        await window.FOLIO.fcm.unsubscribe().catch(() => {});
+      }
+      const res = await apiFetch(API_NOTIFY + '?action=update_settings', {
+        method: 'POST',
+        body: JSON.stringify({ pushEnabled: false }),
+      });
+      if (!res.ok || !res.data?.success) throw new Error('Save failed');
+      S.notificationSettings = res.data.settings;
+      toast('Push disabled', 'success', 1400);
+      renderSection('notifications');
+    } catch (err) {
+      toast(err.message || 'Couldn\'t disable push', 'error');
+    }
+    return;
+  }
+
+  // ── Enabling: permission → waitReady → subscribe → update server ──
+  try {
     if (Notification.permission === 'default') {
       const result = await Notification.requestPermission();
       if (result !== 'granted') { toast('Permission not granted', 'warning'); return; }
     }
 
-    const current = S.notificationSettings?.pushEnabled || false;
-    const next = !current;
-    try {
-      const res = await apiFetch(API_NOTIFY + '?action=update_settings', {
-        method: 'POST',
-        body: JSON.stringify({ pushEnabled: next }),
-      });
-      if (!res.ok || !res.data?.success) throw new Error('Save failed');
-      S.notificationSettings = res.data.settings;
-      toast(next ? 'Push enabled' : 'Push disabled', 'success', 1400);
-      renderSection('notifications');
-    } catch {
-      toast('Couldn\'t update push setting', 'error');
+    const ready = await window.FOLIO?.fcm?.waitReady?.(3000);
+    if (!ready) {
+      throw new Error('Notifications not available on this device');
     }
+    await window.FOLIO.fcm.subscribe();
+
+    const res = await apiFetch(API_NOTIFY + '?action=update_settings', {
+      method: 'POST',
+      body: JSON.stringify({ pushEnabled: true }),
+    });
+    if (!res.ok || !res.data?.success) throw new Error('Save failed');
+    S.notificationSettings = res.data.settings;
+    toast('Push enabled', 'success', 1400);
+    renderSection('notifications');
+  } catch (err) {
+    toast(err.message || 'Couldn\'t enable push', 'error');
+    btn.classList.toggle('on', current); // revert UI
   }
+}
 
   async function handleNotifToggle(key, btn) {
     if (!S.notificationSettings) return;

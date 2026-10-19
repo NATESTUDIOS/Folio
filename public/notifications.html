@@ -1475,10 +1475,11 @@ svg { display: block; }
     btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:0.4rem;vertical-align:middle;"></span>Requesting…';
 
     try {
-      if (!isFCMSupported()) {
-        throw new Error('Push notifications aren\'t available on this page yet.');
-      }
-      await window.FOLIO.fcm.subscribe();
+  const ready = await window.FOLIO?.fcm?.waitReady?.(3000);
+  if (!ready) {
+    throw new Error('Push notifications aren\'t available on this page yet.');
+  }
+  await window.FOLIO.fcm.subscribe();
       STATE.fcmSubscribed = true;
       toast('Notifications enabled', 'success');
       clearStatusError();
