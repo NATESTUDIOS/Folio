@@ -11,9 +11,9 @@ import {
 // DELIVERY MODEL
 // =========================================================================
 // FCM-only. No Web Push, no VAPID keys on the backend.
-// The FCM VAPID key (BKKQ5...) is used *by the browser* in fcm-client.js
-// to call getToken() — it is not a backend concern.
-// Backend only needs FIREBASE_SERVICE_KEY + FIREBASE_DB_URL.
+// Broadcasts use an FCM topic ("folio-general") that every device is
+// subscribed to server-side inside handleSubscribe(). No frontend change
+// required.
 
 // =========================================================================
 // CONSTANTS
@@ -30,9 +30,14 @@ const NOTIFICATIONS_PATH = "folio/Notifications";
 const SETTINGS_PATH = "folio/NotificationSettings";
 const HISTORY_PATH = "folio/NotificationHistory";
 
+// FCM topic every device is subscribed to at subscribe() time.
+// Used for broadcast announcements (maintenance, new features, etc.).
+const GENERAL_TOPIC = "folio-general";
+
 const NOTIFICATION_HISTORY_LIMIT = 50;
 const NOTIFICATION_LIMIT_BUFFER = 10;
 const SEND_CONCURRENCY = 5;
+const BROADCAST_HISTORY_CONCURRENCY = 10;
 
 // =========================================================================
 // RATE LIMITS
@@ -52,6 +57,8 @@ const RATE_LIMITS = {
   create:         { max: 500,  window: 60 * 60 * 1000 },
   authBridge:     { max: 200,  window: 60 * 60 * 1000 },
   config:         { max: 120,  window: 60 * 60 * 1000 },
+  broadcast:      { max: 20,   window: 60 * 60 * 1000 },
+  topicInfo:      { max: 30,   window: 60 * 60 * 1000 },
 };
 
 async function checkRateLimit(identifier, action) {
@@ -224,11 +231,6 @@ async function runWithConcurrency(items, concurrency, fn) {
 // FCM TOKEN VALIDATION
 // =========================================================================
 
-/**
- * FCM v1 tokens are long (~80-200 chars) and contain a colon
- * separating the token ID from the token secret.
- * This is the ONLY token type this backend accepts.
- */
 function isValidFcmToken(token) {
   if (typeof token !== "string") return false;
   if (token.length < 80) return false;
@@ -236,8 +238,15 @@ function isValidFcmToken(token) {
   return true;
 }
 
+function isValidTopicName(topic) {
+  if (typeof topic !== "string") return false;
+  if (topic.length === 0 || topic.length > 900) return false;
+  // FCM topic names: letters, numbers, -, _, ., ~, %, :
+  return /^[a-zA-Z0-9._~%:-]+$/.test(topic);
+}
+
 // =========================================================================
-// FCM DELIVERY
+// FCM DELIVERY — single token
 // =========================================================================
 
 function buildDataMessage({ title, body, imageUrl, link, notificationId, type, userId, extra }) {
@@ -267,8 +276,6 @@ async function sendFcmOne(message, token) {
     const code = err?.code || "";
     const msg = err?.message || "";
 
-    // Token is dead — user uninstalled, cleared data, or unsubscribed at OS level.
-    // Flag it so the caller prunes it from Firebase.
     if (
       code === "messaging/registration-token-not-registered" ||
       code === "messaging/invalid-registration-token" ||
@@ -281,6 +288,77 @@ async function sendFcmOne(message, token) {
 
     log("notify.fcm_send_failed", { code, message: msg });
     return { success: false, error: msg };
+  }
+}
+
+// =========================================================================
+// FCM DELIVERY — topic (broadcast)
+// =========================================================================
+
+async function sendFcmToTopic(message, topic) {
+  try {
+    const id = await messaging.send({ ...message, topic });
+    return { success: true, messageId: id };
+  } catch (err) {
+    const code = err?.code || "";
+    const msg = err?.message || "";
+
+    // Topic with no subscribers yet — not a fatal error
+    if (
+      code === "messaging/invalid-argument" &&
+      (msg.includes("topic") || msg.includes("Topic"))
+    ) {
+      return { success: false, reason: "no_subscribers", error: msg };
+    }
+
+    log("notify.fcm_topic_send_failed", { topic, code, message: msg });
+    return { success: false, error: msg };
+  }
+}
+
+// =========================================================================
+// FCM TOPIC SUBSCRIPTION
+// =========================================================================
+
+async function subscribeTokenToTopic(token, topic = GENERAL_TOPIC) {
+  if (!isValidFcmToken(token)) {
+    return { success: false, error: "Invalid token" };
+  }
+  if (!isValidTopicName(topic)) {
+    return { success: false, error: "Invalid topic" };
+  }
+  try {
+    await messaging.subscribeToTopic(token, topic);
+    log("notify.topic_subscribed", { topic });
+    return { success: true };
+  } catch (err) {
+    log("notify.topic_subscribe_failed", {
+      topic,
+      code: err?.code,
+      message: err?.message,
+    });
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+async function unsubscribeTokenFromTopic(token, topic = GENERAL_TOPIC) {
+  if (!isValidFcmToken(token)) {
+    return { success: false, error: "Invalid token" };
+  }
+  if (!isValidTopicName(topic)) {
+    return { success: false, error: "Invalid topic" };
+  }
+  try {
+    await messaging.unsubscribeFromTopic(token, topic);
+    log("notify.topic_unsubscribed", { topic });
+    return { success: true };
+  } catch (err) {
+    log("notify.topic_unsubscribe_failed", {
+      topic,
+      code: err?.code,
+      message: err?.message,
+    });
+    return { success: false, error: err?.message || String(err) };
   }
 }
 
@@ -512,7 +590,6 @@ async function registerDeviceToken(userId, token, deviceId) {
   const existing = snap.exists() ? snap.val() : {};
   const tokens = existing.tokens || {};
 
-  // Prune any duplicate token values under other keys
   for (const [k, v] of Object.entries(tokens)) {
     if (k !== dk && v?.token === token.trim()) {
       delete tokens[k];
@@ -590,7 +667,7 @@ async function removeExpiredToken(userId, deviceKey) {
 }
 
 // =========================================================================
-// SEND — FCM only
+// SEND — single user (FCM token)
 // =========================================================================
 
 async function sendNotificationWithPush(userId, data) {
@@ -654,6 +731,213 @@ async function sendNotificationWithPush(userId, data) {
 }
 
 // =========================================================================
+// BROADCAST — one FCM call to the topic
+// =========================================================================
+
+/**
+ * Sends one FCM message to the `folio-general` topic.
+ * Every device subscribed to the topic receives it. One HTTP call to FCM
+ * regardless of user count.
+ *
+ * Optionally writes a history entry per user so the bell panel shows it.
+ */
+async function handleBroadcast(req, res, reqId) {
+  if (!requireAdmin(req, res)) return;
+  if (!(await enforceRate(res, "broadcast", `admin_${hashIp(getClientIp(req))}`))) return;
+
+  const {
+    title, body, type = "system", priority = "normal",
+    link, imageUrl,
+    actionType, actionUrl, actionPayload,
+    topic = GENERAL_TOPIC,
+    storeInHistory = false,
+  } = req.body || {};
+
+  if (!title || !body) {
+    return res.status(400).json({ success: false, error: "Missing title or body" });
+  }
+  if (!NOTIFICATION_TYPES.includes(type)) {
+    return res.status(400).json({ success: false, error: `Invalid type: ${type}` });
+  }
+  if (!isValidTopicName(topic)) {
+    return res.status(400).json({ success: false, error: "Invalid topic name" });
+  }
+
+  let parsedPayload = null;
+  if (actionPayload) {
+    try {
+      parsedPayload = typeof actionPayload === "string"
+        ? JSON.parse(actionPayload)
+        : actionPayload;
+    } catch {
+      return res.status(400).json({ success: false, error: "actionPayload must be valid JSON" });
+    }
+  }
+
+  const notificationId = generateNotificationId();
+
+  const fcmMessage = buildDataMessage({
+    title,
+    body,
+    imageUrl,
+    link,
+    notificationId,
+    type,
+    userId: null,
+    extra: JSON.stringify({
+      type,
+      notificationId,
+      action: actionType
+        ? { type: actionType, url: actionUrl || null, payload: parsedPayload }
+        : null,
+      broadcast: true,
+    }),
+  });
+
+  const fcmResult = await sendFcmToTopic(fcmMessage, topic);
+
+  let historyResult = { written: 0 };
+  if (storeInHistory) {
+    historyResult = await writeBroadcastHistory({
+      notificationId,
+      title,
+      body,
+      type,
+      priority,
+      imageUrl,
+      link,
+      action: actionType
+        ? { type: actionType, url: actionUrl || null, payload: parsedPayload }
+        : null,
+    });
+  }
+
+  log("notify.broadcast_complete", {
+    reqId,
+    notificationId,
+    topic,
+    fcm: fcmResult.success,
+    historyWritten: historyResult.written,
+    storeInHistory,
+  });
+
+  return res.status(200).json({
+    success: true,
+    notificationId,
+    topic,
+    fcm: fcmResult,
+    history: historyResult,
+  });
+}
+
+async function writeBroadcastHistory({
+  notificationId, title, body, type, priority, imageUrl, link, action,
+}) {
+  let written = 0;
+  try {
+    const snap = await db.ref(NOTIFICATIONS_PATH).once("value");
+    if (!snap.exists()) return { written: 0 };
+
+    const usersWithTokens = [];
+    snap.forEach(userChild => {
+      const tokens = userChild.val()?.tokens || {};
+      if (Object.keys(tokens).length > 0) {
+        usersWithTokens.push(userChild.key);
+      }
+    });
+
+    const record = (uid) => ({
+      id: notificationId,
+      userId: uid,
+      type,
+      title,
+      body,
+      priority,
+      category: "",
+      icon: null,
+      read: false,
+      dismissed: false,
+      createdAt: Date.now(),
+      expiresAt: null,
+      action: action || null,
+      source: { type: "system", id: null },
+      metadata: { broadcast: true },
+      imageUrl: imageUrl || null,
+      link: link || null,
+      pushSent: true,
+      pushDelivered: true,
+      pushDeliveredAt: Date.now(),
+      pushOpened: false,
+    });
+
+    const CHUNK = BROADCAST_HISTORY_CONCURRENCY;
+    for (let i = 0; i < usersWithTokens.length; i += CHUNK) {
+      const slice = usersWithTokens.slice(i, i + CHUNK);
+      await Promise.allSettled(
+        slice.map(uid =>
+          db.ref(`${HISTORY_PATH}/${uid}/${notificationId}`).set(record(uid))
+        )
+      );
+      written += slice.length;
+      slice.forEach(uid => {
+        invalidateCache(`notif:list`, uid);
+        invalidateCache(`notif:stats`, uid);
+      });
+      if (i + CHUNK < usersWithTokens.length) {
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+  } catch (err) {
+    log("notify.broadcast_history_failed", { notificationId, message: err.message });
+  }
+  return { written };
+}
+
+// =========================================================================
+// TOPIC INFO — inspect subscribers
+// =========================================================================
+
+async function handleTopicInfo(req, res, reqId) {
+  if (!requireAdmin(req, res)) return;
+  if (!(await enforceRate(res, "topicInfo", `admin_${hashIp(getClientIp(req))}`))) return;
+
+  const topic = String(req.query?.topic || GENERAL_TOPIC);
+  if (!isValidTopicName(topic)) {
+    return res.status(400).json({ success: false, error: "Invalid topic name" });
+  }
+
+  const snap = await db.ref(NOTIFICATIONS_PATH).once("value");
+  let users = 0;
+  let devices = 0;
+  const subscribers = [];
+
+  if (snap.exists()) {
+    snap.forEach(userChild => {
+      const tokens = userChild.val()?.tokens || {};
+      const tokenCount = Object.keys(tokens).length;
+      if (tokenCount > 0) {
+        users++;
+        devices += tokenCount;
+        subscribers.push({
+          uid: userChild.key,
+          deviceCount: tokenCount,
+          lastUpdated: userChild.val()?.lastUpdated || null,
+        });
+      }
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    topic,
+    usersSubscribed: users,
+    devicesSubscribed: devices,
+    note: "Counts are based on users with at least one registered FCM token. Topic subscriptions are added at subscribe() time.",
+    subscribers: subscribers.slice(0, 100),
+  });
+}
+
+// =========================================================================
 // AUTH BRIDGE
 // =========================================================================
 
@@ -709,6 +993,7 @@ async function handleConfig(req, res, reqId) {
   return res.status(200).json({
     success: true,
     fcmEnabled: !!messaging,
+    topic: GENERAL_TOPIC,
   });
 }
 
@@ -719,9 +1004,20 @@ async function handleSubscribe(req, res, reqId) {
 
   const { token, deviceId } = req.body || {};
   if (!token) return res.status(400).json({ success: false, error: "Missing token" });
+
   try {
     const { deviceKey } = await registerDeviceToken(user.uid, token, deviceId || null);
-    return res.status(200).json({ success: true, deviceKey, kind: "fcm" });
+
+    // Server-side topic subscription — no frontend change required.
+    const topicResult = await subscribeTokenToTopic(token, GENERAL_TOPIC);
+
+    return res.status(200).json({
+      success: true,
+      deviceKey,
+      kind: "fcm",
+      topic: GENERAL_TOPIC,
+      topicSubscribed: topicResult.success,
+    });
   } catch (err) {
     return res.status(400).json({ success: false, error: err.message });
   }
@@ -732,7 +1028,14 @@ async function handleUnsubscribe(req, res, reqId) {
   if (!user) return;
   if (!(await enforceRate(res, "unsubscribe", `uid_${user.uid}`))) return;
 
-  const { deviceId } = req.body || {};
+  const { deviceId, token } = req.body || {};
+
+  // If the client sends the token, remove it from the topic first.
+  // Falls back gracefully if the client only sends deviceId.
+  if (typeof token === "string" && token.length > 0) {
+    await unsubscribeTokenFromTopic(token, GENERAL_TOPIC);
+  }
+
   const r = await unregisterDeviceToken(user.uid, deviceId || null);
   return res.status(200).json({ success: true, removed: r.removed });
 }
@@ -936,6 +1239,7 @@ async function handleHealth(req, res, reqId) {
     success: true,
     status: "ok",
     delivery: "fcm",
+    topic: GENERAL_TOPIC,
     types: NOTIFICATION_TYPES,
     settings: Object.keys(DEFAULT_SETTINGS),
     cache: getCacheStats(),
@@ -985,6 +1289,8 @@ export default async function handler(req, res) {
 
     // Admin / bridge endpoints
     if (method === "POST" && action === "create")          return await handleCreate(req, res, reqId);
+    if (method === "POST" && action === "broadcast")       return await handleBroadcast(req, res, reqId);
+    if (method === "GET"  && action === "topic-info")      return await handleTopicInfo(req, res, reqId);
     if (method === "POST" && action === "auth_signup")     return await handleAuthSignup(req, res, reqId);
     if (method === "POST" && action === "auth_logout")     return await handleAuthLogout(req, res, reqId);
     if (method === "POST" && action === "auth_ban")        return await handleAuthBan(req, res, reqId);
