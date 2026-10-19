@@ -384,13 +384,17 @@
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
   </defs>
 </svg>
-
+  
 <script src="/install.js" defer></script>
 <script src="/update.js" defer></script>
+<script src="/fcm-client.js" defer></script>
+<script src="/notifications.js" defer></script>
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
       navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(function () {});
+      navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" })
+        .catch(function (err) { console.warn("[SW] FCM registration failed:", err); });
     });
   }
 </script>
@@ -430,6 +434,7 @@ const SETUP_PAGES = [
   { id: 'projects', title: 'Projects', desc: 'All your projects', icon: 'i-folder', href: '/projects' },
   { id: 'tools', title: 'Tools', desc: 'Web-dev utilities', icon: 'i-code', href: '/tools' },
   { id: 'analytics', title: 'Analytics', desc: 'Usage across projects', icon: 'i-hash', href: '/analytics' },
+  { id: 'notifications', title: 'Notifications', desc: 'Alerts and activity', icon: 'i-info', action: 'open-notifications', requiresAuth: true },
   { id: 'profile', title: 'Profile', desc: 'Your public profile', icon: 'i-edit', href: '/profile', requiresAuth: true },
   { id: 'settings', title: 'Settings', desc: 'App configuration', icon: 'i-more', href: '/settings' },
   { id: 'offline', title: 'Offline page', desc: 'Preview offline fallback', icon: 'i-file-text', href: '/offline' },
@@ -2699,6 +2704,22 @@ function openSetupDialog() {
       class: 'setup-row', type: 'button',
       onclick: () => {
         if (requiresAuth) { toast('Sign in to access this page', 'info'); closeSheet(); return; }
+        if (page.action === 'open-notifications') {
+  closeSheet();
+  setTimeout(() => {
+    try {
+      if (window.FOLIO?.notifications?.open) {
+        window.FOLIO.notifications.open();
+      } else {
+        window.location.href = '/notifications';
+      }
+    } catch (e) {
+      console.warn('[Folio] could not open notifications', e);
+      window.location.href = '/notifications';
+    }
+  }, 250);
+  return;
+}
         closeSheet();
         window.location.href = page.href;
       },
