@@ -312,19 +312,29 @@ svg { display: block; }
 .header-logo-badge {
   width: 28px;
   height: 28px;
+  flex-shrink: 0;          /* don't shrink in a flex row */
   border-radius: 8px;
   background: var(--theme-surface-elevated);
   border: 1px solid var(--theme-glass-border);
   overflow: hidden;
-  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--theme-primary);
 }
-.header-logo-badge img { width: 100%; height: 100%; object-fit: cover; }
-.header-logo-badge svg { width: 14px; height: 14px; stroke-width: 2; }
 
+.header-logo-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;          /* remove inline baseline gap */
+}
+
+.header-logo-badge svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+}
 .page-title {
   font-size: 18px;
   font-weight: 800;
@@ -356,7 +366,12 @@ svg { display: block; }
 @media (min-width: 900px) {
   .search-wrap { display: flex; }
 }
-
+.search-trigger {
+  display: none;
+}
+@media (max-width: 899px) {
+  .search-trigger { display: flex; }
+}
 .search-icon {
   position: absolute;
   left: 10px;
@@ -723,7 +738,54 @@ svg { display: block; }
   gap: 2px;
 }
 .project-stats svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.2; }
-
+/* ═══════════════════════════════════════════════════════════
+   CARD LAYOUT — row alignment + edit button
+   ═══════════════════════════════════════════════════════════ */
+.projects-container {
+  grid-auto-rows: min-content;
+}
+.project-card {
+  min-height: 96px;
+}
+.project-card-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  align-self: center;
+  margin-right: -4px;
+}
+.project-edit-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  transition: all 0.15s var(--ease);
+  flex-shrink: 0;
+}
+.project-edit-btn:hover {
+  color: var(--theme-primary);
+  background: var(--theme-primary-soft);
+}
+.project-edit-btn svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+}
+.project-name {
+  font-size: 13px;
+  line-height: 1.3;
+}
+@media (max-width: 639px) {
+  .project-card-actions {
+    gap: 0;
+    margin-right: -6px;
+  }
+}
 /* Mobile list mode */
 @media (max-width: 639px) {
   .project-card {
@@ -731,6 +793,7 @@ svg { display: block; }
     flex-direction: row;
     align-items: center;
     gap: 10px;
+    min-height: 0; 
   }
   .project-card-header {
     flex: 1;
@@ -1786,10 +1849,10 @@ svg { display: block; }
 
       <header class="page-header">
         <a class="header-logo" href="/">
-          <div class="header-logo-badge">
-            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          </div>
-        </a>
+  <div class="header-logo-badge">
+    <img src="/icons/icon-192.png" alt="Folio">
+  </div>
+</a>
         <h1 class="page-title">Projects</h1>
         <span class="page-count" id="pageCount">—</span>
         <div class="header-spacer"></div>
@@ -1801,7 +1864,9 @@ svg { display: block; }
             <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-
+<button class="icon-btn search-trigger" id="searchTrigger" type="button" aria-label="Search">
+  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+</button>
         <button class="sort-btn" id="sortBtn" type="button">
           <svg viewBox="0 0 24 24"><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="15" y2="18"/></svg>
           <span class="label" id="sortLabel">Modified</span>
@@ -1871,6 +1936,23 @@ svg { display: block; }
     </div>
   </div>
 </div>
+<!-- ═══════════ SEARCH SHEET ═══════════ -->
+<div class="fullscreen-overlay" id="searchOverlay" role="dialog" aria-modal="true">
+  <div class="overlay-inner" style="max-width:600px;height:auto;">
+    <div class="overlay-header">
+      <div style="flex:1;min-width:0;">
+        <div class="overlay-title">Search</div>
+      </div>
+      <button class="overlay-close" id="searchSheetClose" aria-label="Close">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="overlay-body">
+      <input class="input" id="searchSheetInput" type="text" placeholder="Search projects…" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+</div>
+
 
 <!-- ═══════════ ACTION MENU ═══════════ -->
 <div class="action-menu" id="actionMenu" role="dialog" aria-modal="true">
@@ -2602,40 +2684,49 @@ svg { display: block; }
     const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
 
     return `
-      <div class="project-card" data-pid="${escapeAttr(p.pid)}">
-        <div class="project-card-header">
-          <div class="project-icon" style="${iconBg}">${iconHTML}</div>
-          <div class="project-header-info">
-            <div class="project-name">${escapeHTML(p.name || 'Untitled project')}</div>
-            <div class="project-meta">
-              ${roleBadge}${liveBadge}
-              ${hasExpired ? `<span style="color:var(--theme-warning);display:inline-flex;align-items:center;gap:2px;">${svg('alertTriangle', 9, 2.4)}</span>` : ''}
-            </div>
-          </div>
-          <button class="project-more-btn" data-more="${escapeAttr(p.pid)}" aria-label="More actions">${svg('more', 13, 2.4)}</button>
+  <div class="project-card" data-pid="${escapeAttr(p.pid)}">
+    <div class="project-card-header">
+      <div class="project-icon" style="${iconBg}">${iconHTML}</div>
+      <div class="project-header-info">
+        <div class="project-name">${escapeHTML(p.name || 'Untitled project')}</div>
+        <div class="project-meta">
+          ${roleBadge}${liveBadge}
+          ${hasExpired ? `<span style="color:var(--theme-warning);display:inline-flex;align-items:center;gap:2px;">${svg('alertTriangle', 9, 2.4)}</span>` : ''}
         </div>
-        ${p.description ? `<div class="project-desc">${escapeHTML(p.description)}</div>` : ''}
-        ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
-        ${statsHTML ? `<div class="project-stats">${statsHTML}</div>` : ''}
       </div>
-    `;
+      <div class="project-card-actions">
+        <button class="project-edit-btn" data-edit="${escapeAttr(p.pid)}" aria-label="Open in editor" title="Open in editor">${svg('edit3', 12, 2.2)}</button>
+        <button class="project-more-btn" data-more="${escapeAttr(p.pid)}" aria-label="More actions" title="More">${svg('more', 13, 2.4)}</button>
+      </div>
+    </div>
+    ${p.description ? `<div class="project-desc">${escapeHTML(p.description)}</div>` : ''}
+    ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
+    ${statsHTML ? `<div class="project-stats">${statsHTML}</div>` : ''}
+  </div>
+`;
   }
 
   function bindProjectCardEvents() {
-    document.querySelectorAll('.project-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('[data-more]')) return;
-        goEditor(card.dataset.pid);
-      });
+  document.querySelectorAll('.project-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('[data-more]') || e.target.closest('[data-edit]')) return;
+      goDashboard(card.dataset.pid);
     });
-    document.querySelectorAll('[data-more]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const p = S.projects.find(proj => proj.pid === btn.dataset.more);
-        if (p) openActionMenu(p);
-      });
+  });
+  document.querySelectorAll('[data-edit]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      goEditor(btn.dataset.edit);
     });
-  }
+  });
+  document.querySelectorAll('[data-more]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const p = S.projects.find(proj => proj.pid === btn.dataset.more);
+      if (p) openActionMenu(p);
+    });
+  });
+}
 
   // ═══════════════════════════════════════════════════════════
   // ACTION MENU
@@ -2664,7 +2755,7 @@ svg { display: block; }
       </div>
       <div class="action-list">
         <button class="action-item" data-action="editor">${svg('edit3', 14, 2.2)}<span>Open in editor</span></button>
-        <button class="action-item" data-action="dashboard">${svg('chart', 14, 2.2)}<span>Open dashboard</span></button>
+        
         ${shareUrl ? `<button class="action-item" data-action="share">${svg('share', 14, 2.2)}<span>Copy share link</span></button>` : ''}
         <div class="action-divider"></div>
         <button class="action-item" data-action="download">${svg('download', 14, 2.2)}<span>Download .folio</span></button>
@@ -3351,16 +3442,44 @@ svg { display: block; }
       if (e.target === $('filtersOverlay')) closeFiltersOverlay();
     });
     $('newBtn').addEventListener('click', openCreateFlow);
+    // Search trigger → sheet (below 900px)
+$('searchTrigger')?.addEventListener('click', () => {
+  $('searchSheetInput').value = S.searchQuery;
+  $('searchOverlay').classList.add('active');
+  setTimeout(() => $('searchSheetInput').focus(), 250);
+});
+$('searchSheetClose')?.addEventListener('click', () => {
+  $('searchOverlay').classList.remove('active');
+});
+$('searchOverlay')?.addEventListener('click', (e) => {
+  if (e.target === $('searchOverlay')) $('searchOverlay').classList.remove('active');
+});
+$('searchSheetInput')?.addEventListener('input', debounce((e) => {
+  S.searchQuery = e.target.value.trim();
+  const inline = $('searchInput');
+  if (inline) inline.value = S.searchQuery;
+  const clearBtn = $('searchClear');
+  if (clearBtn) clearBtn.classList.toggle('visible', S.searchQuery.length > 0);
+  renderActiveFilters();
+  applyFiltersAndRender();
+}, 300));
+    $('searchSheetInput')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    $('searchOverlay').classList.remove('active');
+  }
+});
     $('sortBtn').addEventListener('click', openFiltersOverlay);
     wireSearch();
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        if ($('celebration').classList.contains('active')) return;
-        if ($('actionMenu').classList.contains('active')) return closeActionMenu();
-        if ($('modalOverlay').classList.contains('active')) return closeModal();
-        if ($('filtersOverlay').classList.contains('active')) return closeFiltersOverlay();
-      }
-    });
+  if (e.key === 'Escape') {
+    if ($('celebration').classList.contains('active')) return;
+    if ($('searchOverlay')?.classList.contains('active')) return $('searchOverlay').classList.remove('active');
+    if ($('actionMenu').classList.contains('active')) return closeActionMenu();
+    if ($('modalOverlay').classList.contains('active')) return closeModal();
+    if ($('filtersOverlay').classList.contains('active')) return closeFiltersOverlay();
+  }
+});
     const updateOnline = () => {
       S.online = navigator.onLine;
       $('offlineBanner').classList.toggle('visible', !S.online);
