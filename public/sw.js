@@ -145,34 +145,20 @@ self.addEventListener('install', (event) => {
 
     console.log(`[Folio SW] install complete — bulk=${bulkOk} fetched=${fetched} missed=${missed}`);
 
-    // Only broadcast SW_UPDATE_AVAILABLE if at least one currently-open
-    // window is already controlled by an OLDER worker. On first install
-    // (nothing is controlled yet), or on a same-bytes reinstall, stay quiet.
-    try {
-      const clients = await self.clients.matchAll({
-        type: 'window',
-        includeUncontrolled: true,
-      });
-      const controlledClients = clients.filter(c => !!c.controller);
-      if (controlledClients.length > 0) {
-        controlledClients.forEach(c => {
-          try {
-            c.postMessage({
-              type: 'SW_UPDATE_AVAILABLE',
-              version: CACHE_VERSION,
-              builtAt: CACHE_BUILT_AT,
-            });
-          } catch {}
-        });
-      }
-    } catch (err) {
-      console.warn('[Folio SW] update broadcast failed:', err);
-    }
-
-    // NOTE: intentionally NOT calling self.skipWaiting() here.
-    // The new worker must enter the "waiting" state so update.js can
-    // detect a genuine update and the user controls when to apply it.
-    // skipWaiting() is sent by update.js when the user taps "Update now".
+    // ── FIX ──
+    // Intentionally do NOT broadcast SW_UPDATE_AVAILABLE from install.
+    // The previous implementation broadcast on every install, which caused
+    // update.js to pop the "Update available" dialog repeatedly (once per
+    // install, and again each time update.js's polling ran).
+    //
+    // Detection of a waiting worker is now handled exclusively by
+    // update.js's checkNow() (which runs on boot, on focus, on online,
+    // and every 5 min). checkNow() correctly respects the user's postpone.
+    //
+    // We also intentionally do NOT call self.skipWaiting() — the new worker
+    // must stay in "waiting" so update.js can detect a real update and let
+    // the user choose when to apply it. skipWaiting() is sent by update.js
+    // when the user taps "Update now".
   })());
 });
 

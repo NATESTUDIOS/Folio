@@ -125,6 +125,15 @@
     try { sessionStorage.removeItem(POSTPONE_KEY); } catch {}
   }
 
+  // ── FIX ──
+  // Synchronous gate: any postpone (even versionless) blocks re-showing.
+  // This is checked by both checkNow() and the SW_UPDATE_AVAILABLE handler,
+  // so a postponed update can only re-appear after the tab is closed or
+  // after applyNow() explicitly clears the flag.
+  function hasPostponed() {
+    return !!readPostponed();
+  }
+
   /* Unsaved-work guard */
   function hasUnsavedWork() {
     try {
@@ -588,6 +597,11 @@
     // Suppress duplicate shows for a version the user already postponed.
     if (version && S.postponedVersion === version) return;
 
+    // ── FIX ──
+    // Also suppress if ANY postpone is active (covers the case where the
+    // version string is empty / couldn't be read from the waiting worker).
+    if (hasPostponed()) return;
+
     const ov = buildDialog();
     S.dialogEl = ov;
     S.dialogVersion = version || null;
@@ -604,24 +618,18 @@
     stopCountdown();
     if (!S.dialogEl) return;
 
-    // Remember the actual waiting worker's version so the same update
-    // doesn't immediately re-open on the next checkNow().
+    // ── FIX ──
+    // Set the postpone SYNCHRONOUSLY, before the async version probe.
+    // This guarantees hasPostponed() is true the instant the dialog closes,
+    // so a racing SW_UPDATE_AVAILABLE message or checkNow() tick can't
+    // re-open the dialog during the async gap.
     const waiting = S.reg?.waiting;
+    const fallbackVersion = S.dialogVersion || '';
+
     if (waiting) {
       S.postponed = true;
-      const fallbackVersion = S.dialogVersion || '';
-      S.postponedVersion = fallbackVersion;
-      // Refresh with the authoritative version string when available.
-      getWorkerVersion(waiting).then((ver) => {
-        if (ver) {
-          S.postponedVersion = ver;
-          writePostponed(ver);
-        } else if (fallbackVersion) {
-          writePostponed(fallbackVersion);
-        }
-      }).catch(() => {
-        if (fallbackVersion) writePostponed(fallbackVersion);
-      });
+      S.postponedVersion = fallbackVersion || 'pending';
+      writePostponed(S.postponedVersion);
     }
 
     const ov = S.dialogEl;
@@ -629,6 +637,16 @@
     ov.classList.remove('open');
     document.body.style.overflow = '';
     setTimeout(() => ov.remove(), 280);
+
+    // Async refine: overwrite with the authoritative version if we can read it.
+    if (waiting) {
+      getWorkerVersion(waiting).then((ver) => {
+        if (ver && ver !== S.postponedVersion) {
+          S.postponedVersion = ver;
+          writePostponed(ver);
+        }
+      }).catch(() => {});
+    }
 
     if (typeof window.toast === 'function') {
       toast('Update postponed — you can update from Settings', 'info', 3000);
@@ -746,6 +764,8 @@
           setProgress(100);
           showReloadOverlay();
           try { window.dispatchEvent(new CustomEvent('folio:update:applied')); } catch {}
+          // ── FIX ── clear the postpone flag so the next session starts clean
+          clearPostponed();
           setTimeout(() => location.reload(), CFG.reloadDelayMs);
         };
         navigator.serviceWorker.addEventListener('controllerchange', S.onCtrlHandler);
@@ -758,11 +778,15 @@
           setProgress(100);
           showReloadOverlay();
           try { window.dispatchEvent(new CustomEvent('folio:update:applied')); } catch {}
+          // ── FIX ── clear the postpone flag before reload
+          clearPostponed();
           location.reload();
         }, CFG.controllerTimeoutMs);
       } else {
         setProgress(100);
         showReloadOverlay();
+        // ── FIX ── clear postpone before reload
+        clearPostponed();
         setTimeout(() => location.reload(), CFG.reloadDelayMs);
       }
     } catch (err) {
@@ -782,6 +806,10 @@
 
   async function checkNow() {
     if (S.paused || S.applying || S.dialogEl) return;
+
+    // ── FIX ── synchronous postpone gate, checked before any network
+    if (hasPostponed()) return;
+
     try {
       const reg = S.reg || await navigator.serviceWorker.getRegistration();
       if (!reg) return;
@@ -796,9 +824,14 @@
 
       // Ask the waiting worker what version it is so we can compare against
       // any prior postpone.
-      const version = await getWorkerVersion(reg.waiting);
+      let version = await getWorkerVersion(reg.waiting);
+
+      // ── FIX ── fall back to the remembered version if the probe failed,
+      // so a postponed worker can never be mistaken for a new one.
+      if (!version) version = S.postponedVersion || '';
 
       if (version && S.postponedVersion === version) return;
+      if (hasPostponed()) return;
 
       show(version || null);
     } catch (err) {
@@ -830,12 +863,14 @@
         const d = event.data || {};
         if (d.type !== 'SW_UPDATE_AVAILABLE' && d.type !== 'UPDATE_AVAILABLE') return;
 
+        // ── FIX ── honour the postpone gate. Previously this branch
+        // unconditionally cleared S.postponedVersion, which caused the
+        // dialog to re-open on every SW install broadcast.
+        if (hasPostponed()) return;
+
         const ver = String(d.version || d.builtAt || '');
-        // Ignore if the user already postponed this exact version.
         if (ver && S.postponedVersion === ver) return;
 
-        S.postponed = false;
-        S.postponedVersion = null;
         show(ver || null);
       });
 
