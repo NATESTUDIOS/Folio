@@ -59,7 +59,6 @@ const CACHED_FILES = [
   '/update.js',
   '/fcm-client.js',
   '/notifications.js',
-  '/firebase-messaging-sw.js',
 
   // ── CodeMirror via deno.land ────────────────────────────
   'https://deno.land/x/codemirror_esm@v6.0.1/esm/codemirror/dist/index.js',
