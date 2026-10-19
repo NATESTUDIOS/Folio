@@ -265,7 +265,7 @@
           try {
             const opts = {
               body,
-              icon: '/icons/icon-192.png',
+              icon: '/icons/notif.png',
               badge: '/icons/icon-144.png',
               tag: data.notificationId || 'folio',
               data: {
