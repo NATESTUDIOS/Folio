@@ -2,7 +2,7 @@
 // Folio — Service Worker
 // ============================================================
 
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v1';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
 
@@ -21,10 +21,12 @@ const CACHED_FILES = [
   // ── HTML pages ──────────────────────────────────────────
   '/',
   '/index.html',
+  '/invite.html',
   '/app.css',
   '/register.html',
   '/profile.html',
   '/project.html',
+  '/projects.html',
   '/tools.html',
   '/settings.html',
   '/analytics.html',
