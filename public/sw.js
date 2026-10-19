@@ -23,6 +23,7 @@ const CACHED_FILES = [
   '/index.html',
   '/invite.html',
   '/app.css',
+  '/project.css',
   '/register.html',
   '/profile.html',
   '/project.html',
