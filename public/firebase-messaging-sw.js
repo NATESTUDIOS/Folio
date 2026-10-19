@@ -165,7 +165,7 @@ self.addEventListener('message', (event) => {
       try {
         await self.registration.showNotification('Folio FCM test', {
           body: 'This is a test from the FCM service worker.',
-          icon: '/icons/icon-192.png',
+          icon: '/icons/notif.png',
           badge: '/icons/icon-144.png',
           tag: 'fcm-test-' + Date.now(),
           data: { url: '/notifications', notificationId: 'test', type: 'system' },
