@@ -33,7 +33,7 @@ function normalizeFcmPayload(payload) {
   return {
     title:          d.title || 'Folio',
     body:           d.body || '',
-    icon:           d.icon || '/icons/icon-192.png',
+    icon:           d.icon || '/icons/notif.png',
     badge:          d.badge || '/icons/icon-144.png',
     image:          d.image || undefined,
     tag:            d.tag || d.notificationId || 'folio',
