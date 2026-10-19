@@ -577,7 +577,7 @@ svg { display: block; }
   min-height: 0;
 }
 @media (max-width: 1023px) {
-  .app-body { padding-bottom: var(--bottom-nav-h); padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom)); }
+  .app-body { padding-bottom: var(--safe-bottom); }
 }
 
 /* ── Sidebar ── */
@@ -706,8 +706,9 @@ svg { display: block; }
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  padding: 12px;
+  padding: 12px 12px calc(12px + var(--safe-bottom));
 }
+@media (min-width: 1024px) { .main-content { padding: 20px 20px calc(20px + var(--safe-bottom)); } }
 @media (min-width: 1024px) { .main-content { padding: 20px; } }
 .main-content::-webkit-scrollbar { width: 6px; }
 .main-content::-webkit-scrollbar-thumb { background: var(--theme-divider); border-radius: 3px; }
@@ -1150,7 +1151,7 @@ svg { display: block; }
    ═══════════════════════════════════════════════════════════ */
 .toast-container {
   position: fixed;
-  bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 10px);
+  bottom: calc(var(--safe-bottom) + 10px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
