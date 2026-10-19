@@ -1687,35 +1687,117 @@ async function checkProjectKeyOrRole(req, res, pid, minRole) {
 }
 
 async function handleDbSet(req, res, reqId) {
-  const { pid, key, value, data } = req.body || {};
+  const { pid, key, value, data, mode } = req.body || {};
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
-  if (!(await enforceRate(req, res, "dbSet", `pid_${pid}`))) return;
+
+  const rl = await checkRateLimit(`pid_${pid}`, "dbSet");
+  setRateHeaders(res, rl);
+  if (!rl.allowed) {
+    return res.status(429).json({
+      success: false,
+      error: "Rate limit exceeded",
+      retryAfter: rl.retryAfter,
+      reset: rl.reset,
+      rateLimit: {
+        limit: rl.limit,
+        remaining: rl.remaining,
+        reset: rl.reset,
+      },
+    });
+  }
+  const rateLimitMeta = {
+    limit: rl.limit,
+    remaining: rl.remaining,
+    reset: rl.reset,
+  };
 
   const access = await checkProjectKeyOrRole(req, res, pid, "editor");
   if (!access) return;
 
+  const LIMIT = 15 * 1024 * 1024; // 15 MB hard cap
+
   const payload = data !== undefined ? data : value;
   const serialized = JSON.stringify(payload ?? null);
-  if (serialized.length > 10 * 1024 * 1024) {
-    return res.status(413).json({ success: false, error: "Payload too large (10 MB max)" });
+  if (serialized.length > LIMIT) {
+    return res.status(413).json({
+      success: false,
+      error: "Payload too large (15 MB max)",
+      size: serialized.length,
+      limit: LIMIT,
+      rateLimit: rateLimitMeta,
+    });
   }
 
   const today = dayString();
   const uidForLog = access.uid === "api" ? null : access.uid;
+  const dbRef = db.ref(`projectData/${pid}`);
 
   try {
-    if (data !== undefined) {
-      await db.ref(`projectData/${pid}`).set(data);
+    if (data !== undefined && mode === "merge") {
+      const updates = {};
+      for (const [k, v] of Object.entries(data)) {
+        updates[k] = v;
+      }
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Nothing to merge",
+          rateLimit: rateLimitMeta,
+        });
+      }
+      await dbRef.update(updates);
+
+    } else if (data !== undefined) {
+      await dbRef.set(data);
+
     } else if (key !== undefined) {
-      await db.ref(`projectData/${pid}/${sanitizeFirebasePath(key)}`).set(value);
+      await dbRef.child(sanitizeFirebasePath(key)).set(value);
+
     } else {
-      return res.status(400).json({ success: false, error: "Missing key or data" });
+      return res.status(400).json({
+        success: false,
+        error: "Missing key or data",
+        rateLimit: rateLimitMeta,
+      });
     }
   } catch (err) {
     log("host.dbSet.write_failed", { reqId, pid, message: err.message });
-    return res.status(500).json({ success: false, error: "Write failed" });
+    return res.status(500).json({
+      success: false,
+      error: "Write failed",
+      rateLimit: rateLimitMeta,
+    });
   }
 
+  // ── Size snapshot ────────────────────────────────────────
+  let finalSize = 0;
+  try {
+    const sizeSnap = await dbRef.once("value");
+    finalSize = JSON.stringify(sizeSnap.val() || {}).length;
+  } catch {}
+
+  const spaceRemaining = Math.max(0, LIMIT - finalSize);
+  const percentUsed = LIMIT > 0
+    ? Math.min(100, Math.round((finalSize / LIMIT) * 1000) / 10)
+    : 0;
+
+  if (finalSize > LIMIT) {
+    return res.status(413).json({
+      success: false,
+      error: "Database exceeds 15 MB limit after write",
+      size: finalSize,
+      limit: LIMIT,
+      space: {
+        used: finalSize,
+        remaining: 0,
+        limit: LIMIT,
+        percentUsed: 100,
+      },
+      rateLimit: rateLimitMeta,
+    });
+  }
+
+  // ── Analytics transaction (unchanged) ────────────────────
   await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
     const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
     c.writes = (c.writes || 0) + 1;
@@ -1723,23 +1805,40 @@ async function handleDbSet(req, res, reqId) {
     return c;
   }).catch(() => {});
 
+  // ── Aggregate call count across all days ────────────────
+  // One read of analytics/{pid}/db, sum writes across days.
+  // If this becomes hot, cache it per-request; the value doesn't
+  // change between writes within a single request.
+  let totalWrites = 0;
+  let todayWrites = 0;
+  try {
+    const analyticsSnap = await db.ref(`analytics/${pid}/db`).once("value");
+    if (analyticsSnap.exists()) {
+      analyticsSnap.forEach(dayChild => {
+        const v = dayChild.val() || {};
+        const w = typeof v.writes === "number" ? v.writes : 0;
+        totalWrites += w;
+        if (dayChild.key === today) todayWrites = w;
+      });
+    }
+  } catch {}
+
+  // ── Event log (unchanged, with mode) ─────────────────────
   await logProjectEvent(pid, uidForLog, "db", "db.written", {
     key: key || null,
+    mode: mode || "replace",
     bytes: serialized.length,
     viaApiKey: access.uid === "api",
   });
 
+  // ── Storage warning at 80% ───────────────────────────────
   try {
-    const sizeSnap = await db.ref(`projectData/${pid}`).once("value");
-    const totalSize = JSON.stringify(sizeSnap.val() || {}).length;
-    const limitSnap = await db.ref(`projects/${pid}/storageLimit`).once("value");
-    const limit = limitSnap.exists() ? limitSnap.val() : 1024 * 1024;
-    if (totalSize > limit * 0.8) {
+    if (finalSize > LIMIT * 0.8) {
       const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
       if (ownerSnap.exists()) {
         callNotify("storage", ownerSnap.val(), {
-          title: "Storage nearly full",
-          body: `Project is ${Math.round((totalSize / limit) * 100)}% full.`,
+          title: "Database nearly full",
+          body: `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of 15 MB).`,
           link: `${BASE_URL}/project.html?pid=${pid}`,
           extra: { pid },
         }).catch(() => {});
@@ -1747,7 +1846,20 @@ async function handleDbSet(req, res, reqId) {
     }
   } catch {}
 
-  return res.status(200).json({ success: true });
+  return res.status(200).json({
+    success: true,
+    space: {
+      used: finalSize,
+      remaining: spaceRemaining,
+      limit: LIMIT,
+      percentUsed,
+    },
+    rateLimit: rateLimitMeta,
+    calls: {
+      total: totalWrites,
+      today: todayWrites,
+    },
+  });
 }
 
 async function handleDbGet(req, res, reqId) {
