@@ -7,7 +7,7 @@
 //   Increment <n> for same-day deploys; bump date on a new day.
 //   Sort naturally, easy to spot in DevTools → Application → SW.
 //   Example: '2026-10-19-1', '2026-10-19-2', '2026-10-20-1'
-const CACHE_VERSION = '2026-10-19-1';
+const CACHE_VERSION = '2026-10-19-2';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
 
@@ -18,6 +18,7 @@ const CDN_HOSTS = new Set([
   'esm.sh',
   'fonts.googleapis.com',
   'fonts.gstatic.com',
+  'www.gstatic.com',
 ]);
 
 // ── Pre-cache list ──────────────────────────────────────────
@@ -57,6 +58,9 @@ const CACHED_FILES = [
   // ── Scripts ─────────────────────────────────────────────
   '/install.js',
   '/update.js',
+  '/push-client.js',
+  '/fcm-client.js',
+  '/firebase-messaging-sw.js',
 
   // ── CodeMirror via deno.land ────────────────────────────
   // Core modules
@@ -103,9 +107,9 @@ function shouldBypass(url, request) {
   // Serverless APIs
   if (url.pathname.startsWith('/api/')) return true;
 
-  // Firebase messaging internals
+  // Firebase messaging internals — the dedicated FCM SW handles these.
   if (url.pathname.startsWith('/firebase-cloud-messaging-push-scope/')) return true;
-  if (url.pathname.includes('firebase-messaging-sw.js')) return true;
+  if (url.pathname.endsWith('/firebase-messaging-sw.js')) return true;
   if (url.pathname.includes('/__/firebase/')) return true;
 
   // Chrome extension internals (shouldn't happen, but be safe)
@@ -125,7 +129,6 @@ self.addEventListener('install', (event) => {
     // Try bulk add first — fast path
     let bulkOk = false;
     try {
-      // Skip cross-origin in bulk (some browsers complain on opaque responses)
       const sameOrigin = CACHED_FILES.filter(f => f.startsWith('/'));
       await cache.addAll(sameOrigin);
       bulkOk = true;
@@ -157,20 +160,9 @@ self.addEventListener('install', (event) => {
     console.log(`[Folio SW] install complete — bulk=${bulkOk} fetched=${fetched} missed=${missed}`);
 
     // ── Notify existing clients that a new version is waiting ──
-    // Fires `SW_UPDATE_AVAILABLE` so update.js can show the
-    // "Update available" dialog immediately, without waiting for
-    // its 5-minute poll. Skip the very first install (no clients
-    // controlled yet) — that's not an "update", it's a fresh install.
     try {
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      const hasController = clients.some(c => c.frameType === 'top-level' && c.type === 'window');
-      // Only broadcast if at least one client is already controlled by
-      // a previous SW generation (i.e. this is a genuine update, not
-      // the very first install).
-      const anyControlled = await self.clients.matchAll({ type: 'window' }).then(list =>
-        list.length > 0
-      );
-      if (anyControlled || hasController) {
+      if (clients.length > 0) {
         clients.forEach(c => {
           try {
             c.postMessage({
@@ -245,13 +237,11 @@ self.addEventListener('fetch', (event) => {
 });
 
 async function cacheFirstShell(req) {
-  // Try exact, then origin root, then index.html
   let cached =
     await caches.match(req, { ignoreSearch: true }) ||
     await caches.match('/') ||
     await caches.match('/index.html');
 
-  // Fire-and-forget refresh
   fetch(req).then(res => {
     if (res && res.ok) {
       caches.open(CACHE_NAME).then(c => c.put(req, res.clone())).catch(() => {});
@@ -270,7 +260,6 @@ async function cacheFirstShell(req) {
 async function networkFirstNav(req) {
   try {
     const res = await fetch(req);
-    // Only cache successful HTML responses
     if (res && res.ok && (res.headers.get('content-type') || '').includes('text/html')) {
       const copy = res.clone();
       caches.open(CACHE_NAME).then(c => c.put(req, copy)).catch(() => {});
@@ -305,13 +294,11 @@ async function staleWhileRevalidate(req) {
   const net = await network;
   if (net) return net;
 
-  // No cache, no network
   const accept = req.headers.get('accept') || '';
   if (accept.includes('text/html')) return offlinePage(req);
   return new Response('', { status: 404, statusText: 'Offline' });
 }
 
-// Build the offline URL with ?from= so Retry returns the right page.
 function offlineUrlFor(req) {
   try {
     const u = new URL(req.url);
@@ -323,7 +310,6 @@ function offlineUrlFor(req) {
 }
 
 async function offlinePage(req) {
-  // Try to serve the shell offline.html first (with ?from=)
   const withFrom = req ? offlineUrlFor(req) : '/offline.html';
   const cachedWithFrom = await caches.match(withFrom, { ignoreSearch: true });
   if (cachedWithFrom) return cachedWithFrom;
@@ -331,7 +317,6 @@ async function offlinePage(req) {
   const cachedPlain = await caches.match('/offline.html');
   if (cachedPlain) return cachedPlain;
 
-  // Last-resort inline fallback (offline.html not yet cached)
   return new Response(
     '<!doctype html><meta charset=utf-8><title>Offline — Folio</title>' +
     '<meta name="theme-color" content="#0a0c10">' +
@@ -414,41 +399,183 @@ self.addEventListener('message', (event) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Push + notification click
+// Push — handles both Web Push (from web-push) and FCM data messages
 // ═══════════════════════════════════════════════════════════
+
+/**
+ * Normalizes the two payload shapes we receive:
+ *
+ *   Web Push (from api/notify.js buildWebPushPayload):
+ *     { title, body, icon, badge, image, tag,
+ *       data: { title, body, image, link, notificationId, type, user_id, extra } }
+ *
+ *   FCM data message (from api/notify.js buildDataMessage):
+ *     { title, body, image, link, notificationId, type, user_id, extra }
+ *     (all values are strings — FCM stringifies data values)
+ *
+ * Returns a uniform object so the click handler doesn't care which
+ * channel the message arrived on.
+ */
+function normalizePushPayload(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      title: 'Folio', body: '', icon: '/icons/icon-192.png',
+      badge: '/icons/icon-144.png', image: undefined, tag: undefined,
+      link: '/', notificationId: '', type: 'system', user_id: '', extra: '',
+    };
+  }
+
+  const inner = (raw.data && typeof raw.data === 'object') ? raw.data : {};
+
+  return {
+    title:          raw.title   || inner.title   || 'Folio',
+    body:           raw.body    || inner.body    || '',
+    icon:           raw.icon    || inner.icon    || '/icons/icon-192.png',
+    badge:          raw.badge   || inner.badge   || '/icons/icon-144.png',
+    image:          raw.image   || inner.image   || undefined,
+    tag:            raw.tag     || inner.tag     || inner.notificationId || 'folio',
+    link:           inner.link  || raw.link      || '/',
+    notificationId: inner.notificationId || raw.notificationId || '',
+    type:           inner.type  || raw.type      || 'system',
+    user_id:        inner.user_id || raw.user_id || '',
+    extra:          inner.extra || raw.extra     || '',
+  };
+}
+
 self.addEventListener('push', (event) => {
   let payload = null;
-  try { payload = event.data?.json?.(); } catch {}
-  if (!payload) {
-    console.debug('[Folio SW] push received (no payload)');
-    return;
+
+  // Web Push / FCM data messages both deliver JSON here
+  try {
+    payload = event.data ? event.data.json() : null;
+  } catch {
+    try { payload = { body: event.data ? event.data.text() : '' }; } catch {}
   }
-  const title = payload.title || 'Folio';
+
+  if (!payload) {
+    payload = { title: 'Folio', body: 'You have a new notification.' };
+  }
+
+  const n = normalizePushPayload(payload);
+
   const options = {
-    body: payload.body || '',
-    icon: payload.icon || '/icons/icon-192.png',
-    badge: payload.badge || '/icons/icon-144.png',
-    data: { url: payload.url || '/' },
-    tag: payload.tag || 'folio',
+    body: n.body,
+    icon: n.icon,
+    badge: n.badge,
+    image: n.image,
+    tag: n.tag,
     renotify: false,
+    requireInteraction: false,
+    data: {
+      // Click handler reads these
+      url: n.link,
+      link: n.link,
+      notificationId: n.notificationId,
+      type: n.type,
+      user_id: n.user_id,
+      extra: n.extra,
+    },
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+
+  event.waitUntil((async () => {
+    try {
+      await self.registration.showNotification(n.title, options);
+    } catch (err) {
+      console.warn('[Folio SW] showNotification failed:', err);
+    }
+
+    // Tell any open tabs so they can update unread badges / lists live
+    try {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      clients.forEach(c => c.postMessage({
+        type: 'PUSH_RECEIVED',
+        notificationId: n.notificationId,
+        notificationType: n.type,
+      }));
+    } catch {}
+  })());
 });
 
+// ═══════════════════════════════════════════════════════════
+// Notification click — focus existing tab or open new
+// ═══════════════════════════════════════════════════════════
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = event.notification.data?.url || '/';
+
+  const data = event.notification.data || {};
+  const target = data.url || data.link || '/';
+
   event.waitUntil((async () => {
+    let absoluteUrl;
+    try {
+      absoluteUrl = new URL(target, self.location.origin).toString();
+    } catch {
+      absoluteUrl = self.location.origin + '/';
+    }
+    const targetPath = new URL(absoluteUrl).pathname + new URL(absoluteUrl).search;
+
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+
     for (const c of clients) {
       try {
-        if (new URL(c.url).pathname === new URL(target, self.location.origin).pathname) {
-          c.focus();
+        const cUrl = new URL(c.url);
+        if (cUrl.pathname + cUrl.search === targetPath) {
+          await c.focus();
+          c.postMessage({
+            type: 'NOTIFICATION_CLICKED',
+            notificationId: data.notificationId || '',
+            url: absoluteUrl,
+          });
           return;
         }
       } catch {}
     }
-    self.clients.openWindow(target);
+
+    await self.clients.openWindow(absoluteUrl);
+  })());
+});
+
+// ═══════════════════════════════════════════════════════════
+// Notification close — analytics hook
+// ═══════════════════════════════════════════════════════════
+self.addEventListener('notificationclose', (event) => {
+  try {
+    const data = event.notification.data || {};
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+      clients.forEach(c => c.postMessage({
+        type: 'NOTIFICATION_CLOSED',
+        notificationId: data.notificationId || '',
+      }));
+    });
+  } catch {}
+});
+
+// ═══════════════════════════════════════════════════════════
+// Push subscription change — re-subscribe + tell clients to re-upload
+//
+// The browser can rotate the push subscription endpoint at any time
+// (Chrome after long inactivity, iOS after app updates, etc). Without
+// this handler, the user silently stops receiving pushes because the
+// server still has the old, now-invalid endpoint.
+// ═══════════════════════════════════════════════════════════
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil((async () => {
+    try {
+      const oldSub = event.oldSubscription;
+      const newSub = event.newSubscription || (oldSub
+        ? await self.registration.pushManager.subscribe(oldSub.options)
+        : null);
+
+      if (!newSub) return;
+
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      clients.forEach(c => c.postMessage({
+        type: 'PUSH_SUBSCRIPTION_CHANGED',
+        subscription: newSub.toJSON(),
+      }));
+    } catch (err) {
+      console.warn('[Folio SW] pushsubscriptionchange failed:', err);
+    }
   })());
 });
 
