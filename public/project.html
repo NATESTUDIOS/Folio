@@ -1420,7 +1420,101 @@ svg { display: block; }
 [data-theme="light"] .collab-avatar { color: #ffffff; }
 .collab-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 
+/* ═══════════════════════════════════════════════════════════
+   DB STATS
+   ═══════════════════════════════════════════════════════════ */
+.db-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+@media (min-width: 640px) {
+  .db-stats-grid { grid-template-columns: repeat(3, 1fr); }
+}
 
+.db-stat-tile {
+  padding: 12px;
+  background: var(--theme-surface-card);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.db-stat-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 2px;
+}
+.db-stat-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--theme-text);
+  letter-spacing: -0.4px;
+  line-height: 1.1;
+}
+.db-stat-value.warn { color: var(--theme-warning); }
+.db-stat-value.danger { color: var(--theme-danger); }
+.db-stat-subtext {
+  font-size: 10px;
+  color: var(--theme-text-tertiary);
+  font-weight: 500;
+  margin-top: 2px;
+}
+.db-stat-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--theme-divider);
+  overflow: hidden;
+  margin-top: 6px;
+}
+.db-stat-bar-fill {
+  height: 100%;
+  background: var(--theme-success);
+  transition: width 0.3s var(--ease), background 0.3s var(--ease);
+}
+.db-stat-bar-fill.warn { background: var(--theme-warning); }
+.db-stat-bar-fill.danger { background: var(--theme-danger); }
+
+.db-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 8px;
+  font-size: 10.5px;
+  color: var(--theme-text-tertiary);
+  line-height: 1.5;
+}
+.db-hint svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  stroke: var(--theme-primary);
+  fill: none;
+  stroke-width: 2.2;
+}
+.db-hint .link-btn {
+  color: var(--theme-primary);
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  border: none;
+  background: none;
+  padding: 0;
+}
+.db-hint .link-btn:hover { text-decoration: underline; }
+  
 /* ═══════════════════════════════════════════════════════════
    OFFLINE BANNER
    ═══════════════════════════════════════════════════════════ */
@@ -1655,6 +1749,7 @@ svg { display: block; }
     expand: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>',
     collapse: '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>',
     chevronRight: '<polyline points="9 18 15 12 9 6"/>',
+    
   };
 
   function svg(name, size = 14, sw = 2.2) {
@@ -4051,7 +4146,7 @@ async function commitUploadedIcon(dataUrl) {
   // PANEL: DATA (editable)
   // ═══════════════════════════════════════════════════════════
 
-  async function renderDataPanel(panel) {
+    async function renderDataPanel(panel) {
     if (!gate(panel, { label: 'Data' })) return;
     if (S.syncState !== 'synced') {
       panel.innerHTML = `<div class="card"><div class="card-body">
@@ -4074,7 +4169,22 @@ async function commitUploadedIcon(dataUrl) {
       }
       const { data, schema } = res.data;
       const canEdit = S.isEditor;
+
+      const serialized = JSON.stringify(data || {});
+      const LIMIT = 15 * 1024 * 1024;
+      const initialSpace = {
+        used: serialized.length,
+        limit: LIMIT,
+        remaining: Math.max(0, LIMIT - serialized.length),
+        percentUsed: LIMIT > 0 ? Math.min(100, Math.round((serialized.length / LIMIT) * 1000) / 10) : 0,
+      };
+
       panel.innerHTML = `
+        <div class="db-stats-grid" id="dbStatsGrid">
+          ${renderDbStatTile('Storage', formatBytes(initialSpace.used), `of ${formatBytes(initialSpace.limit)}`, initialSpace.percentUsed, 'storage')}
+          ${renderDbStatTile('Writes', '—', 'updates after first save', null, 'calls')}
+          ${renderDbStatTile('Rate limit', '—', 'updates after first save', null, 'rate')}
+        </div>
         <div class="card">
           <div class="card-header">
             <div class="card-title">${svg('database', 13, 2.2)} JSON database</div>
@@ -4096,7 +4206,12 @@ async function commitUploadedIcon(dataUrl) {
             <div id="dbViewSchema" class="db-json hidden">${schema ? renderJSONPretty(schema) : 'No schema defined'}</div>
           </div>
         </div>
+        <div class="db-hint">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>Saving replaces the entire database. For partial writes, use <button class="link-btn" id="btnShowMerge" type="button">mode: "merge"</button>.</span>
+        </div>
       `;
+
       document.querySelectorAll('[data-db-view]').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('[data-db-view]').forEach(b => b.classList.remove('active'));
@@ -4105,7 +4220,10 @@ async function commitUploadedIcon(dataUrl) {
           $('dbViewSchema').classList.toggle('hidden', btn.dataset.dbView !== 'schema');
         });
       });
+
       $('btnRefreshDb')?.addEventListener('click', () => renderPanel());
+      $('btnShowMerge')?.addEventListener('click', openMergeHintModal);
+
       $('btnSaveDb')?.addEventListener('click', async () => {
         const raw = $('dbRawEditor')?.value || '';
         let parsed;
@@ -4119,7 +4237,43 @@ async function commitUploadedIcon(dataUrl) {
           const save = await apiFetch(API_HOST + '?action=db/set', {
             method: 'POST', body: JSON.stringify({ pid: S.pid, data: parsed }),
           });
-          if (!save.ok || !save.data?.success) throw new Error(save.data?.error || 'Save failed');
+
+          if (save.status === 413) {
+            const msg = save.data?.error || 'Database too large';
+            toast(msg, 'error', 5000);
+            if (save.data?.space) {
+              updateDbStatTiles({
+                space: save.data.space,
+                rateLimit: save.data.rateLimit,
+                calls: null,
+              });
+            }
+            return;
+          }
+
+          if (save.status === 429) {
+            const retry = save.data?.retryAfter || 60;
+            toast(`Rate limited — retry in ${retry}s`, 'warning', 4000);
+            if (save.data?.rateLimit) {
+              updateDbStatTiles({
+                space: null,
+                rateLimit: save.data.rateLimit,
+                calls: null,
+              });
+            }
+            return;
+          }
+
+          if (!save.ok || !save.data?.success) {
+            throw new Error(save.data?.error || 'Save failed');
+          }
+
+          updateDbStatTiles({
+            space: save.data.space || null,
+            rateLimit: save.data.rateLimit || null,
+            calls: save.data.calls || null,
+          });
+
           toast('Saved', 'success');
         } catch (err) {
           toast(err.message || 'Save failed', 'error');
@@ -4131,6 +4285,129 @@ async function commitUploadedIcon(dataUrl) {
     } catch (err) {
       panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('database', 'Couldn\'t load data', err.message)}</div></div>`;
     }
+  }
+
+  function renderDbStatTile(label, value, subtext, percent, id) {
+    let valueClass = 'db-stat-value';
+    let barClass = 'db-stat-bar-fill';
+    if (percent != null) {
+      if (percent >= 85) { valueClass += ' danger'; barClass += ' danger'; }
+      else if (percent >= 60) { valueClass += ' warn'; barClass += ' warn'; }
+    }
+    const bar = percent != null
+      ? `<div class="db-stat-bar"><div class="${barClass}" style="width:${Math.min(100, percent)}%"></div></div>`
+      : '';
+    return `
+      <div class="db-stat-tile" data-tile="${escapeAttr(id)}">
+        <div class="db-stat-label">${escapeHTML(label)}</div>
+        <div class="${valueClass}" data-tile-value>${escapeHTML(value)}</div>
+        <div class="db-stat-subtext" data-tile-subtext>${escapeHTML(subtext)}</div>
+        ${bar ? `<div data-tile-bar>${bar}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function updateDbStatTiles({ space, rateLimit, calls }) {
+    const grid = $('dbStatsGrid');
+    if (!grid) return;
+
+    if (space) {
+      const tile = grid.querySelector('[data-tile="storage"]');
+      if (tile) {
+        const valueEl = tile.querySelector('[data-tile-value]');
+        const subEl = tile.querySelector('[data-tile-subtext]');
+        const barWrap = tile.querySelector('[data-tile-bar]');
+        const pct = space.percentUsed || 0;
+        valueEl.textContent = formatBytes(space.used);
+        subEl.textContent = `of ${formatBytes(space.limit)}`;
+        valueEl.className = 'db-stat-value' + (pct >= 85 ? ' danger' : pct >= 60 ? ' warn' : '');
+        if (barWrap) {
+          const fill = barWrap.querySelector('.db-stat-bar-fill');
+          if (fill) {
+            fill.style.width = Math.min(100, pct) + '%';
+            fill.className = 'db-stat-bar-fill' + (pct >= 85 ? ' danger' : pct >= 60 ? ' warn' : '');
+          }
+        }
+      }
+    }
+
+    if (calls) {
+      const tile = grid.querySelector('[data-tile="calls"]');
+      if (tile) {
+        tile.querySelector('[data-tile-value]').textContent = formatNumber(calls.total || 0);
+        tile.querySelector('[data-tile-subtext]').textContent = `${formatNumber(calls.today || 0)} today`;
+      }
+    }
+
+    if (rateLimit) {
+      const tile = grid.querySelector('[data-tile="rate"]');
+      if (tile) {
+        const remaining = rateLimit.remaining ?? 0;
+        const limit = rateLimit.limit ?? 0;
+        const pct = limit > 0 ? Math.round((remaining / limit) * 100) : 0;
+        let resetLabel = '';
+        if (rateLimit.reset) {
+          const ms = new Date(rateLimit.reset).getTime() - Date.now();
+          if (ms > 0) {
+            const mins = Math.ceil(ms / 60000);
+            resetLabel = `resets in ${mins}m`;
+          } else {
+            resetLabel = 'reset now';
+          }
+        }
+        const valueEl = tile.querySelector('[data-tile-value]');
+        const subEl = tile.querySelector('[data-tile-subtext]');
+        const barWrap = tile.querySelector('[data-tile-bar]');
+        valueEl.textContent = `${remaining} / ${limit}`;
+        subEl.textContent = resetLabel || 'per hour';
+        valueEl.className = 'db-stat-value' + (remaining <= 5 ? ' danger' : remaining <= 20 ? ' warn' : '');
+        if (barWrap) {
+          const fill = barWrap.querySelector('.db-stat-bar-fill');
+          if (fill) {
+            fill.style.width = pct + '%';
+            fill.className = 'db-stat-bar-fill' + (remaining <= 5 ? ' danger' : remaining <= 20 ? ' warn' : '');
+          }
+        }
+      }
+    }
+  }
+
+  function openMergeHintModal() {
+    const code = `await fetch('${API_HOST}?action=db/set', {
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json',
+    'x-project-key': 'fol_...'
+  },
+  body: JSON.stringify({
+    pid: '${S.pid}',
+    data: { config: { theme: 'dark' } },
+    mode: 'merge'
+  })
+});`;
+
+    openModal(`
+      <div class="modal-title">Partial writes with mode: "merge"</div>
+      <div class="modal-desc">
+        <strong>Save</strong> replaces the entire database. To change only some keys without
+        touching the rest, use <code style="font-family:var(--font-mono);">mode: "merge"</code>
+        with the API. Each top-level key you send is overwritten; everything else is preserved.
+      </div>
+      <div class="db-json" style="max-height:240px;margin-bottom:12px;">${escapeHTML(code)}</div>
+      <div class="field-hint" style="margin-bottom:12px;">
+        Replace <code>config</code> with any top-level key from your database.
+        Nested objects are replaced, not deep-merged.
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+        <button class="btn btn-primary" id="copyMergeCode">${svg('copy', 12, 2.2)} Copy</button>
+      </div>
+    `);
+
+    $('copyMergeCode')?.addEventListener('click', () => {
+      if (copyToClipboard(code)) toast('Copied', 'success', 1200);
+      else toast('Copy failed', 'error');
+    });
   }
 
   function renderJSONPretty(obj) {
