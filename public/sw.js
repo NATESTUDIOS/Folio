@@ -41,6 +41,14 @@ const CACHED_FILES = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 
+  // ── Screenshots ─────────────────────────────────────────
+  '/screenshots/screenshot1.png',
+  '/screenshots/screenshot2.png',
+  '/screenshots/screenshot3.png',
+  '/screenshots/screenshot4.png',
+  '/screenshots/screenshot5.png',
+  '/screenshots/screenshot6.png',
+
   // ── Scripts ─────────────────────────────────────────────
   '/install.js',
   '/update.js',
