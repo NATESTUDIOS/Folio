@@ -98,10 +98,12 @@
 
   const haptic = () => { try { navigator.vibrate?.(8); } catch {} };
 
-  /* ── Toast bridge (uses editor's toast if available) ── */
-  const toast = (msg) => {
+  /* ── Toast bridge ──
+     Editor defines: toast(message, type = 'info', duration = 2500)
+     → positional args, NOT an options object.                       [FIX] */
+  const toast = (msg, type = 'info', duration = 2500) => {
     try {
-      if (typeof window.toast === 'function') window.toast(msg, { type: 'info', duration: 2500 });
+      if (typeof window.toast === 'function') window.toast(msg, type, duration);
       else console.log('[Folio install]', msg);
     } catch {}
   };
@@ -339,6 +341,12 @@
   /* ── Show / hide / dismiss ── */
   function show() {
     if (isInstalled()) return false;
+    // Installing requires a manifest fetch and (for Chromium) a
+    // beforeinstallprompt event, which never fires offline.       [FIX]
+    if (!navigator.onLine) {
+      toast('Connect to the internet to install Folio', 'warning', 3000);
+      return false;
+    }
     injectStyles();
     const ov = ensureOverlay();
     document.body.style.overflow = 'hidden';
@@ -364,7 +372,7 @@
     hide();
     markDismissed();
     emit('dismissed');
-    setTimeout(() => toast('You can install Folio anytime from Settings'), 220);
+    setTimeout(() => toast('You can install Folio anytime from Settings', 'info', 3000), 220);
   }
 
   /* ── Install trigger ── */
@@ -398,7 +406,7 @@
         clearDismissed();
         hide();
         emit('installed');
-        toast('Folio installed');
+        toast('Folio installed', 'success', 2500);
         updateAllButtons();
       } else {
         dismissDialog();
@@ -446,7 +454,9 @@
   function updateAllButtons() {
     document.querySelectorAll(`[${DATA}]`).forEach(btn => {
       wireButton(btn);
-      if (isInstalled()) hideButton(btn);
+      // Hide when installed OR offline — the install flow can't
+      // complete offline, so a visible button is misleading.       [FIX]
+      if (isInstalled() || !navigator.onLine) hideButton(btn);
       else showButton(btn);
     });
   }
@@ -466,11 +476,12 @@
         CFG.showDialogOnFirstVisit &&
         !S.autoShownThisSession &&
         !isCoolingDown() &&
-        !isInstalled()
+        !isInstalled() &&
+        navigator.onLine
       ) {
         S.autoShownThisSession = true;
         setTimeout(() => {
-          if (!S.open && !isInstalled()) show();
+          if (!S.open && !isInstalled() && navigator.onLine) show();
         }, CFG.autoPromptDelayMs);
       }
     });
@@ -480,7 +491,7 @@
       clearDismissed();
       hide();
       emit('installed');
-      toast('Folio installed');
+      toast('Folio installed', 'success', 2500);
       updateAllButtons();
     });
 
@@ -491,6 +502,10 @@
         updateAllButtons();
       }
     });
+
+    // Re-evaluate buttons on network transitions               [FIX]
+    window.addEventListener('online', updateAllButtons);
+    window.addEventListener('offline', updateAllButtons);
 
     // Dynamically added buttons
     new MutationObserver((muts) => {
@@ -542,11 +557,12 @@
         CFG.showDialogOnFirstVisit &&
         !S.autoShownThisSession &&
         !isCoolingDown() &&
-        !isInstalled()
+        !isInstalled() &&
+        navigator.onLine
       ) {
         S.autoShownThisSession = true;
         setTimeout(() => {
-          if (!S.open && !isInstalled()) show();
+          if (!S.open && !isInstalled() && navigator.onLine) show();
         }, CFG.autoPromptDelayMs + 500);
       }
     }
