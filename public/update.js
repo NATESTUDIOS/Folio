@@ -2,6 +2,13 @@
    Folio — update.js
    Service worker update prompt + apply.
 
+   Behavior:
+     • When a new SW is waiting, shows an animated dialog
+     • A visible countdown auto-applies the update after N seconds
+     • User can "Update now" to skip the countdown
+     • User can "Later" to postpone (respects unsaved work)
+     • Reload overlay with progress bar + spinner during apply
+
    Usage:
      <script src="/update.js" defer></script>
 
@@ -19,32 +26,41 @@
 (function () {
   'use strict';
 
+  // ═══════════════════════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════════════════════
+
   const CFG = {
-    checkIntervalMs: 5 * 60 * 1000,     // poll every 5 min
-    autoDismissMs: 30 * 1000,           // auto-dismiss dialog after 30s
-    reloadDelayMs: 700,                 // brief pause before reload
-    controllerTimeoutMs: 4000,          // safety net for SKIP_WAITING
-    waitingPollTimeoutMs: 5000,         // wait for a waiting worker
+    checkIntervalMs: 5 * 60 * 1000,      // poll every 5 min
+    autoApplyMs: 30 * 1000,              // auto-apply after 30s (was: auto-dismiss)
+    reloadDelayMs: 700,                  // brief pause before reload
+    controllerTimeoutMs: 4000,           // safety net for SKIP_WAITING
+    waitingPollTimeoutMs: 5000,          // wait for a waiting worker
+    countdownTickMs: 100,                // countdown update interval (for smooth bar)
   };
 
   const S = {
     reg: null,
     dialogEl: null,
-    dialogTimer: null,
+    autoApplyTimer: null,
+    countdownRaf: null,
+    countdownStartAt: 0,
     applying: false,
     paused: false,
-    postponed: false,         // [FIX] "Later" this session → don't re-show
-    postponedVersion: null,   // [FIX] version the user postponed
+    postponed: false,
+    postponedVersion: null,
     stylesInjected: false,
     initialized: false,
     checkTimer: null,
     safetyTimer: null,
     onCtrlHandler: null,
+    reducedMotion: false,
   };
 
-  /* ── Toast bridge ──
-     Editor defines: toast(message, type = 'info', duration = 2500)
-     → positional args, NOT an options object.            [FIX] */
+  // ═══════════════════════════════════════════════════════════
+  // UTILS
+  // ═══════════════════════════════════════════════════════════
+
   const toast = (msg, type = 'info', duration = 3000) => {
     try {
       if (typeof window.toast === 'function') window.toast(msg, type, duration);
@@ -52,7 +68,18 @@
     } catch {}
   };
 
-  /* ── Unsaved-work guard ── */
+  function hasReducedMotion() {
+    try {
+      if (localStorage.getItem('folio.reducedMotion') === 'true') return true;
+    } catch {}
+    return matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function fmtSeconds(ms) {
+    return Math.max(0, Math.ceil(ms / 1000));
+  }
+
+  /* Unsaved-work guard */
   function hasUnsavedWork() {
     try {
       const ws = window.workspace;
@@ -62,11 +89,7 @@
     } catch { return false; }
   }
 
-  /* ── Confirm wrapper ──
-     Handles both:
-       • Editor's Promise-returning confirm({ ... })  (index.html)
-       • Native window.confirm('string') → boolean    (fallback)
-                                                                [FIX] */
+  /* Confirm wrapper — handles both editor's Promise confirm + native */
   async function confirmDiscard() {
     const opts = {
       title: 'Reload anyway?',
@@ -74,19 +97,12 @@
       confirmLabel: 'Reload',
       danger: true,
     };
-
-    // If the editor overrode window.confirm with a Promise-returning
-    // helper, use it. Otherwise fall back to the native boolean confirm.
     try {
       if (typeof window.confirm === 'function') {
         const r = window.confirm(opts);
         if (r && typeof r.then === 'function') return !!(await r);
-        // If it returned a boolean, that's the native confirm — but we
-        // passed an object, so the browser stringified it. Fall through
-        // to a clean native call.
       }
     } catch {}
-
     try {
       return !!window.confirm(opts.message);
     } catch {
@@ -94,88 +110,217 @@
     }
   }
 
-  /* ── CSS ── */
+  // ═══════════════════════════════════════════════════════════
+  // STYLES
+  // ═══════════════════════════════════════════════════════════
+
   function injectStyles() {
     if (S.stylesInjected || document.getElementById('folio-update-style')) {
-      S.stylesInjected = true; return;
+      S.stylesInjected = true;
+      return;
     }
+
     const css = `
       .folio-upd {
         position: fixed; inset: 0; z-index: 999991;
         display: flex; align-items: center; justify-content: center;
         padding: 16px;
         background: rgba(10, 12, 16, 0.72);
-        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
         opacity: 0; pointer-events: none;
-        transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1);
-        font-family: var(--font-sans, "Inter", -apple-system, system-ui, sans-serif);
+        transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
+        font-family: var(--font, "Inter", -apple-system, system-ui, sans-serif);
       }
       .folio-upd.open { opacity: 1; pointer-events: auto; }
+
       .folio-upd-card {
-        width: 100%; max-width: 360px;
+        width: 100%; max-width: 380px;
         background: var(--bg-card, #151922);
         border: 1px solid var(--border, #222831);
         border-radius: 20px;
         padding: 26px 22px 20px;
         text-align: center;
         transform: scale(0.94) translateY(14px);
-        transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+        transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
         position: relative;
+        overflow: hidden;
       }
       .folio-upd.open .folio-upd-card { transform: scale(1) translateY(0); }
+
+      /* Ambient glow at the top */
+      .folio-upd-card::after {
+        content: '';
+        position: absolute;
+        inset: -40% -40% auto -40%;
+        height: 60%;
+        background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
+        pointer-events: none;
+        opacity: 0.9;
+      }
+
       .folio-upd-icon {
-        width: 56px; height: 56px; margin: 0 auto 14px;
-        border-radius: 16px;
-        background: rgba(245, 158, 11, 0.14);
-        border: 1px solid rgba(245, 158, 11, 0.30);
+        width: 64px; height: 64px; margin: 0 auto 16px;
+        border-radius: 18px;
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(249, 115, 22, 0.10));
+        border: 1px solid rgba(245, 158, 11, 0.32);
         display: flex; align-items: center; justify-content: center;
         color: #F59E0B;
+        position: relative;
+        z-index: 1;
+      }
+      .folio-upd-icon::after {
+        content: '';
+        position: absolute;
+        inset: -6px;
+        border-radius: 24px;
+        border: 1px dashed rgba(245, 158, 11, 0.22);
+        animation: folioUpdRing 2.6s ease-in-out infinite;
+        pointer-events: none;
+      }
+      @keyframes folioUpdRing {
+        0%, 100% { opacity: 0.35; transform: scale(1); }
+        50% { opacity: 0.75; transform: scale(1.05); }
       }
       .folio-upd-icon svg {
-        width: 26px; height: 26px;
+        width: 28px; height: 28px;
         stroke: currentColor; fill: none;
         stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
       }
+
+      /* Spinning icon when applying */
+      .folio-upd-card.applying .folio-upd-icon svg {
+        animation: folioUpdSpin 1.2s linear infinite;
+      }
+      .folio-upd-card.applying .folio-upd-icon::after {
+        animation: none;
+        border-color: rgba(245, 158, 11, 0.35);
+      }
+      @keyframes folioUpdSpin { to { transform: rotate(360deg); } }
+
       .folio-upd-title {
         font-size: 18px; font-weight: 700; letter-spacing: -0.3px;
         color: var(--text, #e8ecf1); margin: 0 0 6px;
+        position: relative; z-index: 1;
       }
       .folio-upd-sub {
         font-size: 13px; line-height: 1.55;
-        color: var(--text-muted, #a8b0bc); margin: 0 0 18px;
+        color: var(--text-muted, #a8b0bc); margin: 0 0 16px;
+        position: relative; z-index: 1;
       }
+
+      /* Countdown block */
+      .folio-upd-countdown {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        background: var(--bg-input, #1a1f2a);
+        border: 1px solid var(--border, #222831);
+        border-radius: 12px;
+        margin: 0 0 14px;
+        position: relative;
+        z-index: 1;
+        overflow: hidden;
+      }
+      .folio-upd-countdown-ring {
+        flex-shrink: 0;
+        width: 32px; height: 32px;
+        position: relative;
+      }
+      .folio-upd-countdown-ring svg {
+        width: 32px; height: 32px;
+        transform: rotate(-90deg);
+      }
+      .folio-upd-countdown-ring svg circle {
+        fill: none;
+        stroke-width: 2.6;
+        stroke-linecap: round;
+      }
+      .folio-upd-countdown-ring .track {
+        stroke: rgba(255,255,255,0.08);
+      }
+      [data-theme="light"] .folio-upd-countdown-ring .track {
+        stroke: rgba(0,0,0,0.08);
+      }
+      .folio-upd-countdown-ring .progress {
+        stroke: #F59E0B;
+        transition: stroke-dashoffset 120ms linear;
+      }
+      .folio-upd-countdown-text {
+        flex-shrink: 0;
+        font-family: var(--font-mono, 'JetBrains Mono', monospace);
+        font-size: 15px;
+        font-weight: 800;
+        color: #F59E0B;
+        min-width: 28px;
+        text-align: center;
+        letter-spacing: -0.3px;
+        font-variant-numeric: tabular-nums;
+      }
+      .folio-upd-countdown-info {
+        flex: 1;
+        min-width: 0;
+        text-align: left;
+      }
+      .folio-upd-countdown-info-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text, #e8ecf1);
+        margin-bottom: 1px;
+      }
+      .folio-upd-countdown-info-desc {
+        font-size: 10.5px;
+        color: var(--text-muted, #a8b0bc);
+        line-height: 1.35;
+      }
+
+      /* Progress bar (apply phase) */
       .folio-upd-progress {
         height: 4px; border-radius: 4px;
         background: var(--bg-input, #1a1f2a);
-        overflow: hidden; margin: 0 0 18px;
+        overflow: hidden; margin: 0 0 16px;
+        position: relative; z-index: 1;
       }
       .folio-upd-progress-fill {
         height: 100%; width: 0;
         background: linear-gradient(90deg, #F59E0B, #fbbf24);
-        transition: width 200ms ease;
+        transition: width 220ms cubic-bezier(0.16,1,0.3,1);
+        border-radius: 4px;
       }
-      .folio-upd-actions { display: flex; gap: 8px; }
+
+      .folio-upd-actions {
+        display: flex; gap: 8px;
+        position: relative; z-index: 1;
+      }
       .folio-upd-btn {
         flex: 1;
         font-family: inherit; font-size: 13.5px; font-weight: 600;
         padding: 12px 16px; border-radius: 12px;
         border: 1px solid transparent;
         cursor: pointer;
-        transition: all 120ms ease;
+        transition: all 140ms ease;
         touch-action: manipulation; user-select: none;
       }
       .folio-upd-btn.primary {
         background: #F59E0B; color: #0a0c10;
         box-shadow: 0 6px 20px rgba(245, 158, 11, 0.30);
       }
-      .folio-upd-btn.primary:hover { background: #fbbf24; }
+      .folio-upd-btn.primary:hover:not(:disabled) {
+        background: #fbbf24;
+        transform: translateY(-1px);
+        box-shadow: 0 10px 26px rgba(245, 158, 11, 0.38);
+      }
+      .folio-upd-btn.primary:active:not(:disabled) { transform: scale(0.98); }
       .folio-upd-btn.ghost {
         background: transparent;
         color: var(--text-muted, #a8b0bc);
         border-color: var(--border, #222831);
       }
-      .folio-upd-btn.ghost:hover { color: var(--text, #e8ecf1); background: var(--bg-input, #1a1f2a); }
-      .folio-upd-btn:active { transform: scale(0.97); }
+      .folio-upd-btn.ghost:hover:not(:disabled) {
+        color: var(--text, #e8ecf1);
+        background: var(--bg-input, #1a1f2a);
+      }
+      .folio-upd-btn:active:not(:disabled) { transform: scale(0.97); }
       .folio-upd-btn:focus-visible { outline: 2px solid #F59E0B; outline-offset: 2px; }
       .folio-upd-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 
@@ -185,21 +330,46 @@
         display: flex; align-items: center; justify-content: center;
         background: rgba(10, 12, 16, 0.85);
         backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        font-family: var(--font-sans, "Inter", system-ui, sans-serif);
+        font-family: var(--font, "Inter", system-ui, sans-serif);
         color: var(--text, #e8ecf1);
         text-align: center;
         padding: 24px;
+        opacity: 0;
+        transition: opacity 200ms ease;
       }
+      .folio-reload.open { opacity: 1; }
       .folio-reload-spinner {
-        width: 40px; height: 40px; margin: 0 auto 18px;
-        border: 3px solid rgba(245, 158, 11, 0.20);
+        width: 44px; height: 44px; margin: 0 auto 18px;
+        position: relative;
+      }
+      .folio-reload-spinner::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border: 3px solid rgba(245, 158, 11, 0.18);
+        border-radius: 50%;
+      }
+      .folio-reload-spinner::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border: 3px solid transparent;
         border-top-color: #F59E0B;
         border-radius: 50%;
-        animation: folio-reload-spin 0.9s linear infinite;
+        animation: folioReloadSpin 0.9s linear infinite;
       }
-      @keyframes folio-reload-spin { to { transform: rotate(360deg); } }
-      .folio-reload-title { font-size: 16px; font-weight: 700; margin: 0 0 6px; }
-      .folio-reload-sub { font-size: 13px; color: var(--text-muted, #a8b0bc); margin: 0; }
+      @keyframes folioReloadSpin { to { transform: rotate(360deg); } }
+      .folio-reload-title {
+        font-size: 16px; font-weight: 800;
+        margin: 0 0 6px;
+        letter-spacing: -0.2px;
+      }
+      .folio-reload-sub {
+        font-size: 13px;
+        color: var(--text-muted, #a8b0bc);
+        margin: 0;
+        line-height: 1.5;
+      }
 
       @media (max-width: 480px) {
         .folio-upd { align-items: flex-end; padding: 0; }
@@ -211,18 +381,37 @@
         }
         .folio-upd.open .folio-upd-card { transform: translateY(0); }
         .folio-upd-card::before {
-          content: ''; position: absolute;
-          top: 8px; left: 50%; transform: translateX(-50%);
+          content: '';
+          position: absolute;
+          top: 8px; left: 50%;
+          transform: translateX(-50%);
           width: 36px; height: 4px; border-radius: 4px;
           background: var(--border, #222831);
+          z-index: 1;
         }
+        .folio-upd-countdown-ring { width: 28px; height: 28px; }
+        .folio-upd-countdown-ring svg { width: 28px; height: 28px; }
+        .folio-upd-countdown-text { font-size: 13px; }
       }
+
       @media (prefers-reduced-motion: reduce) {
-        .folio-upd, .folio-upd-card, .folio-upd-btn,
-        .folio-upd-progress-fill, .folio-reload-spinner {
+        .folio-upd,
+        .folio-upd-card,
+        .folio-upd-icon::after,
+        .folio-upd-btn,
+        .folio-upd-progress-fill,
+        .folio-upd-countdown-ring .progress,
+        .folio-upd-countdown-ring svg,
+        .folio-reload,
+        .folio-reload-spinner::after {
           transition-duration: 0.01ms !important;
           animation-duration: 0.01ms !important;
         }
+      }
+      html[data-reduced-motion="true"] .folio-upd-icon::after,
+      html[data-reduced-motion="true"] .folio-upd-card.applying .folio-upd-icon svg,
+      html[data-reduced-motion="true"] .folio-reload-spinner::after {
+        animation: none !important;
       }
     `;
     const s = document.createElement('style');
@@ -232,7 +421,13 @@
     S.stylesInjected = true;
   }
 
-  /* ── Dialog ── */
+  // ═══════════════════════════════════════════════════════════
+  // DIALOG
+  // ═══════════════════════════════════════════════════════════
+
+  // Circle circumference for the countdown ring: 2π × 12 ≈ 75.4
+  const RING_CIRCUMFERENCE = 2 * Math.PI * 12;
+
   function buildDialog() {
     injectStyles();
     const ov = document.createElement('div');
@@ -248,12 +443,30 @@
         </div>
         <h3 class="folio-upd-title" id="folio-upd-title">Update available</h3>
         <p class="folio-upd-sub">A new version of Folio is ready.</p>
-        <div class="folio-upd-progress" hidden>
+
+        <div class="folio-upd-countdown" id="folioUpdCountdown">
+          <div class="folio-upd-countdown-ring" aria-hidden="true">
+            <svg viewBox="0 0 32 32">
+              <circle class="track" cx="16" cy="16" r="12"></circle>
+              <circle class="progress" cx="16" cy="16" r="12"
+                      stroke-dasharray="${RING_CIRCUMFERENCE}"
+                      stroke-dashoffset="0"></circle>
+            </svg>
+          </div>
+          <div class="folio-upd-countdown-text" id="folioUpdCountdownText">30</div>
+          <div class="folio-upd-countdown-info">
+            <div class="folio-upd-countdown-info-title">Auto-updating</div>
+            <div class="folio-upd-countdown-info-desc">Tap Cancel to postpone</div>
+          </div>
+        </div>
+
+        <div class="folio-upd-progress" hidden id="folioUpdProgress">
           <div class="folio-upd-progress-fill"></div>
         </div>
+
         <div class="folio-upd-actions">
-          <button class="folio-upd-btn ghost" data-folio-upd="later">Later</button>
-          <button class="folio-upd-btn primary" data-folio-upd="apply">Update</button>
+          <button class="folio-upd-btn ghost" data-folio-upd="later" type="button">Cancel</button>
+          <button class="folio-upd-btn primary" data-folio-upd="apply" type="button">Update now</button>
         </div>
       </div>
     `;
@@ -261,19 +474,77 @@
 
     ov.querySelector('[data-folio-upd="later"]').addEventListener('click', dismiss);
     ov.querySelector('[data-folio-upd="apply"]').addEventListener('click', applyNow);
-
-    // Click backdrop to dismiss
-    ov.addEventListener('click', (e) => {
-      if (e.target === ov) dismiss();
-    });
+    ov.addEventListener('click', (e) => { if (e.target === ov) dismiss(); });
 
     return ov;
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // COUNTDOWN
+  // ═══════════════════════════════════════════════════════════
+
+  function startCountdown() {
+    const card = S.dialogEl?.querySelector('.folio-upd-card');
+    const text = S.dialogEl?.querySelector('#folioUpdCountdownText');
+    const ring = S.dialogEl?.querySelector('.folio-upd-countdown-ring .progress');
+    if (!card || !text || !ring) return;
+
+    S.countdownStartAt = Date.now();
+
+    const tick = () => {
+      if (!S.dialogEl || S.applying) return;
+      const elapsed = Date.now() - S.countdownStartAt;
+      const remaining = Math.max(0, CFG.autoApplyMs - elapsed);
+      const remainingSec = Math.ceil(remaining / 1000);
+
+      // Update numeric text
+      text.textContent = String(remainingSec);
+
+      // Update ring progress (0 = full, RING = empty)
+      const pct = Math.min(1, elapsed / CFG.autoApplyMs);
+      const offset = RING_CIRCUMFERENCE * pct;
+      ring.style.strokeDashoffset = String(offset);
+
+      // Warn color in last 5 seconds
+      if (remainingSec <= 5 && remainingSec > 0) {
+        text.style.color = '#EF4444';
+        ring.style.stroke = '#EF4444';
+      } else {
+        text.style.color = '#F59E0B';
+        ring.style.stroke = '#F59E0B';
+      }
+
+      if (remaining <= 0) {
+        // Time's up — auto-apply
+        applyNow(true);
+        return;
+      }
+
+      S.countdownRaf = requestAnimationFrame(tick);
+    };
+
+    // First paint
+    text.textContent = String(fmtSeconds(CFG.autoApplyMs));
+    ring.style.strokeDashoffset = '0';
+
+    // Use requestAnimationFrame for smooth ring; setInterval for text
+    S.countdownRaf = requestAnimationFrame(tick);
+  }
+
+  function stopCountdown() {
+    if (S.countdownRaf) {
+      cancelAnimationFrame(S.countdownRaf);
+      S.countdownRaf = null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SHOW / DISMISS
+  // ═══════════════════════════════════════════════════════════
+
   function show() {
     if (S.applying || S.dialogEl) return;
 
-    // Respect a "Later" click for the current waiting version    [FIX]
     const waitingVer = S.reg?.waiting ? S.reg.waiting.scriptURL : null;
     if (S.postponed && waitingVer && waitingVer === S.postponedVersion) return;
 
@@ -283,19 +554,16 @@
     void ov.offsetWidth;
     ov.classList.add('open');
 
-    // Auto-dismiss
-    S.dialogTimer = setTimeout(() => {
-      if (!S.applying) dismiss();
-    }, CFG.autoDismissMs);
+    // Wait a tick for CSS to settle, then start countdown
+    setTimeout(() => startCountdown(), 50);
 
     try { window.dispatchEvent(new CustomEvent('folio:update:available')); } catch {}
   }
 
   function dismiss() {
-    if (S.dialogTimer) { clearTimeout(S.dialogTimer); S.dialogTimer = null; }
+    stopCountdown();
     if (!S.dialogEl) return;
 
-    // Mark this waiting version as postponed for the session       [FIX]
     if (S.reg?.waiting) {
       S.postponed = true;
       S.postponedVersion = S.reg.waiting.scriptURL;
@@ -305,18 +573,33 @@
     S.dialogEl = null;
     ov.classList.remove('open');
     document.body.style.overflow = '';
-    setTimeout(() => ov.remove(), 260);
+    setTimeout(() => ov.remove(), 280);
+
+    if (typeof window.toast === 'function') {
+      toast('Update postponed — you can update from Settings', 'info', 3000);
+    }
   }
 
-  /* ── Progress bar ── */
+  // ═══════════════════════════════════════════════════════════
+  // PROGRESS
+  // ═══════════════════════════════════════════════════════════
+
   function setProgress(pct) {
+    const wrap = S.dialogEl?.querySelector('#folioUpdProgress');
     const fill = S.dialogEl?.querySelector('.folio-upd-progress-fill');
-    const wrap = S.dialogEl?.querySelector('.folio-upd-progress');
     if (wrap) wrap.hidden = false;
     if (fill) fill.style.width = Math.min(100, Math.max(0, pct)) + '%';
   }
 
-  /* ── Show reload overlay ── */
+  function hideCountdown() {
+    const cd = S.dialogEl?.querySelector('#folioUpdCountdown');
+    if (cd) cd.style.display = 'none';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // RELOAD OVERLAY
+  // ═══════════════════════════════════════════════════════════
+
   function showReloadOverlay() {
     injectStyles();
     if (document.getElementById('folio-reload-overlay')) return;
@@ -331,40 +614,60 @@
       </div>
     `;
     document.body.appendChild(ov);
+    void ov.offsetWidth;
+    ov.classList.add('open');
   }
 
-  /* ── Apply update ── */
-  async function applyNow() {
+  // ═══════════════════════════════════════════════════════════
+  // APPLY
+  // ═══════════════════════════════════════════════════════════
+
+  async function applyNow(fromCountdown = false) {
     if (S.applying) return;
     S.applying = true;
+    stopCountdown();
 
-    // Respect unsaved work
-    if (hasUnsavedWork()) {
+    // Respect unsaved work (only if user clicked, not from auto-countdown)
+    if (hasUnsavedWork() && !fromCountdown) {
       const ok = await confirmDiscard();
       if (!ok) {
         S.applying = false;
+        // Restart countdown if user cancelled
+        if (S.dialogEl) {
+          const card = S.dialogEl.querySelector('.folio-upd-card');
+          if (card) card.classList.remove('applying');
+          startCountdown();
+        }
         return;
       }
     }
+    // If auto-countdown fires but there's unsaved work, we still postpone
+    // and treat it as a "later" dismissal to avoid data loss
+    if (hasUnsavedWork() && fromCountdown) {
+      S.applying = false;
+      dismiss();
+      return;
+    }
 
-    // Disable action buttons
+    // Visual: spinning icon, hide countdown, show progress
+    const card = S.dialogEl?.querySelector('.folio-upd-card');
+    if (card) card.classList.add('applying');
+    hideCountdown();
+
     const applyBtn = S.dialogEl?.querySelector('[data-folio-upd="apply"]');
     const laterBtn = S.dialogEl?.querySelector('[data-folio-upd="later"]');
-    if (applyBtn) applyBtn.disabled = true;
+    if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = 'Updating…'; }
     if (laterBtn) laterBtn.disabled = true;
 
     setProgress(10);
-    if (S.dialogTimer) { clearTimeout(S.dialogTimer); S.dialogTimer = null; }
 
     try {
       const reg = S.reg || await navigator.serviceWorker.getRegistration();
       if (!reg) throw new Error('No service worker registration');
       S.reg = reg;
 
-      // Prefer waiting worker
       if (!reg.waiting) {
         await reg.update();
-        // Wait up to CFG.waitingPollTimeoutMs for a waiting worker to appear
         await new Promise((resolve) => {
           const start = Date.now();
           const iv = setInterval(() => {
@@ -378,16 +681,14 @@
       setProgress(45);
 
       if (reg.waiting) {
-        // Clear any pending fallback from a previous attempt       [FIX]
         if (S.safetyTimer) { clearTimeout(S.safetyTimer); S.safetyTimer = null; }
         if (S.onCtrlHandler) {
           navigator.serviceWorker.removeEventListener('controllerchange', S.onCtrlHandler);
           S.onCtrlHandler = null;
         }
 
-        // Listen for controller change → reload
         S.onCtrlHandler = () => {
-          if (S.safetyTimer) { clearTimeout(S.safetyTimer); S.safetyTimer = null; } // [FIX]
+          if (S.safetyTimer) { clearTimeout(S.safetyTimer); S.safetyTimer = null; }
           navigator.serviceWorker.removeEventListener('controllerchange', S.onCtrlHandler);
           S.onCtrlHandler = null;
           setProgress(100);
@@ -400,7 +701,6 @@
         setProgress(75);
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
 
-        // Safety: if no controllerchange after timeout, force reload
         S.safetyTimer = setTimeout(() => {
           S.safetyTimer = null;
           setProgress(100);
@@ -409,7 +709,6 @@
           location.reload();
         }, CFG.controllerTimeoutMs);
       } else {
-        // Nothing waiting — reload anyway to pick up new HTTP cache
         setProgress(100);
         showReloadOverlay();
         setTimeout(() => location.reload(), CFG.reloadDelayMs);
@@ -417,24 +716,27 @@
     } catch (err) {
       console.warn('[Folio update] apply failed:', err);
       S.applying = false;
-      if (applyBtn) applyBtn.disabled = false;
+      if (card) card.classList.remove('applying');
+      if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Update now'; }
       if (laterBtn) laterBtn.disabled = false;
       setProgress(0);
-      toast('Update failed — try again later', 'error', 4000);   // [FIX] positional
+      toast('Update failed — try again later', 'error', 4000);
     }
   }
 
-  /* ── Update checks ── */
+  // ═══════════════════════════════════════════════════════════
+  // CHECKS
+  // ═══════════════════════════════════════════════════════════
+
   async function checkNow() {
     if (S.paused || S.applying) return;
-    if (S.dialogEl) return;        // don't stack dialogs               [FIX]
+    if (S.dialogEl) return;
     try {
       const reg = S.reg || await navigator.serviceWorker.getRegistration();
       if (!reg) return;
       S.reg = reg;
       await reg.update();
 
-      // New SW arrived → clear the "postponed" flag for this new one  [FIX]
       if (reg.waiting && S.postponedVersion !== reg.waiting.scriptURL) {
         S.postponed = false;
         S.postponedVersion = null;
@@ -446,34 +748,32 @@
     }
   }
 
-  /* ── Init ── */
+  // ═══════════════════════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════════════════════
+
   async function init() {
     if (S.initialized || !('serviceWorker' in navigator)) return;
     S.initialized = true;
+    S.reducedMotion = hasReducedMotion();
 
     try {
       S.reg = await navigator.serviceWorker.getRegistration();
       if (!S.reg) return;
 
-      // SW tells us it has an update ready
       navigator.serviceWorker.addEventListener('message', (event) => {
         const d = event.data || {};
         if (d.type === 'SW_UPDATE_AVAILABLE' || d.type === 'UPDATE_AVAILABLE') {
-          // A new version supersedes any postponed one                [FIX]
           S.postponed = false;
           S.postponedVersion = null;
           show();
         }
       });
 
-      // SW took control — do nothing unless applyNow initiated it
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        // No-op: reload is triggered by applyNow's onCtrlHandler.
-        // We intentionally do NOT reload here so a silent first-install
-        // doesn't yank the page out from under the user.
+        // No-op — applyNow handles reload explicitly
       });
 
-      // Recurring + trigger-based checks
       if (S.checkTimer) clearInterval(S.checkTimer);
       S.checkTimer = setInterval(checkNow, CFG.checkIntervalMs);
 
@@ -484,32 +784,35 @@
 
       await checkNow();
 
-      // If a waiting worker exists at boot, surface it
       if (S.reg.waiting) show();
     } catch (err) {
       console.warn('[Folio update] init error:', err);
     }
   }
 
-  /* ── Public API ── */
+  // ═══════════════════════════════════════════════════════════
+  // PUBLIC API
+  // ═══════════════════════════════════════════════════════════
+
   window.FOLIO = window.FOLIO || {};
   window.FOLIO.update = {
     check: checkNow,
-    applyNow,
+    applyNow: () => applyNow(false),
     pause() {
       S.paused = true;
       if (S.checkTimer) { clearInterval(S.checkTimer); S.checkTimer = null; }
+      stopCountdown();
     },
     resume() {
       S.paused = false;
-      if (S.applying) return;              // [FIX] don't check mid-reload
+      if (S.applying) return;
       setTimeout(checkNow, 800);
     },
     isPaused: () => S.paused,
     _state: S,
+    _config: CFG,
   };
 
-  // Bridge used by install.js
   window.__updateManager = window.FOLIO.update;
 
   if (document.readyState === 'loading') {
