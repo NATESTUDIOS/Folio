@@ -5,7 +5,7 @@
 // ── Date-based versioning ───────────────────────────────────
 // Format: YYYY-MM-DD-<n>
 //   Increment <n> for same-day deploys; bump date on a new day.
-const CACHE_VERSION = '2026-10-19-4';
+const CACHE_VERSION = '2026-10-19-5';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
 
@@ -462,7 +462,7 @@ self.addEventListener('message', (event) => {
 function normalizePushPayload(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
-      title: 'Folio', body: '', icon: '/icons/icon-192.png',
+      title: 'Folio', body: '', icon: '/icons/notif.png',
       badge: '/icons/icon-144.png', image: undefined, tag: undefined,
       link: '/notifications', notificationId: '', type: 'system', user_id: '', extra: '',
     };
