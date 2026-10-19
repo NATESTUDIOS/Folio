@@ -381,6 +381,7 @@
     <symbol id="i-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
   </defs>
 </svg>
 
@@ -1890,66 +1891,157 @@ function renderSearchPanel(container) {
     container.innerHTML = '<div class="empty-state" style="padding:20px 6px"><div class="empty-state-title" style="font-size:12px;">No project</div></div>';
     return;
   }
-  const results = el('div');
+
+  const header = el('div', { class: 'search-header' });
   const input = el('input', {
-    type: 'search', class: 'sidebar-filter', placeholder: 'Search across all files…',
+    type: 'search',
+    class: 'sidebar-filter search-input',
+    placeholder: 'Search across all files…',
     oninput: debounce(async (e) => {
       const q = e.target.value.trim();
-      if (!q) { results.innerHTML = ''; return; }
-      try { await doSearch(q, results); }
+      clearBtn.hidden = !q;
+      if (!q) { results.innerHTML = ''; summary.textContent = ''; return; }
+      results.innerHTML = '<div class="search-loading"><div class="spinner"></div><span>Searching…</span></div>';
+      summary.textContent = '';
+      try { await doSearch(q, results, summary); }
       catch (err) { console.error('[Search]', err); }
     }, 300),
   });
-  container.appendChild(input);
+
+  const clearBtn = el('button', {
+    class: 'search-clear', type: 'button', 'aria-label': 'Clear search', hidden: true,
+    onclick: () => {
+      input.value = '';
+      clearBtn.hidden = true;
+      results.innerHTML = '';
+      summary.textContent = '';
+      input.focus();
+    },
+  }, icon('x', 10));
+
+  const summary = el('div', { class: 'search-summary' });
+  const results = el('div', { class: 'search-results' });
+
+  header.appendChild(input);
+  header.appendChild(clearBtn);
+  container.appendChild(header);
+  container.appendChild(summary);
   container.appendChild(results);
+
+  // Initial hint state
+  results.appendChild(el('div', { class: 'search-hint' },
+    el('div', { class: 'search-hint-icon' }, icon('search', 18)),
+    el('div', { class: 'search-hint-title' }, 'Search this project'),
+    el('div', { class: 'search-hint-desc' }, 'Type to find text across every file. Click a result to jump to the line.')
+  ));
 }
 
-async function doSearch(query, resultsEl) {
+async function doSearch(query, resultsEl, summaryEl) {
   resultsEl.innerHTML = '';
+  if (summaryEl) summaryEl.textContent = '';
+
   const files = await db.listFiles(S.currentProject.pid);
   const lower = query.toLowerCase();
-  let totalMatches = 0;
+  const matchesByFile = [];
 
   for (const file of files) {
     if (!isTextFile(file.path) || isPlaceholder(file.path)) continue;
     const lines = file.content.split('\n');
-    const matches = [];
+    const fileMatches = [];
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].toLowerCase().includes(lower)) {
-        matches.push({ line: i + 1, content: lines[i].trim().slice(0, 120) });
+      const idx = lines[i].toLowerCase().indexOf(lower);
+      if (idx >= 0) {
+        fileMatches.push({ line: i + 1, content: lines[i], matchStart: idx, matchLen: query.length });
       }
     }
-    if (matches.length === 0) continue;
-    totalMatches += matches.length;
-
-    const block = el('div', { class: 'search-file-block' },
-      el('div', { class: 'search-file-path' },
-        el('span', { class: 'icon' }, icon(fileIconName(file.path), 10)),
-        el('span', { class: 'path' }, file.path),
-        el('span', { class: 'count' }, String(matches.length))
-      )
-    );
-    for (const m of matches) {
-      block.appendChild(el('div', {
-        class: 'search-match',
-        onclick: async () => {
-          await workspace.openFile(file.path);
-          setTimeout(() => cm.goToLine(m.line), 100);
-        },
-      },
-        el('span', { class: 'line-num' }, String(m.line)),
-        el('span', { class: 'content' }, m.content)
-      ));
+    if (fileMatches.length > 0) {
+      matchesByFile.push({ path: file.path, matches: fileMatches });
     }
-    resultsEl.appendChild(block);
+  }
+
+  const totalMatches = matchesByFile.reduce((n, f) => n + f.matches.length, 0);
+  const totalFiles = matchesByFile.length;
+
+  if (summaryEl) {
+    if (totalMatches === 0) {
+      summaryEl.innerHTML = '';
+    } else {
+      summaryEl.innerHTML = `<span class="search-summary-num">${totalMatches}</span> ${totalMatches === 1 ? 'result' : 'results'} in <span class="search-summary-num">${totalFiles}</span> ${totalFiles === 1 ? 'file' : 'files'}`;
+    }
   }
 
   if (totalMatches === 0) {
-    resultsEl.appendChild(el('div', { class: 'empty-state', style: 'padding:20px 6px' },
-      el('div', { class: 'empty-state-title', style: 'font-size:12px' }, 'No matches'),
-      el('div', { class: 'empty-state-desc', style: 'font-size:10px' }, `Nothing found for "${query}"`)
+    resultsEl.appendChild(el('div', { class: 'search-empty' },
+      el('div', { class: 'search-empty-icon' }, icon('search', 18)),
+      el('div', { class: 'search-empty-title' }, `No results for "${query}"`),
+      el('div', { class: 'search-empty-desc' }, 'Try a different term, or check that the files are text files.')
     ));
+    return;
   }
+
+  for (const { path, matches } of matchesByFile) {
+    const block = el('div', { class: 'search-file-block' });
+
+    const header = el('div', { class: 'search-file-header' },
+      el('span', { class: 'search-file-caret' }, icon('chevron-right', 9)),
+      el('span', { class: 'search-file-icon' }, icon(fileIconName(path), 11)),
+      el('span', { class: 'search-file-path' }, path),
+      el('span', { class: 'search-file-count' }, String(matches.length))
+    );
+
+    const body = el('div', { class: 'search-file-body' });
+
+    for (const m of matches) {
+      // Build highlighted line with context clipping
+      const ctx = buildHighlightedLine(m.content, m.matchStart, m.matchLen, query);
+
+      const row = el('div', { class: 'search-match' },
+        el('span', { class: 'search-line-num' }, String(m.line)),
+        ctx
+      );
+      row.addEventListener('click', async () => {
+        await workspace.openFile(path);
+        setTimeout(() => cm.goToLine(m.line), 100);
+      });
+      body.appendChild(row);
+    }
+
+    let expanded = true;
+    header.addEventListener('click', () => {
+      expanded = !expanded;
+      body.style.display = expanded ? 'block' : 'none';
+      header.classList.toggle('collapsed', !expanded);
+    });
+
+    block.appendChild(header);
+    block.appendChild(body);
+    resultsEl.appendChild(block);
+  }
+}
+
+function buildHighlightedLine(content, start, len, _query) {
+  const wrap = el('span', { class: 'search-match-content' });
+
+  // Compute context window: up to 30 chars before, 60 chars after the match
+  const ctxBefore = 30;
+  const ctxAfter = 60;
+  const winStart = Math.max(0, start - ctxBefore);
+  const winEnd = Math.min(content.length, start + len + ctxAfter);
+
+  const pre = content.slice(winStart, start);
+  const hit = content.slice(start, start + len);
+  const post = content.slice(start + len, winEnd);
+
+  if (winStart > 0) wrap.appendChild(el('span', { class: 'search-match-ellipsis' }, '…'));
+  if (pre) wrap.appendChild(el('span', { class: 'search-match-pre' }, pre));
+
+  const mark = el('mark', { class: 'search-match-hit' }, hit);
+  wrap.appendChild(mark);
+
+  if (post) wrap.appendChild(el('span', { class: 'search-match-post' }, post));
+  if (winEnd < content.length) wrap.appendChild(el('span', { class: 'search-match-ellipsis' }, '…'));
+
+  return wrap;
 }
 
 async function renderVersionsPanel(container) {

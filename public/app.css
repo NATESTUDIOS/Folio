@@ -1773,3 +1773,432 @@ svg { display: block; }
   .empty-recent-item,
   .projects-sheet-item { transition: none; }
 }
+/* ─── Search panel ──────────────────────────────────────── */
+.search-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 3px 0 5px;
+}
+.search-input { padding-right: 26px; }
+.search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+}
+.search-clear:hover { background: var(--theme-glass-bg); color: var(--theme-text); }
+.search-clear svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+.search-summary {
+  padding: 4px 6px 6px;
+  font-size: 10px;
+  color: var(--theme-text-tertiary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--theme-divider);
+  margin-bottom: 5px;
+}
+.search-summary-num {
+  color: var(--theme-text);
+  font-weight: 800;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.search-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 8px;
+  font-size: 11px;
+  color: var(--theme-text-tertiary);
+  justify-content: center;
+}
+.search-loading .spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+.search-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 30px 16px;
+  gap: 6px;
+}
+.search-hint-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  color: var(--theme-text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+.search-hint-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; }
+.search-hint-title { font-size: 12px; font-weight: 700; color: var(--theme-text); }
+.search-hint-desc { font-size: 10.5px; color: var(--theme-text-tertiary); line-height: 1.5; max-width: 240px; }
+
+.search-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 26px 14px;
+  gap: 4px;
+}
+.search-empty-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--theme-glass-bg);
+  color: var(--theme-text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+.search-empty-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; }
+.search-empty-title { font-size: 12px; font-weight: 700; color: var(--theme-text); }
+.search-empty-desc { font-size: 10.5px; color: var(--theme-text-tertiary); line-height: 1.5; max-width: 260px; }
+
+/* ─── Search result files ───────────────────────────────── */
+.search-results { display: flex; flex-direction: column; gap: 4px; }
+
+.search-file-block {
+  border-radius: 7px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  overflow: hidden;
+}
+
+.search-file-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--theme-text-secondary);
+  border-bottom: 1px solid var(--theme-divider);
+}
+.search-file-header:hover { background: var(--theme-surface-elevated); color: var(--theme-text); }
+.search-file-caret {
+  width: 9px;
+  height: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s var(--ease);
+  color: var(--theme-text-tertiary);
+}
+.search-file-caret svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+.search-file-header.collapsed .search-file-caret { transform: rotate(0deg); }
+.search-file-header:not(.collapsed) .search-file-caret { transform: rotate(90deg); }
+.search-file-icon { width: 11px; height: 11px; display: flex; align-items: center; justify-content: center; color: var(--theme-text-tertiary); }
+.search-file-icon svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.search-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-file-count {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  background: var(--theme-divider);
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+.search-file-body { padding: 3px 0; }
+
+/* ─── Individual match rows ─────────────────────────────── */
+.search-match {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 8px 3px 6px;
+  font-size: 10.5px;
+  cursor: pointer;
+  color: var(--theme-text-secondary);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.search-match:hover {
+  background: var(--theme-primary-soft);
+  color: var(--theme-text);
+}
+.search-line-num {
+  color: var(--theme-text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  min-width: 22px;
+  text-align: right;
+  flex-shrink: 0;
+  user-select: none;
+}
+.search-match-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-match-ellipsis { color: var(--theme-text-tertiary); opacity: 0.6; }
+.search-match-pre,
+.search-match-post { color: var(--theme-text-secondary); }
+.search-match-hit {
+  background: var(--theme-primary);
+  color: #0a0c10;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 700;
+}
+[data-theme="light"] .search-match-hit { color: #ffffff; }
+/* ═══════════════════════════════════════════════════════════
+   CODEMIRROR SEARCH PANEL — themed
+   ═══════════════════════════════════════════════════════════ */
+.cm-editor .cm-panels {
+  background: var(--theme-surface) !important;
+  color: var(--theme-text) !important;
+  border-top: 1px solid var(--theme-glass-border) !important;
+  padding: 6px 8px !important;
+  font-family: var(--font) !important;
+  font-size: 11.5px !important;
+  z-index: 10;
+}
+
+.cm-editor .cm-panels.cm-panels-top {
+  border-bottom: 1px solid var(--theme-glass-border) !important;
+  border-top: none !important;
+}
+
+.cm-editor .cm-panel.cm-search {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 0 !important;
+}
+
+/* ── Search / replace inputs ─────────────────────────────── */
+.cm-editor .cm-panel.cm-search input[name="search"],
+.cm-editor .cm-panel.cm-search input[name="replace"] {
+  height: 26px !important;
+  padding: 0 8px !important;
+  background: var(--input-bg) !important;
+  border: 1px solid var(--theme-card-border) !important;
+  border-radius: 6px !important;
+  color: var(--theme-text) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 11.5px !important;
+  outline: none !important;
+  min-width: 140px !important;
+  transition: border-color 0.15s var(--ease) !important;
+}
+
+.cm-editor .cm-panel.cm-search input[name="search"]:focus,
+.cm-editor .cm-panel.cm-search input[name="replace"]:focus {
+  border-color: var(--theme-primary) !important;
+  box-shadow: 0 0 0 2px var(--theme-primary-soft) !important;
+}
+
+.cm-editor .cm-panel.cm-search input[name="search"]::placeholder,
+.cm-editor .cm-panel.cm-search input[name="replace"]::placeholder {
+  color: var(--theme-text-tertiary) !important;
+}
+
+/* No match — CodeMirror marks the input with [main] when no result */
+.cm-editor .cm-panel.cm-search input[name="search"]:invalid {
+  border-color: var(--theme-danger) !important;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.cm-editor .cm-panel.cm-search button {
+  height: 26px !important;
+  padding: 0 9px !important;
+  background: var(--theme-glass-bg) !important;
+  border: 1px solid var(--theme-card-border) !important;
+  border-radius: 6px !important;
+  color: var(--theme-text-secondary) !important;
+  font-family: var(--font) !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 0.15s var(--ease) !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+.cm-editor .cm-panel.cm-search button:hover {
+  background: var(--theme-surface-elevated) !important;
+  color: var(--theme-text) !important;
+  border-color: var(--theme-primary-glow) !important;
+}
+
+.cm-editor .cm-panel.cm-search button:active {
+  transform: scale(0.97) !important;
+}
+
+.cm-editor .cm-panel.cm-search button[name="next"],
+.cm-editor .cm-panel.cm-search button[name="prev"] {
+  padding: 0 8px !important;
+  font-family: var(--font-mono) !important;
+}
+
+.cm-editor .cm-panel.cm-search button[name="replace"],
+.cm-editor .cm-panel.cm-search button[name="replaceAll"] {
+  background: var(--theme-primary) !important;
+  color: #0a0c10 !important;
+  border-color: var(--theme-primary) !important;
+}
+[data-theme="light"] .cm-editor .cm-panel.cm-search button[name="replace"],
+[data-theme="light"] .cm-editor .cm-panel.cm-search button[name="replaceAll"] {
+  color: #ffffff !important;
+}
+
+.cm-editor .cm-panel.cm-search button[name="replace"]:hover,
+.cm-editor .cm-panel.cm-search button[name="replaceAll"]:hover {
+  background: var(--theme-primary-hover) !important;
+  color: #0a0c10 !important;
+}
+
+/* Close "×" button */
+.cm-editor .cm-panel.cm-search button[name="close"] {
+  width: 26px !important;
+  padding: 0 !important;
+  margin-left: auto !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 1 !important;
+  color: var(--theme-text-tertiary) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.cm-editor .cm-panel.cm-search button[name="close"]:hover {
+  background: var(--theme-glass-bg) !important;
+  color: var(--theme-text) !important;
+}
+
+/* ── Checkboxes ──────────────────────────────────────────── */
+.cm-editor .cm-panel.cm-search label {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  color: var(--theme-text-tertiary) !important;
+  cursor: pointer !important;
+  padding: 3px 6px !important;
+  border-radius: 5px !important;
+  transition: all 0.15s var(--ease) !important;
+  user-select: none !important;
+}
+
+.cm-editor .cm-panel.cm-search label:hover {
+  background: var(--theme-glass-bg) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+.cm-editor .cm-panel.cm-search label input[type="checkbox"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 3px !important;
+  border: 1.5px solid var(--theme-card-border) !important;
+  background: var(--input-bg) !important;
+  cursor: pointer !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
+  transition: all 0.15s var(--ease) !important;
+}
+
+.cm-editor .cm-panel.cm-search label input[type="checkbox"]:checked {
+  background: var(--theme-primary) !important;
+  border-color: var(--theme-primary) !important;
+}
+
+.cm-editor .cm-panel.cm-search label input[type="checkbox"]:checked::after {
+  content: '' !important;
+  position: absolute !important;
+  left: 3px !important;
+  top: 0px !important;
+  width: 4px !important;
+  height: 7px !important;
+  border: solid #0a0c10 !important;
+  border-width: 0 1.5px 1.5px 0 !important;
+  transform: rotate(45deg) !important;
+}
+
+[data-theme="light"] .cm-editor .cm-panel.cm-search label input[type="checkbox"]:checked::after {
+  border-color: #ffffff !important;
+}
+
+.cm-editor .cm-panel.cm-search label input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--theme-primary) !important;
+  outline-offset: 1px !important;
+}
+
+/* ── Search match highlights inside the doc ─────────────── */
+.cm-editor .cm-searchMatch {
+  background: rgba(245, 158, 11, 0.28) !important;
+  outline: 1px solid var(--theme-primary) !important;
+  border-radius: 2px !important;
+}
+
+.cm-editor .cm-searchMatch.cm-searchMatch-selected {
+  background: var(--theme-primary) !important;
+  color: #0a0c10 !important;
+  outline: none !important;
+}
+
+[data-theme="light"] .cm-editor .cm-searchMatch.cm-searchMatch-selected {
+  color: #ffffff !important;
+}
+
+/* ── On mobile — stack the inputs, compress the actions ─── */
+@media (max-width: 639px) {
+  .cm-editor .cm-panels { padding: 5px 6px !important; }
+  .cm-editor .cm-panel.cm-search { gap: 4px !important; }
+  .cm-editor .cm-panel.cm-search input[name="search"],
+  .cm-editor .cm-panel.cm-search input[name="replace"] {
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+    height: 28px !important;
+  }
+  .cm-editor .cm-panel.cm-search button {
+    height: 26px !important;
+    padding: 0 7px !important;
+    font-size: 10px !important;
+  }
+  .cm-editor .cm-panel.cm-search label {
+    font-size: 10px !important;
+    padding: 2px 4px !important;
+  }
+  .cm-editor .cm-panel.cm-search button[name="close"] {
+    position: absolute !important;
+    right: 8px !important;
+    top: 6px !important;
+    margin: 0 !important;
+  }
+}
