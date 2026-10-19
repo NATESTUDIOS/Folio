@@ -1737,7 +1737,7 @@ svg { display: block; }
     syncState: 'unknown',
     activeTab: 'overview', tabs: OWNER_TABS, tabCounts: {},
     deployState: null, analyticsData: null, logsData: null, logsOffset: 0,
-    dbData: null, iconVariants: [], selectedIconUrl: null,
+    dbData: null, iconVariants: [], selectedIconUrl: null, pendingUploadDataUrl: null,
     online: navigator.onLine,
     expandedFolders: new Set(),
     fileFilter: '',
@@ -2032,181 +2032,304 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   async function openIconPicker() {
-    if (S.isSharedMode) return;
-    S.iconVariants = [];
-    S.selectedIconUrl = null;
+  if (S.isSharedMode) return;
+  S.iconVariants = [];
+  S.selectedIconUrl = null;
+  S.pendingUploadDataUrl = null;
 
-    const isAuthed = !!S.session;
+  const isAuthed = !!S.session;
+  const hasIcon = !!S.project?.iconUrl;
 
-    openModal(`
-      <div class="modal-title">Project icon</div>
-      <div class="modal-desc">Pick a preset${isAuthed ? ' or build your own' : ''}. Tap one to apply.</div>
+  openModal(`
+    <div class="modal-title">Project icon</div>
+    <div class="modal-desc">Pick a preset, build your own, or upload an image.</div>
 
-      ${isAuthed ? `
-        <div class="icon-tabs">
-          <button class="icon-tab active" data-icon-tab="presets" type="button">Presets</button>
-          <button class="icon-tab" data-icon-tab="custom" type="button">Customize</button>
+    ${isAuthed ? `
+      <div class="icon-tabs">
+        <button class="icon-tab active" data-icon-tab="presets" type="button">Presets</button>
+        <button class="icon-tab" data-icon-tab="custom" type="button">Customize</button>
+        <button class="icon-tab" data-icon-tab="upload" type="button">Upload</button>
+      </div>
+    ` : ''}
+
+    <div class="icon-mode-panel active" data-icon-panel="presets">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:10px;font-weight:700;color:var(--theme-text-tertiary);text-transform:uppercase;letter-spacing:.4px;">5 presets</span>
+        <button class="btn btn-sm btn-ghost" id="iconShuffleBtn" type="button" style="padding:3px 8px;">
+          ${svg('refresh', 10, 2.2)} Shuffle
+        </button>
+      </div>
+      <div id="iconPickerGrid" class="icon-picker-grid"></div>
+      <div style="font-size:10px;color:var(--theme-text-tertiary);margin-top:8px;line-height:1.5;">
+        ${isAuthed
+          ? `Presets are generated from your project name. For full control, switch to <strong style="color:var(--theme-text);">Customize</strong> or <strong style="color:var(--theme-text);">Upload</strong>.`
+          : `Presets are generated from your project name. <a href="/register.html?next=${encodeURIComponent(location.pathname + location.search)}" style="color:var(--theme-primary);font-weight:700;">Sign in</a> to customize or upload.`}
+      </div>
+    </div>
+
+    ${isAuthed ? `
+      <div class="icon-mode-panel" data-icon-panel="custom">
+        <div class="field">
+          <label class="field-label">Headline</label>
+          <input class="input" id="iconCustomText" maxlength="40"
+            value="${escapeAttr(getInitials(S.project?.name || ''))}"
+            placeholder="A, AB, ABC…">
+          <div class="field-hint">1–3 characters works best. Words also OK.</div>
         </div>
-      ` : ''}
-
-      <div class="icon-mode-panel active" data-icon-panel="presets">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <span style="font-size:10px;font-weight:700;color:var(--theme-text-tertiary);text-transform:uppercase;letter-spacing:.4px;">5 presets</span>
-          <button class="btn btn-sm btn-ghost" id="iconShuffleBtn" type="button" style="padding:3px 8px;">
-            ${svg('refresh', 10, 2.2)} Shuffle
-          </button>
+        <div class="field">
+          <label class="field-label">Style</label>
+          <div class="filter-pills" style="gap:4px;">
+            <button class="filter-pill active" data-icon-style="solid" type="button">Solid</button>
+            <button class="filter-pill" data-icon-style="gradient" type="button">Gradient</button>
+            <button class="filter-pill" data-icon-style="pattern" type="button">Pattern</button>
+            <button class="filter-pill" data-icon-style="badge" type="button">Badge</button>
+            <button class="filter-pill" data-icon-style="poster" type="button">Poster</button>
+          </div>
         </div>
-        <div id="iconPickerGrid" class="icon-picker-grid"></div>
-        <div style="font-size:10px;color:var(--theme-text-tertiary);margin-top:8px;line-height:1.5;">
-          ${isAuthed
-            ? `Presets are generated from your project name. For full control, switch to <strong style="color:var(--theme-text);">Customize</strong>.`
-            : `Presets are generated from your project name. <a href="/register.html?next=${encodeURIComponent(location.pathname + location.search)}" style="color:var(--theme-primary);font-weight:700;">Sign in</a> to customize colors, style, and layout.`}
+        <div class="field">
+          <label class="field-label">Primary color</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div style="display:flex;gap:4px;">
+              ${['#F59E0B','#10B981','#3B82F6','#a855f7','#ec4899','#06b6d4'].map((c, i) => `
+                <button type="button" data-color="${c}"
+                  style="width:22px;height:22px;border-radius:6px;background:${c};border:2px solid ${i===0?'var(--theme-text)':'transparent'};cursor:pointer;padding:0;"></button>
+              `).join('')}
+            </div>
+            <input class="input" id="iconCustomColor" type="text" value="#F59E0B"
+              style="width:90px;font-family:var(--font-mono);font-size:11px;height:26px;padding:0 8px;">
+          </div>
         </div>
+        <button class="btn btn-primary btn-block" id="iconCustomGenerate" type="button" style="margin-top:8px;">
+          ${svg('refresh', 12, 2.2)} Generate preview
+        </button>
+        <div id="iconCustomResult" class="icon-picker-grid" style="margin-top:10px;"></div>
       </div>
 
-      ${isAuthed ? `
-        <div class="icon-mode-panel" data-icon-panel="custom">
-          <div class="field">
-            <label class="field-label">Headline</label>
-            <input class="input" id="iconCustomText" maxlength="40"
-              value="${escapeAttr(getInitials(S.project?.name || ''))}"
-              placeholder="A, AB, ABC…">
-            <div class="field-hint">1–3 characters works best. Words also OK.</div>
-          </div>
-          <div class="field">
-            <label class="field-label">Style</label>
-            <div class="filter-pills" style="gap:4px;">
-              <button class="filter-pill active" data-icon-style="solid" type="button">Solid</button>
-              <button class="filter-pill" data-icon-style="gradient" type="button">Gradient</button>
-              <button class="filter-pill" data-icon-style="pattern" type="button">Pattern</button>
-              <button class="filter-pill" data-icon-style="badge" type="button">Badge</button>
-              <button class="filter-pill" data-icon-style="poster" type="button">Poster</button>
-            </div>
-          </div>
-          <div class="field">
-            <label class="field-label">Primary color</label>
-            <div style="display:flex;gap:6px;align-items:center;">
-              <div style="display:flex;gap:4px;">
-                ${['#F59E0B','#10B981','#3B82F6','#a855f7','#ec4899','#06b6d4'].map((c, i) => `
-                  <button type="button" data-color="${c}"
-                    style="width:22px;height:22px;border-radius:6px;background:${c};border:2px solid ${i===0?'var(--theme-text)':'transparent'};cursor:pointer;padding:0;"></button>
-                `).join('')}
-              </div>
-              <input class="input" id="iconCustomColor" type="text" value="#F59E0B"
-                style="width:90px;font-family:var(--font-mono);font-size:11px;height:26px;padding:0 8px;">
-            </div>
-          </div>
-          <button class="btn btn-primary btn-block" id="iconCustomGenerate" type="button" style="margin-top:8px;">
-            ${svg('refresh', 12, 2.2)} Generate preview
+      <div class="icon-mode-panel" data-icon-panel="upload">
+        <input type="file" id="iconUploadFile" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none;">
+
+        <div class="field">
+          <label class="field-label">From file</label>
+          <button class="btn btn-secondary btn-block" id="iconUploadFromFile" type="button">
+            ${svg('upload', 12, 2.2)} Choose an image…
           </button>
-          <div id="iconCustomResult" class="icon-picker-grid" style="margin-top:10px;"></div>
+          <div class="field-hint">PNG, JPG, WebP, or SVG. Max 1 MB.</div>
         </div>
-      ` : ''}
-    `);
 
-    document.querySelectorAll('[data-icon-tab]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-icon-tab]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        document.querySelectorAll('[data-icon-panel]').forEach(p => {
-          p.classList.toggle('active', p.dataset.iconPanel === btn.dataset.iconTab);
-        });
+        <div class="field">
+          <label class="field-label">Or from a URL</label>
+          <div style="display:flex;gap:5px;">
+            <input class="input" id="iconUploadUrl" type="url" placeholder="https://example.com/logo.png" style="flex:1;">
+            <button class="btn btn-secondary btn-icon" id="iconUploadFromUrl" type="button" aria-label="Use URL">
+              ${svg('check', 12, 2.4)}
+            </button>
+          </div>
+          <div class="field-hint">URL must be publicly reachable. CORS may block some hosts.</div>
+        </div>
+
+        <div id="iconUploadStatus" style="font-size:11px;color:var(--theme-text-tertiary);text-align:center;padding:8px;"></div>
+        <div id="iconUploadPreview" class="icon-picker-grid" style="margin-top:10px;"></div>
+      </div>
+    ` : ''}
+
+    ${hasIcon && isAuthed ? `
+      <button class="btn btn-ghost btn-block" id="iconRemoveBtn" type="button" style="margin-top:12px;color:var(--theme-danger);">
+        ${svg('trash', 12, 2.2)} Remove icon
+      </button>
+    ` : ''}
+  `);
+
+  document.querySelectorAll('[data-icon-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-icon-tab]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('[data-icon-panel]').forEach(p => {
+        p.classList.toggle('active', p.dataset.iconPanel === btn.dataset.iconTab);
       });
     });
+  });
 
-    await generateIcons();
-    $('iconShuffleBtn')?.addEventListener('click', async () => {
-      S.iconVariants = [];
-      const grid = $('iconPickerGrid');
-      if (grid) grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
-      await generateIcons({ shuffle: true });
+  await generateIcons();
+
+  $('iconShuffleBtn')?.addEventListener('click', async () => {
+    S.iconVariants = [];
+    const grid = $('iconPickerGrid');
+    if (grid) grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
+    await generateIcons({ shuffle: true });
+  });
+
+  let customStyle = 'solid';
+  document.querySelectorAll('[data-icon-style]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-icon-style]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      customStyle = btn.dataset.iconStyle;
     });
+  });
 
-    let customStyle = 'solid';
-    document.querySelectorAll('[data-icon-style]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-icon-style]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        customStyle = btn.dataset.iconStyle;
-      });
+  document.querySelectorAll('[data-color]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-color]').forEach(b => b.style.borderColor = 'transparent');
+      btn.style.borderColor = 'var(--theme-text)';
+      const inp = $('iconCustomColor');
+      if (inp) inp.value = btn.dataset.color;
     });
-
-    document.querySelectorAll('[data-color]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-color]').forEach(b => b.style.borderColor = 'transparent');
-        btn.style.borderColor = 'var(--theme-text)';
-        const inp = $('iconCustomColor');
-        if (inp) inp.value = btn.dataset.color;
-      });
+  });
+  $('iconCustomColor')?.addEventListener('input', (e) => {
+    const v = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('[data-color]').forEach(b => {
+      b.style.borderColor = b.dataset.color.toLowerCase() === v ? 'var(--theme-text)' : 'transparent';
     });
-    $('iconCustomColor')?.addEventListener('input', (e) => {
-      const v = e.target.value.trim().toLowerCase();
-      document.querySelectorAll('[data-color]').forEach(b => {
-        b.style.borderColor = b.dataset.color.toLowerCase() === v ? 'var(--theme-text)' : 'transparent';
-      });
-    });
+  });
 
-    $('iconCustomGenerate')?.addEventListener('click', async () => {
-      const btn = $('iconCustomGenerate');
-      btn.disabled = true;
-      const original = btn.innerHTML;
-      btn.innerHTML = 'Generating…';
-      try {
-        const text = $('iconCustomText').value.trim() || getInitials(S.project?.name || 'P');
-        const color = $('iconCustomColor').value.trim() || '#F59E0B';
-        const styleMap = {
-          solid:    { template: 'hero-short',          style: { variant: 'dark', pattern: 'none' } },
-          gradient: { template: 'hero-short',          style: { variant: 'dark', pattern: 'none' } },
-          pattern:  { template: 'random-lines-top',    style: { variant: 'dark', pattern: 'dots' } },
-          badge:    { template: 'image-badge-overlay', style: { variant: 'dark', pattern: 'none' } },
-          poster:   { template: 'poster-centered',     style: { variant: 'dark', pattern: 'none' } },
-        };
-        const cfg = styleMap[customStyle] || styleMap.solid;
+  $('iconCustomGenerate')?.addEventListener('click', async () => {
+    const btn = $('iconCustomGenerate');
+    btn.disabled = true;
+    const original = btn.innerHTML;
+    btn.innerHTML = 'Generating…';
+    try {
+      const text = $('iconCustomText').value.trim() || getInitials(S.project?.name || 'P');
+      const color = $('iconCustomColor').value.trim() || '#F59E0B';
+      const styleMap = {
+        solid:    { template: 'hero-short',          style: { variant: 'dark', pattern: 'none' } },
+        gradient: { template: 'hero-short',          style: { variant: 'dark', pattern: 'none' } },
+        pattern:  { template: 'random-lines-top',    style: { variant: 'dark', pattern: 'dots' } },
+        badge:    { template: 'image-badge-overlay', style: { variant: 'dark', pattern: 'none' } },
+        poster:   { template: 'poster-centered',     style: { variant: 'dark', pattern: 'none' } },
+      };
+      const cfg = styleMap[customStyle] || styleMap.solid;
 
-        const res = await fetch(API_FLIER + '?action=avatar/custom', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${S.session}`,
+      const res = await fetch(API_FLIER + '?action=avatar/custom', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${S.session}`,
+        },
+        body: JSON.stringify({
+          mode: 'preview', type: 'template', template: cfg.template, size: '512x512',
+          data: {
+            text: { headline: text },
+            style: { ...cfg.style, colors: { primary: color } },
+            images: {},
           },
-          body: JSON.stringify({
-            mode: 'preview', type: 'template', template: cfg.template, size: '512x512',
-            data: {
-              text: { headline: text },
-              style: { ...cfg.style, colors: { primary: color } },
-              images: {},
-            },
-          }),
-        });
-        const json = await res.json();
-        if (!json.success || !json.preview) throw new Error(json.error || 'Generation failed');
+        }),
+      });
+      const json = await res.json();
+      if (!json.success || !json.preview) throw new Error(json.error || 'Generation failed');
 
-        const grid = $('iconCustomResult');
-        grid.innerHTML = '';
-        const wrapBtn = document.createElement('button');
-        wrapBtn.className = 'icon-option';
-        wrapBtn.type = 'button';
-        wrapBtn.style.gridColumn = '1 / -1';
-        wrapBtn.style.aspectRatio = '1';
-        const img = document.createElement('img');
-        img.src = json.preview;
-        wrapBtn.appendChild(img);
-        wrapBtn.addEventListener('click', async () => {
-          S.selectedIconUrl = json.preview;
-          grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
-          wrapBtn.classList.add('selected');
-          await saveIcon();
+      const grid = $('iconCustomResult');
+      grid.innerHTML = '';
+      const wrapBtn = document.createElement('button');
+      wrapBtn.className = 'icon-option';
+      wrapBtn.type = 'button';
+      wrapBtn.style.gridColumn = '1 / -1';
+      wrapBtn.style.aspectRatio = '1';
+      const img = document.createElement('img');
+      img.src = json.preview;
+      wrapBtn.appendChild(img);
+      wrapBtn.addEventListener('click', async () => {
+        S.selectedIconUrl = json.preview;
+        grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
+        wrapBtn.classList.add('selected');
+        await commitUploadedIcon(S.selectedIconUrl);
+      });
+      grid.appendChild(wrapBtn);
+      grid.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (err) {
+      toast(err.message || 'Could not generate', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  });
+
+  $('iconUploadFromFile')?.addEventListener('click', () => $('iconUploadFile').click());
+  $('iconUploadFile')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 1024 * 1024) { toast('Image too large (max 1 MB)', 'error'); return; }
+    if (!/^image\/(png|jpeg|webp|svg\+xml)$/.test(file.type)) {
+      toast('Use PNG, JPG, WebP, or SVG', 'error');
+      return;
+    }
+    const status = $('iconUploadStatus');
+    if (status) status.textContent = 'Reading file…';
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      if (status) status.textContent = '';
+      await commitUploadedIcon(dataUrl);
+    } catch (err) {
+      if (status) status.textContent = '';
+      toast('Could not read file', 'error');
+    }
+  });
+
+  $('iconUploadFromUrl')?.addEventListener('click', async () => {
+    const url = $('iconUploadUrl').value.trim();
+    if (!url) { toast('Paste an image URL', 'error'); return; }
+    if (!/^https?:\/\//i.test(url)) { toast('URL must start with http:// or https://', 'error'); return; }
+    const status = $('iconUploadStatus');
+    if (status) status.textContent = 'Fetching image…';
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('URL did not return an image');
+      if (blob.size > 1024 * 1024) throw new Error('Image too large (max 1 MB)');
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+      if (status) status.textContent = '';
+      await commitUploadedIcon(dataUrl);
+    } catch (err) {
+      if (status) status.textContent = '';
+      toast('Could not fetch image: ' + (err.message || 'CORS or network error'), 'error', 4000);
+    }
+  });
+
+  $('iconRemoveBtn')?.addEventListener('click', async () => {
+    if (!confirm('Remove project icon? The project will show initials instead.')) return;
+    showLoading('Removing icon', '');
+    try {
+      if (S.session && S.online && !S.isLocalOnly) {
+        const res = await apiFetch(API_HOST + '?action=projects/update', {
+          method: 'POST',
+          body: JSON.stringify({ pid: S.pid, iconUrl: null }),
         });
-        grid.appendChild(wrapBtn);
-        grid.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      } catch (err) {
-        toast(err.message || 'Could not generate', 'error');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = original;
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Update failed');
       }
-    });
-  }
+      S.project.iconUrl = null;
+      await IDB.putProject({
+        pid: S.pid,
+        name: S.project.name,
+        slug: S.project.slug || '',
+        description: S.project.description || '',
+        iconUrl: null,
+        createdAt: S.project.createdAt || Date.now(),
+        updatedAt: Date.now(),
+        myRole: S.project.myRole || 'owner',
+        _server: true,
+      });
+      hideLoading();
+      closeModal();
+      toast('Icon removed', 'success');
+      updateProjectIcons();
+      if (S.activeTab === 'overview') renderPanel();
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Could not remove icon', 'error');
+    }
+  });
+}
 
   async function generateIcons({ shuffle = false } = {}) {
     const grid = $('iconPickerGrid');
@@ -2273,42 +2396,60 @@ svg { display: block; }
   }
 
   async function saveIcon() {
-    if (!S.selectedIconUrl) return;
-    showLoading('Uploading icon', '');
-    try {
-      const uploadRes = await fetch(API_FLIER + '?action=avatar/upload', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataUrl: S.selectedIconUrl, username: S.project?.slug || 'project' }),
-      });
-      const uploadData = await uploadRes.json();
-      if (!uploadData.success || !uploadData.url) throw new Error(uploadData.error || 'Upload failed');
+  if (!S.selectedIconUrl) return;
+  await commitUploadedIcon(S.selectedIconUrl);
+}
 
-      if (S.session && S.online && !S.isLocalOnly) {
-        const updateRes = await apiFetch(API_HOST + '?action=projects/update', {
-          method: 'POST', body: JSON.stringify({ pid: S.pid, iconUrl: uploadData.url }),
-        });
-        if (!updateRes.ok || !updateRes.data?.success) throw new Error(updateRes.data?.error || 'Update failed');
-      }
-      S.project.iconUrl = uploadData.url;
-      await IDB.putProject({
-        pid: S.pid, name: S.project.name, slug: S.project.slug || '',
-        description: S.project.description || '', iconUrl: uploadData.url,
-        createdAt: S.project.createdAt || Date.now(), updatedAt: Date.now(),
-        myRole: S.project.myRole || 'owner', _server: true,
-      });
-      updateProjectIcons();
-      closeModal();
-      hideLoading();
-      toast('Icon saved', 'success');
-      if (S.activeTab === 'overview') {
-        const card = document.getElementById('overviewIcon');
-        if (card) renderProjectIcon(card, S.project);
-      }
-    } catch (err) {
-      hideLoading();
-      toast(err.message || 'Could not save icon', 'error');
+async function commitUploadedIcon(dataUrl) {
+  if (!dataUrl) return;
+  showLoading('Uploading icon', '');
+  try {
+    const uploadRes = await fetch(API_FLIER + '?action=avatar/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dataUrl,
+        username: S.project?.slug || 'project',
+      }),
+    });
+    const uploadData = await uploadRes.json();
+    if (!uploadData.success || !uploadData.url) {
+      throw new Error(uploadData.error || 'Upload failed');
     }
+
+    if (S.session && S.online && !S.isLocalOnly) {
+      const updateRes = await apiFetch(API_HOST + '?action=projects/update', {
+        method: 'POST',
+        body: JSON.stringify({ pid: S.pid, iconUrl: uploadData.url }),
+      });
+      if (!updateRes.ok || !updateRes.data?.success) {
+        throw new Error(updateRes.data?.error || 'Update failed');
+      }
+    }
+
+    S.project.iconUrl = uploadData.url;
+    await IDB.putProject({
+      pid: S.pid,
+      name: S.project.name,
+      slug: S.project.slug || '',
+      description: S.project.description || '',
+      iconUrl: uploadData.url,
+      createdAt: S.project.createdAt || Date.now(),
+      updatedAt: Date.now(),
+      myRole: S.project.myRole || 'owner',
+      _server: true,
+    });
+
+    hideLoading();
+    closeModal();
+    toast('Icon saved', 'success');
+    updateProjectIcons();
+    if (S.activeTab === 'overview') renderPanel();
+  } catch (err) {
+    hideLoading();
+    toast(err.message || 'Could not save icon', 'error');
   }
+}
 
   // ═══════════════════════════════════════════════════════════
   // GATE HELPER
@@ -2873,19 +3014,23 @@ svg { display: block; }
         </div>
       </div>
       ${!S.isLocalOnly && S.syncState !== 'orphan' ? `
-        <div class="card">
-          <div class="card-header"><div class="card-title">${svg('image', 13, 2.2)} Icon</div>
-            ${canEdit ? `<button class="btn btn-sm btn-secondary" id="btnChangeIcon">${svg('refresh', 10, 2.2)} Regenerate</button>` : ''}</div>
-          <div class="card-body">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <div id="overviewIcon" style="width:44px;height:44px;border-radius:10px;background:var(--theme-surface-elevated);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:800;color:var(--theme-primary);font-size:16px;border:1px solid var(--theme-glass-border);"></div>
-              <div style="flex:1;min-width:0;font-size:11px;color:var(--theme-text-secondary);line-height:1.4;">Generated by Flier from your project name.</div>
-            </div>
-          </div>
-        </div>` : ''}
+  <div class="card">
+    <div class="card-header"><div class="card-title">${svg('image', 13, 2.2)} Icon</div>
+      ${canEdit ? `<button class="btn btn-sm btn-secondary" id="btnChangeIcon">${svg('refresh', 10, 2.2)} Change icon</button>` : ''}</div>
+    <div class="card-body">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div id="overviewIcon" style="width:44px;height:44px;border-radius:10px;background:var(--theme-surface-elevated);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:800;color:var(--theme-primary);font-size:16px;border:1px solid var(--theme-glass-border);"></div>
+        <div style="flex:1;min-width:0;font-size:11px;color:var(--theme-text-secondary);line-height:1.4;">
+          ${S.project.iconUrl
+            ? 'Custom icon. Tap to change or remove.'
+            : 'Generated from your project name. Tap to customize or upload.'}
+        </div>
+      </div>
+    </div>
+  </div>` : ''}
     `;
 
-    renderProjectIcon($('overviewIcon'), S.project);
+    renderProjectIcon($('overviewIcon'), S.project, { editable: canEdit });
     if (canEdit || isLocalEditable) {
       $('btnSaveDetails')?.addEventListener('click', saveProjectDetails);
     }
