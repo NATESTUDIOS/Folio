@@ -284,7 +284,6 @@ img { display: block; max-width: 100%; }
   scrollbar-width: none;
   -ms-overflow-style: none;
   -webkit-overflow-scrolling: touch;
-  /* fade edges */
   mask-image: linear-gradient(90deg,
     transparent 0,
     black 8%,
@@ -358,7 +357,7 @@ img { display: block; max-width: 100%; }
   display: block;
 }
 
-/* Placeholder when no image */
+/* Placeholder when no image (kept for fallback) */
 .phone-placeholder {
   width: 100%;
   height: 100%;
@@ -798,7 +797,7 @@ img { display: block; max-width: 100%; }
 </section>
 
 <!-- ═══════════════════════════════════════════════════════
-     PHONE SLIDER
+     PHONE SLIDER — 6 real screenshots
      ═══════════════════════════════════════════════════════ -->
 <section class="slider-section" id="screens">
   <div class="slider-header">
@@ -814,26 +813,9 @@ img { display: block; max-width: 100%; }
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <!--
-              ═══════════════════════════════════════════════════
-              REPLACE with your screenshot:
-              <img src="screen-editor.png" alt="Folio editor">
-              Take this at 390×844 viewport of foliostudios.vercel.app
-              with a project open.
-              ═══════════════════════════════════════════════════
-            -->
-            <div class="phone-placeholder">
-              <div class="phone-placeholder-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="16 18 22 12 16 6"/>
-                  <polyline points="8 6 2 12 8 18"/>
-                </svg>
-              </div>
-              <div class="phone-placeholder-label">Editor</div>
-              <div class="phone-placeholder-hint">
-                Screenshot the app at 390×844 and save as <code>screen-editor.png</code>
-              </div>
-            </div>
+            <img src="/screenshots/screenshot1.png"
+                 alt="Folio editor on mobile"
+                 loading="lazy" decoding="async">
           </div>
         </div>
         <div class="phone-caption">
@@ -846,17 +828,9 @@ img { display: block; max-width: 100%; }
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <div class="phone-placeholder">
-              <div class="phone-placeholder-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                </svg>
-              </div>
-              <div class="phone-placeholder-label">Projects</div>
-              <div class="phone-placeholder-hint">
-                Save as <code>screen-projects.png</code>
-              </div>
-            </div>
+            <img src="/screenshots/screenshot2.png"
+                 alt="Folio projects list"
+                 loading="lazy" decoding="async">
           </div>
         </div>
         <div class="phone-caption">
@@ -869,18 +843,9 @@ img { display: block; max-width: 100%; }
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <div class="phone-placeholder">
-              <div class="phone-placeholder-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-              </div>
-              <div class="phone-placeholder-label">Preview</div>
-              <div class="phone-placeholder-hint">
-                Save as <code>screen-preview.png</code>
-              </div>
-            </div>
+            <img src="/screenshots/screenshot3.png"
+                 alt="Folio live preview"
+                 loading="lazy" decoding="async">
           </div>
         </div>
         <div class="phone-caption">
@@ -893,18 +858,9 @@ img { display: block; max-width: 100%; }
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <div class="phone-placeholder">
-              <div class="phone-placeholder-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
-                  <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
-                </svg>
-              </div>
-              <div class="phone-placeholder-label">Deployments</div>
-              <div class="phone-placeholder-hint">
-                Save as <code>screen-deployments.png</code>
-              </div>
-            </div>
+            <img src="/screenshots/screenshot4.png"
+                 alt="Folio deployments"
+                 loading="lazy" decoding="async">
           </div>
         </div>
         <div class="phone-caption">
@@ -913,28 +869,33 @@ img { display: block; max-width: 100%; }
         </div>
       </div>
 
-      <!-- SLIDE 5: DATABASE -->
+      <!-- SLIDE 5: JSON DB -->
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <div class="phone-placeholder">
-              <div class="phone-placeholder-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                </svg>
-              </div>
-              <div class="phone-placeholder-label">JSON DB</div>
-              <div class="phone-placeholder-hint">
-                Save as <code>screen-db.png</code>
-              </div>
-            </div>
+            <img src="/screenshots/screenshot5.png"
+                 alt="Folio JSON database"
+                 loading="lazy" decoding="async">
           </div>
         </div>
         <div class="phone-caption">
           <div class="phone-caption-title">JSON database</div>
           <div class="phone-caption-desc">Built-in storage for your projects. Read from anywhere, write with a key.</div>
+        </div>
+      </div>
+
+      <!-- SLIDE 6: SEARCH -->
+      <div class="phone-slide">
+        <div class="phone">
+          <div class="phone-screen">
+            <img src="/screenshots/screenshot6.png"
+                 alt="Folio search across files"
+                 loading="lazy" decoding="async">
+          </div>
+        </div>
+        <div class="phone-caption">
+          <div class="phone-caption-title">Search</div>
+          <div class="phone-caption-desc">Find anything across every file. Jump straight to the match.</div>
         </div>
       </div>
 
@@ -980,7 +941,7 @@ img { display: block; max-width: 100%; }
     </div>
     <div class="feature-card reveal">
       <div class="feature-icon">
-        <svg viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0   2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/></svg>
       </div>
       <h3 class="feature-title">One-tap deploy</h3>
       <p class="feature-desc">Publish your project to a live URL instantly. Every deployment is versioned, reversible, and served with proper caching.</p>
@@ -1033,7 +994,7 @@ img { display: block; max-width: 100%; }
         </summary>
         <div class="doc-content">
           <h4>Create your first project</h4>
-          <p>Open <a href="https://foliostudios.vercel.app" target="_blank" rel="noopener">foliostudios.vercel.app</a> and tap <strong>New project</strong>. Give it a name, choose an icon, and you'll land in the editor with three starter files: <code>index</code>, <code>style.css</code>, and <code>app.js</code>.</p>
+          <p>Open <a href="https://foliostudios.vercel.app" target="_blank" rel="noopener">foliostudios.vercel.app</a> and tap <strong>New project</strong>. Give it a name, choose an icon, and you'll land in the editor with three starter files: <code>index.html</code>, <code>style.css</code>, and <code>app.js</code>.</p>
 
           <h4>The three core panels</h4>
           <ul>
@@ -1091,10 +1052,10 @@ img { display: block; max-width: 100%; }
           <pre><code>https://foliostudios.vercel.app/api/host
   ?action=serve
   &amp;pid=YOUR_PROJECT_ID
-  &amp;path=index</code></pre>
+  &amp;path=index.html</code></pre>
 
           <h4>How files are served</h4>
-          <p>Every file in the project — HTML, CSS, JS, images — is served through the <code>action=serve</code> endpoint. When the browser loads your <code>index</code>, Folio rewrites every relative URL in the page (like <code>&lt;link href="style.css"&gt;</code>) to point through the same endpoint. So your multi-file project just works, with no config.</p>
+          <p>Every file in the project — HTML, CSS, JS, images — is served through the <code>action=serve</code> endpoint. When the browser loads your <code>index.html</code>, Folio rewrites every relative URL in the page (like <code>&lt;link href="style.css"&gt;</code>) to point through the same endpoint. So your multi-file project just works, with no config.</p>
 
           <h4>Taking a project offline</h4>
           <p>From the Deploys tab, tap <strong>Take offline</strong>. The URL stops serving immediately, but your files and versions stay intact. Re-deploy any time to bring it back.</p>
@@ -1260,7 +1221,6 @@ console.log(data);</code></pre>
   const dots = dotsEl.querySelectorAll('.slider-dot');
 
   function currentIndex() {
-    // Find the slide whose center is closest to the viewport center
     const trackRect = track.getBoundingClientRect();
     const viewportCenter = trackRect.left + trackRect.width / 2;
     let best = 0;
@@ -1293,7 +1253,6 @@ console.log(data);</code></pre>
   prevBtn.addEventListener('click', () => goTo(currentIndex() - 1));
   nextBtn.addEventListener('click', () => goTo(currentIndex() + 1));
 
-  // Update dots on scroll (throttled with rAF)
   let raf = null;
   track.addEventListener('scroll', () => {
     if (raf) return;
@@ -1303,14 +1262,12 @@ console.log(data);</code></pre>
     });
   }, { passive: true });
 
-  // Keyboard navigation
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, textarea')) return;
     if (e.key === 'ArrowLeft') { goTo(currentIndex() - 1); }
     if (e.key === 'ArrowRight') { goTo(currentIndex() + 1); }
   });
 
-  // Initial dot state
   updateDots();
 })();
 
