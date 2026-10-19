@@ -441,7 +441,7 @@ self.addEventListener('message', (event) => {
         try {
           await self.registration.showNotification('Folio test', {
             body: 'This is a test notification from the service worker.',
-            icon: '/icons/icon-192.png',
+            icon: '/icons/notif.png',
             badge: '/icons/icon-144.png',
             tag: 'folio-test-' + Date.now(),
             data: { url: '/notifications', notificationId: 'test', type: 'system' },
@@ -473,7 +473,7 @@ function normalizePushPayload(raw) {
   return {
     title:          raw.title   || inner.title   || 'Folio',
     body:           raw.body    || inner.body    || '',
-    icon:           raw.icon    || inner.icon    || '/icons/icon-192.png',
+    icon:           raw.icon    || inner.icon    || '/icons/notif.png',
     badge:          raw.badge   || inner.badge   || '/icons/icon-144.png',
     image:          raw.image   || inner.image   || undefined,
     tag:            raw.tag     || inner.tag     || inner.notificationId || 'folio',
