@@ -2,33 +2,33 @@
    Folio — fcm-client.js
    Firebase Cloud Messaging (FCM) subscription manager.
 
-   This is the ONLY client-side push file. It handles:
-     • Fetching/initializing the Firebase Web SDK
-     • Requesting notification permission
-     • Getting an FCM token via getToken()
-     • Uploading the token to /api/notify?action=subscribe
-     • Listening for foreground messages (onMessage)
-     • Cleaning up on unsubscribe
+   Public API (window.FOLIO.fcm):
+     await subscribe({ deviceId? })  → { token, deviceKey, kind }
+     await unsubscribe({ deviceId? })
+     isSupported()                   → boolean (synchronous capability check)
+     isSubscribed()                  → Promise<boolean>
+     getPermission()                 → 'default' | 'granted' | 'denied' | 'unsupported'
+     waitReady(timeoutMs?)           → Promise<boolean>  ← waits for SDK + SW
+     ensureForegroundHandler()       → Promise<void>     ← wires onMessage
 
-   The dedicated FCM service worker (firebase-messaging-sw.js)
-   handles background messages.
-
-   Usage:
-     FOLIO.fcm.subscribe()    // user gesture required
-     FOLIO.fcm.unsubscribe()
-     FOLIO.fcm.isSupported()
-     FOLIO.fcm.getPermission()
+   Design:
+     • Firebase SDK loads lazily on first subscribe()/waitReady()
+     • All state is module-scoped — no external mutation after init
+     • Cross-tab sync via a single BroadcastChannel
+     • Foreground handler is idempotent (no double-wiring)
    ============================================================ */
 (function () {
   'use strict';
 
+  // ═══════════════════════════════════════════════════════════
+  // CONFIG
+  // ═══════════════════════════════════════════════════════════
+
   const API = 'https://foliostudios.vercel.app/api/notify';
   const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/10.13.2';
+  const FCM_SW_PATH = '/firebase-messaging-sw.js';
 
-  // ── Firebase Web config ──────────────────────────────────────
-  // From Firebase Console → Project settings → Your apps → Web app
-  // These values are safe to ship in client-side code (they are
-  // public identifiers, not secrets).
+  // Firebase Web config (public identifiers, safe to ship)
   const firebaseConfig = {
     apiKey: "AIzaSyAShz6D0T-XTu77E-rAqSXw-znRO9gMfMk",
     authDomain: "schollet-e41e7.firebaseapp.com",
@@ -40,36 +40,69 @@
     measurementId: "G-DCRKHR0ZW0"
   };
 
-  // ── FCM VAPID key ───────────────────────────────────────────
-  // From Firebase Console → Cloud Messaging → Web Push certificates
-  // This is DIFFERENT from the web-push CLI key used for standard
-  // Web Push. This one is tied to your Firebase project.
+  // Firebase FCM VAPID key (from Cloud Messaging → Web Push certificates)
   const FCM_VAPID_KEY = "BKKQ5QcfJljXJ4kcEjdcK1Rejl-M6Dq_K7SnfdF_GNtgK_DyfBfFfkvrBB69Qc8A2FcsTYUNcIgqknWeVS6GS4E";
 
-  // ── State ───────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════════
+
   let _app = null;
   let _messaging = null;
-  let _mod = null;         // { getToken, onMessage, deleteToken }
+  let _mod = null;                 // { getToken, onMessage, deleteToken }
+  let _loadPromise = null;         // in-flight SDK load
   let _foregroundUnsubscribe = null;
+  let _broadcast = null;
 
-  // ── Session helper ──────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════
+  // SMALL UTILS
+  // ═══════════════════════════════════════════════════════════
+
   function getSession() {
     try { return localStorage.getItem('folio.session') || ''; } catch { return ''; }
   }
 
   function toast(msg, type) {
     try {
-      if (typeof window.toast === 'function') {
-        window.toast(msg, type || 'info', 3000);
-      } else {
-        console.log('[FCM]', msg);
-      }
+      if (typeof window.toast === 'function') window.toast(msg, type || 'info', 3000);
+      else console.log('[FCM]', msg);
     } catch {}
   }
 
-  // ── Support check ───────────────────────────────────────────
+  function getBC() {
+    if (_broadcast) return _broadcast;
+    try {
+      if (typeof BroadcastChannel === 'function') {
+        _broadcast = new BroadcastChannel('folio-fcm');
+        _broadcast.addEventListener('message', onBroadcast);
+      }
+    } catch {}
+    return _broadcast;
+  }
+
+  function onBroadcast(event) {
+    const d = event.data || {};
+    if (d.type === 'subscribed') {
+      ensureForegroundHandler().catch(() => {});
+    } else if (d.type === 'unsubscribed') {
+      if (_foregroundUnsubscribe) {
+        try { _foregroundUnsubscribe(); } catch {}
+        _foregroundUnsubscribe = null;
+      }
+    }
+  }
+
+  function broadcast(payload) {
+    try { getBC()?.postMessage(payload); } catch {}
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // CAPABILITY / STATE
+  // ═══════════════════════════════════════════════════════════
+
   function isSupported() {
     return (
+      typeof navigator !== 'undefined' &&
       'serviceWorker' in navigator &&
       'PushManager' in window &&
       'Notification' in window
@@ -81,81 +114,153 @@
     return Notification.permission;
   }
 
-  // ── Load Firebase SDK (lazy, cached) ────────────────────────
+  async function isSubscribed() {
+    if (!isSupported()) return false;
+    if (Notification.permission !== 'granted') return false;
+    try { return localStorage.getItem('folio.fcm.subscribed') === 'true'; } catch { return false; }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // LOAD FIREBASE SDK (lazy, idempotent)
+  // ═══════════════════════════════════════════════════════════
+
   async function loadFirebase() {
     if (_mod) return _mod;
+    if (_loadPromise) return _loadPromise;
 
-    const [appMod, msgMod] = await Promise.all([
-      import(`${FIREBASE_SDK}/firebase-app.js`),
-      import(`${FIREBASE_SDK}/firebase-messaging.js`),
-    ]);
+    _loadPromise = (async () => {
+      const [appMod, msgMod] = await Promise.all([
+        import(`${FIREBASE_SDK}/firebase-app.js`),
+        import(`${FIREBASE_SDK}/firebase-messaging.js`),
+      ]);
 
-    // Initialize app only once
-    if (!_app) {
-      _app = appMod.initializeApp(firebaseConfig);
-    }
+      if (!_app) {
+        _app = appMod.initializeApp(firebaseConfig);
+      }
 
-    _messaging = msgMod.getMessaging(_app);
-    _mod = {
-      getToken: msgMod.getToken,
-      onMessage: msgMod.onMessage,
-      deleteToken: msgMod.deleteToken,
-    };
-
-    return _mod;
-  }
-
-  // ── Wait for the FCM service worker to be active ────────────
-  async function waitForFCMServiceWorker(timeoutMs = 10000) {
-    // navigator.serviceWorker.ready resolves when the *current page's*
-    // controlling SW is active — but the FCM SW may not be the
-    // controller. So we poll getRegistration for the specific path.
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      try {
-        const reg = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-        if (reg && (reg.active || reg.installing || reg.waiting)) {
-          if (reg.active) return reg;
-          // Wait for it to become active
-          await new Promise((resolve) => {
-            const sw = reg.installing || reg.waiting;
-            if (!sw) return resolve();
-            sw.addEventListener('statechange', function onChange() {
-              if (sw.state === 'activated' || sw.state === 'redundant') {
-                sw.removeEventListener('statechange', onChange);
-                resolve();
-              }
-            });
-          });
-          const reg2 = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-          if (reg2 && reg2.active) return reg2;
-        }
-      } catch {}
-      await new Promise((r) => setTimeout(r, 200));
-    }
-    throw new Error('FCM service worker not ready — make sure /firebase-messaging-sw.js is registered');
-  }
-
-  // ── Foreground message handling ─────────────────────────────
-  function setupForegroundHandler() {
-    if (_foregroundUnsubscribe) return; // already listening
-
-    if (!_mod || !_messaging) return;
+      _messaging = msgMod.getMessaging(_app);
+      _mod = {
+        getToken: msgMod.getToken,
+        onMessage: msgMod.onMessage,
+        deleteToken: msgMod.deleteToken,
+      };
+      return _mod;
+    })();
 
     try {
-      _foregroundUnsubscribe = _mod.onMessage(_messaging, (payload) => {
+      return await _loadPromise;
+    } catch (err) {
+      _loadPromise = null;
+      throw err;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // WAIT READY — API for pages that need FCM before acting
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Resolves true once:
+   *   • the FCM SDK is loaded
+   *   • /firebase-messaging-sw.js is registered (or can be registered)
+   *
+   * If the SW isn't registered yet, waits up to timeoutMs for it.
+   * Idempotent: safe to call many times; the SDK load is cached.
+   */
+  async function waitReady(timeoutMs = 8000) {
+    if (!isSupported()) return false;
+
+    const start = Date.now();
+    const remaining = () => Math.max(0, timeoutMs - (Date.now() - start));
+
+    try {
+      // Kick off the SDK load and the SW wait in parallel.
+      // We don't fail the whole thing if SW registration is missing —
+      // subscribe() will register on demand — but we do try to load the SDK.
+      const loadP = loadFirebase().then(() => true).catch(() => false);
+      const swP = ensureFCMServiceWorker(remaining()).catch(() => false);
+
+      const [sdkReady] = await Promise.all([loadP, swP]);
+      return sdkReady;
+    } catch {
+      return false;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // FCM SERVICE WORKER
+  // ═══════════════════════════════════════════════════════════
+
+  async function ensureFCMServiceWorker(timeoutMs = 10000) {
+    if (!('serviceWorker' in navigator)) {
+      throw new Error('Service workers not supported');
+    }
+
+    const start = Date.now();
+
+    // 1. Already registered + active?
+    let reg = await navigator.serviceWorker.getRegistration(FCM_SW_PATH);
+    if (reg && reg.active) return reg;
+
+    // 2. Not registered → register now (was missing before!)
+    if (!reg) {
+      try {
+        reg = await navigator.serviceWorker.register(FCM_SW_PATH, { scope: '/' });
+      } catch (err) {
+        throw new Error(`Could not register ${FCM_SW_PATH}: ${err.message || err}`);
+      }
+    }
+
+    // 3. Wait for it to become active
+    while (Date.now() - start < timeoutMs) {
+      const r = await navigator.serviceWorker.getRegistration(FCM_SW_PATH);
+      if (r && r.active) return r;
+      if (r && (r.installing || r.waiting)) {
+        const sw = r.installing || r.waiting;
+        await new Promise((resolve) => {
+          const done = () => {
+            sw.removeEventListener('statechange', onChange);
+            resolve();
+          };
+          const onChange = () => {
+            if (sw.state === 'activated' || sw.state === 'redundant') done();
+          };
+          sw.addEventListener('statechange', onChange);
+          // Also resolve if state is already final
+          if (sw.state === 'activated' || sw.state === 'redundant') done();
+        });
+        const r2 = await navigator.serviceWorker.getRegistration(FCM_SW_PATH);
+        if (r2 && r2.active) return r2;
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    throw new Error('FCM service worker did not activate in time');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // FOREGROUND HANDLER
+  // ═══════════════════════════════════════════════════════════
+
+  async function ensureForegroundHandler() {
+    if (_foregroundUnsubscribe) return;
+    if (!isSupported()) return;
+
+    const mod = await loadFirebase();
+    if (_foregroundUnsubscribe) return; // double-check after await
+
+    try {
+      _foregroundUnsubscribe = mod.onMessage(_messaging, (payload) => {
         console.log('[FCM] Foreground message:', payload);
 
         const data = payload.data || {};
         const title = data.title || 'Folio';
         const body = data.body || '';
-        const link = data.link || '/';
+        const link = data.link || '/notifications';
 
-        // Show a toast in the app
         toast(body || title, 'info');
 
-        // Optionally, also show a system notification if the tab
-        // is visible (FCM doesn't auto-show for foreground messages)
+        // Show a system notification when the tab is visible
         if (document.visibilityState === 'visible') {
           try {
             const opts = {
@@ -169,13 +274,12 @@
                 type: data.type || 'system',
               },
             };
-            navigator.serviceWorker.ready.then((reg) => {
-              reg.showNotification(title, opts);
-            }).catch(() => {});
+            navigator.serviceWorker.ready
+              .then((reg) => reg.showNotification(title, opts))
+              .catch(() => {});
           } catch {}
         }
 
-        // Dispatch a custom event so the app can refresh counts
         try {
           window.dispatchEvent(new CustomEvent('folio:fcm:message', { detail: payload }));
         } catch {}
@@ -185,7 +289,10 @@
     }
   }
 
-  // ── Subscribe ───────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════
+  // SUBSCRIBE
+  // ═══════════════════════════════════════════════════════════
+
   async function subscribe({ deviceId } = {}) {
     if (!isSupported()) {
       throw new Error('Push notifications are not supported in this browser');
@@ -196,7 +303,7 @@
       throw new Error('Sign in first to enable notifications');
     }
 
-    // 1. Permission must be granted from a user gesture
+    // 1. Permission (must come from a user gesture)
     let permission = Notification.permission;
     if (permission === 'default') {
       permission = await Notification.requestPermission();
@@ -205,18 +312,18 @@
       throw new Error(`Notification permission ${permission}`);
     }
 
-    // 2. Load Firebase SDK
+    // 2. Load SDK
     const mod = await loadFirebase();
 
-    // 3. Ensure the FCM service worker is registered and active
-    await waitForFCMServiceWorker();
+    // 3. Ensure FCM SW is registered and active
+    const swReg = await ensureFCMServiceWorker();
 
-    // 4. Get the FCM token
+    // 4. Get the token
     let token;
     try {
       token = await mod.getToken(_messaging, {
         vapidKey: FCM_VAPID_KEY,
-        serviceWorkerRegistration: await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js'),
+        serviceWorkerRegistration: swReg,
       });
     } catch (err) {
       const code = err?.code || '';
@@ -226,6 +333,9 @@
       if (code === 'messaging/failed-service-worker-registration') {
         throw new Error('Service worker registration failed. Try reloading.');
       }
+      if (code === 'messaging/token-subscribe-failed') {
+        throw new Error('FCM rejected the subscription. Check the VAPID key.');
+      }
       throw new Error(err?.message || 'Could not get FCM token');
     }
 
@@ -233,7 +343,7 @@
       throw new Error('No FCM token returned — check your VAPID key and Firebase config');
     }
 
-    // 5. Upload token to server
+    // 5. Upload to server
     const res = await fetch(`${API}?action=subscribe`, {
       method: 'POST',
       headers: {
@@ -250,11 +360,12 @@
       throw new Error(json.error || `Subscribe failed (${res.status})`);
     }
 
-    // 6. Set up foreground handler (only once)
-    setupForegroundHandler();
+    // 6. Foreground handler
+    await ensureForegroundHandler();
 
-    // 7. Remember that we're subscribed
+    // 7. Remember locally + broadcast to other tabs
     try { localStorage.setItem('folio.fcm.subscribed', 'true'); } catch {}
+    broadcast({ type: 'subscribed' });
 
     return {
       token,
@@ -263,20 +374,20 @@
     };
   }
 
-  // ── Unsubscribe ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════
+  // UNSUBSCRIBE
+  // ═══════════════════════════════════════════════════════════
+
   async function unsubscribe({ deviceId } = {}) {
     const session = getSession();
 
-    // 1. Delete the FCM token locally
+    // 1. Delete the local FCM token
     if (_mod && _messaging) {
-      try {
-        await _mod.deleteToken(_messaging);
-      } catch (err) {
-        console.warn('[FCM] deleteToken failed:', err);
-      }
+      try { await _mod.deleteToken(_messaging); }
+      catch (err) { console.warn('[FCM] deleteToken failed:', err); }
     }
 
-    // 2. Tell the server to remove this device's tokens
+    // 2. Tell the server
     let serverResult = null;
     if (session) {
       try {
@@ -292,41 +403,40 @@
       } catch {}
     }
 
-    // 3. Clean up local state
+    // 3. Local cleanup
     try { localStorage.removeItem('folio.fcm.subscribed'); } catch {}
     if (_foregroundUnsubscribe) {
       try { _foregroundUnsubscribe(); } catch {}
       _foregroundUnsubscribe = null;
     }
+    broadcast({ type: 'unsubscribed' });
 
     return serverResult || { success: true };
   }
 
-  // ── Check if already subscribed ─────────────────────────────
-  async function isSubscribed() {
-    if (!isSupported()) return false;
-    if (Notification.permission !== 'granted') return false;
-    try { return localStorage.getItem('folio.fcm.subscribed') === 'true'; } catch { return false; }
-  }
+  // ═══════════════════════════════════════════════════════════
+  // AUTO-SETUP ON LOAD
+  // ═══════════════════════════════════════════════════════════
 
-  // ── Auto-setup foreground listener on load ──────────────────
-  // If the user has already granted permission and we have a
-  // remembered subscription, wire up the foreground handler so
-  // incoming messages while the tab is focused show a toast.
+  // If the user previously subscribed and permission is still granted,
+  // wire the foreground handler so messages show up while the tab is open.
   (async function autoSetup() {
     if (!isSupported()) return;
     if (Notification.permission !== 'granted') return;
     try {
       const subscribed = localStorage.getItem('folio.fcm.subscribed') === 'true';
       if (!subscribed) return;
-      await loadFirebase();
-      setupForegroundHandler();
-    } catch (err) {
+      await ensureForegroundHandler();
+      getBC(); // listen for cross-tab events
+    } catch {
       // Silent — foreground is nice-to-have
     }
   })();
 
-  // ── Expose public API ───────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════
+  // PUBLIC API
+  // ═══════════════════════════════════════════════════════════
+
   window.FOLIO = window.FOLIO || {};
   window.FOLIO.fcm = {
     subscribe,
@@ -334,44 +444,9 @@
     isSupported,
     isSubscribed,
     getPermission,
-  };
-
-  // ── Broadcast channel for cross-tab sync ────────────────────
-  // If one tab subscribes, other tabs can re-enable their
-  // foreground handler without re-subscribing.
-  try {
-    const bc = new BroadcastChannel('folio-fcm');
-    bc.addEventListener('message', (event) => {
-      const d = event.data || {};
-      if (d.type === 'subscribed' || d.type === 'unsubscribed') {
-        if (d.type === 'subscribed') {
-          (async () => {
-            try {
-              await loadFirebase();
-              setupForegroundHandler();
-            } catch {}
-          })();
-        } else if (_foregroundUnsubscribe) {
-          try { _foregroundUnsubscribe(); } catch {}
-          _foregroundUnsubscribe = null;
-        }
-      }
-    });
-  } catch {}
-
-  // Wrap subscribe/unsubscribe to broadcast to other tabs
-  const _originalSubscribe = window.FOLIO.fcm.subscribe;
-  const _originalUnsubscribe = window.FOLIO.fcm.unsubscribe;
-
-  window.FOLIO.fcm.subscribe = async function (...args) {
-    const result = await _originalSubscribe.apply(this, args);
-    try { new BroadcastChannel('folio-fcm').postMessage({ type: 'subscribed' }); } catch {}
-    return result;
-  };
-
-  window.FOLIO.fcm.unsubscribe = async function (...args) {
-    const result = await _originalUnsubscribe.apply(this, args);
-    try { new BroadcastChannel('folio-fcm').postMessage({ type: 'unsubscribed' }); } catch {}
-    return result;
+    waitReady,
+    ensureForegroundHandler,
+    // Debug helpers
+    _state: () => ({ app: !!_app, messaging: !!_messaging, mod: !!_mod }),
   };
 })();
