@@ -357,52 +357,6 @@ img { display: block; max-width: 100%; }
   display: block;
 }
 
-/* Placeholder when no image (kept for fallback) */
-.phone-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px 24px;
-  text-align: center;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.15), transparent 60%),
-    linear-gradient(180deg, var(--surface), var(--elevated));
-}
-.phone-placeholder-icon {
-  width: 56px; height: 56px;
-  border-radius: 14px;
-  background: var(--primary-soft);
-  color: var(--primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.phone-placeholder-icon svg { width: 24px; height: 24px; }
-.phone-placeholder-label {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  margin-top: 4px;
-}
-.phone-placeholder-hint {
-  font-size: 11px;
-  color: var(--text-3);
-  line-height: 1.5;
-  max-width: 200px;
-}
-.phone-placeholder-hint code {
-  font-family: var(--mono);
-  font-size: 10px;
-  background: var(--primary-soft);
-  color: var(--primary);
-  padding: 2px 5px;
-  border-radius: 4px;
-}
-
 .phone-caption {
   text-align: center;
   max-width: 240px;
@@ -747,7 +701,7 @@ img { display: block; max-width: 100%; }
      ═══════════════════════════════════════════════════════ -->
 <nav class="nav">
   <div class="nav-inner">
-    <a href="/" class="nav-logo">
+    <a href="https://foliostudios.vercel.app" class="nav-logo">
       <span class="nav-logo-mark">F</span>
       <span>Folio</span>
     </a>
@@ -797,7 +751,7 @@ img { display: block; max-width: 100%; }
 </section>
 
 <!-- ═══════════════════════════════════════════════════════
-     PHONE SLIDER — 6 real screenshots
+     PHONE SLIDER — 6 real screenshots, absolute URLs
      ═══════════════════════════════════════════════════════ -->
 <section class="slider-section" id="screens">
   <div class="slider-header">
@@ -813,7 +767,7 @@ img { display: block; max-width: 100%; }
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <img src="/screenshots/screenshot1.png"
+            <img src="https://foliostudios.vercel.app/screenshots/screenshot1.png"
                  alt="Folio editor on mobile"
                  loading="lazy" decoding="async">
           </div>
@@ -828,7 +782,7 @@ img { display: block; max-width: 100%; }
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <img src="/screenshots/screenshot2.png"
+            <img src="https://foliostudios.vercel.app/screenshots/screenshot2.png"
                  alt="Folio projects list"
                  loading="lazy" decoding="async">
           </div>
@@ -843,7 +797,7 @@ img { display: block; max-width: 100%; }
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <img src="/screenshots/screenshot3.png"
+            <img src="https://foliostudios.vercel.app/screenshots/screenshot3.png"
                  alt="Folio live preview"
                  loading="lazy" decoding="async">
           </div>
@@ -858,7 +812,7 @@ img { display: block; max-width: 100%; }
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <img src="/screenshots/screenshot4.png"
+            <img src="https://foliostudios.vercel.app/screenshots/screenshot4.png"
                  alt="Folio deployments"
                  loading="lazy" decoding="async">
           </div>
@@ -873,7 +827,7 @@ img { display: block; max-width: 100%; }
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <img src="/screenshots/screenshot5.png"
+            <img src="https://foliostudios.vercel.app/screenshots/screenshot5.png"
                  alt="Folio JSON database"
                  loading="lazy" decoding="async">
           </div>
@@ -888,7 +842,7 @@ img { display: block; max-width: 100%; }
       <div class="phone-slide">
         <div class="phone">
           <div class="phone-screen">
-            <img src="/screenshots/screenshot6.png"
+            <img src="https://foliostudios.vercel.app/screenshots/screenshot6.png"
                  alt="Folio search across files"
                  loading="lazy" decoding="async">
           </div>
@@ -1063,33 +1017,39 @@ img { display: block; max-width: 100%; }
       </details>
 
       <!-- DOC 4 -->
-      <details class="doc-item">
-        <summary class="doc-summary">
-          <span class="doc-num">4</span>
-          <span class="doc-summary-text">The JSON database</span>
-          <span class="doc-chevron">
-            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-          </span>
-        </summary>
-        <div class="doc-content">
-          <h4>What it is</h4>
-          <p>Every project has a private JSON blob attached to it — a key-value store you can read and write from your deployed site. It's not a real database (no queries, no indexes, no per-user records), but it's enough for guestbooks, site config, todo lists, feature flags, and small dynamic content.</p>
+<!-- DOC 4 -->
+<details class="doc-item">
+  <summary class="doc-summary">
+    <span class="doc-num">4</span>
+    <span class="doc-summary-text">The JSON database</span>
+    <span class="doc-chevron">
+      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+    </span>
+  </summary>
+  <div class="doc-content">
+    <h4>What it is</h4>
+    <p>Every project has a private JSON blob attached to it — a key-value store you can read and write from your deployed site. It's not a real database (no queries, no indexes, no per-user records), but it's enough for guestbooks, site config, todo lists, feature flags, and small dynamic content.</p>
 
-          <h4>Enable public reads</h4>
-          <p>By default, nobody can read the DB. To let visitors read it, go to your project page → <strong>Sharing</strong> → flip <strong>JSON database API</strong> to <strong>Public</strong>.</p>
+    <h4>Enable public reads</h4>
+    <p>By default, nobody can read the DB. To let visitors read it, go to your project page → <strong>Sharing</strong> → flip <strong>JSON database API</strong> to <strong>Public</strong>.</p>
 
-          <h4>Reading</h4>
-          <pre><code>const res = await fetch(
+    <h4>Reading</h4>
+    <pre><code>const res = await fetch(
   'https://foliostudios.vercel.app/api/host' +
   '?action=db/get&pid=YOUR_PID'
 );
 const { data } = await res.json();
 console.log(data);</code></pre>
-          <p>No auth needed if the DB is public. If you want to read it privately, send the project's API key in an <code>x-project-key</code> header.</p>
+    <p>No auth needed if the DB is public. If you want to read it privately, send the project's API key in an <code>x-project-key</code> header.</p>
 
-          <h4>Writing</h4>
-          <p>Writes always require the API key. Generate one at project page → <strong>Sharing</strong> → <strong>API key</strong>. It's shown once — copy it and keep it safe.</p>
-          <pre><code>await fetch(
+    <h4>Writing — three modes</h4>
+    <p>Writes always require the API key. Generate one at project page → <strong>Sharing</strong> → <strong>API key</strong>. It's shown once — copy it and keep it safe.</p>
+    <p>There are three ways to write, and you choose by the shape of your request body:</p>
+
+    <h4>1. Path write (recommended for edits)</h4>
+    <p>Send a <code>key</code> (slash-separated path) and a <code>value</code>. Only that path is touched — every sibling is preserved. This is the safest way to update a single field.</p>
+    <pre><code>// Set posts/p_abc/heart to 42, leaving every other post intact
+await fetch(
   'https://foliostudios.vercel.app/api/host' +
   '?action=db/set&pid=YOUR_PID',
   {
@@ -1100,16 +1060,81 @@ console.log(data);</code></pre>
     },
     body: JSON.stringify({
       pid: 'YOUR_PID',
-      data: { entries: [/* ... */] }
+      key: 'posts/p_abc/heart',
+      value: 42
     })
   }
 );</code></pre>
-          <p>The <code>data</code> field replaces the entire DB. Read first, merge, then write. There's no atomic append.</p>
+    <p>Pass <code>value: null</code> to delete a single field or array entry without touching its siblings.</p>
 
-          <h4>Security note</h4>
-          <p>If you embed the key in client-side JavaScript, anyone who opens DevTools can read it and write to your DB. For anything beyond a toy project, put the key in a small backend and proxy writes through it.</p>
-        </div>
-      </details>
+    <h4>2. Merge write (partial top-level update)</h4>
+    <p>Send a <code>data</code> object with <code>mode: "merge"</code>. Each top-level key you send <strong>replaces</strong> that subtree — the rest of the DB is untouched. Because it's a top-level replacement, you must send the <strong>full subtree</strong> for any key you include.</p>
+    <pre><code>// Replace config wholesale; leave posts and members alone
+await fetch(
+  'https://foliostudios.vercel.app/api/host' +
+  '?action=db/set&pid=YOUR_PID',
+  {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-project-key': 'fol_...'
+    },
+    body: JSON.stringify({
+      pid: 'YOUR_PID',
+      data: {
+        config: {
+          theme: 'dark',
+          welcome: 'No posts yet — say hi.'
+        }
+      },
+      mode: 'merge'
+    })
+  }
+);</code></pre>
+    <p><strong>Warning:</strong> this is <em>not</em> a deep merge. If you send <code>{ posts: { p_abc: {...} } }</code> with merge mode, the entire <code>posts</code> object becomes <code>{ p_abc: {...} }</code> — every other post is dropped. To update one post without wiping others, either use a <strong>path write</strong> (mode 1) or send the full <code>posts</code> object in the merge.</p>
+
+    <h4>3. Replace write (full DB replacement)</h4>
+    <p>Send a <code>data</code> object with no <code>mode</code>. This <strong>replaces</strong> the entire <code>projectData/{pid}</code> node — everything not present in your payload is deleted.</p>
+    <pre><code>// Wipe the DB and set it to a fresh object
+await fetch(
+  'https://foliostudios.vercel.app/api/host' +
+  '?action=db/set&pid=YOUR_PID',
+  {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-project-key': 'fol_...'
+    },
+    body: JSON.stringify({
+      pid: 'YOUR_PID',
+      data: {
+        config: { theme: 'dark' },
+        posts: {},
+        members: {}
+      }
+    })
+  }
+);</code></pre>
+    <p>Use this only when you genuinely want to overwrite everything — e.g. importing a backup, resetting a project, or replacing the DB in one atomic call. For incremental changes, use mode 1 or 2.</p>
+
+    <h4>Which mode should I use?</h4>
+    <ul>
+      <li><strong>Editing one field</strong> (a reaction, a vote, a rename) → <strong>path write</strong> (<code>key</code> + <code>value</code>).</li>
+      <li><strong>Updating a whole top-level object</strong> (config, members, posts) → <strong>merge write</strong> (<code>data</code> + <code>mode: "merge"</code>), sending the complete subtree.</li>
+      <li><strong>Resetting / importing / atomic replace</strong> → <strong>replace write</strong> (<code>data</code>, no mode).</li>
+    </ul>
+
+    <h4>Limits</h4>
+    <ul>
+      <li><strong>15 MB total</strong> per project DB. Writes that push the DB over the limit return <code>413</code>.</li>
+      <li><strong>100 writes per hour</strong> per project via <code>dbSet</code>. The response includes <code>rateLimit</code> and <code>space</code> so you can back off gracefully.</li>
+      <li>Writes are not transactional. If you send a replace write while another client is mid-merge, one wins silently.</li>
+    </ul>
+
+    <h4>Security note</h4>
+    <p>If you embed the key in client-side JavaScript, anyone who opens DevTools can read it and write to your DB. For anything beyond a toy project, put the key in a small backend and proxy writes through it.</p>
+  </div>
+</details>
 
       <!-- DOC 5 -->
       <details class="doc-item">
@@ -1193,7 +1218,11 @@ console.log(data);</code></pre>
      FOOTER
      ═══════════════════════════════════════════════════════ -->
 <footer class="footer">
-  <div>Folio — code in your pocket.</div>
+  <div>
+    Folio — code in your pocket.
+    &nbsp;·&nbsp;
+    <a href="https://foliostudios.vercel.app">foliostudios.vercel.app</a>
+  </div>
 </footer>
 
 <script>
@@ -1210,7 +1239,6 @@ console.log(data);</code></pre>
   const slides = track.querySelectorAll('.phone-slide');
   if (slides.length === 0) return;
 
-  // Build dots
   slides.forEach((_, i) => {
     const dot = document.createElement('button');
     dot.className = 'slider-dot' + (i === 0 ? ' active' : '');
@@ -1244,7 +1272,6 @@ console.log(data);</code></pre>
     if (i >= slides.length) i = slides.length - 1;
     const slide = slides[i];
     const trackRect = track.getBoundingClientRect();
-    const slideRect = slide.getBoundingClientRect();
     const scrollLeft =
       slide.offsetLeft - (trackRect.width - slide.offsetWidth) / 2;
     track.scrollTo({ left: scrollLeft, behavior: 'smooth' });
