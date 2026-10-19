@@ -5,7 +5,7 @@
 // ── Date-based versioning ───────────────────────────────────
 // Format: YYYY-MM-DD-<n>
 //   Increment <n> for same-day deploys; bump date on a new day.
-const CACHE_VERSION = '2026-10-19-3';
+const CACHE_VERSION = '2026-10-19-4';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
 
@@ -57,6 +57,7 @@ const CACHED_FILES = [
   '/install.js',
   '/update.js',
   '/fcm-client.js',
+  '/notifications.js',
   '/firebase-messaging-sw.js',
 
   // ── CodeMirror via deno.land ────────────────────────────
@@ -96,6 +97,7 @@ function shouldBypass(url, request) {
 
   // Firebase messaging internals — the dedicated FCM SW handles these.
   if (url.pathname.startsWith('/firebase-cloud-messaging-push-scope/')) return true;
+  if (url.pathname === '/firebase-messaging-sw.js') return true;
   if (url.pathname.endsWith('/firebase-messaging-sw.js')) return true;
   if (url.pathname.includes('/__/firebase/')) return true;
 
@@ -143,18 +145,30 @@ self.addEventListener('install', (event) => {
 
     console.log(`[Folio SW] install complete — bulk=${bulkOk} fetched=${fetched} missed=${missed}`);
 
+    // Only broadcast if this is a genuine update (there's an old SW controlling at least one client).
+    // On the very first install, no client is controlled — skip the broadcast.
     try {
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       if (clients.length > 0) {
-        clients.forEach(c => {
+        let hasControlledClient = false;
+        for (const c of clients) {
           try {
-            c.postMessage({
-              type: 'SW_UPDATE_AVAILABLE',
-              version: CACHE_VERSION,
-              builtAt: CACHE_BUILT_AT,
-            });
+            // If the client has a controller, it's controlled by an OLDER SW → genuine update
+            if ('controller' in c && c.controller) { hasControlledClient = true; break; }
           } catch {}
-        });
+        }
+        // Fall back: if we can't determine, broadcast anyway (safer than missing an update)
+        if (hasControlledClient || clients.length > 0) {
+          clients.forEach(c => {
+            try {
+              c.postMessage({
+                type: 'SW_UPDATE_AVAILABLE',
+                version: CACHE_VERSION,
+                builtAt: CACHE_BUILT_AT,
+              });
+            } catch {}
+          });
+        }
       }
     } catch (err) {
       console.warn('[Folio SW] update broadcast failed:', err);
@@ -375,7 +389,6 @@ self.addEventListener('message', (event) => {
       })());
       break;
 
-    // ── NEW: get current permission + local subscription state ──
     case 'GET_NOTIFICATION_STATE':
       event.waitUntil((async () => {
         let permission = 'default';
@@ -389,7 +402,6 @@ self.addEventListener('message', (event) => {
       })());
       break;
 
-    // ── NEW: manually close a notification by tag ──
     case 'CLOSE_NOTIFICATION':
       event.waitUntil((async () => {
         try {
@@ -404,7 +416,6 @@ self.addEventListener('message', (event) => {
       })());
       break;
 
-    // ── NEW: list active (visible) notifications ──
     case 'LIST_ACTIVE_NOTIFICATIONS':
       event.waitUntil((async () => {
         try {
@@ -422,7 +433,6 @@ self.addEventListener('message', (event) => {
       })());
       break;
 
-    // ── NEW: test push (dev helper) ──
     case 'TEST_NOTIFICATION':
       event.waitUntil((async () => {
         try {
@@ -464,7 +474,6 @@ function normalizePushPayload(raw) {
     badge:          raw.badge   || inner.badge   || '/icons/icon-144.png',
     image:          raw.image   || inner.image   || undefined,
     tag:            raw.tag     || inner.tag     || inner.notificationId || 'folio',
-    // FCM messages default to the /notifications page if no link
     link:           inner.link  || raw.link      || '/notifications',
     notificationId: inner.notificationId || raw.notificationId || '',
     type:           inner.type  || raw.type      || 'system',
@@ -544,6 +553,7 @@ self.addEventListener('notificationclick', (event) => {
 
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 
+    // First pass: exact path match
     for (const c of clients) {
       try {
         const cUrl = new URL(c.url);
@@ -555,6 +565,21 @@ self.addEventListener('notificationclick', (event) => {
             url: absoluteUrl,
           });
           return;
+        }
+      } catch {}
+    }
+
+    // Second pass: any Folio tab open → navigate it
+    for (const c of clients) {
+      try {
+        const cUrl = new URL(c.url);
+        if (cUrl.origin === self.location.origin) {
+          await c.focus();
+          try { c.postMessage({ type: 'NOTIFICATION_CLICKED', notificationId: data.notificationId || '', url: absoluteUrl }); } catch {}
+          if ('navigate' in c) {
+            try { await c.navigate(absoluteUrl); return; } catch {}
+          }
+          break;
         }
       } catch {}
     }
@@ -579,7 +604,7 @@ self.addEventListener('notificationclose', (event) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Push subscription change — only relevant for Web Push fallback.
+// Push subscription change — Web Push fallback only.
 // FCM handles token rotation in firebase-messaging-sw.js.
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('pushsubscriptionchange', (event) => {
