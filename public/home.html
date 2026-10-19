@@ -35,6 +35,14 @@
   --mono: 'JetBrains Mono', monospace;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --safe-b: env(safe-area-inset-bottom, 0px);
+
+  /* install.js reads these CSS custom properties.
+     Map them to the landing page palette so the install
+     dialog matches the rest of the page.                        [NEW] */
+  --bg-card: var(--elevated);
+  --bg-input: var(--elevated);
+  --text-muted: var(--text-2);
+  --font-sans: var(--font);
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -692,6 +700,34 @@ img { display: block; max-width: 100%; }
     transform: translateY(0);
   }
 }
+
+/* ═══════════════════════════════════════════════════════
+   INSTALL.JS FALLBACK TOAST
+   Minimal toast used only by install.js on this page. The
+   editor ships a richer one; the landing page just needs
+   enough for install.js's console-fallback path to show.     [NEW]
+   ═══════════════════════════════════════════════════════ */
+#folio-landing-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 999999;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  font-family: var(--font);
+  pointer-events: none;
+  animation: folioLandingToastIn 0.2s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+@keyframes folioLandingToastIn {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
 </style>
 </head>
 <body>
@@ -1017,38 +1053,37 @@ img { display: block; max-width: 100%; }
       </details>
 
       <!-- DOC 4 -->
-<!-- DOC 4 -->
-<details class="doc-item">
-  <summary class="doc-summary">
-    <span class="doc-num">4</span>
-    <span class="doc-summary-text">The JSON database</span>
-    <span class="doc-chevron">
-      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-    </span>
-  </summary>
-  <div class="doc-content">
-    <h4>What it is</h4>
-    <p>Every project has a private JSON blob attached to it — a key-value store you can read and write from your deployed site. It's not a real database (no queries, no indexes, no per-user records), but it's enough for guestbooks, site config, todo lists, feature flags, and small dynamic content.</p>
+      <details class="doc-item">
+        <summary class="doc-summary">
+          <span class="doc-num">4</span>
+          <span class="doc-summary-text">The JSON database</span>
+          <span class="doc-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </summary>
+        <div class="doc-content">
+          <h4>What it is</h4>
+          <p>Every project has a private JSON blob attached to it — a key-value store you can read and write from your deployed site. It's not a real database (no queries, no indexes, no per-user records), but it's enough for guestbooks, site config, todo lists, feature flags, and small dynamic content.</p>
 
-    <h4>Enable public reads</h4>
-    <p>By default, nobody can read the DB. To let visitors read it, go to your project page → <strong>Sharing</strong> → flip <strong>JSON database API</strong> to <strong>Public</strong>.</p>
+          <h4>Enable public reads</h4>
+          <p>By default, nobody can read the DB. To let visitors read it, go to your project page → <strong>Sharing</strong> → flip <strong>JSON database API</strong> to <strong>Public</strong>.</p>
 
-    <h4>Reading</h4>
-    <pre><code>const res = await fetch(
+          <h4>Reading</h4>
+          <pre><code>const res = await fetch(
   'https://foliostudios.vercel.app/api/host' +
   '?action=db/get&pid=YOUR_PID'
 );
 const { data } = await res.json();
 console.log(data);</code></pre>
-    <p>No auth needed if the DB is public. If you want to read it privately, send the project's API key in an <code>x-project-key</code> header.</p>
+          <p>No auth needed if the DB is public. If you want to read it privately, send the project's API key in an <code>x-project-key</code> header.</p>
 
-    <h4>Writing — three modes</h4>
-    <p>Writes always require the API key. Generate one at project page → <strong>Sharing</strong> → <strong>API key</strong>. It's shown once — copy it and keep it safe.</p>
-    <p>There are three ways to write, and you choose by the shape of your request body:</p>
+          <h4>Writing — three modes</h4>
+          <p>Writes always require the API key. Generate one at project page → <strong>Sharing</strong> → <strong>API key</strong>. It's shown once — copy it and keep it safe.</p>
+          <p>There are three ways to write, and you choose by the shape of your request body:</p>
 
-    <h4>1. Path write (recommended for edits)</h4>
-    <p>Send a <code>key</code> (slash-separated path) and a <code>value</code>. Only that path is touched — every sibling is preserved. This is the safest way to update a single field.</p>
-    <pre><code>// Set posts/p_abc/heart to 42, leaving every other post intact
+          <h4>1. Path write (recommended for edits)</h4>
+          <p>Send a <code>key</code> (slash-separated path) and a <code>value</code>. Only that path is touched — every sibling is preserved. This is the safest way to update a single field.</p>
+          <pre><code>// Set posts/p_abc/heart to 42, leaving every other post intact
 await fetch(
   'https://foliostudios.vercel.app/api/host' +
   '?action=db/set&pid=YOUR_PID',
@@ -1065,11 +1100,11 @@ await fetch(
     })
   }
 );</code></pre>
-    <p>Pass <code>value: null</code> to delete a single field or array entry without touching its siblings.</p>
+          <p>Pass <code>value: null</code> to delete a single field or array entry without touching its siblings.</p>
 
-    <h4>2. Merge write (partial top-level update)</h4>
-    <p>Send a <code>data</code> object with <code>mode: "merge"</code>. Each top-level key you send <strong>replaces</strong> that subtree — the rest of the DB is untouched. Because it's a top-level replacement, you must send the <strong>full subtree</strong> for any key you include.</p>
-    <pre><code>// Replace config wholesale; leave posts and members alone
+          <h4>2. Merge write (partial top-level update)</h4>
+          <p>Send a <code>data</code> object with <code>mode: "merge"</code>. Each top-level key you send <strong>replaces</strong> that subtree — the rest of the DB is untouched. Because it's a top-level replacement, you must send the <strong>full subtree</strong> for any key you include.</p>
+          <pre><code>// Replace config wholesale; leave posts and members alone
 await fetch(
   'https://foliostudios.vercel.app/api/host' +
   '?action=db/set&pid=YOUR_PID',
@@ -1091,11 +1126,11 @@ await fetch(
     })
   }
 );</code></pre>
-    <p><strong>Warning:</strong> this is <em>not</em> a deep merge. If you send <code>{ posts: { p_abc: {...} } }</code> with merge mode, the entire <code>posts</code> object becomes <code>{ p_abc: {...} }</code> — every other post is dropped. To update one post without wiping others, either use a <strong>path write</strong> (mode 1) or send the full <code>posts</code> object in the merge.</p>
+          <p><strong>Warning:</strong> this is <em>not</em> a deep merge. If you send <code>{ posts: { p_abc: {...} } }</code> with merge mode, the entire <code>posts</code> object becomes <code>{ p_abc: {...} }</code> — every other post is dropped. To update one post without wiping others, either use a <strong>path write</strong> (mode 1) or send the full <code>posts</code> object in the merge.</p>
 
-    <h4>3. Replace write (full DB replacement)</h4>
-    <p>Send a <code>data</code> object with no <code>mode</code>. This <strong>replaces</strong> the entire <code>projectData/{pid}</code> node — everything not present in your payload is deleted.</p>
-    <pre><code>// Wipe the DB and set it to a fresh object
+          <h4>3. Replace write (full DB replacement)</h4>
+          <p>Send a <code>data</code> object with no <code>mode</code>. This <strong>replaces</strong> the entire <code>projectData/{pid}</code> node — everything not present in your payload is deleted.</p>
+          <pre><code>// Wipe the DB and set it to a fresh object
 await fetch(
   'https://foliostudios.vercel.app/api/host' +
   '?action=db/set&pid=YOUR_PID',
@@ -1115,26 +1150,26 @@ await fetch(
     })
   }
 );</code></pre>
-    <p>Use this only when you genuinely want to overwrite everything — e.g. importing a backup, resetting a project, or replacing the DB in one atomic call. For incremental changes, use mode 1 or 2.</p>
+          <p>Use this only when you genuinely want to overwrite everything — e.g. importing a backup, resetting a project, or replacing the DB in one atomic call. For incremental changes, use mode 1 or 2.</p>
 
-    <h4>Which mode should I use?</h4>
-    <ul>
-      <li><strong>Editing one field</strong> (a reaction, a vote, a rename) → <strong>path write</strong> (<code>key</code> + <code>value</code>).</li>
-      <li><strong>Updating a whole top-level object</strong> (config, members, posts) → <strong>merge write</strong> (<code>data</code> + <code>mode: "merge"</code>), sending the complete subtree.</li>
-      <li><strong>Resetting / importing / atomic replace</strong> → <strong>replace write</strong> (<code>data</code>, no mode).</li>
-    </ul>
+          <h4>Which mode should I use?</h4>
+          <ul>
+            <li><strong>Editing one field</strong> (a reaction, a vote, a rename) → <strong>path write</strong> (<code>key</code> + <code>value</code>).</li>
+            <li><strong>Updating a whole top-level object</strong> (config, members, posts) → <strong>merge write</strong> (<code>data</code> + <code>mode: "merge"</code>), sending the complete subtree.</li>
+            <li><strong>Resetting / importing / atomic replace</strong> → <strong>replace write</strong> (<code>data</code>, no mode).</li>
+          </ul>
 
-    <h4>Limits</h4>
-    <ul>
-      <li><strong>15 MB total</strong> per project DB. Writes that push the DB over the limit return <code>413</code>.</li>
-      <li><strong>100 writes per hour</strong> per project via <code>dbSet</code>. The response includes <code>rateLimit</code> and <code>space</code> so you can back off gracefully.</li>
-      <li>Writes are not transactional. If you send a replace write while another client is mid-merge, one wins silently.</li>
-    </ul>
+          <h4>Limits</h4>
+          <ul>
+            <li><strong>15 MB total</strong> per project DB. Writes that push the DB over the limit return <code>413</code>.</li>
+            <li><strong>100 writes per hour</strong> per project via <code>dbSet</code>. The response includes <code>rateLimit</code> and <code>space</code> so you can back off gracefully.</li>
+            <li>Writes are not transactional. If you send a replace write while another client is mid-merge, one wins silently.</li>
+          </ul>
 
-    <h4>Security note</h4>
-    <p>If you embed the key in client-side JavaScript, anyone who opens DevTools can read it and write to your DB. For anything beyond a toy project, put the key in a small backend and proxy writes through it.</p>
-  </div>
-</details>
+          <h4>Security note</h4>
+          <p>If you embed the key in client-side JavaScript, anyone who opens DevTools can read it and write to your DB. For anything beyond a toy project, put the key in a small backend and proxy writes through it.</p>
+        </div>
+      </details>
 
       <!-- DOC 5 -->
       <details class="doc-item">
@@ -1224,6 +1259,44 @@ await fetch(
     <a href="https://foliostudios.vercel.app">foliostudios.vercel.app</a>
   </div>
 </footer>
+
+<!-- ═══════════════════════════════════════════════════════
+     MINIMAL TOAST (for install.js fallback path)          [NEW]
+     ═══════════════════════════════════════════════════════ -->
+<script>
+  window.toast = function (msg, type, duration) {
+    const styles = {
+      info:    { bg: 'rgba(26,31,42,0.95)',    color: '#e8ecf1', border: 'rgba(255,255,255,0.09)' },
+      success: { bg: 'rgba(16,185,129,0.15)', color: '#10B981', border: 'rgba(16,185,129,0.3)' },
+      warning: { bg: 'rgba(217,119,6,0.15)',  color: '#D97706', border: 'rgba(217,119,6,0.3)' },
+      error:   { bg: 'rgba(239,68,68,0.15)',  color: '#EF4444', border: 'rgba(239,68,68,0.3)' },
+    };
+    const st = styles[type] || styles.info;
+    const el = document.createElement('div');
+    el.id = 'folio-landing-toast';
+    el.textContent = msg;
+    el.style.background = st.bg;
+    el.style.color = st.color;
+    el.style.border = '1px solid ' + st.border;
+    el.style.backdropFilter = 'blur(12px)';
+    el.style.webkitBackdropFilter = 'blur(12px)';
+    document.body.appendChild(el);
+    setTimeout(() => {
+      el.style.transition = 'opacity 0.2s ease';
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 220);
+    }, duration || 3000);
+  };
+</script>
+
+<!-- ═══════════════════════════════════════════════════════
+     INSTALL.JS                                            [NEW]
+     The install button auto-hides on this page because it
+     has no manifest + service worker, so `beforeinstallprompt`
+     never fires. `FOLIO.install.show()` still works and shows
+     an informative toast directing users to the editor.
+     ═══════════════════════════════════════════════════════ -->
+<script src="https://foliostudios.vercel.app/install.js" defer></script>
 
 <script>
 // ═══════════════════════════════════════════════════════
