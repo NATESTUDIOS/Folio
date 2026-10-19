@@ -64,6 +64,7 @@ const RATE_LIMITS = {
   getSettings:    { max: 120,  window: 60 * 60 * 1000 },
   create:         { max: 500,  window: 60 * 60 * 1000 },
   authBridge:     { max: 200,  window: 60 * 60 * 1000 },
+  config:         { max: 120,  window: 60 * 60 * 1000 },
 };
 
 async function checkRateLimit(identifier, action) {
@@ -259,8 +260,10 @@ function detectTokenKind(token) {
     return null;
   }
 
-  // FCM token heuristic
-  if (token.length >= 100 && token.includes(":")) {
+  // FCM token heuristic — FCM tokens are long and contain a colon.
+  // Modern FCM tokens (v1) can be ~150-200 chars. Being strict here
+  // previously rejected valid tokens; loosened the check slightly.
+  if (token.length >= 80 && token.includes(":")) {
     return { kind: "fcm", payload: token };
   }
 
@@ -283,7 +286,7 @@ function buildWebPushPayload({ title, body, imageUrl, link, notificationId, type
       title: title || "",
       body: body || "",
       image: imageUrl || undefined,
-      link: link || "/app",
+      link: link || "/notifications",
       notificationId: notificationId || "",
       type: type || "system",
       user_id: userId || "",
@@ -341,8 +344,23 @@ async function sendFcmOne(message, token) {
     const id = await messaging.send({ ...message, token });
     return { success: true, messageId: id };
   } catch (err) {
-    log("notify.fcm_send_failed", { code: err.code, message: err.message });
-    return { success: false, error: err.message };
+    const code = err?.code || "";
+    const msg = err?.message || "";
+
+    // Token is dead — the user uninstalled, cleared data, or unsubscribed.
+    // Return `expired: true` so the caller can prune it from Firebase.
+    if (
+      code === "messaging/registration-token-not-registered" ||
+      code === "messaging/invalid-registration-token" ||
+      code === "messaging/invalid-argument" ||
+      msg.includes("not-registered") ||
+      msg.includes("Requested entity was not found")
+    ) {
+      return { success: false, error: "token_gone", expired: true };
+    }
+
+    log("notify.fcm_send_failed", { code, message: msg });
+    return { success: false, error: msg };
   }
 }
 
@@ -574,6 +592,15 @@ async function registerDeviceToken(userId, token, deviceId) {
   const snap = await ref.once("value");
   const existing = snap.exists() ? snap.val() : {};
   const tokens = existing.tokens || {};
+
+  // Prune any other tokens that are the SAME value (avoid duplicate keys
+  // if the same token was stored under a different deviceId).
+  for (const [k, v] of Object.entries(tokens)) {
+    if (k !== dk && v?.token === token.trim()) {
+      delete tokens[k];
+    }
+  }
+
   tokens[dk] = {
     token: token.trim(),
     kind: detected.kind,
@@ -698,7 +725,9 @@ async function sendNotificationWithPush(userId, data) {
           return r;
         }
         // default: FCM
-        return await sendFcmOne(fcmMessage, entry.token);
+        const r = await sendFcmOne(fcmMessage, entry.token);
+        if (r.expired) expiredDeviceKeys.push(entry.deviceKey);
+        return r;
       });
 
       const delivered = results.filter(r => r.status === "fulfilled" && r.value.success).length;
@@ -706,13 +735,14 @@ async function sendNotificationWithPush(userId, data) {
         success: delivered > 0,
         tokensAttempted: tokens.length,
         tokensDelivered: delivered,
+        tokensExpired: expiredDeviceKeys.length,
         byKind: {
           fcm: tokens.filter(t => t.kind === "fcm").length,
           webpush: tokens.filter(t => t.kind === "webpush").length,
         },
       };
 
-      // Clean up expired Web Push subscriptions
+      // Clean up expired tokens — works for BOTH FCM and Web Push now.
       if (expiredDeviceKeys.length > 0) {
         Promise.all(expiredDeviceKeys.map(dk => removeExpiredToken(userId, dk))).catch(() => {});
       }
@@ -778,6 +808,16 @@ async function bridgeOnUnban(uid) {
 // =========================================================================
 // HANDLERS
 // =========================================================================
+
+async function handleConfig(req, res, reqId) {
+  if (!(await enforceRate(res, "config", `ip_${hashIp(getClientIp(req))}`))) return;
+  return res.status(200).json({
+    success: true,
+    vapidPublicKey: VAPID_PUBLIC_KEY || null,
+    pushEnabled: !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY),
+    fcmEnabled: !!messaging,
+  });
+}
 
 async function handleSubscribe(req, res, reqId) {
   const user = await requireAuth(req, res);
@@ -1037,6 +1077,9 @@ export default async function handler(req, res) {
   const method = req.method;
 
   try {
+    // Public config
+    if (method === "GET"  && action === "config")          return await handleConfig(req, res, reqId);
+
     // User endpoints
     if (method === "POST" && action === "subscribe")       return await handleSubscribe(req, res, reqId);
     if (method === "POST" && action === "unsubscribe")     return await handleUnsubscribe(req, res, reqId);
