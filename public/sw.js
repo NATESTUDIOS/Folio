@@ -2,7 +2,12 @@
 // Folio — Service Worker
 // ============================================================
 
-const CACHE_VERSION = 'v1';
+// ── Date-based versioning ───────────────────────────────────
+// Format: YYYY-MM-DD-<n>
+//   Increment <n> for same-day deploys; bump date on a new day.
+//   Sort naturally, easy to spot in DevTools → Application → SW.
+//   Example: '2026-10-19-1', '2026-10-19-2', '2026-10-20-1'
+const CACHE_VERSION = '2026-10-19-1';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
 
@@ -150,6 +155,36 @@ self.addEventListener('install', (event) => {
     );
 
     console.log(`[Folio SW] install complete — bulk=${bulkOk} fetched=${fetched} missed=${missed}`);
+
+    // ── Notify existing clients that a new version is waiting ──
+    // Fires `SW_UPDATE_AVAILABLE` so update.js can show the
+    // "Update available" dialog immediately, without waiting for
+    // its 5-minute poll. Skip the very first install (no clients
+    // controlled yet) — that's not an "update", it's a fresh install.
+    try {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const hasController = clients.some(c => c.frameType === 'top-level' && c.type === 'window');
+      // Only broadcast if at least one client is already controlled by
+      // a previous SW generation (i.e. this is a genuine update, not
+      // the very first install).
+      const anyControlled = await self.clients.matchAll({ type: 'window' }).then(list =>
+        list.length > 0
+      );
+      if (anyControlled || hasController) {
+        clients.forEach(c => {
+          try {
+            c.postMessage({
+              type: 'SW_UPDATE_AVAILABLE',
+              version: CACHE_VERSION,
+              builtAt: CACHE_BUILT_AT,
+            });
+          } catch {}
+        });
+      }
+    } catch (err) {
+      console.warn('[Folio SW] update broadcast failed:', err);
+    }
+
     await self.skipWaiting();
   })());
 });
