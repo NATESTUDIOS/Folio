@@ -1690,6 +1690,7 @@ async function handleDbSet(req, res, reqId) {
   const { pid, key, value, data, mode } = req.body || {};
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
 
+  // ── Rate limit ─────────────────────────────────────────────
   const rl = await checkRateLimit(`pid_${pid}`, "dbSet");
   setRateHeaders(res, rl);
   if (!rl.allowed) {
@@ -1698,167 +1699,373 @@ async function handleDbSet(req, res, reqId) {
       error: "Rate limit exceeded",
       retryAfter: rl.retryAfter,
       reset: rl.reset,
-      rateLimit: {
-        limit: rl.limit,
-        remaining: rl.remaining,
-        reset: rl.reset,
-      },
+      rateLimit: { limit: rl.limit, remaining: rl.remaining, reset: rl.reset },
     });
   }
-  const rateLimitMeta = {
-    limit: rl.limit,
-    remaining: rl.remaining,
-    reset: rl.reset,
-  };
+  const rateLimitMeta = { limit: rl.limit, remaining: rl.remaining, reset: rl.reset };
 
+  // ── Auth (project key or role) ─────────────────────────────
   const access = await checkProjectKeyOrRole(req, res, pid, "editor");
   if (!access) return;
 
   const LIMIT = 15 * 1024 * 1024; // 15 MB hard cap
-
-  const payload = data !== undefined ? data : value;
-  const serialized = JSON.stringify(payload ?? null);
-  if (serialized.length > LIMIT) {
-    return res.status(413).json({
-      success: false,
-      error: "Payload too large (15 MB max)",
-      size: serialized.length,
-      limit: LIMIT,
-      rateLimit: rateLimitMeta,
-    });
-  }
-
+  const dbRef = db.ref(`projectData/${pid}`);
   const today = dayString();
   const uidForLog = access.uid === "api" ? null : access.uid;
-  const dbRef = db.ref(`projectData/${pid}`);
 
-  try {
-    if (data !== undefined && mode === "merge") {
-      const updates = {};
-      for (const [k, v] of Object.entries(data)) {
-        updates[k] = v;
-      }
-      if (Object.keys(updates).length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: "Nothing to merge",
-          rateLimit: rateLimitMeta,
-        });
-      }
-      await dbRef.update(updates);
-
-    } else if (data !== undefined) {
-      await dbRef.set(data);
-
-    } else if (key !== undefined) {
-      await dbRef.child(sanitizeFirebasePath(key)).set(value);
-
-    } else {
+  // ═══════════════════════════════════════════════════════════
+  // Branch 1 — PATH WRITE (key + value)
+  // Writes ONLY the given path. Preserves every sibling.
+  // Example: key="posts/pA/comments/c1", value={...}
+  //   → projectData/{pid}/posts/pA/comments/c1 = {...}
+  //   → posts/pB untouched, posts/pA.body untouched
+  // ═══════════════════════════════════════════════════════════
+  if (key !== undefined) {
+    if (data !== undefined) {
       return res.status(400).json({
         success: false,
-        error: "Missing key or data",
+        error: "Send either `key` or `data`, not both",
         rateLimit: rateLimitMeta,
       });
     }
-  } catch (err) {
-    log("host.dbSet.write_failed", { reqId, pid, message: err.message });
-    return res.status(500).json({
-      success: false,
-      error: "Write failed",
-      rateLimit: rateLimitMeta,
-    });
-  }
 
-  // ── Size snapshot ────────────────────────────────────────
-  let finalSize = 0;
-  try {
-    const sizeSnap = await dbRef.once("value");
-    finalSize = JSON.stringify(sizeSnap.val() || {}).length;
-  } catch {}
-
-  const spaceRemaining = Math.max(0, LIMIT - finalSize);
-  const percentUsed = LIMIT > 0
-    ? Math.min(100, Math.round((finalSize / LIMIT) * 1000) / 10)
-    : 0;
-
-  if (finalSize > LIMIT) {
-    return res.status(413).json({
-      success: false,
-      error: "Database exceeds 15 MB limit after write",
-      size: finalSize,
-      limit: LIMIT,
-      space: {
-        used: finalSize,
-        remaining: 0,
-        limit: LIMIT,
-        percentUsed: 100,
-      },
-      rateLimit: rateLimitMeta,
-    });
-  }
-
-  // ── Analytics transaction (unchanged) ────────────────────
-  await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
-    const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
-    c.writes = (c.writes || 0) + 1;
-    c.bytesIn = (c.bytesIn || 0) + serialized.length;
-    return c;
-  }).catch(() => {});
-
-  // ── Aggregate call count across all days ────────────────
-  // One read of analytics/{pid}/db, sum writes across days.
-  // If this becomes hot, cache it per-request; the value doesn't
-  // change between writes within a single request.
-  let totalWrites = 0;
-  let todayWrites = 0;
-  try {
-    const analyticsSnap = await db.ref(`analytics/${pid}/db`).once("value");
-    if (analyticsSnap.exists()) {
-      analyticsSnap.forEach(dayChild => {
-        const v = dayChild.val() || {};
-        const w = typeof v.writes === "number" ? v.writes : 0;
-        totalWrites += w;
-        if (dayChild.key === today) todayWrites = w;
+    const parts = String(key).split("/").filter(Boolean);
+    if (parts.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid key path",
+        rateLimit: rateLimitMeta,
       });
     }
-  } catch {}
 
-  // ── Event log (unchanged, with mode) ─────────────────────
-  await logProjectEvent(pid, uidForLog, "db", "db.written", {
-    key: key || null,
-    mode: mode || "replace",
-    bytes: serialized.length,
-    viaApiKey: access.uid === "api",
-  });
-
-  // ── Storage warning at 80% ───────────────────────────────
-  try {
-    if (finalSize > LIMIT * 0.8) {
-      const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
-      if (ownerSnap.exists()) {
-        callNotify("storage", ownerSnap.val(), {
-          title: "Database nearly full",
-          body: `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of 15 MB).`,
-          link: `${BASE_URL}/project.html?pid=${pid}`,
-          extra: { pid },
-        }).catch(() => {});
+    // Sanitize each segment individually — never mangle the separators.
+    const safeParts = [];
+    for (const seg of parts) {
+      const safe = sanitizeFirebasePath(seg);
+      if (!safe) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid path segment: "${seg}"`,
+          rateLimit: rateLimitMeta,
+        });
       }
+      safeParts.push(safe);
     }
-  } catch {}
 
-  return res.status(200).json({
-    success: true,
-    space: {
-      used: finalSize,
-      remaining: spaceRemaining,
-      limit: LIMIT,
-      percentUsed,
-    },
+    // Build a nested multi-path update:
+    //   parts = ["posts","pA","comments","c1"]
+    //   value = { ...comment }
+    //   →  { posts: { pA: { comments: { c1: {...comment} } } } }
+    // Firebase .update() with this object writes ONLY the leaf.
+    let nested = value === undefined ? null : value;
+    for (let i = safeParts.length - 1; i >= 0; i--) {
+      nested = { [safeParts[i]]: nested };
+    }
+
+    // Size check on the payload value only (not the whole DB)
+    const serialized = JSON.stringify(value === undefined ? null : value);
+    if (serialized.length > LIMIT) {
+      return res.status(413).json({
+        success: false,
+        error: "Payload too large (15 MB max)",
+        size: serialized.length,
+        limit: LIMIT,
+        rateLimit: rateLimitMeta,
+      });
+    }
+
+    try {
+      // Multi-path update — writes only the leaf path, keeps every sibling.
+      await dbRef.update(nested);
+    } catch (err) {
+      log("host.dbSet.path_write_failed", { reqId, pid, key, message: err.message });
+      return res.status(500).json({
+        success: false,
+        error: "Write failed",
+        rateLimit: rateLimitMeta,
+      });
+    }
+
+    // ── Post-write size check ──
+    let finalSize = 0;
+    try {
+      const sizeSnap = await dbRef.once("value");
+      finalSize = JSON.stringify(sizeSnap.val() || {}).length;
+    } catch {}
+
+    if (finalSize > LIMIT) {
+      return res.status(413).json({
+        success: false,
+        error: "Database exceeds 15 MB limit after write",
+        size: finalSize,
+        limit: LIMIT,
+        space: { used: finalSize, remaining: 0, limit: LIMIT, percentUsed: 100 },
+        rateLimit: rateLimitMeta,
+      });
+    }
+
+    const spaceRemaining = Math.max(0, LIMIT - finalSize);
+    const percentUsed = Math.min(100, Math.round((finalSize / LIMIT) * 1000) / 10);
+
+    // Analytics
+    await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
+      const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
+      c.writes = (c.writes || 0) + 1;
+      c.bytesIn = (c.bytesIn || 0) + serialized.length;
+      return c;
+    }).catch(() => {});
+
+    // Aggregate call counts
+    let totalWrites = 0;
+    let todayWrites = 0;
+    try {
+      const a = await db.ref(`analytics/${pid}/db`).once("value");
+      if (a.exists()) {
+        a.forEach(d => {
+          const v = d.val() || {};
+          const w = typeof v.writes === "number" ? v.writes : 0;
+          totalWrites += w;
+          if (d.key === today) todayWrites = w;
+        });
+      }
+    } catch {}
+
+    await logProjectEvent(pid, uidForLog, "db", "db.written", {
+      key,
+      mode: "path",
+      bytes: serialized.length,
+      viaApiKey: access.uid === "api",
+    });
+
+    // Storage warning at 80%
+    try {
+      if (finalSize > LIMIT * 0.8) {
+        const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
+        if (ownerSnap.exists()) {
+          callNotify("storage", ownerSnap.val(), {
+            title: "Database nearly full",
+            body: `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of 15 MB).`,
+            link: `${BASE_URL}/project.html?pid=${pid}`,
+            extra: { pid },
+          }).catch(() => {});
+        }
+      }
+    } catch {}
+
+    return res.status(200).json({
+      success: true,
+      mode: "path",
+      key,
+      space: { used: finalSize, remaining: spaceRemaining, limit: LIMIT, percentUsed },
+      rateLimit: rateLimitMeta,
+      calls: { total: totalWrites, today: todayWrites },
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Branch 2 — DATA MERGE (data + mode:"merge")
+  // Shallow top-level update. The client MUST send the full subtree
+  // for any top-level key it includes (e.g. the entire `posts` object,
+  // not just one post), because Firebase .update() replaces each
+  // provided top-level value wholesale.
+  // ═══════════════════════════════════════════════════════════
+  if (data !== undefined && mode === "merge") {
+    const serialized = JSON.stringify(data ?? null);
+    if (serialized.length > LIMIT) {
+      return res.status(413).json({
+        success: false,
+        error: "Payload too large (15 MB max)",
+        size: serialized.length,
+        limit: LIMIT,
+        rateLimit: rateLimitMeta,
+      });
+    }
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      return res.status(400).json({
+        success: false,
+        error: "Merge data must be a plain object",
+        rateLimit: rateLimitMeta,
+      });
+    }
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Nothing to merge",
+        rateLimit: rateLimitMeta,
+      });
+    }
+
+    try {
+      // Multi-path update. Top-level keys in `data` are treated as
+      // full-subtree replacements — the client contract.
+      await dbRef.update(data);
+    } catch (err) {
+      log("host.dbSet.merge_failed", { reqId, pid, message: err.message });
+      return res.status(500).json({
+        success: false,
+        error: "Write failed",
+        rateLimit: rateLimitMeta,
+      });
+    }
+
+    // ── Post-write size check ──
+    let finalSize = 0;
+    try {
+      const s = await dbRef.once("value");
+      finalSize = JSON.stringify(s.val() || {}).length;
+    } catch {}
+    if (finalSize > LIMIT) {
+      return res.status(413).json({
+        success: false,
+        error: "Database exceeds 15 MB limit after write",
+        size: finalSize,
+        limit: LIMIT,
+        space: { used: finalSize, remaining: 0, limit: LIMIT, percentUsed: 100 },
+        rateLimit: rateLimitMeta,
+      });
+    }
+    const spaceRemaining = Math.max(0, LIMIT - finalSize);
+    const percentUsed = Math.min(100, Math.round((finalSize / LIMIT) * 1000) / 10);
+
+    // Analytics
+    await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
+      const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
+      c.writes = (c.writes || 0) + 1;
+      c.bytesIn = (c.bytesIn || 0) + serialized.length;
+      return c;
+    }).catch(() => {});
+
+    let totalWrites = 0;
+    let todayWrites = 0;
+    try {
+      const a = await db.ref(`analytics/${pid}/db`).once("value");
+      if (a.exists()) {
+        a.forEach(d => {
+          const v = d.val() || {};
+          const w = typeof v.writes === "number" ? v.writes : 0;
+          totalWrites += w;
+          if (d.key === today) todayWrites = w;
+        });
+      }
+    } catch {}
+
+    await logProjectEvent(pid, uidForLog, "db", "db.written", {
+      key: null,
+      mode: "merge",
+      keys: Object.keys(data),
+      bytes: serialized.length,
+      viaApiKey: access.uid === "api",
+    });
+
+    // Storage warning at 80%
+    try {
+      if (finalSize > LIMIT * 0.8) {
+        const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
+        if (ownerSnap.exists()) {
+          callNotify("storage", ownerSnap.val(), {
+            title: "Database nearly full",
+            body: `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of 15 MB).`,
+            link: `${BASE_URL}/project.html?pid=${pid}`,
+            extra: { pid },
+          }).catch(() => {});
+        }
+      }
+    } catch {}
+
+    return res.status(200).json({
+      success: true,
+      mode: "merge",
+      keys: Object.keys(data),
+      space: { used: finalSize, remaining: spaceRemaining, limit: LIMIT, percentUsed },
+      rateLimit: rateLimitMeta,
+      calls: { total: totalWrites, today: todayWrites },
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Branch 3 — DATA REPLACE (data, no mode)
+  // Full replacement of projectData/{pid}. Use only for
+  // create-group, delete-group, and explicit "wipe DB" ops.
+  // ═══════════════════════════════════════════════════════════
+  if (data !== undefined) {
+    const serialized = JSON.stringify(data ?? null);
+    if (serialized.length > LIMIT) {
+      return res.status(413).json({
+        success: false,
+        error: "Payload too large (15 MB max)",
+        size: serialized.length,
+        limit: LIMIT,
+        rateLimit: rateLimitMeta,
+      });
+    }
+
+    try {
+      await dbRef.set(data);
+    } catch (err) {
+      log("host.dbSet.replace_failed", { reqId, pid, message: err.message });
+      return res.status(500).json({
+        success: false,
+        error: "Write failed",
+        rateLimit: rateLimitMeta,
+      });
+    }
+
+    // ── Post-write size check ──
+    let finalSize = 0;
+    try {
+      const s = await dbRef.once("value");
+      finalSize = JSON.stringify(s.val() || {}).length;
+    } catch {}
+    const spaceRemaining = Math.max(0, LIMIT - finalSize);
+    const percentUsed = LIMIT > 0
+      ? Math.min(100, Math.round((finalSize / LIMIT) * 1000) / 10)
+      : 0;
+
+    // Analytics
+    await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
+      const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
+      c.writes = (c.writes || 0) + 1;
+      c.bytesIn = (c.bytesIn || 0) + serialized.length;
+      return c;
+    }).catch(() => {});
+
+    let totalWrites = 0;
+    let todayWrites = 0;
+    try {
+      const a = await db.ref(`analytics/${pid}/db`).once("value");
+      if (a.exists()) {
+        a.forEach(d => {
+          const v = d.val() || {};
+          const w = typeof v.writes === "number" ? v.writes : 0;
+          totalWrites += w;
+          if (d.key === today) todayWrites = w;
+        });
+      }
+    } catch {}
+
+    await logProjectEvent(pid, uidForLog, "db", "db.written", {
+      key: null,
+      mode: "replace",
+      bytes: serialized.length,
+      viaApiKey: access.uid === "api",
+    });
+
+    return res.status(200).json({
+      success: true,
+      mode: "replace",
+      space: { used: finalSize, remaining: spaceRemaining, limit: LIMIT, percentUsed },
+      rateLimit: rateLimitMeta,
+      calls: { total: totalWrites, today: todayWrites },
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Nothing to do
+  // ═══════════════════════════════════════════════════════════
+  return res.status(400).json({
+    success: false,
+    error: "Missing key or data",
     rateLimit: rateLimitMeta,
-    calls: {
-      total: totalWrites,
-      today: todayWrites,
-    },
   });
 }
 
