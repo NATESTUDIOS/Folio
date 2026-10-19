@@ -1,6 +1,5 @@
 // api/notify.js
 import crypto from "node:crypto";
-import webpush from "web-push";
 import { db, messaging } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import {
@@ -9,23 +8,12 @@ import {
 } from "../utils/users.js";
 
 // =========================================================================
-// VAPID — Web Push delivery
+// DELIVERY MODEL
 // =========================================================================
-
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:hello@folio.app";
-
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  try {
-    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-    log("notify.vapid_ready", { subject: VAPID_SUBJECT });
-  } catch (err) {
-    log("notify.vapid_init_failed", { message: err.message });
-  }
-} else {
-  log("notify.vapid_missing", { note: "Web Push delivery disabled" });
-}
+// FCM-only. No Web Push, no VAPID keys on the backend.
+// The FCM VAPID key (BKKQ5...) is used *by the browser* in fcm-client.js
+// to call getToken() — it is not a backend concern.
+// Backend only needs FIREBASE_SERVICE_KEY + FIREBASE_DB_URL.
 
 // =========================================================================
 // CONSTANTS
@@ -44,7 +32,6 @@ const HISTORY_PATH = "folio/NotificationHistory";
 
 const NOTIFICATION_HISTORY_LIMIT = 50;
 const NOTIFICATION_LIMIT_BUFFER = 10;
-const STORE_CONCURRENCY = 50;
 const SEND_CONCURRENCY = 5;
 
 // =========================================================================
@@ -137,7 +124,6 @@ async function enforceRate(res, action, identifier) {
 
 const serverCache = new Map();
 const CACHE_TTL = 60 * 1000;
-const CACHE_TTL_ADMIN = 5 * 1000;
 const CACHE_MAX_SIZE = 1000;
 
 function getCacheKey(prefix, identifier, params = {}) {
@@ -235,85 +221,19 @@ async function runWithConcurrency(items, concurrency, fn) {
 }
 
 // =========================================================================
-// TOKEN VALIDATION — detect FCM token OR Web Push subscription
+// FCM TOKEN VALIDATION
 // =========================================================================
 
 /**
- * A token is either:
- *   - FCM token: string with ":" and length >= 100
- *   - Web Push subscription: JSON string of { endpoint, keys: { p256dh, auth } }
- * Returns { kind: "fcm" | "webpush", payload } or null if invalid.
+ * FCM v1 tokens are long (~80-200 chars) and contain a colon
+ * separating the token ID from the token secret.
+ * This is the ONLY token type this backend accepts.
  */
-function detectTokenKind(token) {
-  if (typeof token !== "string" || token.length === 0) return null;
-
-  // Try Web Push subscription first
-  if (token.startsWith("{")) {
-    try {
-      const parsed = JSON.parse(token);
-      if (parsed.endpoint && parsed.keys && parsed.keys.p256dh && parsed.keys.auth) {
-        return { kind: "webpush", payload: parsed };
-      }
-    } catch {
-      // fall through
-    }
-    return null;
-  }
-
-  // FCM token heuristic — FCM tokens are long and contain a colon.
-  // Modern FCM tokens (v1) can be ~150-200 chars. Being strict here
-  // previously rejected valid tokens; loosened the check slightly.
-  if (token.length >= 80 && token.includes(":")) {
-    return { kind: "fcm", payload: token };
-  }
-
-  return null;
-}
-
-// =========================================================================
-// WEB PUSH DELIVERY
-// =========================================================================
-
-function buildWebPushPayload({ title, body, imageUrl, link, notificationId, type, userId, extra }) {
-  return JSON.stringify({
-    title: title || "",
-    body: body || "",
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
-    image: imageUrl || undefined,
-    tag: notificationId || undefined,
-    data: {
-      title: title || "",
-      body: body || "",
-      image: imageUrl || undefined,
-      link: link || "/notifications",
-      notificationId: notificationId || "",
-      type: type || "system",
-      user_id: userId || "",
-      extra: extra || "",
-    },
-  });
-}
-
-async function sendWebPushOne(payloadString, subscriptionJson) {
-  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    return { success: false, error: "VAPID not configured" };
-  }
-  try {
-    const subscription = typeof subscriptionJson === "string"
-      ? JSON.parse(subscriptionJson)
-      : subscriptionJson;
-    await webpush.sendNotification(subscription, payloadString, { TTL: 60 * 60 * 24 });
-    return { success: true };
-  } catch (err) {
-    // 404/410 = subscription expired/unsubscribed — treat as soft failure
-    const statusCode = err?.statusCode || 0;
-    if (statusCode === 404 || statusCode === 410) {
-      return { success: false, error: "subscription_gone", expired: true };
-    }
-    log("notify.webpush_send_failed", { statusCode, message: err.message });
-    return { success: false, error: err.message };
-  }
+function isValidFcmToken(token) {
+  if (typeof token !== "string") return false;
+  if (token.length < 80) return false;
+  if (!token.includes(":")) return false;
+  return true;
 }
 
 // =========================================================================
@@ -347,8 +267,8 @@ async function sendFcmOne(message, token) {
     const code = err?.code || "";
     const msg = err?.message || "";
 
-    // Token is dead — the user uninstalled, cleared data, or unsubscribed.
-    // Return `expired: true` so the caller can prune it from Firebase.
+    // Token is dead — user uninstalled, cleared data, or unsubscribed at OS level.
+    // Flag it so the caller prunes it from Firebase.
     if (
       code === "messaging/registration-token-not-registered" ||
       code === "messaging/invalid-registration-token" ||
@@ -582,9 +502,8 @@ async function listNotifications(userId, { type = "all", limit = 20, offset = 0,
 // =========================================================================
 
 async function registerDeviceToken(userId, token, deviceId) {
-  const detected = detectTokenKind(token);
-  if (!detected) {
-    throw new Error("Invalid token (must be FCM token or Web Push subscription)");
+  if (!isValidFcmToken(token)) {
+    throw new Error("Invalid FCM token");
   }
 
   const dk = deviceKeyFor(deviceId, token);
@@ -593,8 +512,7 @@ async function registerDeviceToken(userId, token, deviceId) {
   const existing = snap.exists() ? snap.val() : {};
   const tokens = existing.tokens || {};
 
-  // Prune any other tokens that are the SAME value (avoid duplicate keys
-  // if the same token was stored under a different deviceId).
+  // Prune any duplicate token values under other keys
   for (const [k, v] of Object.entries(tokens)) {
     if (k !== dk && v?.token === token.trim()) {
       delete tokens[k];
@@ -603,13 +521,12 @@ async function registerDeviceToken(userId, token, deviceId) {
 
   tokens[dk] = {
     token: token.trim(),
-    kind: detected.kind,
     addedAt: tokens[dk]?.addedAt || Date.now(),
     lastSeenAt: Date.now(),
   };
   await ref.update({ tokens, lastUpdated: Date.now() });
   invalidateCache("notif:tokens", userId);
-  return { deviceKey: dk, kind: detected.kind };
+  return { deviceKey: dk };
 }
 
 async function unregisterDeviceToken(userId, deviceId) {
@@ -655,7 +572,7 @@ async function getUserTokens(userId) {
   snap.forEach(child => {
     const v = child.val();
     if (v && v.token) {
-      tokens.push({ token: v.token, kind: v.kind || "fcm", deviceKey: child.key });
+      tokens.push({ token: v.token, deviceKey: child.key });
     }
   });
   setToCache(cacheKey, tokens);
@@ -673,7 +590,7 @@ async function removeExpiredToken(userId, deviceKey) {
 }
 
 // =========================================================================
-// SEND — fans out to both FCM and Web Push
+// SEND — FCM only
 // =========================================================================
 
 async function sendNotificationWithPush(userId, data) {
@@ -706,25 +623,8 @@ async function sendNotificationWithPush(userId, data) {
         extra: extraPayload,
       });
 
-      const webpushPayload = buildWebPushPayload({
-        title: data.title,
-        body: data.body,
-        imageUrl: data.imageUrl,
-        link: data.link,
-        notificationId: id,
-        type: data.type,
-        userId,
-        extra: extraPayload,
-      });
-
       const expiredDeviceKeys = [];
       const results = await runWithConcurrency(tokens, SEND_CONCURRENCY, async (entry) => {
-        if (entry.kind === "webpush") {
-          const r = await sendWebPushOne(webpushPayload, entry.token);
-          if (r.expired) expiredDeviceKeys.push(entry.deviceKey);
-          return r;
-        }
-        // default: FCM
         const r = await sendFcmOne(fcmMessage, entry.token);
         if (r.expired) expiredDeviceKeys.push(entry.deviceKey);
         return r;
@@ -736,13 +636,8 @@ async function sendNotificationWithPush(userId, data) {
         tokensAttempted: tokens.length,
         tokensDelivered: delivered,
         tokensExpired: expiredDeviceKeys.length,
-        byKind: {
-          fcm: tokens.filter(t => t.kind === "fcm").length,
-          webpush: tokens.filter(t => t.kind === "webpush").length,
-        },
       };
 
-      // Clean up expired tokens — works for BOTH FCM and Web Push now.
       if (expiredDeviceKeys.length > 0) {
         Promise.all(expiredDeviceKeys.map(dk => removeExpiredToken(userId, dk))).catch(() => {});
       }
@@ -813,8 +708,6 @@ async function handleConfig(req, res, reqId) {
   if (!(await enforceRate(res, "config", `ip_${hashIp(getClientIp(req))}`))) return;
   return res.status(200).json({
     success: true,
-    vapidPublicKey: VAPID_PUBLIC_KEY || null,
-    pushEnabled: !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY),
     fcmEnabled: !!messaging,
   });
 }
@@ -827,8 +720,8 @@ async function handleSubscribe(req, res, reqId) {
   const { token, deviceId } = req.body || {};
   if (!token) return res.status(400).json({ success: false, error: "Missing token" });
   try {
-    const { deviceKey, kind } = await registerDeviceToken(user.uid, token, deviceId || null);
-    return res.status(200).json({ success: true, deviceKey, kind });
+    const { deviceKey } = await registerDeviceToken(user.uid, token, deviceId || null);
+    return res.status(200).json({ success: true, deviceKey, kind: "fcm" });
   } catch (err) {
     return res.status(400).json({ success: false, error: err.message });
   }
@@ -1042,13 +935,11 @@ async function handleHealth(req, res, reqId) {
   return res.status(200).json({
     success: true,
     status: "ok",
+    delivery: "fcm",
     types: NOTIFICATION_TYPES,
     settings: Object.keys(DEFAULT_SETTINGS),
     cache: getCacheStats(),
-    delivery: {
-      fcm: !!messaging,
-      webpush: !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY),
-    },
+    fcm: !!messaging,
   });
 }
 
