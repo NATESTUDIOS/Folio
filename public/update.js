@@ -32,16 +32,19 @@
 
   const CFG = {
     checkIntervalMs: 5 * 60 * 1000,      // poll every 5 min
-    autoApplyMs: 30 * 1000,              // auto-apply after 30s (was: auto-dismiss)
+    autoApplyMs: 30 * 1000,              // auto-apply after 30s
     reloadDelayMs: 700,                  // brief pause before reload
     controllerTimeoutMs: 4000,           // safety net for SKIP_WAITING
     waitingPollTimeoutMs: 5000,          // wait for a waiting worker
-    countdownTickMs: 100,                // countdown update interval (for smooth bar)
+    countdownTickMs: 100,                // countdown update interval
   };
+
+  const POSTPONE_KEY = 'folio.upd.postponed';
 
   const S = {
     reg: null,
     dialogEl: null,
+    dialogVersion: null,
     autoApplyTimer: null,
     countdownRaf: null,
     countdownStartAt: 0,
@@ -77,6 +80,49 @@
 
   function fmtSeconds(ms) {
     return Math.max(0, Math.ceil(ms / 1000));
+  }
+
+  /* Ask a specific service-worker instance for its CACHE_VERSION. */
+  function getWorkerVersion(worker, timeoutMs = 1500) {
+    return new Promise((resolve) => {
+      if (!worker) { resolve(''); return; }
+      try {
+        const mc = new MessageChannel();
+        const timer = setTimeout(() => resolve(''), timeoutMs);
+        mc.port1.onmessage = (e) => {
+          clearTimeout(timer);
+          resolve(String(e.data?.version || ''));
+        };
+        worker.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
+      } catch {
+        resolve('');
+      }
+    });
+  }
+
+  /* Persist postpone across page reloads within the same tab session. */
+  function readPostponed() {
+    try {
+      const raw = sessionStorage.getItem(POSTPONE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.version) return parsed;
+    } catch {}
+    return null;
+  }
+
+  function writePostponed(version) {
+    if (!version) return;
+    try {
+      sessionStorage.setItem(
+        POSTPONE_KEY,
+        JSON.stringify({ version, at: Date.now() })
+      );
+    } catch {}
+  }
+
+  function clearPostponed() {
+    try { sessionStorage.removeItem(POSTPONE_KEY); } catch {}
   }
 
   /* Unsaved-work guard */
@@ -497,15 +543,12 @@
       const remaining = Math.max(0, CFG.autoApplyMs - elapsed);
       const remainingSec = Math.ceil(remaining / 1000);
 
-      // Update numeric text
       text.textContent = String(remainingSec);
 
-      // Update ring progress (0 = full, RING = empty)
       const pct = Math.min(1, elapsed / CFG.autoApplyMs);
       const offset = RING_CIRCUMFERENCE * pct;
       ring.style.strokeDashoffset = String(offset);
 
-      // Warn color in last 5 seconds
       if (remainingSec <= 5 && remainingSec > 0) {
         text.style.color = '#EF4444';
         ring.style.stroke = '#EF4444';
@@ -515,7 +558,6 @@
       }
 
       if (remaining <= 0) {
-        // Time's up — auto-apply
         applyNow(true);
         return;
       }
@@ -523,11 +565,9 @@
       S.countdownRaf = requestAnimationFrame(tick);
     };
 
-    // First paint
     text.textContent = String(fmtSeconds(CFG.autoApplyMs));
     ring.style.strokeDashoffset = '0';
 
-    // Use requestAnimationFrame for smooth ring; setInterval for text
     S.countdownRaf = requestAnimationFrame(tick);
   }
 
@@ -542,19 +582,19 @@
   // SHOW / DISMISS
   // ═══════════════════════════════════════════════════════════
 
-  function show() {
+  function show(version) {
     if (S.applying || S.dialogEl) return;
 
-    const waitingVer = S.reg?.waiting ? S.reg.waiting.scriptURL : null;
-    if (S.postponed && waitingVer && waitingVer === S.postponedVersion) return;
+    // Suppress duplicate shows for a version the user already postponed.
+    if (version && S.postponedVersion === version) return;
 
     const ov = buildDialog();
     S.dialogEl = ov;
+    S.dialogVersion = version || null;
     document.body.style.overflow = 'hidden';
     void ov.offsetWidth;
     ov.classList.add('open');
 
-    // Wait a tick for CSS to settle, then start countdown
     setTimeout(() => startCountdown(), 50);
 
     try { window.dispatchEvent(new CustomEvent('folio:update:available')); } catch {}
@@ -564,9 +604,24 @@
     stopCountdown();
     if (!S.dialogEl) return;
 
-    if (S.reg?.waiting) {
+    // Remember the actual waiting worker's version so the same update
+    // doesn't immediately re-open on the next checkNow().
+    const waiting = S.reg?.waiting;
+    if (waiting) {
       S.postponed = true;
-      S.postponedVersion = S.reg.waiting.scriptURL;
+      const fallbackVersion = S.dialogVersion || '';
+      S.postponedVersion = fallbackVersion;
+      // Refresh with the authoritative version string when available.
+      getWorkerVersion(waiting).then((ver) => {
+        if (ver) {
+          S.postponedVersion = ver;
+          writePostponed(ver);
+        } else if (fallbackVersion) {
+          writePostponed(fallbackVersion);
+        }
+      }).catch(() => {
+        if (fallbackVersion) writePostponed(fallbackVersion);
+      });
     }
 
     const ov = S.dialogEl;
@@ -632,7 +687,6 @@
       const ok = await confirmDiscard();
       if (!ok) {
         S.applying = false;
-        // Restart countdown if user cancelled
         if (S.dialogEl) {
           const card = S.dialogEl.querySelector('.folio-upd-card');
           if (card) card.classList.remove('applying');
@@ -641,15 +695,13 @@
         return;
       }
     }
-    // If auto-countdown fires but there's unsaved work, we still postpone
-    // and treat it as a "later" dismissal to avoid data loss
+    // If auto-countdown fires but there's unsaved work, treat it as "later"
     if (hasUnsavedWork() && fromCountdown) {
       S.applying = false;
       dismiss();
       return;
     }
 
-    // Visual: spinning icon, hide countdown, show progress
     const card = S.dialogEl?.querySelector('.folio-upd-card');
     if (card) card.classList.add('applying');
     hideCountdown();
@@ -729,20 +781,26 @@
   // ═══════════════════════════════════════════════════════════
 
   async function checkNow() {
-    if (S.paused || S.applying) return;
-    if (S.dialogEl) return;
+    if (S.paused || S.applying || S.dialogEl) return;
     try {
       const reg = S.reg || await navigator.serviceWorker.getRegistration();
       if (!reg) return;
       S.reg = reg;
-      await reg.update();
 
-      if (reg.waiting && S.postponedVersion !== reg.waiting.scriptURL) {
-        S.postponed = false;
-        S.postponedVersion = null;
+      // Only ask the server for a new SW if we're not already sitting on one.
+      if (!reg.waiting && !reg.installing) {
+        try { await reg.update(); } catch {}
       }
 
-      if (reg.waiting) show();
+      if (!reg.waiting) return;
+
+      // Ask the waiting worker what version it is so we can compare against
+      // any prior postpone.
+      const version = await getWorkerVersion(reg.waiting);
+
+      if (version && S.postponedVersion === version) return;
+
+      show(version || null);
     } catch (err) {
       console.warn('[Folio update] check failed:', err);
     }
@@ -761,17 +819,24 @@
       S.reg = await navigator.serviceWorker.getRegistration();
       if (!S.reg) return;
 
+      // Restore any postpone from this tab's earlier session.
+      const postponed = readPostponed();
+      if (postponed) {
+        S.postponed = true;
+        S.postponedVersion = postponed.version;
+      }
+
       navigator.serviceWorker.addEventListener('message', (event) => {
         const d = event.data || {};
-        if (d.type === 'SW_UPDATE_AVAILABLE' || d.type === 'UPDATE_AVAILABLE') {
-          S.postponed = false;
-          S.postponedVersion = null;
-          show();
-        }
-      });
+        if (d.type !== 'SW_UPDATE_AVAILABLE' && d.type !== 'UPDATE_AVAILABLE') return;
 
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        // No-op — applyNow handles reload explicitly
+        const ver = String(d.version || d.builtAt || '');
+        // Ignore if the user already postponed this exact version.
+        if (ver && S.postponedVersion === ver) return;
+
+        S.postponed = false;
+        S.postponedVersion = null;
+        show(ver || null);
       });
 
       if (S.checkTimer) clearInterval(S.checkTimer);
@@ -782,9 +847,8 @@
       });
       window.addEventListener('online', checkNow);
 
+      // checkNow handles waiting-worker detection + version comparison.
       await checkNow();
-
-      if (S.reg.waiting) show();
     } catch (err) {
       console.warn('[Folio update] init error:', err);
     }
