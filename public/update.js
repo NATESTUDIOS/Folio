@@ -8,8 +8,9 @@
    API:
      FOLIO.update.check()
      FOLIO.update.applyNow()
-     FOLIO.update.pause()    // install.js uses this
+     FOLIO.update.pause()      // install.js uses this
      FOLIO.update.resume()
+     FOLIO.update.isPaused()
 
    Event:
      folio:update:available
@@ -19,9 +20,11 @@
   'use strict';
 
   const CFG = {
-    checkIntervalMs: 5 * 60 * 1000,
-    autoDismissMs: 30 * 1000,
-    reloadDelayMs: 700,
+    checkIntervalMs: 5 * 60 * 1000,     // poll every 5 min
+    autoDismissMs: 30 * 1000,           // auto-dismiss dialog after 30s
+    reloadDelayMs: 700,                 // brief pause before reload
+    controllerTimeoutMs: 4000,          // safety net for SKIP_WAITING
+    waitingPollTimeoutMs: 5000,         // wait for a waiting worker
   };
 
   const S = {
@@ -30,19 +33,26 @@
     dialogTimer: null,
     applying: false,
     paused: false,
+    postponed: false,         // [FIX] "Later" this session → don't re-show
+    postponedVersion: null,   // [FIX] version the user postponed
     stylesInjected: false,
     initialized: false,
+    checkTimer: null,
+    safetyTimer: null,
+    onCtrlHandler: null,
   };
 
-  /* ── Toast bridge ── */
-  const toast = (msg, opts) => {
+  /* ── Toast bridge ──
+     Editor defines: toast(message, type = 'info', duration = 2500)
+     → positional args, NOT an options object.            [FIX] */
+  const toast = (msg, type = 'info', duration = 3000) => {
     try {
-      if (typeof window.toast === 'function') window.toast(msg, opts || { type: 'info' });
+      if (typeof window.toast === 'function') window.toast(msg, type, duration);
       else console.log('[Folio update]', msg);
     } catch {}
   };
 
-  /* ── Unsaved-work guard (works with the editor's workspace object) ── */
+  /* ── Unsaved-work guard ── */
   function hasUnsavedWork() {
     try {
       const ws = window.workspace;
@@ -52,19 +62,36 @@
     } catch { return false; }
   }
 
+  /* ── Confirm wrapper ──
+     Handles both:
+       • Editor's Promise-returning confirm({ ... })  (index.html)
+       • Native window.confirm('string') → boolean    (fallback)
+                                                                [FIX] */
   async function confirmDiscard() {
+    const opts = {
+      title: 'Reload anyway?',
+      message: 'You have unsaved changes. Reloading will lose them.',
+      confirmLabel: 'Reload',
+      danger: true,
+    };
+
+    // If the editor overrode window.confirm with a Promise-returning
+    // helper, use it. Otherwise fall back to the native boolean confirm.
     try {
       if (typeof window.confirm === 'function') {
-        return await window.confirm({
-          title: 'Reload anyway?',
-          message: 'You have unsaved changes. Reloading will lose them.',
-          confirmLabel: 'Reload',
-          danger: true,
-        });
+        const r = window.confirm(opts);
+        if (r && typeof r.then === 'function') return !!(await r);
+        // If it returned a boolean, that's the native confirm — but we
+        // passed an object, so the browser stringified it. Fall through
+        // to a clean native call.
       }
     } catch {}
-    // Fallback to native
-    return window.confirm('You have unsaved changes. Reload anyway?');
+
+    try {
+      return !!window.confirm(opts.message);
+    } catch {
+      return false;
+    }
   }
 
   /* ── CSS ── */
@@ -93,6 +120,7 @@
         text-align: center;
         transform: scale(0.94) translateY(14px);
         transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+        position: relative;
       }
       .folio-upd.open .folio-upd-card { transform: scale(1) translateY(0); }
       .folio-upd-icon {
@@ -234,11 +262,21 @@
     ov.querySelector('[data-folio-upd="later"]').addEventListener('click', dismiss);
     ov.querySelector('[data-folio-upd="apply"]').addEventListener('click', applyNow);
 
+    // Click backdrop to dismiss
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov) dismiss();
+    });
+
     return ov;
   }
 
   function show() {
     if (S.applying || S.dialogEl) return;
+
+    // Respect a "Later" click for the current waiting version    [FIX]
+    const waitingVer = S.reg?.waiting ? S.reg.waiting.scriptURL : null;
+    if (S.postponed && waitingVer && waitingVer === S.postponedVersion) return;
+
     const ov = buildDialog();
     S.dialogEl = ov;
     document.body.style.overflow = 'hidden';
@@ -256,6 +294,13 @@
   function dismiss() {
     if (S.dialogTimer) { clearTimeout(S.dialogTimer); S.dialogTimer = null; }
     if (!S.dialogEl) return;
+
+    // Mark this waiting version as postponed for the session       [FIX]
+    if (S.reg?.waiting) {
+      S.postponed = true;
+      S.postponedVersion = S.reg.waiting.scriptURL;
+    }
+
     const ov = S.dialogEl;
     S.dialogEl = null;
     ov.classList.remove('open');
@@ -314,15 +359,16 @@
     try {
       const reg = S.reg || await navigator.serviceWorker.getRegistration();
       if (!reg) throw new Error('No service worker registration');
+      S.reg = reg;
 
       // Prefer waiting worker
       if (!reg.waiting) {
         await reg.update();
-        // Wait up to 5s for a waiting worker to appear
+        // Wait up to CFG.waitingPollTimeoutMs for a waiting worker to appear
         await new Promise((resolve) => {
           const start = Date.now();
           const iv = setInterval(() => {
-            if (reg.waiting || Date.now() - start > 5000) {
+            if (reg.waiting || Date.now() - start > CFG.waitingPollTimeoutMs) {
               clearInterval(iv); resolve();
             }
           }, 100);
@@ -332,25 +378,36 @@
       setProgress(45);
 
       if (reg.waiting) {
+        // Clear any pending fallback from a previous attempt       [FIX]
+        if (S.safetyTimer) { clearTimeout(S.safetyTimer); S.safetyTimer = null; }
+        if (S.onCtrlHandler) {
+          navigator.serviceWorker.removeEventListener('controllerchange', S.onCtrlHandler);
+          S.onCtrlHandler = null;
+        }
+
         // Listen for controller change → reload
-        const onCtrl = () => {
-          navigator.serviceWorker.removeEventListener('controllerchange', onCtrl);
+        S.onCtrlHandler = () => {
+          if (S.safetyTimer) { clearTimeout(S.safetyTimer); S.safetyTimer = null; } // [FIX]
+          navigator.serviceWorker.removeEventListener('controllerchange', S.onCtrlHandler);
+          S.onCtrlHandler = null;
           setProgress(100);
           showReloadOverlay();
           try { window.dispatchEvent(new CustomEvent('folio:update:applied')); } catch {}
           setTimeout(() => location.reload(), CFG.reloadDelayMs);
         };
-        navigator.serviceWorker.addEventListener('controllerchange', onCtrl);
+        navigator.serviceWorker.addEventListener('controllerchange', S.onCtrlHandler);
 
         setProgress(75);
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
 
-        // Safety: if no controllerchange after 4s, force reload
-        setTimeout(() => {
+        // Safety: if no controllerchange after timeout, force reload
+        S.safetyTimer = setTimeout(() => {
+          S.safetyTimer = null;
           setProgress(100);
           showReloadOverlay();
+          try { window.dispatchEvent(new CustomEvent('folio:update:applied')); } catch {}
           location.reload();
-        }, 4000);
+        }, CFG.controllerTimeoutMs);
       } else {
         // Nothing waiting — reload anyway to pick up new HTTP cache
         setProgress(100);
@@ -363,18 +420,26 @@
       if (applyBtn) applyBtn.disabled = false;
       if (laterBtn) laterBtn.disabled = false;
       setProgress(0);
-      toast('Update failed — try again later', { type: 'error' });
+      toast('Update failed — try again later', 'error', 4000);   // [FIX] positional
     }
   }
 
   /* ── Update checks ── */
   async function checkNow() {
     if (S.paused || S.applying) return;
+    if (S.dialogEl) return;        // don't stack dialogs               [FIX]
     try {
       const reg = S.reg || await navigator.serviceWorker.getRegistration();
       if (!reg) return;
       S.reg = reg;
       await reg.update();
+
+      // New SW arrived → clear the "postponed" flag for this new one  [FIX]
+      if (reg.waiting && S.postponedVersion !== reg.waiting.scriptURL) {
+        S.postponed = false;
+        S.postponedVersion = null;
+      }
+
       if (reg.waiting) show();
     } catch (err) {
       console.warn('[Folio update] check failed:', err);
@@ -393,19 +458,25 @@
       // SW tells us it has an update ready
       navigator.serviceWorker.addEventListener('message', (event) => {
         const d = event.data || {};
-        if (d.type === 'SW_UPDATE_AVAILABLE' || d.type === 'UPDATE_AVAILABLE') show();
+        if (d.type === 'SW_UPDATE_AVAILABLE' || d.type === 'UPDATE_AVAILABLE') {
+          // A new version supersedes any postponed one                [FIX]
+          S.postponed = false;
+          S.postponedVersion = null;
+          show();
+        }
       });
 
-      // SW took control — reload (only if we haven't already from applyNow)
+      // SW took control — do nothing unless applyNow initiated it
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (S.applying) return;
-        // The service worker claimed clients on a fresh install.
-        // Do not reload unless we have an update waiting.
-        if (S.dialogEl) return;
+        // No-op: reload is triggered by applyNow's onCtrlHandler.
+        // We intentionally do NOT reload here so a silent first-install
+        // doesn't yank the page out from under the user.
       });
 
       // Recurring + trigger-based checks
-      setInterval(checkNow, CFG.checkIntervalMs);
+      if (S.checkTimer) clearInterval(S.checkTimer);
+      S.checkTimer = setInterval(checkNow, CFG.checkIntervalMs);
+
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') checkNow();
       });
@@ -425,8 +496,15 @@
   window.FOLIO.update = {
     check: checkNow,
     applyNow,
-    pause()  { S.paused = true; },
-    resume() { S.paused = false; setTimeout(checkNow, 800); },
+    pause() {
+      S.paused = true;
+      if (S.checkTimer) { clearInterval(S.checkTimer); S.checkTimer = null; }
+    },
+    resume() {
+      S.paused = false;
+      if (S.applying) return;              // [FIX] don't check mid-reload
+      setTimeout(checkNow, 800);
+    },
     isPaused: () => S.paused,
     _state: S,
   };
