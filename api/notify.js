@@ -21,7 +21,8 @@ import {
 
 const API_NAME = "notify";
 
-// 🆕 Added "security" so host.js rate-limit / api-key alerts are accepted.
+// 🆕 Added "security" so host.js rate-limit / api-key alerts and auth.js
+// security events are accepted.
 const NOTIFICATION_TYPES = ["system", "analytics", "db", "storage", "project", "invite", "security"];
 const NOTIFICATION_PRIORITIES = ["normal", "high", "urgent"];
 const ACTION_TYPES = ["navigate", "modal", "external", "deep_link"];
@@ -37,28 +38,24 @@ const DEDUPE_PATH = "folio/NotifyDedupe";
 const GENERAL_TOPIC = "folio-general";
 
 // Android notification channel — must exist in your mobile app config.
-// If unsure, keep "default" or whatever channelId you registered.
 const ANDROID_CHANNEL_ID = process.env.FCM_ANDROID_CHANNEL || "folio_default";
-// Small icon drawable name inside your Android app.
 const ANDROID_ICON = process.env.FCM_ANDROID_ICON || "ic_notification";
-// Accent color used in notification tray.
 const ANDROID_COLOR = process.env.FCM_ANDROID_COLOR || "#F59E0B";
 
 const NOTIFICATION_HISTORY_LIMIT = 50;
 const NOTIFICATION_LIMIT_BUFFER = 10;
 const SEND_CONCURRENCY = 5;
-const MAX_TOKENS_PER_USER = 10;          // 🆕
-const BROADCAST_HISTORY_BATCH = 500;     // 🆕 (was 10, way too slow)
+const MAX_TOKENS_PER_USER = 10;
+const BROADCAST_HISTORY_BATCH = 500;
 
 // Per-type dedupe TTLs (milliseconds). 0 = no dedupe.
-// Matches plan: storage 6–12h, security 1h, project 1m minimum.
 const DEDUPE_TTL_MS = {
   storage: 6 * 60 * 60 * 1000,
   security: 60 * 60 * 1000,
   analytics: 60 * 60 * 1000,
   db: 30 * 60 * 1000,
   project: 60 * 1000,
-  invite: 0,       // invite accept/cancel should NEVER dedupe
+  invite: 0,
   system: 0,
 };
 
@@ -77,9 +74,7 @@ const RATE_LIMITS = {
   list:           { max: 120,  window: 60 * 60 * 1000 },
   stats:          { max: 120,  window: 60 * 60 * 1000 },
   getSettings:    { max: 120,  window: 60 * 60 * 1000 },
-  // 🆕 Bumped from 500 → 2000. Identifier is now per-target-uid (below),
-  //     so this is a per-user cap, not a global cap across all of Folio.
-  create:         { max: 50,   window: 60 * 60 * 1000 },
+  create:         { max: 50,   window: 60 * 60 * 1000 }, // per target uid
   authBridge:     { max: 200,  window: 60 * 60 * 1000 },
   config:         { max: 120,  window: 60 * 60 * 1000 },
   broadcast:      { max: 20,   window: 60 * 60 * 1000 },
@@ -206,6 +201,9 @@ function getCacheStats() {
 // HELPERS
 // =========================================================================
 
+// 🆕 securityAlerts added. Defaults to true so existing users see no
+// behavior change. Security notifications always deliver regardless of
+// this toggle (see ALWAYS_DELIVER_TYPES below).
 const DEFAULT_SETTINGS = {
   pushEnabled: true,
   systemAlerts: true,
@@ -214,6 +212,7 @@ const DEFAULT_SETTINGS = {
   storageAlerts: true,
   projectAlerts: true,
   inviteAlerts: true,
+  securityAlerts: true,   // 🆕
   quietHours: { enabled: false, start: "22:00", end: "07:00" },
 };
 
@@ -224,8 +223,14 @@ const TYPE_TO_SETTING = {
   storage: "storageAlerts",
   project: "projectAlerts",
   invite: "inviteAlerts",
-  security: "systemAlerts", // 🆕 reuse systemAlerts
+  security: "securityAlerts",  // 🆕 dedicated toggle
 };
+
+// 🆕 Security notifications bypass the per-category toggle entirely.
+// They still respect pushEnabled (transport-level), but the user cannot
+// silence a password change / new device login just by disabling a category.
+// This matches industry standard (GitHub, Google, Stripe, etc.).
+const ALWAYS_DELIVER_TYPES = new Set(["security"]);
 
 function generateNotificationId() {
   return `notif_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
@@ -254,16 +259,9 @@ async function runWithConcurrency(items, concurrency, fn) {
 }
 
 // =========================================================================
-// DEDUPE (🆕)
+// DEDUPE
 // =========================================================================
 
-/**
- * Returns true if a notification with the same dedupe key was sent to this
- * user within the dedupe window (per-type default TTL). Silently marks the
- * key as consumed when it returns false (so the NEXT call within TTL sees it).
- *
- * Skip dedupe by passing ttlMs = 0 explicitly.
- */
 async function shouldDedupe(uid, type, dedupeKey, ttlMsOverride) {
   if (!uid) return false;
   const ttl = ttlMsOverride !== undefined
@@ -285,7 +283,7 @@ async function shouldDedupe(uid, type, dedupeKey, ttlMsOverride) {
     await ref.set({ ts: now, uid, type }).catch(() => {});
     return false;
   } catch {
-    return false; // fail-open
+    return false;
   }
 }
 
@@ -310,15 +308,6 @@ function isValidTopicName(topic) {
 // FCM MESSAGE BUILDERS
 // =========================================================================
 
-/**
- * 🆕 Builds a full FCM message with BOTH data AND notification blocks.
- *
- * The `notification` block is essential:
- *  - iOS drops data-only messages without it (or an aps.content-available).
- *  - Android shows a tray notification automatically when killed (uses channel).
- *
- * Any payload-level data you want available in the tap handler goes in `data`.
- */
 function buildFullMessage({ title, body, imageUrl, link, notificationId, type, userId, extra }) {
   const data = {};
   if (title) data.title = String(title);
@@ -335,7 +324,6 @@ function buildFullMessage({ title, body, imageUrl, link, notificationId, type, u
 
   return {
     data,
-    // Notification block — auto-display in tray when app is killed/background.
     notification: hasTitleBody ? {
       title: String(title),
       body: String(body),
@@ -348,7 +336,6 @@ function buildFullMessage({ title, body, imageUrl, link, notificationId, type, u
         icon: ANDROID_ICON,
         color: ANDROID_COLOR,
         sound: "default",
-        // FCM tap-handler routes to your app; deep-links come from `data.link`.
         clickAction: "FLUTTER_NOTIFICATION_CLICK",
       } : undefined,
     },
@@ -395,15 +382,9 @@ async function sendFcmOne(message, token) {
   }
 }
 
-/**
- * 🆕 Retry wrapper — up to 2 attempts for transient failures.
- * Token-gone errors are not retried (will never succeed).
- */
 async function sendFcmOneWithRetry(message, token, attempt = 0) {
   const r = await sendFcmOne(message, token);
   if (r.success || r.expired || attempt >= 2) return r;
-
-  // Backoff: 400ms, 900ms
   await new Promise(rs => setTimeout(rs, 400 + attempt * 500));
   return sendFcmOneWithRetry(message, token, attempt + 1);
 }
@@ -706,7 +687,6 @@ async function registerDeviceToken(userId, token, deviceId) {
   const existing = snap.exists() ? snap.val() : {};
   const tokens = existing.tokens || {};
 
-  // Remove any other key that points at the same token (device id churn).
   for (const [k, v] of Object.entries(tokens)) {
     if (k !== dk && v?.token === token.trim()) {
       delete tokens[k];
@@ -719,7 +699,6 @@ async function registerDeviceToken(userId, token, deviceId) {
     lastSeenAt: Date.now(),
   };
 
-  // 🆕 Cap token count per user, drop oldest by lastSeenAt.
   const entries = Object.entries(tokens);
   if (entries.length > MAX_TOKENS_PER_USER) {
     entries.sort((a, b) => (a[1].lastSeenAt || 0) - (b[1].lastSeenAt || 0));
@@ -734,16 +713,6 @@ async function registerDeviceToken(userId, token, deviceId) {
   return { deviceKey: dk };
 }
 
-/**
- * 🆕 Now accepts optional `token` so hashing matches registration.
- *
- * Previously unregister hashed `deviceId || ""` while register hashed
- * `deviceId || token`. If the client only sent deviceId at logout, the
- * device was never removed. Fixed by:
- *   1. Trying the same hash as registration (deviceId, token).
- *   2. Fallback: match by token value across all entries.
- *   3. Fallback: match by deviceId prefix in the doc as before (legacy).
- */
 async function unregisterDeviceToken(userId, deviceId, token = null) {
   const ref = db.ref(`${NOTIFICATIONS_PATH}/${userId}`);
   const snap = await ref.once("value");
@@ -760,21 +729,18 @@ async function unregisterDeviceToken(userId, deviceId, token = null) {
 
   let removed = 0;
 
-  // 1. Exact hash match (matches how register hashes).
   const dk = deviceKeyFor(deviceId, token);
   if (tokens[dk]) {
     delete tokens[dk];
     removed++;
   }
 
-  // 2. Match by token value if provided.
   if (!removed && token) {
     for (const [k, v] of Object.entries(tokens)) {
       if (v?.token === token.trim()) { delete tokens[k]; removed++; }
     }
   }
 
-  // 3. Legacy: deviceId passed as token value (older clients).
   if (!removed && deviceId) {
     for (const [k, v] of Object.entries(tokens)) {
       if (v?.token === deviceId) { delete tokens[k]; removed++; }
@@ -821,7 +787,6 @@ async function removeExpiredToken(userId, deviceKey) {
 // =========================================================================
 
 async function sendNotificationWithPush(userId, data, { dedupeKey, dedupeTtlMs } = {}) {
-  // 🆕 Dedupe check before storing anything.
   if (await shouldDedupe(userId, data.type, dedupeKey, dedupeTtlMs)) {
     return { notificationId: null, deduped: true, pushSent: false };
   }
@@ -829,7 +794,12 @@ async function sendNotificationWithPush(userId, data, { dedupeKey, dedupeTtlMs }
   const id = await storeNotification(userId, data);
   const settings = await getUserSettings(userId);
   const settingKey = TYPE_TO_SETTING[data.type] || "systemAlerts";
-  const pushOn = settings.pushEnabled && settings[settingKey];
+
+  // 🆕 Security type always delivers if pushEnabled is on — the user cannot
+  // silence it via the category toggle. This ensures password changes, new
+  // device logins, and account lockouts are never silently dropped.
+  const isAlwaysDeliver = ALWAYS_DELIVER_TYPES.has(data.type);
+  const pushOn = settings.pushEnabled && (isAlwaysDeliver || settings[settingKey]);
 
   let pushResult = { success: false, reason: "push_disabled" };
 
@@ -844,7 +814,6 @@ async function sendNotificationWithPush(userId, data, { dedupeKey, dedupeTtlMs }
         action: data.action || null,
       });
 
-      // 🆕 Full message with notification block + retries.
       const fcmMessage = buildFullMessage({
         title: data.title,
         body: data.body,
@@ -890,11 +859,6 @@ async function sendNotificationWithPush(userId, data, { dedupeKey, dedupeTtlMs }
 // BROADCAST — one FCM call to the topic
 // =========================================================================
 
-/**
- * Sends one FCM message to the `folio-general` topic.
- * Every device subscribed to the topic receives it. One HTTP call to FCM
- * regardless of user count.
- */
 async function handleBroadcast(req, res, reqId) {
   if (!requireAdmin(req, res)) return;
   if (!(await enforceRate(res, "broadcast", `admin_${hashIp(getClientIp(req))}`))) return;
@@ -984,10 +948,6 @@ async function handleBroadcast(req, res, reqId) {
   });
 }
 
-/**
- * 🆕 Rewritten to use batched `.update()` instead of N sequential `.set()`.
- * With 1000 users this drops from ~50s to ~2s and 2 writes instead of 1000.
- */
 async function writeBroadcastHistory({
   notificationId, title, body, type, priority, imageUrl, link, action,
 }) {
@@ -1057,7 +1017,7 @@ async function writeBroadcastHistory({
 }
 
 // =========================================================================
-// TOPIC INFO — inspect subscribers
+// TOPIC INFO
 // =========================================================================
 
 async function handleTopicInfo(req, res, reqId) {
@@ -1095,7 +1055,7 @@ async function handleTopicInfo(req, res, reqId) {
     topic,
     usersSubscribed: users,
     devicesSubscribed: devices,
-    note: "Counts are based on users with at least one registered FCM token. Topic subscriptions are added at subscribe() time.",
+    note: "Counts are based on users with at least one registered FCM token.",
     subscribers: subscribers.slice(0, 100),
   });
 }
@@ -1192,7 +1152,6 @@ async function handleUnsubscribe(req, res, reqId) {
     await unsubscribeTokenFromTopic(token, GENERAL_TOPIC);
   }
 
-  // 🆕 Pass both deviceId and token so hashing matches register.
   const r = await unregisterDeviceToken(user.uid, deviceId || null, token || null);
   return res.status(200).json({ success: true, removed: r.removed });
 }
@@ -1250,8 +1209,12 @@ async function handleUpdateSettings(req, res, reqId) {
   if (!user) return;
   if (!(await enforceRate(res, "updateSettings", `uid_${user.uid}`))) return;
 
-  const allowedKeys = ["pushEnabled", "systemAlerts", "analyticsAlerts", "dbAlerts",
-                       "storageAlerts", "projectAlerts", "inviteAlerts", "quietHours"];
+  const allowedKeys = [
+    "pushEnabled", "systemAlerts", "analyticsAlerts", "dbAlerts",
+    "storageAlerts", "projectAlerts", "inviteAlerts",
+    "securityAlerts",  // 🆕
+    "quietHours",
+  ];
   const patch = {};
   for (const k of allowedKeys) {
     if (req.body?.[k] !== undefined) patch[k] = req.body[k];
@@ -1307,12 +1270,6 @@ async function handleGetSettings(req, res, reqId) {
   return res.status(200).json({ success: true, settings });
 }
 
-/**
- * 🆕 Admin-only create endpoint. Now supports:
- *  - Per-target-uid rate limit (was per-admin-IP)
- *  - Optional `dedupeKey` + `dedupeTtlMs` overrides
- *  - Optional `sourceType: "security"` from host.js
- */
 async function handleCreate(req, res, reqId) {
   if (!requireAdmin(req, res)) return;
 
@@ -1323,7 +1280,6 @@ async function handleCreate(req, res, reqId) {
 
   if (!uid) return res.status(400).json({ success: false, error: "Missing uid" });
 
-  // 🆕 Rate limit is per target uid now.
   if (!(await enforceRate(res, "create", `target_${uid}`))) return;
 
   if (!title || !body) return res.status(400).json({ success: false, error: "Missing title or body" });
@@ -1357,11 +1313,8 @@ async function handleCreate(req, res, reqId) {
     source: sourceType ? { type: sourceType, id: sourceId || null } : null,
   };
 
-  // 🆕 Dedupe key: caller-supplied or auto from (pid, link).
-  const autoDedupeKey = dedupeKey
-    || `${sourceId || ""}|${link || ""}`;
+  const autoDedupeKey = dedupeKey || `${sourceId || ""}|${link || ""}`;
 
-  // 🆕 Parse dedupeTtlMs (allow explicit 0 to disable).
   let ttlOverride;
   if (dedupeTtlMs !== undefined && dedupeTtlMs !== null) {
     const n = Number(dedupeTtlMs);
@@ -1427,10 +1380,11 @@ async function handleHealth(req, res, reqId) {
     topic: GENERAL_TOPIC,
     types: NOTIFICATION_TYPES,
     settings: Object.keys(DEFAULT_SETTINGS),
+    alwaysDeliverTypes: [...ALWAYS_DELIVER_TYPES],  // 🆕
     cache: getCacheStats(),
     fcm: !!messaging,
-    androidChannel: ANDROID_CHANNEL_ID, // 🆕
-    androidIcon: ANDROID_ICON,          // 🆕
+    androidChannel: ANDROID_CHANNEL_ID,
+    androidIcon: ANDROID_ICON,
   });
 }
 
@@ -1459,10 +1413,8 @@ export default async function handler(req, res) {
   const method = req.method;
 
   try {
-    // Public config
     if (method === "GET"  && action === "config")          return await handleConfig(req, res, reqId);
 
-    // User endpoints
     if (method === "POST" && action === "subscribe")       return await handleSubscribe(req, res, reqId);
     if (method === "POST" && action === "unsubscribe")     return await handleUnsubscribe(req, res, reqId);
     if (method === "POST" && action === "mark_read")       return await handleMarkRead(req, res, reqId);
@@ -1474,7 +1426,6 @@ export default async function handler(req, res) {
     if (method === "GET"  && action === "stats")           return await handleStats(req, res, reqId);
     if (method === "GET"  && action === "get_settings")    return await handleGetSettings(req, res, reqId);
 
-    // Admin / bridge endpoints
     if (method === "POST" && action === "create")          return await handleCreate(req, res, reqId);
     if (method === "POST" && action === "broadcast")       return await handleBroadcast(req, res, reqId);
     if (method === "GET"  && action === "topic-info")      return await handleTopicInfo(req, res, reqId);
@@ -1483,7 +1434,6 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "auth_ban")        return await handleAuthBan(req, res, reqId);
     if (method === "POST" && action === "auth_unban")      return await handleAuthUnban(req, res, reqId);
 
-    // Health
     if (method === "GET"  && action === "health")          return await handleHealth(req, res, reqId);
 
     return res.status(400).json({ success: false, error: `Unknown action: ${action || "(none)"}` });
