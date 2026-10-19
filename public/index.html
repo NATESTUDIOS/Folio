@@ -426,12 +426,12 @@ const DEFAULT_PREFS = {
 };
 
 const SETUP_PAGES = [
-  { id: 'projects', title: 'Projects', desc: 'All your projects', icon: 'i-folder', href: '/projects.html' },
-  { id: 'tools', title: 'Tools', desc: 'Web-dev utilities', icon: 'i-code', href: '/tools.html' },
-  { id: 'analytics', title: 'Analytics', desc: 'Usage across projects', icon: 'i-hash', href: '/analytics.html' },
-  { id: 'profile', title: 'Profile', desc: 'Your public profile', icon: 'i-edit', href: '/profile.html', requiresAuth: true },
-  { id: 'settings', title: 'Settings', desc: 'App configuration', icon: 'i-more', href: '/settings.html' },
-  { id: 'offline', title: 'Offline page', desc: 'Preview offline fallback', icon: 'i-file-text', href: '/offline.html' },
+  { id: 'projects', title: 'Projects', desc: 'All your projects', icon: 'i-folder', href: '/projects' },
+  { id: 'tools', title: 'Tools', desc: 'Web-dev utilities', icon: 'i-code', href: '/tools' },
+  { id: 'analytics', title: 'Analytics', desc: 'Usage across projects', icon: 'i-hash', href: '/analytics' },
+  { id: 'profile', title: 'Profile', desc: 'Your public profile', icon: 'i-edit', href: '/profile', requiresAuth: true },
+  { id: 'settings', title: 'Settings', desc: 'App configuration', icon: 'i-more', href: '/settings' },
+  { id: 'offline', title: 'Offline page', desc: 'Preview offline fallback', icon: 'i-file-text', href: '/offline' },
 ];
 
 const S = {
@@ -2633,11 +2633,11 @@ function applyGuestState() {
     const dismissed = (() => { try { return localStorage.getItem(STORAGE.guestBannerDismissed) === 'true'; } catch { return false; } })();
     if (!dismissed) guestBanner?.classList.add('visible');
     if (navProfile) {
-      navProfile.href = '/register.html?next=%2Findex.html';
+      navProfile.href = '/register?next=%2Findex.html';
       navProfile.querySelector('span').textContent = 'Sign in';
     }
     if (railProfile) {
-      railProfile.href = '/register.html?next=%2Findex.html';
+      railProfile.href = '/register?next=%2Findex.html';
       railProfile.classList.add('guest-signin');
       railProfile.innerHTML = iconHTML('lock', 12) + '<span>Sign in</span>';
     }
@@ -2645,11 +2645,11 @@ function applyGuestState() {
     guestBadge?.classList.remove('visible');
     guestBanner?.classList.remove('visible');
     if (navProfile) {
-      navProfile.href = '/profile.html';
+      navProfile.href = '/profile';
       navProfile.querySelector('span').textContent = 'Profile';
     }
     if (railProfile) {
-      railProfile.href = '/profile.html';
+      railProfile.href = '/profile';
       railProfile.classList.remove('guest-signin');
       railProfile.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
     }
@@ -2664,7 +2664,7 @@ async function hostProject() {
       confirmLabel: 'Sign in',
       danger: false,
     });
-    if (ok) window.location.href = '/register.html?next=' + encodeURIComponent('/index.html');
+    if (ok) window.location.href = '/register?next=' + encodeURIComponent('/');
     return;
   }
   if (!S.online) { toast('Requires internet', 'warning'); return; }

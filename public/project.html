@@ -1566,22 +1566,22 @@ svg { display: block; }
       <a class="rail-item" href="/" aria-label="Editor">
         <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
       </a>
-      <a class="rail-item active" href="/projects.html" aria-label="Projects">
+      <a class="rail-item active" href="/projects" aria-label="Projects">
         <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       </a>
-      <a class="rail-item" href="/analytics.html" aria-label="Analytics">
+      <a class="rail-item" href="/analytics" aria-label="Analytics">
         <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
       </a>
-      <a class="rail-item" href="/tools.html" aria-label="Tools">
+      <a class="rail-item" href="/tools" aria-label="Tools">
         <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       </a>
-      <a class="rail-item" href="/settings.html" aria-label="Settings">
+      <a class="rail-item" href="/settings" aria-label="Settings">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </a>
     </div>
     <div class="rail-bottom">
       <div class="rail-divider"></div>
-      <a class="rail-item" href="/profile.html" aria-label="Profile">
+      <a class="rail-item" href="/profile" aria-label="Profile">
         <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       </a>
     </div>
@@ -1589,7 +1589,7 @@ svg { display: block; }
 
   <!-- ═══════════ HEADER ═══════════ -->
   <header class="header" id="header">
-    <a class="header-back-btn" id="btnBackToProjects" href="/projects.html" aria-label="Back to projects" title="Back to projects">
+    <a class="header-back-btn" id="btnBackToProjects" href="/projects" aria-label="Back to projects" title="Back to projects">
       <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
     </a>
     <button class="header-menu-btn" id="menuBtn" aria-label="Menu">
@@ -2062,7 +2062,7 @@ svg { display: block; }
       action.textContent = 'Sign in';
       action.disabled = false;
       action.onclick = () => {
-        window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
+        window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
       };
       return;
     }
@@ -2159,7 +2159,7 @@ svg { display: block; }
       <div style="font-size:10px;color:var(--theme-text-tertiary);margin-top:8px;line-height:1.5;">
         ${isAuthed
           ? `Presets are generated from your project name. For full control, switch to <strong style="color:var(--theme-text);">Customize</strong> or <strong style="color:var(--theme-text);">Upload</strong>.`
-          : `Presets are generated from your project name. <a href="/register.html?next=${encodeURIComponent(location.pathname + location.search)}" style="color:var(--theme-primary);font-weight:700;">Sign in</a> to customize or upload.`}
+          : `Presets are generated from your project name. <a href="/register?next=${encodeURIComponent(location.pathname + location.search)}" style="color:var(--theme-primary);font-weight:700;">Sign in</a> to customize or upload.`}
       </div>
     </div>
 
@@ -2564,7 +2564,7 @@ async function commitUploadedIcon(dataUrl) {
     if (requiresAuth && !S.session) {
       panel.innerHTML = `<div class="card"><div class="card-body">
         ${emptyState('key', `${label} needs an account`, 'Sign in to access this tab.',
-          `<a class="btn btn-primary" href="/register.html?next=${encodeURIComponent(location.pathname + location.search)}">Sign in</a>`)}
+          `<a class="btn btn-primary" href="/register?next=${encodeURIComponent(location.pathname + location.search)}">Sign in</a>`)}
       </div></div>`;
       return false;
     }
@@ -2624,7 +2624,7 @@ async function commitUploadedIcon(dataUrl) {
       if (res.status === 401) {
         toast('Session expired — signing in again', 'warning', 3200);
         setTimeout(() => {
-          window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
+          window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
         }, 1200);
         return false;
       }
@@ -2834,7 +2834,7 @@ async function commitUploadedIcon(dataUrl) {
   function showFatal(title, desc) {
     $('contentInner').innerHTML = `<div class="panel active"><div class="card"><div class="card-body">
       ${emptyState('alertCircle', title, desc, `<button class="btn btn-secondary" onclick="location.reload()">${svg('refresh', 12, 2.2)} Try again</button>
-      <a class="btn btn-ghost" href="/projects.html" style="margin-top:6px;">Back to projects</a>`)}
+      <a class="btn btn-ghost" href="/projects" style="margin-top:6px;">Back to projects</a>`)}
     </div></div></div>`;
   }
 
@@ -2859,7 +2859,7 @@ async function commitUploadedIcon(dataUrl) {
 
   async function promoteLocalProject() {
     if (!S.session) {
-      window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
+      window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
       return;
     }
     if (!S.isLocalOnly) { toast('Already on server', 'info'); return; }
@@ -2932,7 +2932,7 @@ async function commitUploadedIcon(dataUrl) {
       hideLoading();
       toast('Project synced to your account', 'success');
       setTimeout(() => {
-        window.location.href = '/project.html?pid=' + encodeURIComponent(newPid);
+        window.location.href = '/project?pid=' + encodeURIComponent(newPid);
       }, 400);
     } catch (err) {
       hideLoading();
@@ -2946,7 +2946,7 @@ async function commitUploadedIcon(dataUrl) {
 
   async function pushOrphanToServer() {
     if (!S.session) {
-      window.location.href = '/register.html?next=' + encodeURIComponent(location.pathname + location.search);
+      window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
       return;
     }
     if (!S.online) { toast('Requires internet', 'warning'); return; }
@@ -3014,7 +3014,7 @@ async function commitUploadedIcon(dataUrl) {
       hideLoading();
       toast('Project pushed to server', 'success');
       setTimeout(() => {
-        window.location.href = '/project.html?pid=' + encodeURIComponent(newPid);
+        window.location.href = '/project?pid=' + encodeURIComponent(newPid);
       }, 400);
     } catch (err) {
       hideLoading();
@@ -3976,7 +3976,7 @@ async function commitUploadedIcon(dataUrl) {
       body.querySelectorAll('[data-copy-invite]').forEach(btn => {
         btn.addEventListener('click', () => {
           const token = btn.dataset.copyInvite;
-          const url = `${location.origin}/invite.html?token=${encodeURIComponent(token)}`;
+          const url = `${location.origin}/invite?token=${encodeURIComponent(token)}`;
           if (copyToClipboard(url)) toast('Invite link copied', 'success', 1400);
           else toast('Copy failed', 'error');
         });
@@ -4066,7 +4066,7 @@ async function commitUploadedIcon(dataUrl) {
         if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
 
         const inviteUrl = res.data.inviteUrl ||
-          `${location.origin}/invite.html?token=${encodeURIComponent(res.data.token)}`;
+          `${location.origin}/invite?token=${encodeURIComponent(res.data.token)}`;
 
         openModal(`
           <div class="modal-title">Invite sent</div>
@@ -4657,7 +4657,7 @@ async function commitUploadedIcon(dataUrl) {
         hideLoading();
         if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Copy failed');
         toast('Copy created', 'success');
-        setTimeout(() => { window.location.href = '/project.html?pid=' + encodeURIComponent(res.data.pid); }, 800);
+        setTimeout(() => { window.location.href = '/project?pid=' + encodeURIComponent(res.data.pid); }, 800);
       } catch (err) { hideLoading(); toast(err.message || 'Copy failed', 'error'); }
     });
   }
@@ -4761,7 +4761,7 @@ async function commitUploadedIcon(dataUrl) {
         } catch {}
         hideLoading();
         toast('Deleted', 'success');
-        setTimeout(() => { window.location.href = '/projects.html'; }, 800);
+        setTimeout(() => { window.location.href = '/projects'; }, 800);
       } catch (err) { hideLoading(); toast(err.message || 'Delete failed', 'error'); }
     });
   }
