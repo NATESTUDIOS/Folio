@@ -21,8 +21,34 @@
 <script>
 (function () {
   try {
+    // 1. Read the raw preference from storage ("dark", "light", "auto", or "system")
     var pref = localStorage.getItem("folio.theme") || "dark";
-    if (pref === "light") document.documentElement.setAttribute("data-theme", "light");
+
+    // 2. If it's "auto" or "system", resolve it to a concrete value using the OS setting
+    var resolved = pref;
+    if (pref === "auto" || pref === "system") {
+      resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
+        ? "light" : "dark";
+    }
+
+    // 3. Apply the RESOLVED value (not the raw preference)
+    if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
+    else document.documentElement.removeAttribute("data-theme");
+
+    // 4. Also apply reduced-motion (Settings slider writes this)
+    if (localStorage.getItem("folio.reducedMotion") === "true") {
+      document.documentElement.setAttribute("data-reduced-motion", "true");
+    }
+
+    // 5. Also apply page scale (Settings text-size slider writes this)
+    var scale = Number(localStorage.getItem("folio.pageScale") || 1);
+    if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
+    if (scale > 1.35) scale = 1.35;
+    document.documentElement.style.setProperty("--page-scale", String(scale));
+
+    // 6. Update the mobile browser chrome color bar
+    var meta = document.getElementById("themeColorMeta") || document.getElementById("metaThemeColor");
+    if (meta) meta.setAttribute("content", resolved === "light" ? "#f7f8fa" : "#0a0c10");
   } catch (e) {}
 })();
 </script>
@@ -352,7 +378,58 @@ body { overflow: hidden; }
 <script>
 (function () {
   'use strict';
+function wireThemeSync() {
+  window.addEventListener('storage', function (e) {
+    try {
+      // Theme changed in another tab
+      if (e.key === 'folio.theme') {
+        var pref = e.newValue || 'dark';
+        var resolved = pref;
+        if (pref === 'auto' || pref === 'system') {
+          resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+            ? 'light' : 'dark';
+        }
+        if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        else document.documentElement.removeAttribute('data-theme');
 
+        var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
+        if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
+      }
+
+      // Reduced-motion toggled in another tab
+      if (e.key === 'folio.reducedMotion') {
+        if (e.newValue === 'true') document.documentElement.setAttribute('data-reduced-motion', 'true');
+        else document.documentElement.removeAttribute('data-reduced-motion');
+      }
+
+      // Page scale changed in another tab
+      if (e.key === 'folio.pageScale') {
+        var scale = Number(e.newValue || 1);
+        if (!Number.isFinite(scale) || scale < 0.85) scale = 1;
+        if (scale > 1.35) scale = 1.35;
+        document.documentElement.style.setProperty('--page-scale', String(scale));
+      }
+    } catch (err) {}
+  });
+}
+function wireThemeMediaQuery() {
+  if (!window.matchMedia) return;
+  var mq = window.matchMedia('(prefers-color-scheme: light)');
+  var handler = function () {
+    try {
+      var pref = localStorage.getItem('folio.theme') || 'dark';
+      if (pref !== 'auto' && pref !== 'system') return;   // only react when theme is auto
+      var resolved = mq.matches ? 'light' : 'dark';
+      if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      else document.documentElement.removeAttribute('data-theme');
+      var meta = document.getElementById('themeColorMeta') || document.getElementById('metaThemeColor');
+      if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
+    } catch (e) {}
+  };
+  if (mq.addEventListener) mq.addEventListener('change', handler);
+  else if (mq.addListener) mq.addListener(handler);
+}
+  
   const API_BASE = 'https://foliostudios.vercel.app/api';
   const API_AUTH = API_BASE + '/auth';
   const API_HOST = API_BASE + '/host';
@@ -851,6 +928,8 @@ body { overflow: hidden; }
   // ═══════════════════════════════════════════════════════════
 
   async function boot() {
+    wireThemeSync();
+wireThemeMediaQuery();
     // 1. Read token
     S.token = readTokenFromUrl();
     if (!S.token) {
