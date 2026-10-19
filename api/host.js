@@ -2099,8 +2099,10 @@ async function handleDbGet(req, res, reqId) {
   const schema = schemaSnap.exists() ? schemaSnap.val() : null;
 
   const today = dayString();
-  const bytesOut = JSON.stringify(data).length;
+  const serialized = JSON.stringify(data || {});
+  const bytesOut = serialized.length;
 
+  // Analytics write (reads counter)
   await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
     const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
     c.reads = (c.reads || 0) + 1;
@@ -2108,8 +2110,66 @@ async function handleDbGet(req, res, reqId) {
     return c;
   }).catch(() => {});
 
-  return res.status(200).json({ success: true, data, schema });
-}
+  // ── Aggregate call counts across all days ──
+  let totalWrites = 0;
+  let todayWrites = 0;
+  let totalReads = 0;
+  try {
+    const a = await db.ref(`analytics/${pid}/db`).once("value");
+    if (a.exists()) {
+      a.forEach(d => {
+        const v = d.val() || {};
+        const w = typeof v.writes === "number" ? v.writes : 0;
+        const r = typeof v.reads === "number" ? v.reads : 0;
+        totalWrites += w;
+        totalReads += r;
+        if (d.key === today) todayWrites = w;
+      });
+    }
+  } catch {}
+
+  // ── Space usage ──
+  const LIMIT = 15 * 1024 * 1024;
+  const used = serialized.length;
+  const space = {
+    used,
+    remaining: Math.max(0, LIMIT - used),
+    limit: LIMIT,
+    percentUsed: LIMIT > 0 ? Math.min(100, Math.round((used / LIMIT) * 1000) / 10) : 0,
+  };
+
+  // ── Rate limit snapshot (does NOT increment — read-only peek) ──
+  const cfg = RATE_LIMITS.dbSet;
+  let rateLimit = { limit: cfg.max, remaining: cfg.max, reset: null };
+  try {
+    const rlKey = sanitizeFirebasePath(String(`pid_${pid}`).toLowerCase());
+    const rlSnap = await db.ref(`rate_limit/${API_NAME}/dbSet/${rlKey}`).once("value");
+    if (rlSnap.exists()) {
+      const d = rlSnap.val();
+      const now = Date.now();
+      const resetAt = (d.first_request || now) + cfg.window;
+      if (now > resetAt) {
+        rateLimit = { limit: cfg.max, remaining: cfg.max, reset: null };
+      } else {
+        const usedCount = d.count || 0;
+        rateLimit = {
+          limit: cfg.max,
+          remaining: Math.max(0, cfg.max - usedCount),
+          reset: new Date(resetAt).toISOString(),
+        };
+      }
+    }
+  } catch {}
+
+  return res.status(200).json({
+    success: true,
+    data,
+    schema,
+    calls: { total: totalWrites, today: todayWrites, reads: totalReads },
+    rateLimit,
+    space,
+  });
+} 
 
 async function canAccessProjectFromReq(req) {
   const header = req.headers.authorization || "";
