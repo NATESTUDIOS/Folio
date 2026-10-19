@@ -86,6 +86,190 @@ async function enforceRate(res, action, identifier) {
 }
 
 // =========================================================================
+// 🆕 NOTIFICATIONS — helpers
+// =========================================================================
+
+const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
+
+async function callNotify(type, uid, payload) {
+  if (!uid) return;
+  try {
+    const res = await fetch(`${BASE_URL}/api/notify?action=create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ADMIN_API_KEY || "",
+      },
+      body: JSON.stringify({ type, uid, ...payload }),
+    });
+    if (!res.ok) log("analytics.notify_failed", { type, uid, status: res.status });
+  } catch (err) {
+    log("analytics.notify_error", { type, uid, message: err.message });
+  }
+}
+
+// Fire-once-per-window dedupe (mirrors host.js helper).
+async function shouldNotifyOnce(uid, key, ttlMs = 24 * 60 * 60 * 1000) {
+  if (!uid) return false;
+  try {
+    const ref = db.ref(`notify_dedupe/${uid}/${sanitizeFirebasePath(key)}`);
+    const snap = await ref.once("value");
+    const now = Date.now();
+    if (snap.exists() && now - (snap.val()?.ts || 0) < ttlMs) return false;
+    await ref.set({ ts: now }).catch(() => {});
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+// Milestones for traffic-spike notifications. Only these counts are checked —
+// per-hit cost stays O(1) on non-milestone hits.
+const SPIKE_MILESTONES = [
+  20, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000,
+];
+
+/**
+ * 🆕 A1 + A5 — Evaluates a milestone crossing against the 7-day baseline.
+ * Fires exactly one notification if the threshold is met.
+ * Never blocks the response — call fire-and-forget.
+ */
+async function evaluateTrafficSpike(pid, todayCount, milestone) {
+  try {
+    // A5 — hard viral threshold (10k/day), skip baseline check.
+    if (milestone === 10000) {
+      const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
+      if (!ownerSnap.exists()) return;
+      if (!(await shouldNotifyOnce(ownerSnap.val(), `viral_${pid}_${dayString()}`, 24 * 60 * 60 * 1000))) return;
+      callNotify("analytics", ownerSnap.val(), {
+        title: "🎉 10,000 visits today",
+        body: `Your project just crossed 10k visits in a single day.`,
+        link: `${BASE_URL}/project.html?pid=${pid}`,
+        extra: { pid, milestone, kind: "viral" },
+        dedupeKey: `viral_${pid}_${dayString()}`,
+      });
+      return;
+    }
+
+    // A1 — 3× baseline spike. Skip tiny milestones that never qualify.
+    if (milestone < 20) return;
+
+    // Read last 7 days (excluding today) of rollups.
+    let sum = 0;
+    let counted = 0;
+    for (let i = 1; i <= 7; i++) {
+      const s = await db.ref(`analytics/${pid}/rollups/${daysAgo(i)}/count`).once("value");
+      if (s.exists()) {
+        sum += s.val() || 0;
+        counted++;
+      }
+    }
+    if (counted === 0) return; // no history yet — not a spike
+    const avg = sum / counted;
+
+    // Require: min 20 hits today AND 3× the rolling average.
+    if (todayCount < 20) return;
+    if (todayCount < avg * 3) return;
+
+    const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
+    if (!ownerSnap.exists()) return;
+
+    callNotify("analytics", ownerSnap.val(), {
+      title: "Traffic spike detected",
+      body: `Today's traffic (${todayCount} hits) is ${(todayCount / Math.max(avg, 1)).toFixed(1)}× your 7-day average.`,
+      link: `${BASE_URL}/project.html?pid=${pid}`,
+      extra: { pid, todayCount, avg7: Math.round(avg), milestone, kind: "spike" },
+      dedupeKey: `spike_${pid}`,
+    });
+  } catch (err) {
+    log("analytics.spike_eval_failed", { pid, milestone, message: err.message });
+  }
+}
+
+/**
+ * 🆕 A2 — First hit after (re)deploy. Only checks when todayCount === 1.
+ */
+async function evaluateFirstHitAfterDeploy(pid, todayCount) {
+  if (todayCount !== 1) return;
+  try {
+    const deployedSnap = await db.ref(`projects/${pid}/deployment/deployedAt`).once("value");
+    if (!deployedSnap.exists()) return;
+    const deployedAt = deployedSnap.val() || 0;
+    if (!deployedAt) return;
+
+    const fpSnap = await db.ref(`projects/${pid}/analytics_last_first_hit_deploy`).once("value");
+    const lastNotified = fpSnap.exists() ? fpSnap.val() : 0;
+    if (lastNotified === deployedAt) return;
+
+    await db.ref(`projects/${pid}/analytics_last_first_hit_deploy`).set(deployedAt).catch(() => {});
+
+    const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
+    if (!ownerSnap.exists()) return;
+
+    const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
+    const pname = nameSnap.exists() ? nameSnap.val() : "your project";
+
+    callNotify("analytics", ownerSnap.val(), {
+      title: "First visit after deploy",
+      body: `"${pname}" received its first visitor since going live.`,
+      link: `${BASE_URL}/project.html?pid=${pid}`,
+      extra: { pid, deployedAt, kind: "first_hit" },
+      dedupeKey: `first_hit_${pid}_${deployedAt}`,
+    });
+  } catch (err) {
+    log("analytics.first_hit_eval_failed", { pid, message: err.message });
+  }
+}
+
+/**
+ * 🆕 A3 — Referrer flood. Only checks when count exactly hits the threshold.
+ */
+async function evaluateReferrerFlood(pid, hour, referrer, count) {
+  // Fire only when we hit the threshold exactly (500). Avoids repeated notifies.
+  if (count !== 500) return;
+  try {
+    const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
+    if (!ownerSnap.exists()) return;
+
+    callNotify("security", ownerSnap.val(), {
+      title: "Unusual traffic source",
+      body: `A single referrer has sent 500+ hits this hour. Possible bot attack or embed surge.`,
+      link: `${BASE_URL}/project.html?pid=${pid}`,
+      extra: {
+        pid,
+        hour,
+        referrer: String(referrer || "").slice(0, 100),
+        kind: "referrer_flood",
+      },
+      dedupeKey: `ref_flood_${pid}_${hour}`,
+    });
+  } catch (err) {
+    log("analytics.ref_flood_eval_failed", { pid, hour, message: err.message });
+  }
+}
+
+/**
+ * 🆕 A4 — Bot flood. Sampled 1:10, so threshold is 20 (=200 real).
+ */
+async function evaluateBotFlood(projectId, bucket, sampledCount) {
+  if (sampledCount !== 20) return;
+  try {
+    const ownerSnap = await db.ref(`projects/${projectId}/ownerId`).once("value");
+    if (!ownerSnap.exists()) return;
+
+    callNotify("security", ownerSnap.val(), {
+      title: "Bot activity detected",
+      body: `200+ bot requests in the last 10 minutes. Your site may be getting scraped.`,
+      link: `${BASE_URL}/project.html?pid=${projectId}`,
+      extra: { pid: projectId, bucket, kind: "bot_flood" },
+      dedupeKey: `bot_flood_${projectId}_${bucket}`,
+    });
+  } catch (err) {
+    log("analytics.bot_flood_eval_failed", { projectId, bucket, message: err.message });
+  }
+}
+
+// =========================================================================
 // HELPERS
 // =========================================================================
 
@@ -216,6 +400,12 @@ async function readUsage(pid, days) {
 /**
  * POST /hit — public, wildcard CORS, called from deployed pages.
  * Body: { projectId, path, referrer? }
+ *
+ * 🆕 Also:
+ *  - maintains a daily rollup counter (analytics/{pid}/rollups/{today})
+ *  - on milestone crossings, evaluates A1 (spike) + A5 (viral)
+ *  - on first hit of day, evaluates A2 (first-after-deploy)
+ *  - tracks referrer floods (A3) and sampled bot floods (A4)
  */
 async function handleHit(req, res, reqId) {
   const ip = getClientIp(req);
@@ -223,7 +413,7 @@ async function handleHit(req, res, reqId) {
   // Per-IP limit
   if (!(await enforceRate(res, "hit", `ip_${hashIp(ip)}`))) return;
 
-  const { projectId, path: rawPath } = req.body || {};
+  const { projectId, path: rawPath, referrer: rawReferrer } = req.body || {};
   if (!projectId || typeof projectId !== "string") {
     return res.status(400).json({ success: false, error: "Missing projectId" });
   }
@@ -231,8 +421,29 @@ async function handleHit(req, res, reqId) {
     return res.status(400).json({ success: false, error: "Invalid path" });
   }
 
-  // Bot filter
+  // ── Bot filter (🆕 with sampled counter so A4 can fire) ──
   if (isBot(req)) {
+    // Sample 1-in-10 to keep writes bounded even under a flood.
+    if (Math.random() < 0.1) {
+      const bucket = Math.floor(Date.now() / (10 * 60 * 1000)); // 10-min bucket
+      const botRef = db.ref(`analytics/${projectId}/bots/${bucket}`);
+      // Circuit breaker: stop writing once a bucket already crossed the alert point.
+      botRef.once("value").then(snap => {
+        const cur = snap.exists() ? (snap.val()?.count || 0) : 0;
+        if (cur >= 40) return; // already well over threshold — don't churn
+        return botRef.transaction(c => {
+          const v = c || { count: 0 };
+          v.count = (v.count || 0) + 1;
+          v.lastTs = Date.now();
+          return v;
+        }).then(result => {
+          const after = result?.snapshot?.val()?.count || 0;
+          if (after === 20) {
+            evaluateBotFlood(projectId, bucket, after).catch(() => {});
+          }
+        });
+      }).catch(() => {});
+    }
     return res.status(200).json({ success: true, skipped: "bot" });
   }
 
@@ -248,6 +459,7 @@ async function handleHit(req, res, reqId) {
   const h = pathHash(rawPath);
   const today = dayString();
 
+  // ── Primary hit counter ──
   try {
     await db.ref(`analytics/${projectId}/hits/${today}/${h}`).transaction(cur => {
       const c = cur || { count: 0, lastTs: 0 };
@@ -270,12 +482,79 @@ async function handleHit(req, res, reqId) {
     log("analytics.hit_path_write_failed", { reqId, projectId, message: err.message });
   }
 
+  // ── 🆕 Daily rollup + milestone detection ──
+  // Single transaction per hit that both counts and detects milestone crossings.
+  let todayCount = 0;
+  let milestoneCrossed = null;
+  try {
+    const rollupRef = db.ref(`analytics/${projectId}/rollups/${today}`);
+    const tx = await rollupRef.transaction(cur => {
+      const c = cur || { count: 0, lastMilestone: 0, lastTs: 0 };
+      const prev = c.count || 0;
+      c.count = prev + 1;
+      c.lastTs = Date.now();
+      const next = SPIKE_MILESTONES.find(
+        m => m > (c.lastMilestone || 0) && c.count >= m
+      );
+      if (next) {
+        c.lastMilestone = next;
+      }
+      return c;
+    });
+    if (tx.committed && tx.snapshot.exists()) {
+      const v = tx.snapshot.val();
+      todayCount = v.count || 0;
+      // We fire outside the transaction to avoid blocking it.
+      const justCrossed = SPIKE_MILESTONES.find(
+        m => m === todayCount // exact match = we just landed on it
+      );
+      if (justCrossed) milestoneCrossed = justCrossed;
+    }
+  } catch (err) {
+    log("analytics.rollup_failed", { reqId, projectId, message: err.message });
+  }
+
+  // Fire-and-forget evaluations
+  if (milestoneCrossed) {
+    evaluateTrafficSpike(projectId, todayCount, milestoneCrossed).catch(() => {});
+  }
+  if (todayCount === 1) {
+    evaluateFirstHitAfterDeploy(projectId, todayCount).catch(() => {});
+  }
+
+  // ── 🆕 A3 — Referrer flood tracking ──
+  const referrer = typeof rawReferrer === "string" ? rawReferrer.slice(0, 200) : "";
+  if (referrer) {
+    try {
+      const rh = crypto.createHash("sha256").update(referrer).digest("hex").slice(0, 8);
+      const hour = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
+      const refRef = db.ref(`analytics/${projectId}/refRollups/${hour}/${rh}`);
+      const tx = await refRef.transaction(cur => {
+        const c = cur || { count: 0, sample: referrer };
+        c.count = (c.count || 0) + 1;
+        c.sample = c.sample || referrer;
+        c.lastTs = Date.now();
+        return c;
+      });
+      if (tx.committed && tx.snapshot.exists()) {
+        const newCount = tx.snapshot.val()?.count || 0;
+        // Fire on hitting exactly 500 (evaluateReferrerFlood checks ===500).
+        if (newCount === 500) {
+          evaluateReferrerFlood(projectId, hour, referrer, newCount).catch(() => {});
+        }
+      }
+    } catch (err) {
+      log("analytics.ref_rollup_failed", { reqId, projectId, message: err.message });
+    }
+  }
+
   return res.status(200).json({ success: true });
 }
 
 /**
  * GET /project?pid — viewer+ role required.
  * Returns aggregate stats: 7-day trend, top pages, DB/API usage, total views.
+ * 🆕 Also includes daily rollup trend for faster stats when present.
  */
 async function handleProject(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
