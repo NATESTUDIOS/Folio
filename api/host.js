@@ -750,9 +750,13 @@ function buildZip(entries) {
 }
 
 // =========================================================================
-// 🆕 NOTIFICATIONS — helpers
+// NOTIFICATIONS — helpers
 // =========================================================================
 
+/**
+ * 🆕 Now awaited by callers — previously fire-and-forget was killed by Vercel
+ * before the fetch completed, causing notifications to silently fail.
+ */
 async function callNotify(type, uid, payload) {
   if (!uid) return;
   try {
@@ -770,10 +774,13 @@ async function callNotify(type, uid, payload) {
   }
 }
 
-// Fan-out to multiple recipients. Fire-and-forget, dedupe uids.
-function notifyMany(type, uids, payload) {
+/**
+ * 🆕 Fan-out to multiple recipients. Now `async` and awaits all sends so
+ * the function doesn't get killed before they complete.
+ */
+async function notifyMany(type, uids, payload) {
   const unique = [...new Set((uids || []).filter(Boolean))];
-  Promise.allSettled(unique.map(uid => callNotify(type, uid, payload))).catch(() => {});
+  await Promise.allSettled(unique.map(uid => callNotify(type, uid, payload)));
 }
 
 // Returns ownerId + every uid that has a role on this project.
@@ -802,19 +809,19 @@ async function shouldNotifyOnce(uid, key, ttlMs = 24 * 60 * 60 * 1000) {
     await ref.set({ ts: now }).catch(() => {});
     return true;
   } catch {
-    return true; // fail-open: better a duplicate than silence
+    return true;
   }
 }
 
 // Deploy failure notify helper.
-function notifyDeployFailed(access, pid, projectName, reason, status) {
+async function notifyDeployFailed(access, pid, projectName, reason, status) {
   if (!access?.uid || access.uid === "api") return;
-  callNotify("project", access.uid, {
+  await callNotify("project", access.uid, {
     title: "Deployment failed",
     body: `Deploy to "${projectName || "project"}" failed: ${reason}`,
     link: `${BASE_URL}/project.html?pid=${pid}`,
     extra: { pid, status, kind: "deploy_failed" },
-  }).catch(() => {});
+  });
 }
 
 // Storage warning. Dedupes per project for `ttlMs` so 100 writes at 82% don't spam.
@@ -823,14 +830,14 @@ async function notifyStorageWarning(pid, ownerId, finalSize, LIMIT, percentUsed,
   const key = `storage_${kind}_${pid}`;
   const ttl = kind === "full" ? 6 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
   if (!(await shouldNotifyOnce(ownerId, key, ttl))) return;
-  callNotify("storage", ownerId, {
+  await callNotify("storage", ownerId, {
     title: kind === "full" ? "Database limit reached" : "Database nearly full",
     body: kind === "full"
       ? `Writes to this project are being rejected — ${percentUsed}% full.`
       : `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of ${Math.round(LIMIT / 1024 / 1024)} MB).`,
     link: `${BASE_URL}/project.html?pid=${pid}`,
     extra: { pid, size: finalSize, limit: LIMIT, percentUsed, kind },
-  }).catch(() => {});
+  });
 }
 
 // Rate-limit abuse notifier — fires once per hour after 5 consecutive 429s.
@@ -865,12 +872,12 @@ async function maybeNotifyRateLimitAbuse(action, identifier, rateResult) {
   }
   if (!ownerId) return;
 
-  callNotify("security", ownerId, {
+  await callNotify("security", ownerId, {
     title: "Repeated rate-limit warnings",
     body: `"${action}" is being rejected repeatedly${pid ? " on one of your projects" : ""}. Possible abuse or a stuck client.`,
     link: pid ? `${BASE_URL}/project.html?pid=${pid}` : `${BASE_URL}/projects`,
     extra: { action, pid, identifier: s, retryAfter: rateResult?.retryAfter },
-  }).catch(() => {});
+  });
 }
 
 // =========================================================================
@@ -982,7 +989,7 @@ async function handleProjectsUpdate(req, res, reqId) {
     if (others.length) {
       const touched = Object.keys(patch).filter(k => ["name", "description", "iconUrl"].includes(k));
       if (touched.length) {
-        notifyMany("project", others, {
+        await notifyMany("project", others, {
           title: "Project details updated",
           body: `Someone updated ${touched.join(", ")} on a project you collaborate on.`,
           link: `${BASE_URL}/project.html?pid=${pid}`,
@@ -1018,9 +1025,9 @@ async function handleProjectsDelete(req, res, reqId) {
 
   try {
     await deleteProjectRecord(pid, access.uid);
-    // 🆕 Notify collaborators after successful delete (fire-and-forget)
+    // 🆕 Notify collaborators after successful delete
     if (collaborators.length) {
-      notifyMany("project", collaborators, {
+      await notifyMany("project", collaborators, {
         title: "Project deleted",
         body: `"${projectName || "A project you collaborated on"}" was deleted by its owner.`,
         link: `${BASE_URL}/projects`,
@@ -1066,9 +1073,9 @@ async function handleDeploy(req, res, reqId) {
     totalBytes += content.length;
     if (totalBytes > MAX_TOTAL_BYTES) {
       // 🆕 Deploy failed — notify deployer + owner
-      notifyDeployFailed(access, pid, project.name, "payload exceeds size limit", 413);
+      try { await notifyDeployFailed(access, pid, project.name, "payload exceeds size limit", 413); } catch {}
       if (project.ownerId && project.ownerId !== access.uid) {
-        notifyDeployFailed({ uid: project.ownerId }, pid, project.name, "payload exceeds size limit", 413);
+        try { await notifyDeployFailed({ uid: project.ownerId }, pid, project.name, "payload exceeds size limit", 413); } catch {}
       }
       return res.status(413).json({
         success: false,
@@ -1092,7 +1099,7 @@ async function handleDeploy(req, res, reqId) {
 
   if (filesWritten === 0) {
     // 🆕 No files written — notify deployer
-    notifyDeployFailed(access, pid, project.name, "no valid files in payload", 400);
+    try { await notifyDeployFailed(access, pid, project.name, "no valid files in payload", 400); } catch {}
     return res.status(400).json({ success: false, error: "No valid files to deploy" });
   }
 
@@ -1142,7 +1149,7 @@ async function handleDeploy(req, res, reqId) {
     const audience = await getProjectAudience(pid);
     const others = audience.uids.filter(u => u !== access.uid);
     if (others.length) {
-      notifyMany("project", others, {
+      await notifyMany("project", others, {
         title: "Deployment complete",
         body: `Project "${project.name}" is live.`,
         link: `${BASE_URL}/project.html?pid=${pid}`,
@@ -1261,7 +1268,7 @@ async function handleDeploymentOffline(req, res, reqId) {
     if (others.length) {
       const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
       const pname = nameSnap.exists() ? nameSnap.val() : "a project";
-      notifyMany("project", others, {
+      await notifyMany("project", others, {
         title: "Deployment taken offline",
         body: `"${pname}" was taken offline.`,
         link: `${BASE_URL}/project.html?pid=${pid}`,
@@ -1296,7 +1303,7 @@ async function handleDeploymentDelete(req, res, reqId) {
     const audience = await getProjectAudience(pid);
     const others = audience.uids.filter(u => u !== access.uid);
     if (others.length) {
-      notifyMany("project", others, {
+      await notifyMany("project", others, {
         title: "Deployment removed",
         body: `A ${isCurrent ? "current " : ""}deployment record was deleted.`,
         link: `${BASE_URL}/project.html?pid=${pid}`,
@@ -1312,26 +1319,35 @@ async function handleDeploymentDelete(req, res, reqId) {
 // SERVE (static files out of DB)
 // =========================================================================
 
+/**
+ * 🆕 Fixed: replaced all `.type("text")` (Express-only method) with
+ * `res.setHeader("Content-Type", ...)` — Vercel's Node runtime has no `.type()`.
+ */
 async function handleServe(req, res, reqId) {
+  const sendText = (status, body) => {
+    res.status(status).setHeader("Content-Type", "text/plain; charset=utf-8");
+    return res.send(body);
+  };
+
   let pid = String(req.query?.pid || "").trim();
   if (!pid && req.query.username && req.query.project) {
     const found = await findProjectBySlug(
       String(req.query.username).toLowerCase(),
       String(req.query.project),
     );
-    if (!found) return res.status(404).type("text").send("Not found");
+    if (!found) return sendText(404, "Not found");
     pid = found.pid;
   }
-  if (!pid) return res.status(400).type("text").send("Missing pid");
+  if (!pid) return sendText(400, "Missing pid");
 
   if (!(await enforceRate(req, res, "serve", ipKey(req)))) return;
 
   const projSnap = await db.ref(`projects/${pid}`).once("value");
-  if (!projSnap.exists()) return res.status(404).type("text").send("Not found");
+  if (!projSnap.exists()) return sendText(404, "Not found");
   const project = projSnap.val();
 
   if (project.deployment?.state === "OFFLINE") {
-    return res.status(410).type("text").send("This project is offline");
+    return sendText(410, "This project is offline");
   }
 
   const isPublic =
@@ -1340,7 +1356,7 @@ async function handleServe(req, res, reqId) {
 
   if (!isPublic) {
     const access = await canAccessProjectFromReq(req);
-    if (!access) return res.status(403).type("text").send("Project is not public");
+    if (!access) return sendText(403, "Project is not public");
   }
 
   let wantPath = String(req.query?.path || "").replace(/^\/+/, "");
@@ -1355,20 +1371,20 @@ async function handleServe(req, res, reqId) {
         });
       }
     }
-    if (!wantPath) return res.status(404).type("text").send("No HTML file");
+    if (!wantPath) return sendText(404, "No HTML file");
   }
 
   const safeKey = sanitizeFirebasePath(wantPath.replace(/\//g, "__"));
   const fileSnap = await db.ref(`files/${pid}/${safeKey}`).once("value");
   if (!fileSnap.exists()) {
-    return res.status(404).type("text").send(`Not found: ${wantPath}`);
+    return sendText(404, `Not found: ${wantPath}`);
   }
   const file = fileSnap.val() || {};
   const content = String(file.content ?? "");
 
   const MAX_BYTES = 4 * 1024 * 1024;
   if (content.length > MAX_BYTES) {
-    return res.status(413).type("text").send("File too large to serve");
+    return sendText(413, "File too large to serve");
   }
 
   res.setHeader("Content-Type", mimeFor(wantPath));
@@ -1579,18 +1595,17 @@ async function handleProjectExport(req, res, reqId) {
   });
 
   // 🆕 If a non-owner pulled a copy of a public project, tell the owner.
-  // Only for publicOnly exports of the full project — this is the "fork" signal.
   try {
     if (publicOnly && access.uid && project.ownerId && project.ownerId !== access.uid) {
       const exporter = await getUser(access.uid);
       const who = exporter?.profile?.username ? `@${exporter.profile.username}` : "a user";
       if (await shouldNotifyOnce(project.ownerId, `export_${pid}_${access.uid}`, 24 * 60 * 60 * 1000)) {
-        callNotify("project", project.ownerId, {
+        await callNotify("project", project.ownerId, {
           title: "Someone downloaded your project",
           body: `${who} exported a copy of "${safeProject.name || "your project"}".`,
           link: `${BASE_URL}/project.html?pid=${pid}`,
           extra: { pid, exporterUid: access.uid, format },
-        }).catch(() => {});
+        });
       }
     }
   } catch {}
@@ -1682,7 +1697,7 @@ async function handleProjectSyncBack(req, res, reqId) {
       const audience = await getProjectAudience(pid);
       const others = audience.uids.filter(u => u !== access.uid);
       if (others.length) {
-        notifyMany("project", others, {
+        await notifyMany("project", others, {
           title: "Project updated from sync",
           body: `${result.filesWritten} file(s) synced back${result.dbWritten ? ", DB imported" : ""}.`,
           link: `${BASE_URL}/project.html?pid=${pid}`,
@@ -1892,18 +1907,17 @@ async function handleProjectCopy(req, res, reqId) {
   });
 
   // 🆕 Notify source owner when someone else forks their public project.
-  // Dedupe per (source, forker) for 24h so quick re-forks don't spam.
   try {
     if (source.ownerId && source.ownerId !== user.uid) {
       if (await shouldNotifyOnce(source.ownerId, `fork_${sourcePid}_${user.uid}`, 24 * 60 * 60 * 1000)) {
         const forker = await getUser(user.uid);
         const who = forker?.profile?.username ? `@${forker.profile.username}` : "someone";
-        callNotify("project", source.ownerId, {
+        await callNotify("project", source.ownerId, {
           title: "Someone copied your project",
           body: `${who} saved a copy of "${source.name || "your project"}".`,
           link: `${BASE_URL}/${forker?.profile?.username || ""}/${newProject.slug || ""}`,
           extra: { sourcePid, newPid: newProject.pid, forkerUid: user.uid },
-        }).catch(() => {});
+        });
       }
     }
   } catch {}
@@ -2452,13 +2466,12 @@ async function handleApiKeyGenerate(req, res, reqId) {
   });
   await logProjectEvent(pid, access.uid, "project", "apikey.generated", {});
 
-  // 🆕 Notify the owner (even if they were the actor — security event)
-  // We notify any other owner-role collaborators too, and the actor for their own audit trail.
+  // 🆕 Notify the owner + collaborators (security event)
   try {
     const audience = await getProjectAudience(pid);
     const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
     const pname = nameSnap.exists() ? nameSnap.val() : "your project";
-    notifyMany("project", audience.uids, {
+    await notifyMany("project", audience.uids, {
       title: "New API key generated",
       body: `A new API key was created for "${pname}". If this wasn't you, revoke it now.`,
       link: `${BASE_URL}/project.html?pid=${pid}`,
@@ -2510,7 +2523,7 @@ async function handleVisibility(req, res, reqId) {
       const others = audience.uids.filter(u => u !== access.uid);
       if (others.length) {
         const wentPublic = significant.some(a => changes[a] === "public");
-        notifyMany("project", others, {
+        await notifyMany("project", others, {
           title: wentPublic ? "Project went public" : "Project made private",
           body: `${significant.join(", ")} visibility changed.`,
           link: `${BASE_URL}/project.html?pid=${pid}`,
@@ -2593,12 +2606,12 @@ async function handleInviteCreate(req, res, reqId) {
   try {
     const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
     const pname = nameSnap.exists() ? nameSnap.val() : "a project";
-    callNotify("invite", invited.uid, {
+    await callNotify("invite", invited.uid, {
       title: "Project invitation",
       body: `You've been invited to join "${pname}" as ${role}.`,
       link: `${BASE_URL}/invite.html?token=${token}`,
       extra: { token, pid, role },
-    }).catch(() => {});
+    });
   } catch {}
 
   await logProjectEvent(pid, access.uid, "invite", "invite.sent", {
@@ -2693,12 +2706,12 @@ async function handleInviteAccept(req, res, reqId) {
       ]);
       const pname = nameSnap.exists() ? nameSnap.val() : "your project";
       const who = acceptorUser?.profile?.username ? `@${acceptorUser.profile.username}` : "Someone";
-      callNotify("invite", invite.invitedBy, {
+      await callNotify("invite", invite.invitedBy, {
         title: "Invitation accepted",
         body: `${who} joined "${pname}" as ${invite.role}.`,
         link: `${BASE_URL}/project.html?pid=${invite.pid}`,
         extra: { pid: invite.pid, uid: user.uid, role: invite.role },
-      }).catch(() => {});
+      });
     }
   } catch {}
 
@@ -2725,12 +2738,12 @@ async function handleInviteCancel(req, res, reqId) {
     if (invite.invitedUid) {
       const nameSnap = await db.ref(`projects/${invite.pid}/name`).once("value");
       const pname = nameSnap.exists() ? nameSnap.val() : "a project";
-      callNotify("invite", invite.invitedUid, {
+      await callNotify("invite", invite.invitedUid, {
         title: "Invitation cancelled",
         body: `Your invitation to "${pname}" was cancelled.`,
         link: `${BASE_URL}/projects`,
         extra: { pid: invite.pid },
-      }).catch(() => {});
+      });
     }
   } catch {}
 
@@ -2755,12 +2768,12 @@ async function handleCollaboratorRemove(req, res, reqId) {
   try {
     const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
     const pname = nameSnap.exists() ? nameSnap.val() : "a project";
-    callNotify("project", targetUid, {
+    await callNotify("project", targetUid, {
       title: "Removed from project",
       body: `You no longer have access to "${pname}".`,
       link: `${BASE_URL}/projects`,
       extra: { pid },
-    }).catch(() => {});
+    });
   } catch {}
 
   return res.status(200).json({ success: true });
@@ -3018,6 +3031,18 @@ async function handleProfilePublic(req, res, reqId) {
       message: "No username was provided in the URL.",
       status: 400,
       icon: "alert",
+    });
+  }
+
+  // 🆕 Reject invalid usernames (contains dot, special chars, etc.)
+  // Prevents crash from /icon.jpg being treated as a username.
+  if (!/^[a-z0-9_-]{1,30}$/.test(username)) {
+    return sendHtmlPage(res, {
+      title: "Invalid username",
+      heading: "Profile not found",
+      message: "The username in the URL is not valid.",
+      status: 400,
+      icon: "user",
     });
   }
 
