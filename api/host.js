@@ -1248,7 +1248,69 @@ async function handleProjectsList(req, res, reqId) {
   if (!(await enforceRate(req, res, "projectsList", `uid_${user.uid}`))) return;
 
   const projects = await listUserProjects(user.uid);
-  return res.status(200).json({ success: true, projects });
+
+  // Enrich each project with thumbnail, ogImage, languages, storageUsed
+  const enriched = await Promise.all(projects.map(async (p) => {
+    if (!p || !p.pid) return p;
+    try {
+      const snap = await db.ref(`projects/${p.pid}`).once("value");
+      if (!snap.exists()) return p;
+      const full = snap.val();
+
+      const thumbnail = full.thumbnail?.url && isValidOgUrl(full.thumbnail.url)
+        ? {
+            url: full.thumbnail.url,
+            generatedAt: full.thumbnail.generatedAt || null,
+          }
+        : null;
+
+      const ogImage = full.ogImage?.url && isValidOgUrl(full.ogImage.url)
+        ? {
+            url: full.ogImage.url,
+            template: full.ogImage.template || null,
+            scene: full.ogImage.scene || null,
+            palette: full.ogImage.palette || null,
+            generatedAt: full.ogImage.generatedAt || null,
+          }
+        : null;
+
+      const languages = full.languages?.breakdown && Object.keys(full.languages.breakdown).length > 0
+        ? {
+            breakdown: full.languages.breakdown,
+            totalLines: full.languages.totalLines || 0,
+            computedAt: full.languages.computedAt || null,
+          }
+        : null;
+
+      // Compute storageUsed from files if not stored
+      let storageUsed = full.storageUsed || 0;
+      if (!storageUsed) {
+        try {
+          const filesSnap = await db.ref(`files/${p.pid}`).once("value");
+          if (filesSnap.exists()) {
+            filesSnap.forEach(c => {
+              const v = c.val();
+              if (v?.content && typeof v.content === "string") {
+                storageUsed += v.content.length;
+              }
+            });
+          }
+        } catch {}
+      }
+
+      return {
+        ...p,
+        thumbnail,
+        ogImage,
+        languages,
+        storageUsed,
+      };
+    } catch {
+      return p;
+    }
+  }));
+
+  return res.status(200).json({ success: true, projects: enriched });
 }
 
 async function handleProjectsGet(req, res, reqId) {
@@ -1367,7 +1429,49 @@ async function handleProjectsUpdate(req, res, reqId) {
   const { apiKeyHash, ...safe } = p;
   return res.status(200).json({ success: true, project: { pid, ...safe } });
 }
+async function handleRegeneratePreview(req, res, reqId) {
+  const { pid } = req.body || {};
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "projectsUpdate", `pid_${pid}`))) return;
 
+  const access = await requireProjectRole(req, res, pid, "editor");
+  if (!access) return;
+
+  const projSnap = await db.ref(`projects/${pid}`).once("value");
+  if (!projSnap.exists()) {
+    return res.status(404).json({ success: false, error: "Project not found" });
+  }
+  const project = projSnap.val();
+
+  // Read files for language + thumbnail computation
+  let files = null;
+  try {
+    const filesSnap = await db.ref(`files/${pid}`).once("value");
+    files = {};
+    if (filesSnap.exists()) {
+      filesSnap.forEach(c => {
+        const v = c.val();
+        if (v?.path) files[v.path] = v.content || "";
+      });
+    }
+  } catch {}
+
+  try {
+    const languages = await ensureProjectLanguages(pid, project, files);
+    const thumbnailUrl = await ensureProjectThumbnail(pid, files);
+    await invalidateProjectOgImage(pid).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      languages,
+      thumbnailUrl: thumbnailUrl || null,
+      regeneratedAt: Date.now(),
+    });
+  } catch (err) {
+    log("host.regenerate_preview.failed", { pid, message: err.message });
+    return res.status(500).json({ success: false, error: err.message || "Regenerate failed" });
+  }
+}
 async function handleProjectsDelete(req, res, reqId) {
   const { pid } = req.body || {};
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
@@ -3965,6 +4069,7 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "projects/create")      return await handleProjectsCreate(req, res, reqId);
     if (method === "POST" && action === "projects/update")      return await handleProjectsUpdate(req, res, reqId);
     if (method === "POST" && action === "projects/delete")      return await handleProjectsDelete(req, res, reqId);
+    if (method === "POST" && action === "project/regenerate-preview") return await handleRegeneratePreview(req, res, reqId);
 
     if (method === "POST" && action === "deploy")               return await handleDeploy(req, res, reqId);
     if (method === "POST" && action === "redeploy")             return await handleRedeploy(req, res, reqId);
