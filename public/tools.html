@@ -955,20 +955,35 @@
         overflow: hidden;
         display: flex; align-items: center; justify-content: center;
       }
-      .flier-frame img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
       .flier-empty {
         display: flex; flex-direction: column;
         align-items: center; gap: 8px;
         color: var(--theme-text-tertiary);
         font-size: 11px; text-align: center; padding: 20px;
       }
-      .flier-frame-loading {
-        position: absolute; inset: 0;
-        display: flex; align-items: center; justify-content: center;
-        background: rgba(10, 12, 16, 0.55);
-        opacity: 0; pointer-events: none;
-        transition: opacity 0.2s;
-      }
+      .flier-frame img {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+.flier-frame-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 16, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 2;
+}
       .flier-frame-loading.visible { opacity: 1; }
       .flier-meta {
         font-size: 10px; color: var(--theme-text-tertiary);
@@ -3043,63 +3058,75 @@
         }
 
         async function refreshFlierPreview(force) {
-        if (!S.isAuthed) { toast('Sign in to render', 'warning'); return; }
-        if (!S.online) { toast('Offline — cannot render', 'warning'); return; }
-        if (S.flier.rendering) return;
+  if (!S.isAuthed) { toast('Sign in to render', 'warning'); return; }
+  if (!S.online) { toast('Offline - cannot render', 'warning'); return; }
+  if (S.flier.rendering) return;
 
-        var payload = buildFlierBody();
-        payload.mode = 'preview';
-        var key = JSON.stringify(payload);
+  var payload = buildFlierBody();
+  payload.mode = 'preview';
+  var key = JSON.stringify(payload);
 
-        if (!force && key === S.flier.lastRender) return;
+  if (!force && key === S.flier.lastRender) return;
 
-        S.flier.rendering = true;
-        var load = $('flierFrameLoading');
-        if (load) load.classList.add('visible');
+  S.flier.rendering = true;
+  var load = $('flierFrameLoading');
+  if (load) load.classList.add('visible');
 
-        try {
-          var res = await api(API_FLIER + '?action=generate', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-          });
-          rememberRateHeaders(res.headers);
-          updateHeaderUsage();
+  try {
+    var res = await api(API_FLIER + '?action=generate', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    rememberRateHeaders(res.headers);
+    updateHeaderUsage();
 
-          if (!res.ok || !res.data || !res.data.preview) {
-            throw new Error((res.data && res.data.error) || 'Render failed');
-          }
+    if (!res.ok || !res.data || !res.data.preview) {
+      throw new Error((res.data && res.data.error) || 'Render failed');
+    }
 
-          S.flier.preview = res.data.preview;
-          S.flier.lastRender = key;
-          S.flier.lastResponse = res.data;
+    S.flier.preview = res.data.preview;
+    S.flier.lastRender = key;
+    S.flier.lastResponse = res.data;
 
-          var frame = $('flierFrame');
-          if (frame) {
-            var img = frame.querySelector('img');
-            if (img) {
-              img.src = res.data.preview;
-            } else {
-              frame.insertAdjacentHTML('afterbegin', '<img src="' + attr(res.data.preview) + '" alt="">');
-            }
-          }
+    var frame = $('flierFrame');
+    if (frame) {
+      // Remove the empty state if present
+      var empty = frame.querySelector('.flier-empty');
+      if (empty) empty.remove();
 
-          var meta = $('flierMeta');
-          if (meta) {
-            meta.textContent = (res.data.scene || 'no scene') + ' · ' + (res.data.template || '') + ' · ' + res.data.width + '×' + res.data.height;
-          }
-
-          renderFlierDrawer('Output');
-          addActivity({ text: 'Rendered ' + (res.data.template || 'flier'), ok: true });
-        } catch (err) {
-          console.warn(err);
-          toast(err.message || 'Render failed', 'error');
-          addActivity({ text: 'Render failed: ' + (err.message || 'error'), ok: false });
-        } finally {
-          S.flier.rendering = false;
-          var l2 = $('flierFrameLoading');
-          if (l2) l2.classList.remove('visible');
-        }
+      // Reuse existing img or create one
+      var img = frame.querySelector('img');
+      if (img) {
+        img.src = res.data.preview;
+      } else {
+        var newImg = document.createElement('img');
+        newImg.src = res.data.preview;
+        newImg.alt = '';
+        // Insert before the loading overlay so the overlay stays on top
+        frame.insertBefore(newImg, frame.firstChild);
       }
+    }
+
+    var meta = $('flierMeta');
+    if (meta) {
+      meta.textContent =
+        (res.data.scene || 'no scene') + ' | ' +
+        (res.data.template || '') + ' | ' +
+        res.data.width + 'x' + res.data.height;
+    }
+
+    renderFlierDrawer('Output');
+    addActivity({ text: 'Rendered ' + (res.data.template || 'flier'), ok: true });
+  } catch (err) {
+    console.warn(err);
+    toast(err.message || 'Render failed', 'error');
+    addActivity({ text: 'Render failed: ' + (err.message || 'error'), ok: false });
+  } finally {
+    S.flier.rendering = false;
+    var l2 = $('flierFrameLoading');
+    if (l2) l2.classList.remove('visible');
+  }
+}
 
         async function flierDownload() {
         if (!S.isAuthed) { toast('Sign in to download', 'warning'); return; }
