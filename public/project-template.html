@@ -2,1012 +2,1091 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
-<meta http-equiv="X-UA-Compatible" content="IE=edge">
-<title>{{PROJECT_NAME}} — Folio</title>
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<title>{{OG_TITLE}} — Folio</title>
 <meta name="description" content="{{OG_DESCRIPTION}}">
-<meta name="theme-color" content="#0a0c10">
-<meta name="robots" content="index,follow">
-<meta property="og:site_name" content="Folio">
-<meta property="og:type" content="website">
-<meta property="og:url" content="{{CANONICAL_URL}}">
-<meta property="og:title" content="{{OG_TITLE}}">
-<meta property="og:description" content="{{OG_DESCRIPTION}}">
-{{OG_IMAGE_META}}
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="{{OG_TITLE}}">
-<meta name="twitter:description" content="{{OG_DESCRIPTION}}">
-{{TWITTER_IMAGE_META}}
 <link rel="canonical" href="{{CANONICAL_URL}}">
-
+{{OG_IMAGE_META}}
+{{TWITTER_IMAGE_META}}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Folio">
+<meta property="og:url" content="{{CANONICAL_URL}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="robots" content="index,follow">
 <link rel="icon" href="/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-
 <style>
-/* ═══════════════════════════════════════════════════════════
-   THEME
-   ═══════════════════════════════════════════════════════════ */
 :root {
-  --primary: #F59E0B;
-  --primary-hover: #fbbf24;
-  --primary-soft: rgba(245, 158, 11, 0.14);
-  --primary-glow: rgba(245, 158, 11, 0.4);
-
-  --bg: #0a0c10;
-  --bg-2: #0f1218;
-  --surface: #151922;
-  --surface-2: #1a1f2a;
-  --card: rgba(21, 25, 34, 0.72);
-
-  --text: #e8ecf1;
-  --text-2: rgba(232, 236, 241, 0.72);
-  --text-3: rgba(232, 236, 241, 0.44);
-
-  --border: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --divider: rgba(255, 255, 255, 0.08);
-
-  --success: #10B981;
-  --success-soft: rgba(16, 185, 129, 0.14);
-  --danger: #EF4444;
-  --warning: #D97706;
-
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
-
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Monaco, monospace;
-
+  --theme-primary: #F59E0B;
+  --theme-primary-hover: #fbbf24;
+  --theme-primary-glow: rgba(245, 158, 11, 0.32);
+  --theme-primary-soft: rgba(245, 158, 11, 0.12);
+  --theme-bg: #0a0c10;
+  --theme-surface: #0f1218;
+  --theme-surface-card: rgba(21, 25, 34, 0.72);
+  --theme-surface-card-solid: #151922;
+  --theme-surface-elevated: #1a1f2a;
+  --theme-text: #e8ecf1;
+  --theme-text-secondary: rgba(232, 236, 241, 0.72);
+  --theme-text-tertiary: rgba(232, 236, 241, 0.44);
+  --theme-glass-bg: rgba(255, 255, 255, 0.05);
+  --theme-glass-border: rgba(255, 255, 255, 0.09);
+  --theme-card-border: rgba(255, 255, 255, 0.07);
+  --theme-divider: rgba(255, 255, 255, 0.07);
+  --theme-success: #10B981;
+  --theme-success-soft: rgba(16, 185, 129, 0.14);
+  --theme-danger: #EF4444;
+  --theme-warning: #D97706;
+  --theme-info: #3B82F6;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-
-  color-scheme: dark;
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Monaco, monospace;
+  --content-max: 960px;
 }
 
-/* Language colors — used by the stacked bar and legend dots */
-:root {
-  --lang-html: #E44D26;
-  --lang-css: #264DE4;
-  --lang-js: #F7DF1E;
-  --lang-ts: #3178C6;
-  --lang-jsx: #61DAFB;
-  --lang-json: #8B95A5;
-  --lang-md: #A3A3A3;
-  --lang-py: #3776AB;
-  --lang-rb: #CC342D;
-  --lang-go: #00ADD8;
-  --lang-rs: #CE412B;
-  --lang-php: #777BB4;
-  --lang-java: #007396;
-  --lang-svg: #FFB13B;
-  --lang-xml: #F1662A;
-  --lang-yaml: #CB171E;
-  --lang-default: #8B95A5;
+[data-theme="light"] {
+  --theme-primary: #D97706;
+  --theme-primary-hover: #B45309;
+  --theme-primary-glow: rgba(217, 119, 6, 0.24);
+  --theme-primary-soft: rgba(217, 119, 6, 0.09);
+  --theme-bg: #f7f8fa;
+  --theme-surface: #ffffff;
+  --theme-surface-card: rgba(255, 255, 255, 0.85);
+  --theme-surface-card-solid: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-text: #121316;
+  --theme-text-secondary: rgba(18, 19, 22, 0.72);
+  --theme-text-tertiary: rgba(18, 19, 22, 0.48);
+  --theme-glass-bg: rgba(0, 0, 0, 0.03);
+  --theme-glass-border: rgba(0, 0, 0, 0.08);
+  --theme-card-border: rgba(0, 0, 0, 0.07);
+  --theme-divider: rgba(0, 0, 0, 0.06);
+  --theme-success: #059669;
+  --theme-success-soft: rgba(5, 150, 105, 0.12);
+  --theme-danger: #DC2626;
+  --theme-warning: #B45309;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   BASE
-   ═══════════════════════════════════════════════════════════ */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html { -webkit-text-size-adjust: 100%; }
 
-body {
-  background: var(--bg);
-  background-image:
-    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(245, 158, 11, 0.16), transparent 60%),
-    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(249, 115, 22, 0.10), transparent 55%),
-    radial-gradient(ellipse 50% 40% at 0% 50%, rgba(59, 130, 246, 0.06), transparent 60%);
-  background-attachment: fixed;
-  color: var(--text);
+html, body {
+  background: var(--theme-bg);
+  color: var(--theme-text);
   font-family: var(--font);
-  line-height: 1.55;
   font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
   min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--theme-bg);
+  background-image:
+    radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.10) 0%, transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.05) 0%, transparent 50%);
+  background-attachment: fixed;
   overflow-x: hidden;
 }
 
-a { color: var(--primary); text-decoration: none; }
-button { font: inherit; color: inherit; cursor: pointer; background: none; border: none; -webkit-tap-highlight-color: transparent; }
-img { display: block; max-width: 100%; }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+[data-theme="light"] body {
+  background-image:
+    radial-gradient(circle at 50% -10%, rgba(217, 119, 6, 0.06) 0%, transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.03) 0%, transparent 50%);
 }
 
+a { color: var(--theme-primary); text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; touch-action: manipulation; }
+img { display: block; max-width: 100%; height: auto; }
+svg { display: block; flex-shrink: 0; }
+kbd { font-family: var(--font-mono); font-size: 0.75em; }
+
 :focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--theme-primary);
   outline-offset: 3px;
   border-radius: 4px;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SHELL
-   ═══════════════════════════════════════════════════════════ */
-.shell {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: calc(20px + var(--safe-top)) 16px calc(48px + var(--safe-bottom));
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 8px;
+  padding: 8px 16px;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  border-radius: 6px;
+  font-weight: 700;
+  z-index: 9999;
 }
-@media (min-width: 640px) { .shell { padding: calc(32px + var(--safe-top)) 24px calc(64px + var(--safe-bottom)); } }
-@media (min-width: 1024px) { .shell { padding: calc(48px + var(--safe-top)) 32px calc(96px + var(--safe-bottom)); } }
+.skip-link:focus { top: 8px; }
 
-/* ═══════════════════════════════════════════════════════════
-   TOPBAR
-   ═══════════════════════════════════════════════════════════ */
-.topbar {
+/* ── Page shell ── */
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--theme-bg) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  border-bottom: 1px solid var(--theme-glass-border);
+  padding-top: var(--safe-top);
+}
+
+.page-header-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 32px;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 10px 20px;
+  padding-left: calc(20px + var(--safe-left));
+  padding-right: calc(20px + var(--safe-right));
 }
-@media (min-width: 768px) { .topbar { margin-bottom: 48px; } }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  color: var(--text);
-  text-decoration: none;
+  gap: 8px;
+  color: var(--theme-text);
   font-weight: 800;
-  font-size: 14px;
-  letter-spacing: -0.2px;
+  font-size: 15px;
+  letter-spacing: -0.3px;
 }
 .brand-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, var(--primary), #f97316);
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--theme-primary);
+  overflow: hidden;
+}
+.brand-icon img { width: 100%; height: 100%; object-fit: cover; }
+.brand-wordmark { color: var(--theme-text); }
+@media (max-width: 400px) { .brand-wordmark { display: none; } }
+
+.header-spacer { flex: 1; }
+
+.header-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-glass-border);
+  color: var(--theme-text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+  text-decoration: none;
+}
+.header-user:hover { background: var(--theme-surface-elevated); color: var(--theme-text); }
+.header-user img {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--theme-surface-elevated);
+}
+.header-user .initials {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--theme-primary), #f97316);
+  color: #0a0c10;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.btn-signin {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  font-size: 12.5px;
+  font-weight: 700;
+  transition: background 0.15s var(--ease);
+}
+.btn-signin:hover { background: var(--theme-primary-hover); }
+
+/* ── Main ── */
+.page-main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+  padding-left: calc(20px + var(--safe-left));
+  padding-right: calc(20px + var(--safe-right));
+}
+
+/* ── Hero / preview ── */
+.project-hero {
+  margin-bottom: 24px;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  border: 1px solid var(--theme-card-border);
+  background: var(--theme-surface-card-solid);
+  box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.35);
+}
+.project-hero-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  object-fit: cover;
+  background: var(--theme-surface-elevated);
+}
+@media (max-width: 639px) {
+  .project-hero { border-radius: var(--r-lg); margin-bottom: 18px; }
+  .project-hero-image { aspect-ratio: 4 / 3; }
+}
+
+.project-hero-empty {
+  aspect-ratio: 16 / 9;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #0a0c10;
-  flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+  background:
+    radial-gradient(circle at 30% 20%, var(--theme-primary-soft) 0%, transparent 55%),
+    var(--theme-surface-elevated);
+  color: var(--theme-primary);
+  border-radius: var(--r-xl);
+  border: 1px solid var(--theme-card-border);
+  margin-bottom: 24px;
+  font-size: 64px;
 }
-.brand-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.4; }
-.brand-meta { display: flex; flex-direction: column; line-height: 1.1; }
-.brand-name { color: var(--text); font-weight: 800; }
-.brand-sub { color: var(--primary); font-size: 9.5px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; margin-top: 2px; }
+@media (max-width: 639px) {
+  .project-hero-empty { aspect-ratio: 4 / 3; font-size: 48px; }
+}
 
-.topbar-actions { display: flex; align-items: center; gap: 6px; }
+/* ── Project head ── */
+.project-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 24px;
+  padding: 20px;
+  background: var(--theme-surface-card);
+  border: 1px solid var(--theme-card-border);
+  border-radius: var(--r-lg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+@media (max-width: 639px) {
+  .project-head {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 16px;
+    gap: 12px;
+  }
+}
 
-/* ═══════════════════════════════════════════════════════════
-   BUTTONS
-   ═══════════════════════════════════════════════════════════ */
+.project-icon-wrap {
+  flex-shrink: 0;
+  width: 64px; height: 64px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-glass-border);
+  display: flex; align-items: center; justify-content: center;
+}
+.project-icon-wrap img { width: 100%; height: 100%; object-fit: cover; }
+@media (max-width: 639px) {
+  .project-icon-wrap { width: 52px; height: 52px; border-radius: 13px; }
+}
+
+.project-head-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-name {
+  font-size: clamp(22px, 3.2vw, 32px);
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  color: var(--theme-text);
+  margin-bottom: 6px;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.project-desc {
+  font-size: 14px;
+  color: var(--theme-text-secondary);
+  line-height: 1.55;
+  margin-bottom: 10px;
+  overflow-wrap: break-word;
+}
+
+.project-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--theme-text-tertiary);
+}
+.project-meta-dot { opacity: 0.5; }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-glass-border);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--theme-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.status-badge .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--theme-text-tertiary);
+}
+.status-badge.live {
+  background: var(--theme-success-soft);
+  border-color: rgba(16, 185, 129, 0.28);
+  color: var(--theme-success);
+}
+.status-badge.live .dot { background: var(--theme-success); }
+
+/* ── Owner block ── */
+.project-owner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--theme-divider);
+  flex-shrink: 0;
+}
+@media (min-width: 1024px) {
+  .project-owner {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+    border-left: 1px solid var(--theme-divider);
+    padding-left: 18px;
+    margin-left: 18px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}
+.project-owner-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--theme-surface-elevated);
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.project-owner-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.project-owner-text { min-width: 0; }
+.project-owner-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--theme-text-tertiary);
+  margin-bottom: 2px;
+}
+.project-owner-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--theme-text);
+  text-decoration: none;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+.project-owner-name:hover { color: var(--theme-primary); }
+.project-owner-handle {
+  font-size: 11.5px;
+  color: var(--theme-text-tertiary);
+  font-family: var(--font-mono);
+}
+
+/* ── Actions ── */
+.project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+@media (max-width: 639px) {
+  .project-actions { flex-direction: column; }
+  .project-actions > * { width: 100%; }
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 10px 16px;
+  gap: 8px;
+  padding: 11px 18px;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   border: 1px solid transparent;
   transition: all 0.15s var(--ease);
   white-space: nowrap;
-  text-decoration: none;
-  min-height: 40px;
+  min-height: 44px;
   font-family: inherit;
+  cursor: pointer;
 }
-.btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
-.btn:active { transform: scale(0.97); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-.btn.primary {
-  background: var(--primary);
-  color: #0a0c10;
-  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.28);
-}
-.btn.primary:hover { background: var(--primary-hover); box-shadow: 0 8px 24px rgba(245, 158, 11, 0.35); }
+.btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.btn.primary { background: var(--theme-primary); color: #0a0c10; }
+.btn.primary:hover:not(:disabled) { background: var(--theme-primary-hover); }
+
 .btn.secondary {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
-  border-color: var(--border-strong);
+  background: var(--theme-glass-bg);
+  color: var(--theme-text);
+  border-color: var(--theme-glass-border);
 }
-.btn.secondary:hover { background: var(--surface-2); border-color: rgba(245, 158, 11, 0.3); }
-.btn.ghost { background: transparent; color: var(--text-2); }
-.btn.ghost:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
-.btn.sm { padding: 7px 12px; font-size: 12px; min-height: 32px; border-radius: 8px; }
-.btn.sm svg { width: 12px; height: 12px; }
-.btn.block { width: 100%; }
+.btn.secondary:hover:not(:disabled) {
+  background: var(--theme-surface-elevated);
+  border-color: var(--theme-primary-glow);
+}
 
-/* ═══════════════════════════════════════════════════════════
-   HERO PREVIEW (mock browser)
-   ═══════════════════════════════════════════════════════════ */
-.preview-wrap {
+.btn.ghost {
+  background: transparent;
+  color: var(--theme-text-secondary);
+  border-color: var(--theme-glass-border);
+}
+.btn.ghost:hover:not(:disabled) {
+  background: var(--theme-glass-bg);
+  color: var(--theme-text);
+}
+
+/* ── Languages ── */
+.project-section {
   margin-bottom: 28px;
-  animation: slideUp 0.55s var(--ease) both;
 }
-@media (min-width: 768px) { .preview-wrap { margin-bottom: 36px; } }
-
-.preview {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 40px 80px -20px rgba(0, 0, 0, 0.6),
-    0 20px 40px -20px rgba(245, 158, 11, 0.16);
+.project-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--theme-text-tertiary);
+  margin-bottom: 12px;
+}
+.project-section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--theme-divider);
 }
 
-.preview-chrome {
+.languages-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lang-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-glass-border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+}
+.lang-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--theme-primary);
+  flex-shrink: 0;
+}
+
+/* ── File hint ── */
+.file-hint {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--divider);
+  margin-bottom: 20px;
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--theme-text);
 }
-.preview-dots { display: flex; gap: 6px; }
-.preview-dot { width: 10px; height: 10px; border-radius: 50%; }
-.preview-dot.red { background: #FF5F57; }
-.preview-dot.yellow { background: #FEBC2E; }
-.preview-dot.green { background: #28C840; }
-.preview-url {
-  flex: 1;
-  min-width: 0;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.3);
-  font-family: var(--font-mono);
+.file-hint strong { font-family: var(--font-mono); color: var(--theme-primary); }
+.file-hint svg { color: var(--theme-primary); }
+
+/* ── OG preview panel ── */
+.og-preview-panel {
+  margin-bottom: 28px;
+  padding: 16px;
+  background: var(--theme-surface-card);
+  border: 1px dashed var(--theme-glass-border);
+  border-radius: var(--r-lg);
+}
+.og-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+.og-preview-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--theme-text-tertiary);
+}
+.og-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
   font-size: 10.5px;
-  color: var(--text-3);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.og-preview-image {
+  width: 100%;
+  aspect-ratio: 1200 / 630;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--theme-glass-border);
+  background: var(--theme-surface-elevated);
+}
+
+/* ── About panel ── */
+.about-panel {
+  margin-top: 32px;
+  border: 1px solid var(--theme-glass-border);
+  border-radius: var(--r-lg);
+  background: var(--theme-surface-card);
+  overflow: hidden;
+  transition: background 0.2s var(--ease);
+}
+.about-panel[open] { background: var(--theme-surface-card-solid); }
+
+.about-panel > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: color 0.15s var(--ease);
+}
+.about-panel > summary:hover { color: var(--theme-text); }
+.about-panel > summary::-webkit-details-marker { display: none; }
+.about-panel > summary::after {
+  content: "";
+  margin-left: auto;
+  width: 8px; height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.2s var(--ease);
+  opacity: 0.6;
+}
+.about-panel[open] > summary::after { transform: rotate(-135deg); }
+
+.about-panel-icon {
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  display: flex; align-items: center; justify-content: center;
+}
+.about-panel-icon svg { width: 12px; height: 12px; }
+
+.about-panel-body {
+  padding: 0 18px 18px;
+  font-size: 12.5px;
+  color: var(--theme-text-secondary);
+}
+
+.about-intro {
+  margin-bottom: 16px;
+  line-height: 1.55;
+  color: var(--theme-text-tertiary);
+}
+
+.about-facts {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--theme-glass-bg);
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.about-fact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.about-fact-label {
+  color: var(--theme-text-tertiary);
+  font-family: var(--font);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+}
+.about-fact-value {
+  color: var(--theme-text);
+  text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 60%;
 }
-.preview-url strong { color: var(--text-2); font-weight: 600; }
 
-.preview-body {
-  position: relative;
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  background: linear-gradient(135deg, #0a0c10, #1a1f2a);
-}
-@media (min-width: 640px) { .preview-body { aspect-ratio: 16 / 8; } }
-
-.preview-bg {
-  position: absolute;
-  inset: 0;
-  background-image: var(--og-image);
-  background-size: cover;
-  background-position: center;
-  filter: blur(40px) saturate(1.2);
-  opacity: 0.5;
-  transform: scale(1.2);
-}
-.preview-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top center;
-  display: block;
-}
-.preview-empty {
-  position: absolute;
-  inset: 0;
+.about-actions {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 32px;
-  text-align: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
 }
-.preview-empty-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 18px;
-  overflow: hidden;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 20px 40px -10px rgba(0, 0, 0, 0.5);
-}
-.preview-empty-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.preview-empty-icon span {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--primary), #f97316);
-  color: #0a0c10;
-  font-size: 28px;
-  font-weight: 900;
-}
-.preview-empty-title {
-  font-size: 22px;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  max-width: 90%;
-  overflow-wrap: break-word;
-}
-.preview-empty-sub {
+.about-actions .btn {
+  padding: 8px 14px;
+  min-height: 36px;
   font-size: 12px;
-  color: var(--text-3);
-  font-family: var(--font-mono);
 }
+.about-actions .btn svg { width: 12px; height: 12px; }
 
-/* ═══════════════════════════════════════════════════════════
-   TITLE ROW
-   ═══════════════════════════════════════════════════════════ */
-.title-row {
+.about-cta {
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
-  animation: slideUp 0.55s var(--ease) 0.08s both;
-}
-
-.title-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.4);
-}
-@media (min-width: 640px) { .title-icon { width: 64px; height: 64px; border-radius: 16px; } }
-.title-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.title-icon span {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--primary), #f97316);
-  color: #0a0c10;
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.title-info { flex: 1; min-width: 0; }
-.title-heading {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 6px;
+  padding: 12px 14px;
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  border-radius: 10px;
 }
-.title-name {
-  font-size: clamp(26px, 5vw, 40px);
-  font-weight: 900;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-  color: var(--text);
-  overflow-wrap: break-word;
+.about-cta-text {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-text);
+  line-height: 1.4;
 }
-.title-meta {
+.about-cta-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: background 0.15s var(--ease);
+}
+.about-cta-link:hover { background: var(--theme-primary-hover); }
+
+/* ── Footer ── */
+.page-footer {
+  border-top: 1px solid var(--theme-glass-border);
+  padding: 20px;
+  padding-bottom: calc(20px + var(--safe-bottom));
+  padding-left: calc(20px + var(--safe-left));
+  padding-right: calc(20px + var(--safe-right));
+  background: var(--theme-surface);
+}
+.page-footer-inner {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: var(--content-max);
+  margin: 0 auto;
   flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--theme-text-tertiary);
+}
+.footer-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-glass-border);
+  color: var(--theme-text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: all 0.15s var(--ease);
+}
+.footer-copy:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.footer-copy svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  bottom: calc(20px + var(--safe-bottom));
+  left: 50%;
+  transform: translate(-50%, 20px);
+  z-index: 1000;
+  display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
-  color: var(--text-3);
-  font-weight: 500;
-  margin-top: 4px;
-}
-.title-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.title-meta-item svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.2; opacity: 0.7; }
-.title-meta-item strong { color: var(--text-2); font-weight: 600; }
-.title-meta-divider { width: 3px; height: 3px; border-radius: 50%; background: var(--text-3); opacity: 0.5; }
-
-.title-avatar {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.title-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.title-avatar span {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--primary), #f97316);
-  color: #0a0c10;
-  font-size: 9px;
-  font-weight: 800;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   STATUS BADGE
-   ═══════════════════════════════════════════════════════════ */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  background: var(--divider);
-  color: var(--text-3);
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-}
-.status-badge.live {
-  background: var(--success-soft);
-  color: var(--success);
-}
-.status-badge .dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.status-badge.live .dot {
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
-  50% { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.08); }
-}
-
-/* ═══════════════════════════════════════════════════════════
-   DESCRIPTION
-   ═══════════════════════════════════════════════════════════ */
-.description {
-  font-size: clamp(15px, 2vw, 17px);
-  color: var(--text-2);
-  line-height: 1.6;
-  max-width: 65ch;
-  margin-bottom: 28px;
-  overflow-wrap: break-word;
-  animation: slideUp 0.55s var(--ease) 0.14s both;
-}
-.description:empty { display: none; }
-
-/* ═══════════════════════════════════════════════════════════
-   STATS
-   ═══════════════════════════════════════════════════════════ */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 10px;
-  margin-bottom: 28px;
-  animation: slideUp 0.55s var(--ease) 0.2s both;
-}
-
-.stat {
-  padding: 14px 16px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  transition: border-color 0.2s var(--ease);
-}
-.stat:hover { border-color: rgba(245, 158, 11, 0.25); }
-.stat-value {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  color: var(--text);
-  margin-bottom: 3px;
-}
-.stat-value.accent { color: var(--primary); }
-.stat-value.success { color: var(--success); }
-.stat-label {
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-3);
-}
-
-/* ═══════════════════════════════════════════════════════════
-   LANGUAGE CHART
-   ═══════════════════════════════════════════════════════════ */
-.lang-section {
-  margin-bottom: 28px;
-  animation: slideUp 0.55s var(--ease) 0.26s both;
-}
-.lang-section:empty { display: none; }
-
-.lang-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.lang-header-title {
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-3);
-}
-.lang-header-count {
-  font-size: 11px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-card-border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--text-3);
-  font-family: var(--font-mono);
+  color: var(--theme-text);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease-spring);
+  max-width: calc(100vw - 32px);
 }
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast.success { border-color: rgba(16, 185, 129, 0.4); color: var(--theme-success); }
+.toast.error { border-color: rgba(239, 68, 68, 0.4); color: var(--theme-danger); }
 
-.lang-bar {
-  display: flex;
-  height: 12px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--divider);
-  margin-bottom: 14px;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-.lang-seg {
-  height: 100%;
-  transition: filter 0.15s var(--ease);
-  cursor: default;
-}
-.lang-seg:hover { filter: brightness(1.2); }
-
-.lang-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-}
-.lang-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11.5px;
-  color: var(--text-2);
-  font-weight: 500;
-}
-.lang-item-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.lang-item-name { font-weight: 700; color: var(--text); }
-.lang-item-pct { color: var(--text-3); font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; }
-
-/* ═══════════════════════════════════════════════════════════
-   CTA ROW
-   ═══════════════════════════════════════════════════════════ */
-.cta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 24px 0;
-  margin-bottom: 24px;
-  border-top: 1px solid var(--divider);
-  border-bottom: 1px solid var(--divider);
-  animation: slideUp 0.55s var(--ease) 0.32s both;
-}
-.cta-row:empty { display: none; }
-.cta-row > * { flex: 0 1 auto; }
-@media (max-width: 480px) {
-  .cta-row { flex-direction: column; }
-  .cta-row > * { width: 100%; }
-}
-
-/* Style the buttons the CTA/CODE/LIVE variables emit */
-.cta-row .btn.primary,
-.cta-row .btn.secondary {
-  padding: 12px 20px;
-  font-size: 14px;
-  min-height: 46px;
-  border-radius: 11px;
-}
-.cta-row .btn.primary svg,
-.cta-row .btn.secondary svg { width: 16px; height: 16px; }
-
-/* ═══════════════════════════════════════════════════════════
-   FOOTER
-   ═══════════════════════════════════════════════════════════ */
-.footer {
-  margin-top: 40px;
-  padding-top: 24px;
-  border-top: 1px solid var(--divider);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  font-size: 11.5px;
-  color: var(--text-3);
-  animation: slideUp 0.55s var(--ease) 0.38s both;
-}
-.footer-brand { display: inline-flex; align-items: center; gap: 6px; }
-.footer-brand a { color: var(--text-2); font-weight: 700; }
-.footer-brand a:hover { color: var(--primary); }
-.footer-links { display: flex; gap: 16px; flex-wrap: wrap; }
-.footer a { color: var(--text-2); font-weight: 600; }
-.footer a:hover { color: var(--primary); }
-
-/* ═══════════════════════════════════════════════════════════
-   MODAL (code viewer)
-   ═══════════════════════════════════════════════════════════ */
-.modal-overlay {
+/* ── Code viewer modal ── */
+.code-modal {
   position: fixed;
   inset: 0;
   z-index: 900;
   background: rgba(10, 12, 16, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s var(--ease);
+  transition: opacity 0.22s var(--ease);
 }
-.modal-overlay.active { opacity: 1; pointer-events: all; }
+.code-modal.open { opacity: 1; pointer-events: auto; }
 
-.modal {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+.code-modal-inner {
   width: 100%;
   max-width: 720px;
-  max-height: 85vh;
+  max-height: 88vh;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: var(--r-lg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   transform: scale(0.96);
-  transition: transform 0.2s var(--ease);
-  box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.6);
+  transition: transform 0.25s var(--ease-spring);
 }
-.modal-overlay.active .modal { transform: scale(1); }
+.code-modal.open .code-modal-inner { transform: scale(1); }
 
-.modal-header {
+.code-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid var(--divider);
+  border-bottom: 1px solid var(--theme-glass-border);
+  background: var(--theme-surface);
   flex-shrink: 0;
 }
-.modal-title {
+.code-modal-head h2 {
   font-size: 14px;
   font-weight: 800;
+  color: var(--theme-text);
   letter-spacing: -0.2px;
-  color: var(--text);
 }
-.modal-close {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-3);
+.code-modal-close {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--theme-text-tertiary);
+  font-size: 20px;
+  line-height: 1;
   transition: all 0.15s var(--ease);
 }
-.modal-close:hover { background: var(--divider); color: var(--text); }
-.modal-close svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.4; }
-.modal-body {
+.code-modal-close:hover { background: var(--theme-glass-bg); color: var(--theme-text); }
+
+.code-modal-body {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 18px;
   min-height: 0;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   CODE VIEWER
-   ═══════════════════════════════════════════════════════════ */
-.code-file-list {
+.code-file-list { list-style: none; padding: 6px; }
+.code-file-list li { margin-bottom: 2px; }
+.code-file-btn {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-align: left;
+  color: var(--theme-text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: all 0.15s var(--ease);
 }
-.code-file-item {
+.code-file-btn:hover { background: var(--theme-glass-bg); color: var(--theme-text); }
+.code-file-icon { font-size: 14px; flex-shrink: 0; }
+.code-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.code-file-size {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+}
+
+.code-file-header {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 12.5px;
-  color: var(--text-2);
-  text-align: left;
-  width: 100%;
-  transition: background 0.15s var(--ease);
-  font-family: inherit;
+  border-bottom: 1px solid var(--theme-glass-border);
+  background: var(--theme-surface);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
 }
-.code-file-item:hover { background: var(--divider); color: var(--text); }
-.code-file-item svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; opacity: 0.6; }
-.code-file-item .path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.code-file-item .size { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
-
-.code-viewer {
-  background: var(--surface-2);
-  border: 1px solid var(--divider);
-  border-radius: 10px;
-  padding: 16px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.65;
-  color: var(--text-2);
-  overflow-x: auto;
-  max-height: 60vh;
-  overflow-y: auto;
-  white-space: pre;
-}
-.code-viewer-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.code-viewer-header .back {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-2);
-  background: var(--divider);
+.code-file-back {
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--theme-text-secondary);
   transition: all 0.15s var(--ease);
 }
-.code-viewer-header .back:hover { color: var(--text); background: var(--border); }
-.code-viewer-header .back svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.4; }
-.code-viewer-header .file {
+.code-file-back:hover { background: var(--theme-glass-bg); color: var(--theme-text); }
+.code-file-title {
   flex: 1;
   font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
+  color: var(--theme-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   TOAST
-   ═══════════════════════════════════════════════════════════ */
-.toast-container {
-  position: fixed;
-  bottom: calc(20px + var(--safe-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  pointer-events: none;
-  width: calc(100% - 40px);
-  max-width: 360px;
-}
-.toast {
-  padding: 12px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  transform: translateY(20px);
-  opacity: 0;
-  transition: all 0.25s var(--ease);
-  pointer-events: all;
-}
-.toast.show { transform: translateY(0); opacity: 1; }
-.toast.success { border-color: rgba(16, 185, 129, 0.35); color: var(--success); }
-.toast.error { border-color: rgba(239, 68, 68, 0.35); color: var(--danger); }
-
-/* ═══════════════════════════════════════════════════════════
-   LOADING
-   ═══════════════════════════════════════════════════════════ */
-.loading-state {
-  padding: 40px 20px;
-  text-align: center;
-  color: var(--text-3);
+.code-file-content {
+  padding: 16px;
+  font-family: var(--font-mono);
   font-size: 12px;
-}
-.spinner {
-  width: 26px;
-  height: 26px;
-  border: 2.5px solid var(--primary-soft);
-  border-top-color: var(--primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 12px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ═══════════════════════════════════════════════════════════
-   ANIMATIONS
-   ═══════════════════════════════════════════════════════════ */
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  line-height: 1.6;
+  color: var(--theme-text-secondary);
+  white-space: pre;
+  overflow-x: auto;
+  background: var(--theme-surface);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   FALLBACK STYLES FOR TEMPLATE VARIABLES
-   ═══════════════════════════════════════════════════════════ */
+/* ── Auth state loading ── */
+body.auth-pending .auth-only {
+  opacity: 0.4;
+  pointer-events: none;
+}
 
-/* {{LANGUAGES}} emits spans like <span class="lang-badge">...</span>.
-   If they land in the page unintentionally, hide them.
-   The JS script rebuilds the chart separately. */
-.lang-badges { display: none !important; }
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
-/* {{LIVE_BADGE_HTML}} may emit a status badge — leave it inline. */
+/* ── Responsive tweaks ── */
+@media (max-width: 639px) {
+  .page-main { padding: 18px 16px 32px; }
+  .project-head { padding: 14px; }
+  .project-name { font-size: 22px; }
+  .about-panel-body { padding: 0 14px 14px; }
+  .about-facts { font-size: 11px; }
+  .about-cta { flex-direction: column; align-items: stretch; }
+  .about-cta-link { justify-content: center; }
+  .page-footer-inner { flex-direction: column; align-items: flex-start; }
+}
+
+@media (min-width: 1024px) {
+  .page-main { padding: 40px 24px 60px; }
+}
 </style>
 </head>
 <body>
 
-<div class="shell">
+<a class="skip-link" href="#main">Skip to content</a>
 
-  <!-- ═══════════════════════════════════════════════════════
-       TOPBAR
-       ═══════════════════════════════════════════════════════ -->
-  <div class="topbar">
-    <a class="brand" href="/">
-      <span class="brand-icon">
-        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      </span>
-      <span class="brand-meta">
-        <span class="brand-name">Folio</span>
-        <span class="brand-sub">Project</span>
-      </span>
-    </a>
-    <div class="topbar-actions">
-      <button class="btn ghost sm" type="button" data-action="copy-link" aria-label="Copy link">
-        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        <span class="copy-link-label">Copy link</span>
+<div class="page">
+  <header class="page-header">
+    <div class="page-header-inner">
+      <a class="brand" href="/" aria-label="Folio home">
+        <span class="brand-icon">
+          <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none'">
+        </span>
+        <span class="brand-wordmark">Folio</span>
+      </a>
+      <div class="header-spacer"></div>
+      <div id="authSlot">
+        <a class="btn-signin" href="/register">Sign in</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-main" id="main">
+
+    <!-- File hint (only if fileParam) -->
+    <div class="file-hint" id="fileHint" style="display:none" role="status">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span>Viewing file: <strong id="fileHintPath"></strong></span>
+    </div>
+
+    <!-- Hero preview -->
+    {{PROJECT_PREVIEW_HTML}}
+
+    <!-- Project head -->
+    <section class="project-head">
+      <div class="project-icon-wrap">
+        {{PROJECT_ICON_HTML}}
+      </div>
+      <div class="project-head-body">
+        <h1 class="project-name">{{PROJECT_NAME}}</h1>
+        <p class="project-desc">{{PROJECT_DESCRIPTION}}</p>
+        <div class="project-meta">
+          {{LIVE_BADGE_HTML}}
+          <span class="project-meta-dot">·</span>
+          <span>Updated {{UPDATED_AT}}</span>
+        </div>
+      </div>
+      <div class="project-owner">
+        <div class="project-owner-avatar">{{OWNER_AVATAR_HTML}}</div>
+        <div class="project-owner-text">
+          <div class="project-owner-label">By</div>
+          <a class="project-owner-name" href="{{OWNER_PROFILE_URL}}">{{OWNER_DISPLAY_NAME}}</a>
+          <div class="project-owner-handle">@{{OWNER_USERNAME}}</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Actions -->
+    <div class="project-actions" id="projectActions">
+      {{CTA_HTML}}
+      {{LIVE_BUTTON_HTML}}
+      {{CODE_BUTTON_HTML}}
+    </div>
+
+    <!-- Languages -->
+    <section class="project-section" id="languagesSection" {{LANGUAGES_ENABLED}}>
+      <h2 class="project-section-title">Languages</h2>
+      <div class="languages-grid">
+        {{LANGUAGES}}
+      </div>
+    </section>
+
+    <!-- OG preview (owner-only) -->
+    {{OG_PREVIEW_HTML}}
+
+    <!-- About panel -->
+    <details class="about-panel" id="aboutPanel">
+      <summary>
+        <span class="about-panel-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        About this page
+      </summary>
+      <div class="about-panel-body">
+        <p class="about-intro">
+          This page is rendered by Folio — a mobile-first, offline-first code editor and static host.
+          Every project page gets an auto-generated OG card, language breakdown, and can be forked by any signed-in user.
+        </p>
+        <div class="about-facts" id="aboutFacts">
+          <!-- filled by JS -->
+        </div>
+        <div class="about-actions">
+          <button class="btn ghost" type="button" data-action="share-copy" data-url="{{CANONICAL_URL}}" id="copyLinkBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy canonical URL
+          </button>
+          <button class="btn ghost" type="button" data-action="copy-project-id" id="copyPidBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+            Copy project ID
+          </button>
+        </div>
+        <div class="about-cta">
+          <span class="about-cta-text">Want a page like this for your own project?</span>
+          <a class="about-cta-link" href="/register">
+            Try Folio free
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </a>
+        </div>
+      </div>
+    </details>
+
+  </main>
+
+  <footer class="page-footer">
+    <div class="page-footer-inner">
+      <span>Built with <a href="/" style="color:var(--theme-text);font-weight:700;text-decoration:none">Folio</a></span>
+      <button class="footer-copy" type="button" data-action="share-copy" data-url="{{SHARE_URL}}" id="footerShareBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        Copy link
       </button>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════
-       HERO PREVIEW — mock browser with OG image or icon
-       ═══════════════════════════════════════════════════════ -->
-  <div class="preview-wrap" id="previewWrap">
-    <div class="preview">
-      <div class="preview-chrome">
-        <div class="preview-dots">
-          <span class="preview-dot red"></span>
-          <span class="preview-dot yellow"></span>
-          <span class="preview-dot green"></span>
-        </div>
-        <div class="preview-url" id="previewUrl">
-          <strong>foliostudios.vercel.app</strong>/{{OWNER_USERNAME}}/{{PROJECT_SLUG}}
-        </div>
-      </div>
-      <div class="preview-body" id="previewBody">
-        <div class="preview-empty" id="previewEmpty">
-          <div class="preview-empty-icon" id="previewEmptyIcon">{{PROJECT_ICON_HTML}}</div>
-          <div class="preview-empty-title">{{PROJECT_NAME}}</div>
-          <div class="preview-empty-sub" id="previewEmptySub">@{{OWNER_USERNAME}}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════
-       TITLE ROW
-       ═══════════════════════════════════════════════════════ -->
-  <div class="title-row">
-    <div class="title-icon">{{PROJECT_ICON_HTML}}</div>
-    <div class="title-info">
-      <div class="title-heading">
-        <h1 class="title-name">{{PROJECT_NAME}}</h1>
-        {{LIVE_BADGE_HTML}}
-      </div>
-      <div class="title-meta">
-        <span class="title-meta-item">
-          <span class="title-avatar">{{OWNER_AVATAR_HTML}}</span>
-          <a href="{{OWNER_PROFILE_URL}}"><strong>{{OWNER_DISPLAY_NAME}}</strong></a>
-        </span>
-        <span class="title-meta-divider"></span>
-        <span class="title-meta-item">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Updated {{UPDATED_AT}}
-        </span>
-        <span class="title-meta-divider"></span>
-        <span class="title-meta-item">
-          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Created {{CREATED_AT}}
-        </span>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════
-       DESCRIPTION
-       ═══════════════════════════════════════════════════════ -->
-  <p class="description">{{PROJECT_DESCRIPTION}}</p>
-
-  <!-- ═══════════════════════════════════════════════════════
-       STATS
-       ═══════════════════════════════════════════════════════ -->
-  <div class="stats" id="statsRow">
-    <div class="stat">
-      <div class="stat-value" id="statLanguages">—</div>
-      <div class="stat-label">Languages</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" id="statLines">—</div>
-      <div class="stat-label">Lines</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" id="statStatus">—</div>
-      <div class="stat-label">Status</div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════
-       LANGUAGE CHART (populated by JS)
-       ═══════════════════════════════════════════════════════ -->
-  <div class="lang-section" id="langSection" style="display:none;">
-    <div class="lang-header">
-      <span class="lang-header-title">Language breakdown</span>
-      <span class="lang-header-count" id="langCount"></span>
-    </div>
-    <div class="lang-bar" id="langBar"></div>
-    <div class="lang-legend" id="langLegend"></div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════
-       CTA ROW (owner / copy / signin button + live + code)
-       ═══════════════════════════════════════════════════════ -->
-  <div class="cta-row">
-    {{CTA_HTML}}
-    {{LIVE_BUTTON_HTML}}
-    {{CODE_BUTTON_HTML}}
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════
-       FOOTER
-       ═══════════════════════════════════════════════════════ -->
-  <footer class="footer">
-    <span class="footer-brand">Made on <a href="/">Folio</a></span>
-    <div class="footer-links">
-      <a href="/projects">Projects</a>
-      <a href="/register">Sign in</a>
     </div>
   </footer>
-
 </div>
-
-<!-- ═══════════════════════════════════════════════════════
-     MODAL (code viewer)
-     ═══════════════════════════════════════════════════════ -->
-<div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
-  <div class="modal" role="document">
-    <div class="modal-header">
-      <div class="modal-title" id="modalTitle">—</div>
-      <button class="modal-close" id="modalClose" aria-label="Close">
-        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body" id="modalBody"></div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════
-     TOASTS
-     ═══════════════════════════════════════════════════════ -->
-<div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
 {{INJECT_PROJECT_SCRIPT}}
 
@@ -1015,434 +1094,385 @@ img { display: block; max-width: 100%; }
 (function () {
   'use strict';
 
-  const $ = id => document.getElementById(id);
+  var S = { session: 'folio.session', user: 'folio.user' };
+  var $ = function (id) { return document.getElementById(id); };
 
-  // ═══════════════════════════════════════════════════════
-  // CONSTANTS
-  // ═══════════════════════════════════════════════════════
-
-  const API_BASE = 'https://foliostudios.vercel.app/api';
-  const API_HOST = API_BASE + '/host';
-
-  const LANG_COLORS = {
-    HTML:       '#E44D26',
-    CSS:        '#264DE4',
-    JavaScript: '#F7DF1E',
-    TypeScript: '#3178C6',
-    JSX:        '#61DAFB',
-    TSX:        '#3178C6',
-    JSON:       '#8B95A5',
-    Markdown:   '#A3A3A3',
-    Python:     '#3776AB',
-    Ruby:       '#CC342D',
-    Go:         '#00ADD8',
-    Rust:       '#CE412B',
-    PHP:        '#777BB4',
-    Java:       '#007396',
-    SVG:        '#FFB13B',
-    XML:        '#F1662A',
-    YAML:       '#CB171E',
-  };
-
-  const DEFAULT_LANG_COLOR = '#8B95A5';
-
-  function colorFor(name) {
-    return LANG_COLORS[name] || DEFAULT_LANG_COLOR;
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
   }
 
-  // ═══════════════════════════════════════════════════════
-  // UTIL
-  // ═══════════════════════════════════════════════════════
-
-  function toast(msg, type = 'info', duration = 2400) {
-    const container = $('toastContainer');
-    if (!container) return;
-    const el = document.createElement('div');
+  function toast(msg, type) {
+    type = type || 'info';
+    var el = document.createElement('div');
     el.className = 'toast ' + type;
     el.textContent = msg;
-    container.appendChild(el);
-    requestAnimationFrame(() => el.classList.add('show'));
-    setTimeout(() => {
+    document.body.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('show'); });
+    setTimeout(function () {
       el.classList.remove('show');
-      setTimeout(() => el.remove(), 250);
-    }, duration);
+      setTimeout(function () { el.remove(); }, 300);
+    }, 2800);
   }
 
-  function copyToClipboard(text) {
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }).catch(function () { return false; });
+    }
     try {
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text).catch(() => {});
-        return true;
-      }
-    } catch {}
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta); ta.select();
+      var ok = document.execCommand('copy');
       document.body.removeChild(ta);
-      return ok;
-    } catch { return false; }
+      return Promise.resolve(ok);
+    } catch (e) { return Promise.resolve(false); }
   }
 
-  function formatBytes(n) {
+  function timeAgo(ts) {
+    if (!ts) return '—';
+    var d = Date.now() - ts;
+    if (d < 0) return 'just now';
+    if (d < 60000) return 'just now';
+    var m = Math.floor(d / 60000);
+    if (m < 60) return m + 'm ago';
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + 'h ago';
+    var dd = Math.floor(h / 24);
+    return dd + 'd ago';
+  }
+
+  function fmtBytes(n) {
     if (!n || n < 0) return '0 B';
-    const u = ['B', 'KB', 'MB', 'GB'];
-    let i = 0;
+    var u = ['B', 'KB', 'MB', 'GB'];
+    var i = 0;
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
     return (n < 10 ? n.toFixed(1) : Math.round(n)) + ' ' + u[i];
   }
 
-  function formatNumber(n) {
-    if (!n && n !== 0) return '—';
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
-    return String(n);
-  }
-
-  function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, c => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    }[c]));
-  }
-
-  function readSession() {
-    try { return localStorage.getItem('folio.session'); } catch { return null; }
-  }
-
-  async function apiFetch(url, opts = {}) {
-    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-    const session = readSession();
-    if (session) headers['Authorization'] = 'Bearer ' + session;
-    const res = await fetch(url, { ...opts, headers });
-    let data = {};
-    try { data = await res.json(); } catch {}
-    return { ok: res.ok, status: res.status, data };
-  }
-
-  // ═══════════════════════════════════════════════════════
-  // PROJECT DATA (from injected script)
-  // ═══════════════════════════════════════════════════════
-
-  const project = window.__PROJECT__ || {};
-
-  // ═══════════════════════════════════════════════════════
-  // LANGUAGE CHART
-  // ═══════════════════════════════════════════════════════
-
-  function buildLanguageChart() {
-    const langs = project.languages || {};
-    const entries = Object.entries(langs)
-      .filter(([, pct]) => typeof pct === 'number' && pct > 0)
-      .sort(([, a], [, b]) => b - a);
-
-    if (entries.length === 0) return;
-
-    const total = entries.reduce((s, [, pct]) => s + pct, 0) || 1;
-
-    const barEl = $('langBar');
-    const legendEl = $('langLegend');
-    const sectionEl = $('langSection');
-    const countEl = $('langCount');
-
-    if (!barEl || !legendEl || !sectionEl) return;
-
-    // Bar
-    barEl.innerHTML = '';
-    for (const [name, pct] of entries) {
-      const seg = document.createElement('span');
-      seg.className = 'lang-seg';
-      seg.style.width = ((pct / total) * 100).toFixed(2) + '%';
-      seg.style.background = colorFor(name);
-      seg.title = `${name} ${pct}%`;
-      barEl.appendChild(seg);
+  /* ── Theme ── */
+  function applyTheme(pref) {
+    var resolved = pref;
+    if (pref === 'auto' || pref === 'system') {
+      resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
     }
+    if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
 
-    // Legend
-    legendEl.innerHTML = '';
-    for (const [name, pct] of entries) {
-      const item = document.createElement('span');
-      item.className = 'lang-item';
-      item.innerHTML = `
-        <span class="lang-item-dot" style="background:${colorFor(name)};"></span>
-        <span class="lang-item-name">${escapeHtml(name)}</span>
-        <span class="lang-item-pct">${pct}%</span>
-      `;
-      legendEl.appendChild(item);
-    }
-
-    countEl.textContent = `${entries.length} language${entries.length === 1 ? '' : 's'}`;
-    sectionEl.style.display = '';
+    var meta = $('themeColorMeta');
+    if (meta) meta.setAttribute('content', resolved === 'light' ? '#f7f8fa' : '#0a0c10');
   }
-
-  // ═══════════════════════════════════════════════════════
-  // STATS
-  // ═══════════════════════════════════════════════════════
-
-  function buildStats() {
-    const langs = project.languages || {};
-    const langCount = Object.keys(langs).length;
-
-    // Approximate lines from percentages + totalLines if available.
-    // Since __PROJECT__ doesn't include totalLines directly, we
-    // derive a rough count only when we know it — otherwise show the
-    // language count and label lines as unavailable.
-    const statLanguages = $('statLanguages');
-    const statLines = $('statLines');
-    const statStatus = $('statStatus');
-
-    if (statLanguages) {
-      statLanguages.textContent = langCount > 0 ? String(langCount) : '—';
-    }
-
-    if (statLines) {
-      // Fallback: count file extensions if languages is present,
-      // else show a dash. handleShare doesn't expose file counts,
-      // so we show what we can.
-      statLines.textContent = '—';
-    }
-
-    if (statStatus) {
-      let status = 'Private';
-      let className = '';
-      if (project.liveUrl) {
-        status = 'Live';
-        className = 'success';
-      } else if (project.codePublic) {
-        status = 'Code';
-      } else if (project.isSignedIn) {
-        status = 'Signed in';
-      }
-      statStatus.textContent = status;
-      statStatus.className = 'stat-value' + (className ? ' ' + className : '');
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  // PREVIEW — use OG image if available, else fallback
-  // ═══════════════════════════════════════════════════════
-
-  function setupPreview() {
-    const bodyEl = $('previewBody');
-    const emptyEl = $('previewEmpty');
-    if (!bodyEl || !emptyEl) return;
-
-    // Try the OG image meta tag (handleShare injects one when available)
-    const ogImageMeta = document.querySelector('meta[property="og:image"]');
-    const ogImageUrl = ogImageMeta?.getAttribute('content');
-
-    if (ogImageUrl) {
-      // Layer: blurred background + sharp image on top
-      bodyEl.style.setProperty('--og-image', `url("${ogImageUrl.replace(/"/g, '\\"')}")`);
-
-      const bg = document.createElement('div');
-      bg.className = 'preview-bg';
-      bodyEl.appendChild(bg);
-
-      const img = document.createElement('img');
-      img.className = 'preview-image';
-      img.src = ogImageUrl;
-      img.alt = project.name || 'Project preview';
-      img.loading = 'lazy';
-      img.addEventListener('error', () => {
-        img.remove();
-        bg.remove();
-        emptyEl.style.display = '';
+  try {
+    var pref = localStorage.getItem('folio.theme') || 'dark';
+    applyTheme(pref);
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
+        var p = localStorage.getItem('folio.theme') || 'dark';
+        if (p === 'auto' || p === 'system') applyTheme(p);
       });
-      bodyEl.appendChild(img);
-      emptyEl.style.display = 'none';
     }
-    // else: the built-in preview-empty placeholder is already visible
+  } catch (e) {}
 
-    // Update URL bar to point at the live URL if we have one
-    if (project.liveUrl) {
-      const urlEl = $('previewUrl');
-      if (urlEl) {
-        try {
-          const u = new URL(project.liveUrl);
-          urlEl.innerHTML = `<strong>${escapeHtml(u.hostname)}</strong>${escapeHtml(u.pathname)}`;
-        } catch {
-          urlEl.textContent = project.liveUrl;
+  /* ── About panel facts ── */
+  function renderAboutFacts() {
+    var p = window.__PROJECT__ || {};
+    var facts = [
+      ['Project ID', p.pid || '—'],
+      ['Owner ID', p.ownerUid ? p.ownerUid.slice(0, 12) + '…' : '—'],
+      ['Canonical', p.canonicalPath || '—'],
+      ['Rendered at', new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC'],
+      ['OG template', p.ogImageTemplate || '—'],
+      ['OG scene', p.scene || '—'],
+      ['OG palette', p.palette || '—'],
+      ['OG generated', p.ogImageGeneratedAt ? timeAgo(p.ogImageGeneratedAt) : '—'],
+      ['Thumbnail', p.thumbnailUrl ? 'Yes' : 'No'],
+      ['Deployed', p.liveUrl ? 'Yes' : 'No']
+    ];
+    var container = $('aboutFacts');
+    if (!container) return;
+    container.innerHTML = facts.map(function (f) {
+      return '<div class="about-fact">' +
+        '<span class="about-fact-label">' + escapeHtml(f[0]) + '</span>' +
+        '<span class="about-fact-value">' + escapeHtml(f[1]) + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  /* ── File hint ── */
+  function renderFileHint() {
+    var p = window.__PROJECT__ || {};
+    if (!p.fileParam) return;
+    var hint = $('fileHint');
+    var path = $('fileHintPath');
+    if (hint && path) {
+      path.textContent = p.fileParam;
+      hint.style.display = 'flex';
+    }
+  }
+
+  /* ── Auth hydration ── */
+  function hydrateAuth() {
+    var session = null;
+    try { session = localStorage.getItem(S.session); } catch (e) {}
+    if (!session) return Promise.resolve();
+
+    document.body.classList.add('auth-pending');
+
+    return fetch('/api/auth?action=me', {
+      headers: { 'Authorization': 'Bearer ' + session },
+      signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          try {
+            localStorage.removeItem(S.session);
+            localStorage.removeItem(S.user);
+          } catch (e) {}
+          return null;
         }
+        return res.json();
+      })
+      .then(function (data) {
+        if (data && data.success && data.user) {
+          window.__VIEWER__ = data.user;
+          document.body.classList.add('auth-signed-in');
+          upgradeAuthUI(data.user);
+        }
+      })
+      .catch(function (err) {
+        console.warn('[auth] hydration failed:', err);
+      })
+      .finally(function () {
+        document.body.classList.remove('auth-pending');
+      });
+  }
+
+  function upgradeAuthUI(viewer) {
+    var p = window.__PROJECT__ || {};
+    var isOwner = p.ownerUid && viewer.uid === p.ownerUid;
+
+    /* Header avatar */
+    var slot = $('authSlot');
+    if (slot) {
+      var displayName = (viewer.profile && viewer.profile.displayName) || viewer.username || '';
+      var initial = displayName.charAt(0).toUpperCase() || '?';
+      var avatarUrl = (viewer.profile && viewer.profile.avatarUrl) || '';
+      slot.innerHTML =
+        '<a class="header-user" href="/profile" title="' + escapeHtml(displayName) + '">' +
+          (avatarUrl
+            ? '<img src="' + escapeHtml(avatarUrl) + '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><span class="initials" style="display:none">' + escapeHtml(initial) + '</span>'
+            : '<span class="initials">' + escapeHtml(initial) + '</span>') +
+          '<span>@' + escapeHtml(viewer.username || '') + '</span>' +
+        '</a>';
+    }
+
+    /* Owner CTA */
+    if (isOwner && p.editorUrl) {
+      var ctaSlot = $('projectActions');
+      if (ctaSlot) {
+        var ownerBtn = document.createElement('a');
+        ownerBtn.className = 'btn primary';
+        ownerBtn.href = p.editorUrl;
+        ownerBtn.innerHTML =
+          '<svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' +
+          ' Open dashboard';
+        ctaSlot.insertBefore(ownerBtn, ctaSlot.firstChild);
+
+        /* Remove duplicate sign-in CTA if present */
+        var signInLink = ctaSlot.querySelector('a[href*="/register"]');
+        if (signInLink && signInLink !== ownerBtn) signInLink.remove();
       }
     }
-  }
 
-  // ═══════════════════════════════════════════════════════
-  // MODAL
-  // ═══════════════════════════════════════════════════════
-
-  function openModal(title, html) {
-    $('modalTitle').textContent = title;
-    $('modalBody').innerHTML = html;
-    $('modalOverlay').classList.add('active');
-  }
-
-  function closeModal() {
-    $('modalOverlay').classList.remove('active');
-    setTimeout(() => { $('modalBody').innerHTML = ''; }, 200);
-  }
-
-  $('modalClose')?.addEventListener('click', closeModal);
-  $('modalOverlay')?.addEventListener('click', (e) => {
-    if (e.target === $('modalOverlay')) closeModal();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeModal();
-  });
-
-  // ═══════════════════════════════════════════════════════
-  // COPY LINK
-  // ═══════════════════════════════════════════════════════
-
-  document.querySelectorAll('[data-action="copy-link"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const url = location.origin + location.pathname;
-      if (copyToClipboard(url)) {
-        toast('Link copied', 'success', 1400);
-        const label = btn.querySelector('.copy-link-label');
-        if (label) {
-          const original = label.textContent;
-          label.textContent = 'Copied!';
-          setTimeout(() => { label.textContent = original; }, 1500);
-        }
-      } else {
-        toast('Copy failed', 'error');
+    /* Non-owner signed in — show Save a copy if public */
+    if (!isOwner && p.canCopy) {
+      var actions = $('projectActions');
+      if (actions && !actions.querySelector('[data-action="copy"]')) {
+        var copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'btn primary';
+        copyBtn.dataset.action = 'copy';
+        copyBtn.dataset.pid = p.pid;
+        copyBtn.innerHTML =
+          '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
+          ' Save a copy';
+        actions.insertBefore(copyBtn, actions.firstChild);
       }
-    });
-  });
+    }
 
-  // ═══════════════════════════════════════════════════════
-  // SAVE A COPY
-  // ═══════════════════════════════════════════════════════
+    /* Reveal owner-only OG preview */
+    var ogPanel = $('ogPreview');
+    if (ogPanel && isOwner) ogPanel.style.display = '';
+  }
 
-  document.querySelectorAll('[data-action="copy"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const pid = btn.getAttribute('data-pid');
+  /* ── Actions ── */
+  document.addEventListener('click', function (e) {
+    var target = e.target.closest('[data-action]');
+    if (!target) return;
+    var action = target.dataset.action;
+
+    if (action === 'copy') {
+      var pid = target.dataset.pid;
       if (!pid) return;
-      const session = readSession();
-      if (!session) {
-        const next = encodeURIComponent(location.pathname);
-        window.location.href = '/register?next=' + next;
-        return;
-      }
-      btn.disabled = true;
-      const original = btn.innerHTML;
-      btn.innerHTML = 'Saving…';
-      try {
-        const res = await apiFetch(API_HOST + '?action=project/copy', {
-          method: 'POST',
-          body: JSON.stringify({ pid }),
+      target.disabled = true;
+      var original = target.innerHTML;
+      target.textContent = 'Copying…';
+      var session = null;
+      try { session = localStorage.getItem(S.session); } catch (err) {}
+      fetch('/api/host?action=project/copy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': session ? 'Bearer ' + session : ''
+        },
+        body: JSON.stringify({ pid: pid })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data && data.success && data.pid) {
+            toast('Copy saved — opening…', 'success');
+            setTimeout(function () {
+              location.href = '/project?pid=' + encodeURIComponent(data.pid);
+            }, 700);
+          } else {
+            toast((data && data.error) || 'Copy failed', 'error');
+            target.disabled = false;
+            target.innerHTML = original;
+          }
+        })
+        .catch(function () {
+          toast('Copy failed', 'error');
+          target.disabled = false;
+          target.innerHTML = original;
         });
-        if (!res.ok || !res.data?.success) {
-          throw new Error(res.data?.error || 'Copy failed');
-        }
-        toast('Project copied', 'success', 1200);
-        setTimeout(() => {
-          window.location.href = '/project.html?pid=' + encodeURIComponent(res.data.pid);
-        }, 800);
-      } catch (err) {
-        toast(err.message || 'Copy failed', 'error');
-        btn.disabled = false;
-        btn.innerHTML = original;
-      }
-    });
+      return;
+    }
+
+    if (action === 'view-code') {
+      openCodeViewer();
+      return;
+    }
+
+    if (action === 'share-copy') {
+      var url = target.dataset.url || location.href;
+      copyText(url).then(function (ok) {
+        toast(ok ? 'Link copied' : 'Copy failed', ok ? 'success' : 'error');
+      });
+      return;
+    }
+
+    if (action === 'copy-project-id') {
+      var project = window.__PROJECT__ || {};
+      if (!project.pid) return;
+      copyText(project.pid).then(function (ok) {
+        toast(ok ? 'Project ID copied' : 'Copy failed', ok ? 'success' : 'error');
+      });
+      return;
+    }
+
+    if (action === 'copy-canonical') {
+      var canonical = (window.__PROJECT__ && window.__PROJECT__.canonicalPath) || location.pathname;
+      var full = canonical.startsWith('http') ? canonical : (location.origin + canonical);
+      copyText(full).then(function (ok) {
+        toast(ok ? 'URL copied' : 'Copy failed', ok ? 'success' : 'error');
+      });
+      return;
+    }
   });
 
-  // ═══════════════════════════════════════════════════════
-  // VIEW CODE
-  // ═══════════════════════════════════════════════════════
+  /* ── Code viewer ── */
+  function openCodeViewer() {
+    var p = window.__PROJECT__ || {};
+    if (!p.pid) return;
 
-  document.querySelectorAll('[data-action="view-code"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (!project.pid) return;
-      openModal('Files', '<div class="loading-state"><div class="spinner"></div>Loading files…</div>');
-      try {
-        const res = await apiFetch(API_HOST + '?action=file/list&pid=' + encodeURIComponent(project.pid));
-        if (!res.ok || !res.data?.success) {
-          throw new Error(res.data?.error || 'Could not load files');
-        }
-        const files = res.data.files || [];
-        if (files.length === 0) {
-          $('modalBody').innerHTML = '<div class="loading-state">No files</div>';
+    var modal = document.createElement('div');
+    modal.className = 'code-modal';
+    modal.innerHTML =
+      '<div class="code-modal-inner">' +
+        '<header class="code-modal-head">' +
+          '<h2>Project files</h2>' +
+          '<button class="code-modal-close" type="button" aria-label="Close">×</button>' +
+        '</header>' +
+        '<div class="code-modal-body" id="codeViewerBody">' +
+          '<div style="padding:32px;text-align:center;color:var(--theme-text-tertiary);font-size:12.5px">Loading…</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    requestAnimationFrame(function () { modal.classList.add('open'); });
+
+    var close = function () {
+      modal.classList.remove('open');
+      setTimeout(function () { modal.remove(); }, 300);
+      document.removeEventListener('keydown', onKey);
+    };
+    var onKey = function (ev) { if (ev.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+
+    modal.querySelector('.code-modal-close').addEventListener('click', close);
+    modal.addEventListener('click', function (ev) { if (ev.target === modal) close(); });
+
+    fetch('/api/host?action=file/list&pid=' + encodeURIComponent(p.pid))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var body = modal.querySelector('#codeViewerBody');
+        if (!data || !data.success || !data.files) {
+          body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--theme-text-tertiary);font-size:12.5px">Could not load files.</div>';
           return;
         }
-        const list = document.createElement('div');
-        list.className = 'code-file-list';
-        for (const f of files) {
-          const item = document.createElement('button');
-          item.className = 'code-file-item';
-          item.type = 'button';
-          item.innerHTML = `
-            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            <span class="path"></span>
-            <span class="size"></span>
-          `;
-          item.querySelector('.path').textContent = f.path;
-          item.querySelector('.size').textContent = formatBytes(f.size);
-          item.addEventListener('click', () => loadFile(f.path));
-          list.appendChild(item);
-        }
-        $('modalBody').innerHTML = '';
-        $('modalBody').appendChild(list);
-      } catch (err) {
-        $('modalBody').innerHTML = '<div class="loading-state">' + escapeHtml(err.message || 'Could not load files') + '</div>';
-      }
-    });
-  });
-
-  async function loadFile(path) {
-    if (!project.pid) return;
-    $('modalBody').innerHTML = '<div class="loading-state"><div class="spinner"></div>Loading file…</div>';
-    try {
-      const res = await apiFetch(
-        API_HOST + '?action=file/get&pid=' + encodeURIComponent(project.pid) + '&path=' + encodeURIComponent(path)
-      );
-      if (!res.ok || !res.data?.success) {
-        throw new Error(res.data?.error || 'Could not load file');
-      }
-      const { content, truncated, bytes } = res.data;
-      const html = `
-        <div class="code-viewer-header">
-          <button class="back" type="button" data-back aria-label="Back to files">
-            <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-          <span class="file"></span>
-        </div>
-        <div class="code-viewer"></div>
-        ${truncated ? `<div style="font-size:11px;color:var(--text-3);margin-top:10px;">File truncated — showing first 2 MB of ${formatBytes(bytes)}.</div>` : ''}
-      `;
-      $('modalBody').innerHTML = html;
-      $('modalBody').querySelector('.file').textContent = path;
-      $('modalBody').querySelector('.code-viewer').textContent = content;
-      $('modalBody').querySelector('[data-back]')?.addEventListener('click', () => {
-        document.querySelector('[data-action="view-code"]')?.click();
+        body.innerHTML =
+          '<ul class="code-file-list">' +
+            data.files.map(function (f) {
+              return '<li><button class="code-file-btn" type="button" data-path="' + escapeHtml(f.path) + '">' +
+                '<span class="code-file-icon">📄</span>' +
+                '<span class="code-file-name">' + escapeHtml(f.path) + '</span>' +
+                '<span class="code-file-size">' + fmtBytes(f.size) + '</span>' +
+              '</button></li>';
+            }).join('') +
+          '</ul>';
+        body.querySelectorAll('.code-file-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            viewFile(p.pid, btn.dataset.path, body, close);
+          });
+        });
+      })
+      .catch(function () {
+        var body = modal.querySelector('#codeViewerBody');
+        if (body) body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--theme-text-tertiary);font-size:12.5px">Network error.</div>';
       });
-    } catch (err) {
-      $('modalBody').innerHTML = '<div class="loading-state">' + escapeHtml(err.message || 'Could not load file') + '</div>';
-    }
   }
 
-  // ═══════════════════════════════════════════════════════
-  // INIT
-  // ═══════════════════════════════════════════════════════
-
-  function init() {
-    setupPreview();
-    buildStats();
-    buildLanguageChart();
+  function viewFile(pid, path, container, closeFn) {
+    fetch('/api/host?action=file/get&pid=' + encodeURIComponent(pid) + '&path=' + encodeURIComponent(path))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.success) {
+          toast((data && data.error) || 'Could not load file', 'error');
+          return;
+        }
+        container.innerHTML =
+          '<header class="code-file-header">' +
+            '<button class="code-file-back" type="button">←</button>' +
+            '<span class="code-file-title">' + escapeHtml(path) + '</span>' +
+            '<span class="code-file-size" style="font-family:var(--font-mono);font-size:10.5px;color:var(--theme-text-tertiary)">' + fmtBytes(data.bytes) + '</span>' +
+          '</header>' +
+          '<pre class="code-file-content"><code>' + escapeHtml(data.content) + '</code></pre>';
+        container.querySelector('.code-file-back').addEventListener('click', function () {
+          if (closeFn) closeFn();
+          setTimeout(function () { openCodeViewer(); }, 150);
+        });
+      })
+      .catch(function () {
+        toast('Network error', 'error');
+      });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-
+  /* ── Boot ── */
+  renderAboutFacts();
+  renderFileHint();
+  hydrateAuth();
 })();
 </script>
+
 </body>
 </html>
