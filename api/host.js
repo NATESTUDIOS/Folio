@@ -107,7 +107,6 @@ async function enforceRate(req, res, action, identifier) {
       retryAfter: r.retryAfter,
       reset: r.reset,
     });
-    // 🆕 Notify owner on repeated rate-limit abuse (fires once per hour after 5 denials)
     try {
       await maybeNotifyRateLimitAbuse(action, identifier, r).catch(() => {});
     } catch {}
@@ -130,6 +129,36 @@ const INVITE_TTL_DAYS = 7;
 const INVITE_TTL_MS = INVITE_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 const BOT_UA_RE = /bot|crawler|spider|preview|curl|wget|python-requests|httpclient/i;
+
+// ── Fallback OG images ──
+const FALLBACK_OG = { project: null, profile: null };
+
+// ── Flier memory cache ──
+const FLIER_MEM_CACHE = new Map();
+const FLIER_MEM_TTL = 5 * 60 * 1000;
+const FLIER_MEM_MAX = 200;
+
+// ── OG URL validation ──
+const OG_IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif"];
+const OG_URL_MAX_LENGTH = 500;
+
+// ── Language cache TTL ──
+const LANGUAGES_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+// ── Thumbnail sizes ──
+const THUMBNAIL_SIZE = "512x512";
+const OG_SIZE = "1200x630";
+
+// ── Deterministic scene/palette pools ──
+const PROJECT_SCENES = [
+  "skyline", "ribbon", "terminal", "vinyl",
+  "shelf", "halftone", "grid_wave", "window_sill",
+];
+const PROFILE_SCENES = [
+  "ribbon", "halftone", "glass_cards",
+  "book_spine", "rooftop", "cassette",
+];
+const PALETTES = ["warm", "cool", "neon", "earth", "sunset", "mono"];
 
 function isBot(req) {
   const ua = req.headers["user-agent"] || "";
@@ -436,7 +465,7 @@ function rewriteCssUrls(css, pid, currentPath) {
 }
 
 // =========================================================================
-// OG IMAGE GENERATION — lazy, cached, signature-invalidated
+// OG IMAGE GENERATION — lazily-generated, cached, signature-invalidated
 // =========================================================================
 
 const FLIER_INTERNAL_URL = process.env.FLIER_INTERNAL_URL || `${BASE_URL}/api/flier`;
@@ -446,32 +475,192 @@ function ogSignature(...parts) {
   return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16);
 }
 
-async function callFlier(payload) {
+function isValidOgUrl(url) {
+  if (!url || typeof url !== "string") return false;
+  if (url.length > OG_URL_MAX_LENGTH) return false;
   try {
-    const res = await fetch(FLIER_INTERNAL_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": process.env.ADMIN_API_KEY || "",
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(25_000),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      log("og_image.flier_http", { status: res.status, body: text.slice(0, 200) });
-      return null;
-    }
-    const json = await res.json();
-    if (!json.success || !json.url) {
-      log("og_image.flier_no_url", { response: json });
-      return null;
-    }
-    return json.url;
-  } catch (err) {
-    log("og_image.flier_error", { message: err.message });
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    const ext = u.pathname.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+    if (ext && !OG_IMAGE_EXTENSIONS.includes(ext)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function flierCacheKey(payload) {
+  return crypto.createHash("sha256")
+    .update(JSON.stringify(payload))
+    .digest("hex")
+    .slice(0, 32);
+}
+
+function flierCacheGet(key) {
+  const c = FLIER_MEM_CACHE.get(key);
+  if (!c) return null;
+  if (Date.now() - c.at > FLIER_MEM_TTL) {
+    FLIER_MEM_CACHE.delete(key);
     return null;
   }
+  return c.url;
+}
+
+function flierCacheSet(key, url) {
+  if (FLIER_MEM_CACHE.size >= FLIER_MEM_MAX) {
+    const first = FLIER_MEM_CACHE.keys().next().value;
+    if (first) FLIER_MEM_CACHE.delete(first);
+  }
+  FLIER_MEM_CACHE.set(key, { url, at: Date.now() });
+}
+
+async function callFlier(payload, { retries = 1 } = {}) {
+  const cacheKey = flierCacheKey(payload);
+  const cached = flierCacheGet(cacheKey);
+  if (cached && isValidOgUrl(cached)) return cached;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(FLIER_INTERNAL_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": process.env.ADMIN_API_KEY || "",
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(25_000),
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        log("og_image.flier_http", {
+          status: res.status,
+          attempt,
+          body: text.slice(0, 200),
+        });
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 400 + attempt * 600));
+          continue;
+        }
+        return null;
+      }
+
+      const json = await res.json();
+
+      if (!json.success || !json.url) {
+        log("og_image.flier_no_url", { attempt, response: json });
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 400 + attempt * 600));
+          continue;
+        }
+        return null;
+      }
+
+      if (!isValidOgUrl(json.url)) {
+        log("og_image.flier_bad_url", { attempt, url: json.url });
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 400 + attempt * 600));
+          continue;
+        }
+        return null;
+      }
+
+      flierCacheSet(cacheKey, json.url);
+
+      if (json.imageReport) {
+        for (const [slot, report] of Object.entries(json.imageReport)) {
+          if (report && report.ok === false && report.code !== "NONE") {
+            log("og_image.image_failed", {
+              slot,
+              code: report.code,
+              message: report.message,
+            });
+          }
+        }
+      }
+
+      return json.url;
+    } catch (err) {
+      log("og_image.flier_error", { attempt, message: err.message });
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 400 + attempt * 600));
+        continue;
+      }
+    }
+  }
+  return null;
+}
+
+async function getFallbackOg(kind) {
+  if (FALLBACK_OG[kind]) return FALLBACK_OG[kind];
+
+  const cached = await db.ref(`og_defaults/${kind}/url`).once("value").catch(() => null);
+  if (cached?.exists() && isValidOgUrl(cached.val())) {
+    FALLBACK_OG[kind] = cached.val();
+    return cached.val();
+  }
+
+  const payload = {
+    mode: "upload",
+    type: "template",
+    template: "hero-short",
+    size: OG_SIZE,
+    data: {
+      text: {
+        kicker: "FOLIO",
+        headline: kind === "project" ? "A project on Folio" : "A creator on Folio",
+      },
+      style: {
+        variant: "dark",
+        scene: kind === "project" ? "skyline" : "ribbon",
+        scenePalette: "warm",
+        colors: { primary: "#F59E0B", accent: "#fbbf24" },
+      },
+    },
+    upload: { name: `og_default_${kind}` },
+  };
+
+  const url = await callFlier(payload, { retries: 2 });
+  if (!url) {
+    log("og_image.fallback_failed", { kind });
+    return null;
+  }
+
+  await db.ref(`og_defaults/${kind}`).set({
+    url,
+    generatedAt: Date.now(),
+  }).catch(() => {});
+
+  FALLBACK_OG[kind] = url;
+  return url;
+}
+
+function pickSceneForProject(project) {
+  const hash = crypto.createHash("sha256")
+    .update(String(project.name || project.pid || ""))
+    .digest();
+  return PROJECT_SCENES[hash[0] % PROJECT_SCENES.length];
+}
+
+function pickPaletteForProject(project) {
+  const hash = crypto.createHash("sha256")
+    .update(String(project.name || project.pid || ""))
+    .digest();
+  return PALETTES[hash[1] % PALETTES.length];
+}
+
+function pickSceneForProfile(user, username) {
+  const hash = crypto.createHash("sha256")
+    .update(String(user.profile?.displayName || username || ""))
+    .digest();
+  return PROFILE_SCENES[hash[0] % PROFILE_SCENES.length];
+}
+
+function pickPaletteForProfile(user, username) {
+  const hash = crypto.createHash("sha256")
+    .update(String(user.profile?.displayName || username || ""))
+    .digest();
+  return PALETTES[hash[1] % PALETTES.length];
 }
 
 function deriveProjectDescription(project, files) {
@@ -536,18 +725,23 @@ async function ensureProjectOgImage({ pid, project, files }) {
   );
 
   const cached = project.ogImage;
-  if (cached?.url && cached.signature === sig) return cached.url;
+  if (cached?.url && cached.signature === sig && isValidOgUrl(cached.url)) {
+    return cached.url;
+  }
 
   const template = pickProjectTemplate(project, derivedDesc, langs);
+  const scene = pickSceneForProject(project);
+  const palette = pickPaletteForProject(project);
+
   const payload = {
     mode: "upload",
     type: "template",
     template,
-    size: "1200x630",
+    size: OG_SIZE,
     data: {
       text: {
-        kicker:      langs.length ? langs.slice(0, 2).join(" · ") : "FOLIO",
-        headline:    project.name || "Untitled project",
+        kicker: langs.length ? langs.slice(0, 2).join(" · ") : "FOLIO",
+        headline: project.name || "Untitled project",
         subheadline: derivedDesc,
       },
       style: {
@@ -556,6 +750,9 @@ async function ensureProjectOgImage({ pid, project, files }) {
         colors: { primary: "#F59E0B", accent: "#fbbf24" },
         headlineCase: "auto",
         watermark: true,
+        scene,
+        scenePalette: palette,
+        sceneOpacity: 0.85,
       },
       images: project.iconUrl ? { primary: { url: project.iconUrl } } : {},
     },
@@ -563,12 +760,18 @@ async function ensureProjectOgImage({ pid, project, files }) {
   };
 
   const url = await callFlier(payload);
-  if (!url) return null;
+
+  if (!url) {
+    log("og_image.project_fallback", { pid, template, scene, palette });
+    return await getFallbackOg("project");
+  }
 
   await db.ref(`projects/${pid}/ogImage`).set({
     url,
     signature: sig,
     template,
+    scene,
+    palette,
     generatedAt: Date.now(),
   }).catch(() => {});
 
@@ -577,28 +780,36 @@ async function ensureProjectOgImage({ pid, project, files }) {
 
 async function ensureProfileOgImage({ user, username }) {
   const displayName = user.profile?.displayName || username;
-  const derivedBio  = (user.profile?.bio || "").trim().slice(0, 160);
+  const derivedBio = (user.profile?.bio || "").trim().slice(0, 160);
 
   const sig = ogSignature(displayName, derivedBio, user.profile?.avatarUrl);
+
   const cached = user.profile?.ogImage;
-  if (cached?.url && cached.signature === sig) return cached.url;
+  if (cached?.url && cached.signature === sig && isValidOgUrl(cached.url)) {
+    return cached.url;
+  }
 
   const template = pickProfileTemplate(user, derivedBio);
+  const scene = pickSceneForProfile(user, username);
+  const palette = pickPaletteForProfile(user, username);
+
   const payload = {
     mode: "upload",
     type: "template",
     template,
-    size: "1200x630",
+    size: OG_SIZE,
     data: {
       text: {
-        kicker:      `@${username}`,
-        headline:    displayName,
+        kicker: `@${username}`,
+        headline: displayName,
         subheadline: derivedBio,
       },
       style: {
         variant: "dark",
         align: template === "hero-short" ? "center" : "left",
         colors: { primary: "#F59E0B", accent: "#fbbf24" },
+        scene,
+        scenePalette: palette,
       },
       images: user.profile?.avatarUrl ? { primary: { url: user.profile.avatarUrl } } : {},
     },
@@ -606,12 +817,18 @@ async function ensureProfileOgImage({ user, username }) {
   };
 
   const url = await callFlier(payload);
-  if (!url) return null;
+
+  if (!url) {
+    log("og_image.profile_fallback", { username, template });
+    return await getFallbackOg("profile");
+  }
 
   await db.ref(`users/${user.uid}/profile/ogImage`).set({
     url,
     signature: sig,
     template,
+    scene,
+    palette,
     generatedAt: Date.now(),
   }).catch(() => {});
 
@@ -622,10 +839,15 @@ async function invalidateProjectOgImage(pid) {
   await db.ref(`projects/${pid}/ogImage`).remove().catch(() => {});
 }
 
+async function invalidateProfileOgImage(uid) {
+  await db.ref(`users/${uid}/profile/ogImage`).remove().catch(() => {});
+  await db.ref(`users/${uid}/profile/ogImageUrl`).remove().catch(() => {});
+}
+
 async function resolveProjectMeta(pid, project) {
   const meta = { ...(project.metaTags || {}) };
 
-  if (!meta.ogImage) {
+  if (!meta.ogImage || !isValidOgUrl(meta.ogImage)) {
     let files = null;
     if (!project.description?.trim()) {
       const snap = await db.ref(`files/${pid}`).once("value").catch(() => null);
@@ -649,114 +871,228 @@ async function resolveProjectMeta(pid, project) {
 }
 
 // =========================================================================
-// ZIP BUILDER (server-side, no external dep)
+// LANGUAGE HELPERS
 // =========================================================================
 
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let c = i;
-    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-    table[i] = c >>> 0;
-  }
-  return table;
-})();
+async function ensureProjectLanguages(pid, project, files) {
+  const cached = project.languages;
 
-function crc32(buf) {
-  let crc = 0xFFFFFFFF;
-  for (let i = 0; i < buf.length; i++) {
-    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buf[i]) & 0xFF];
+  if (
+    cached?.breakdown &&
+    Object.keys(cached.breakdown).length > 0 &&
+    cached.computedAt &&
+    Date.now() - cached.computedAt < LANGUAGES_CACHE_TTL
+  ) {
+    return cached;
   }
-  return (crc ^ 0xFFFFFFFF) >>> 0;
+
+  if (!files) {
+    const snap = await db.ref(`files/${pid}`).once("value").catch(() => null);
+    if (!snap?.exists()) {
+      return { breakdown: {}, totalLines: 0, computedAt: Date.now() };
+    }
+    files = {};
+    snap.forEach(c => {
+      const v = c.val();
+      if (v?.path) files[v.path] = v.content || "";
+    });
+  }
+
+  const { breakdown, totalLines, computedAt } = computeLanguageBreakdown(files, files);
+  const record = { breakdown, totalLines, computedAt };
+
+  await db.ref(`projects/${pid}/languages`).set(record).catch(() => {});
+
+  return record;
 }
 
-function dosDateTime(date = new Date()) {
-  const time = ((date.getHours() & 0x1F) << 11)
-    | ((date.getMinutes() & 0x3F) << 5)
-    | ((Math.floor(date.getSeconds() / 2)) & 0x1F);
-  const dt = (((date.getFullYear() - 1980) & 0x7F) << 9)
-    | (((date.getMonth() + 1) & 0x0F) << 5)
-    | (date.getDate() & 0x1F);
-  return { time, date: dt };
-}
+// =========================================================================
+// THUMBNAIL HELPERS
+// =========================================================================
 
-function buildZip(entries) {
-  const localHeaders = [];
-  const centralDir = [];
-  let offset = 0;
-  const { time, date } = dosDateTime();
-
-  for (const entry of entries) {
-    const nameBuf = Buffer.from(entry.name, "utf8");
-    const data = entry.data;
-    const crc = crc32(data);
-
-    const localHeader = Buffer.alloc(30 + nameBuf.length);
-    localHeader.writeUInt32LE(0x04034b50, 0);
-    localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(0x0800, 6);
-    localHeader.writeUInt16LE(0, 8);
-    localHeader.writeUInt16LE(time, 10);
-    localHeader.writeUInt16LE(date, 12);
-    localHeader.writeUInt32LE(crc, 14);
-    localHeader.writeUInt32LE(data.length, 18);
-    localHeader.writeUInt32LE(data.length, 22);
-    localHeader.writeUInt16LE(nameBuf.length, 26);
-    localHeader.writeUInt16LE(0, 28);
-    nameBuf.copy(localHeader, 30);
-
-    localHeaders.push(localHeader);
-    localHeaders.push(data);
-
-    const central = Buffer.alloc(46 + nameBuf.length);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(20, 4);
-    central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(0x0800, 8);
-    central.writeUInt16LE(0, 10);
-    central.writeUInt16LE(time, 12);
-    central.writeUInt16LE(date, 14);
-    central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(data.length, 20);
-    central.writeUInt32LE(data.length, 24);
-    central.writeUInt16LE(nameBuf.length, 28);
-    central.writeUInt16LE(0, 30);
-    central.writeUInt16LE(0, 32);
-    central.writeUInt16LE(0, 34);
-    central.writeUInt16LE(0, 36);
-    central.writeUInt32LE(0, 38);
-    central.writeUInt32LE(offset, 42);
-    nameBuf.copy(central, 46);
-
-    centralDir.push(central);
-    offset += localHeader.length + data.length;
+async function ensureProjectThumbnail(pid, files) {
+  if (!files) {
+    const snap = await db.ref(`files/${pid}`).once("value").catch(() => null);
+    if (!snap?.exists()) return null;
+    files = {};
+    snap.forEach(c => {
+      const v = c.val();
+      if (v?.path) files[v.path] = v.content || "";
+    });
   }
 
-  const centralStart = offset;
-  let centralSize = 0;
-  for (const c of centralDir) centralSize += c.length;
+  const indexHtml =
+    files["index.html"] ||
+    files["index.htm"] ||
+    Object.entries(files).find(([p]) => /\.html?$/i.test(p))?.[1];
 
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(0, 4);
-  end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(centralDir.length, 8);
-  end.writeUInt16LE(centralDir.length, 10);
-  end.writeUInt32LE(centralSize, 12);
-  end.writeUInt32LE(centralStart, 16);
-  end.writeUInt16LE(0, 20);
+  if (!indexHtml) return null;
 
-  return Buffer.concat([...localHeaders, ...centralDir, end]);
+  const sig = crypto.createHash("sha256")
+    .update(indexHtml.slice(0, 5000))
+    .digest("hex")
+    .slice(0, 16);
+
+  const existing = await db.ref(`projects/${pid}/thumbnail`).once("value").catch(() => null);
+  if (existing?.exists()) {
+    const t = existing.val();
+    if (t.signature === sig && isValidOgUrl(t.url)) return t.url;
+  }
+
+  const payload = {
+    mode: "upload",
+    type: "html",
+    html: indexHtml.slice(0, 200_000),
+    size: THUMBNAIL_SIZE,
+    upload: { name: `thumb_${pid}_${sig}` },
+  };
+
+  const url = await callFlier(payload);
+  if (!url) return null;
+
+  await db.ref(`projects/${pid}/thumbnail`).set({
+    url,
+    signature: sig,
+    generatedAt: Date.now(),
+  }).catch(() => {});
+
+  return url;
+}
+
+async function ensureDeploymentThumbnail(pid, deploymentId, files) {
+  if (!files) return null;
+
+  const indexHtml =
+    files["index.html"] ||
+    files["index.htm"] ||
+    Object.entries(files).find(([p]) => /\.html?$/i.test(p))?.[1];
+
+  if (!indexHtml) return null;
+
+  const sig = crypto.createHash("sha256")
+    .update(indexHtml.slice(0, 5000))
+    .digest("hex")
+    .slice(0, 16);
+
+  const existing = await db.ref(`projects/${pid}/deployments/${deploymentId}/thumbnail`).once("value").catch(() => null);
+  if (existing?.exists()) {
+    const t = existing.val();
+    if (t.signature === sig && isValidOgUrl(t.url)) return t.url;
+  }
+
+  const proj = await db.ref(`projects/${pid}/thumbnail`).once("value").catch(() => null);
+  if (proj?.exists() && proj.val().signature === sig && isValidOgUrl(proj.val().url)) {
+    const record = proj.val();
+    await db.ref(`projects/${pid}/deployments/${deploymentId}/thumbnail`).set(record).catch(() => {});
+    return record.url;
+  }
+
+  const payload = {
+    mode: "upload",
+    type: "html",
+    html: indexHtml.slice(0, 200_000),
+    size: THUMBNAIL_SIZE,
+    upload: { name: `thumb_${pid}_${deploymentId}` },
+  };
+
+  const url = await callFlier(payload);
+  if (!url) return null;
+
+  const record = { url, signature: sig, generatedAt: Date.now() };
+  await db.ref(`projects/${pid}/deployments/${deploymentId}/thumbnail`).set(record).catch(() => {});
+  return url;
+}
+
+// =========================================================================
+// AVATAR HELPERS
+// =========================================================================
+
+async function ensureUserAvatar(uid, displayName, username) {
+  if (!uid || !username) return null;
+
+  const existing = await db.ref(`users/${uid}/profile/avatarUrl`).once("value").catch(() => null);
+  if (existing?.exists() && existing.val()) return existing.val();
+
+  try {
+    const res = await fetch(`${BASE_URL}/api/flier?action=avatar/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, displayName }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    if (!json.success || !Array.isArray(json.variants) || json.variants.length === 0) {
+      return null;
+    }
+
+    const chosen = json.variants[0];
+    if (!chosen?.dataUrl) return null;
+
+    const upRes = await fetch(`${BASE_URL}/api/flier?action=avatar/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataUrl: chosen.dataUrl, username }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!upRes.ok) return null;
+
+    const upJson = await upRes.json();
+    if (!upJson.success || !upJson.url || !isValidOgUrl(upJson.url)) {
+      return null;
+    }
+
+    await db.ref(`users/${uid}/profile/avatarUrl`).set(upJson.url).catch(() => {});
+    return upJson.url;
+  } catch (err) {
+    log("host.avatar_generate_failed", { uid, username, message: err.message });
+    return null;
+  }
+}
+
+// =========================================================================
+// NOTIFICATION IMAGE HELPER
+// =========================================================================
+
+async function notificationImageUrl({
+  title,
+  subtitle = "",
+  template = "hero-short",
+  scene = "auto",
+  palette = "warm",
+  size = OG_SIZE,
+} = {}) {
+  if (!title) return null;
+
+  const payload = {
+    mode: "upload",
+    type: "template",
+    template,
+    size,
+    data: {
+      text: {
+        kicker: "FOLIO",
+        headline: title,
+        subheadline: subtitle,
+      },
+      style: {
+        variant: "dark",
+        scene,
+        scenePalette: palette,
+        colors: { primary: "#F59E0B", accent: "#fbbf24" },
+      },
+    },
+    upload: { name: `notif_${Date.now()}` },
+  };
+
+  return await callFlier(payload);
 }
 
 // =========================================================================
 // NOTIFICATIONS — helpers
 // =========================================================================
 
-/**
- * 🆕 Now awaited by callers — previously fire-and-forget was killed by Vercel
- * before the fetch completed, causing notifications to silently fail.
- */
 async function callNotify(type, uid, payload) {
   if (!uid) return;
   try {
@@ -774,16 +1110,11 @@ async function callNotify(type, uid, payload) {
   }
 }
 
-/**
- * 🆕 Fan-out to multiple recipients. Now `async` and awaits all sends so
- * the function doesn't get killed before they complete.
- */
 async function notifyMany(type, uids, payload) {
   const unique = [...new Set((uids || []).filter(Boolean))];
   await Promise.allSettled(unique.map(uid => callNotify(type, uid, payload)));
 }
 
-// Returns ownerId + every uid that has a role on this project.
 async function getProjectAudience(pid) {
   try {
     const snap = await db.ref(`projects/${pid}`).once("value");
@@ -798,7 +1129,6 @@ async function getProjectAudience(pid) {
   }
 }
 
-// Fire-once-per-window dedupe helper.
 async function shouldNotifyOnce(uid, key, ttlMs = 24 * 60 * 60 * 1000) {
   if (!uid) return false;
   try {
@@ -813,41 +1143,69 @@ async function shouldNotifyOnce(uid, key, ttlMs = 24 * 60 * 60 * 1000) {
   }
 }
 
-// Deploy failure notify helper.
 async function notifyDeployFailed(access, pid, projectName, reason, status) {
   if (!access?.uid || access.uid === "api") return;
+
+  let imageUrl = null;
+  try {
+    imageUrl = await notificationImageUrl({
+      title: "Deployment failed",
+      subtitle: reason,
+      template: "stat-hero",
+      scene: "grid_wave",
+      palette: "sunset",
+    });
+  } catch (err) {
+    log("host.notify_deploy_failed.image_error", { message: err.message });
+  }
+
   await callNotify("project", access.uid, {
     title: "Deployment failed",
     body: `Deploy to "${projectName || "project"}" failed: ${reason}`,
+    imageUrl,
     link: `${BASE_URL}/project.html?pid=${pid}`,
     extra: { pid, status, kind: "deploy_failed" },
   });
 }
 
-// Storage warning. Dedupes per project for `ttlMs` so 100 writes at 82% don't spam.
 async function notifyStorageWarning(pid, ownerId, finalSize, LIMIT, percentUsed, kind = "nearly_full") {
   if (!ownerId) return;
+
   const key = `storage_${kind}_${pid}`;
   const ttl = kind === "full" ? 6 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
   if (!(await shouldNotifyOnce(ownerId, key, ttl))) return;
+
+  let imageUrl = null;
+  try {
+    imageUrl = await notificationImageUrl({
+      title: kind === "full" ? "100% full" : `${percentUsed}% full`,
+      subtitle: `${Math.round(finalSize / 1024 / 1024)} MB of ${Math.round(LIMIT / 1024 / 1024)} MB used`,
+      template: "stat-hero",
+      scene: "grid_wave",
+      palette: kind === "full" ? "sunset" : "warm",
+    });
+  } catch (err) {
+    log("host.notify_storage.image_error", { message: err.message });
+  }
+
   await callNotify("storage", ownerId, {
     title: kind === "full" ? "Database limit reached" : "Database nearly full",
     body: kind === "full"
       ? `Writes to this project are being rejected — ${percentUsed}% full.`
       : `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of ${Math.round(LIMIT / 1024 / 1024)} MB).`,
+    imageUrl,
     link: `${BASE_URL}/project.html?pid=${pid}`,
     extra: { pid, size: finalSize, limit: LIMIT, percentUsed, kind },
   });
 }
 
-// Rate-limit abuse notifier — fires once per hour after 5 consecutive 429s.
 async function maybeNotifyRateLimitAbuse(action, identifier, rateResult) {
   const s = String(identifier || "");
   let pid = null;
   let directUid = null;
   if (s.startsWith("pid_")) pid = s.slice(4);
   else if (s.startsWith("uid_")) directUid = s.slice(4);
-  else return; // ignore ip_ keys — we don't know who owns them
+  else return;
 
   const windowKey = `rl_abuse_${action}_${sanitizeFirebasePath(s)}`;
   const ref = db.ref(`rate_limit_abuse/${windowKey}`);
@@ -982,16 +1340,21 @@ async function handleProjectsUpdate(req, res, reqId) {
     await invalidateProjectOgImage(pid);
   }
 
-  // 🆕 Notify other project members (not the actor) about significant metadata changes
   try {
     const audience = await getProjectAudience(pid);
     const others = audience.uids.filter(u => u !== access.uid);
     if (others.length) {
       const touched = Object.keys(patch).filter(k => ["name", "description", "iconUrl"].includes(k));
       if (touched.length) {
+        let imageUrl = null;
+        try {
+          const t = await db.ref(`projects/${pid}/ogImage/url`).once("value").catch(() => null);
+          if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
+        } catch {}
         await notifyMany("project", others, {
           title: "Project details updated",
           body: `Someone updated ${touched.join(", ")} on a project you collaborate on.`,
+          imageUrl,
           link: `${BASE_URL}/project.html?pid=${pid}`,
           extra: { pid, fields: touched },
         });
@@ -1013,7 +1376,6 @@ async function handleProjectsDelete(req, res, reqId) {
   const access = await requireProjectRole(req, res, pid, "owner");
   if (!access) return;
 
-  // 🆕 Snapshot the audience BEFORE deleting so we can notify them
   let projectName = "";
   let collaborators = [];
   try {
@@ -1025,11 +1387,16 @@ async function handleProjectsDelete(req, res, reqId) {
 
   try {
     await deleteProjectRecord(pid, access.uid);
-    // 🆕 Notify collaborators after successful delete
     if (collaborators.length) {
+      let imageUrl = null;
+      try {
+        const t = await db.ref(`projects/${pid}/ogImage/url`).once("value").catch(() => null);
+        if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
+      } catch {}
       await notifyMany("project", collaborators, {
         title: "Project deleted",
         body: `"${projectName || "A project you collaborated on"}" was deleted by its owner.`,
+        imageUrl,
         link: `${BASE_URL}/projects`,
         extra: { pid, deleted: true },
       });
@@ -1042,7 +1409,7 @@ async function handleProjectsDelete(req, res, reqId) {
 }
 
 // =========================================================================
-// DEPLOY (DB-only — no external host)
+// DEPLOY (DB-only)
 // =========================================================================
 
 async function handleDeploy(req, res, reqId) {
@@ -1072,7 +1439,6 @@ async function handleDeploy(req, res, reqId) {
     if (content.length > MAX_FILE_BYTES) { skipped.push(filePath); continue; }
     totalBytes += content.length;
     if (totalBytes > MAX_TOTAL_BYTES) {
-      // 🆕 Deploy failed — notify deployer + owner
       try { await notifyDeployFailed(access, pid, project.name, "payload exceeds size limit", 413); } catch {}
       if (project.ownerId && project.ownerId !== access.uid) {
         try { await notifyDeployFailed({ uid: project.ownerId }, pid, project.name, "payload exceeds size limit", 413); } catch {}
@@ -1098,10 +1464,26 @@ async function handleDeploy(req, res, reqId) {
   }
 
   if (filesWritten === 0) {
-    // 🆕 No files written — notify deployer
     try { await notifyDeployFailed(access, pid, project.name, "no valid files in payload", 400); } catch {}
     return res.status(400).json({ success: false, error: "No valid files to deploy" });
   }
+
+  // ── Language compute ──
+  try {
+    await ensureProjectLanguages(pid, project, files);
+  } catch (err) {
+    log("host.deploy.languages_failed", { pid, message: err.message });
+  }
+
+  // ── Project thumbnail ──
+  try {
+    await ensureProjectThumbnail(pid, files);
+  } catch (err) {
+    log("host.deploy.thumbnail_failed", { pid, message: err.message });
+  }
+
+  // ── Invalidate OG ──
+  await invalidateProjectOgImage(pid).catch(() => {});
 
   const publicUrl =
     `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=index.html`;
@@ -1144,14 +1526,27 @@ async function handleDeploy(req, res, reqId) {
     filesSkipped: skipped.length,
   });
 
-  // 🆕 Notify owner + all collaborators (excluding the deployer)
+  // ── Deployment thumbnail ──
+  try {
+    await ensureDeploymentThumbnail(pid, deploymentRecord.deploymentId, files);
+  } catch (err) {
+    log("host.deploy.deployment_thumb_failed", {
+      pid,
+      deploymentId: deploymentRecord.deploymentId,
+      message: err.message,
+    });
+  }
+
   try {
     const audience = await getProjectAudience(pid);
     const others = audience.uids.filter(u => u !== access.uid);
     if (others.length) {
+      const thumb = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
+      const imageUrl = thumb?.exists() && isValidOgUrl(thumb.val()) ? thumb.val() : null;
       await notifyMany("project", others, {
         title: "Deployment complete",
         body: `Project "${project.name}" is live.`,
+        imageUrl,
         link: `${BASE_URL}/project.html?pid=${pid}`,
         extra: { pid, deploymentId: deploymentRecord.deploymentId },
       });
@@ -1225,6 +1620,16 @@ async function handleDeploymentHistory(req, res, reqId) {
   deployments.sort((a, b) => (b.deployedAt || 0) - (a.deployedAt || 0));
 
   const slice = deployments.slice(offset, offset + limit);
+
+  await Promise.all(slice.map(async d => {
+    try {
+      const t = await db.ref(`projects/${pid}/deployments/${d.id}/thumbnail/url`).once("value");
+      if (t?.exists() && isValidOgUrl(t.val())) {
+        d.thumbnailUrl = t.val();
+      }
+    } catch {}
+  }));
+
   const currentSnap = await db.ref(`projects/${pid}/deployment/deploymentId`).once("value");
   const currentId = currentSnap.exists() ? currentSnap.val() : null;
 
@@ -1261,16 +1666,21 @@ async function handleDeploymentOffline(req, res, reqId) {
 
   await logProjectEvent(pid, access.uid, "deploy", "deployment.offline", {});
 
-  // 🆕 Notify owner + collaborators (not the actor)
   try {
     const audience = await getProjectAudience(pid);
     const others = audience.uids.filter(u => u !== access.uid);
     if (others.length) {
       const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
       const pname = nameSnap.exists() ? nameSnap.val() : "a project";
+      let imageUrl = null;
+      try {
+        const t = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
+        if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
+      } catch {}
       await notifyMany("project", others, {
         title: "Deployment taken offline",
         body: `"${pname}" was taken offline.`,
+        imageUrl,
         link: `${BASE_URL}/project.html?pid=${pid}`,
         extra: { pid, kind: "offline" },
       });
@@ -1298,7 +1708,6 @@ async function handleDeploymentDelete(req, res, reqId) {
 
   await logProjectEvent(pid, access.uid, "deploy", "deployment.deleted", { deploymentId });
 
-  // 🆕 Notify collaborators (not the actor)
   try {
     const audience = await getProjectAudience(pid);
     const others = audience.uids.filter(u => u !== access.uid);
@@ -1319,10 +1728,6 @@ async function handleDeploymentDelete(req, res, reqId) {
 // SERVE (static files out of DB)
 // =========================================================================
 
-/**
- * 🆕 Fixed: replaced all `.type("text")` (Express-only method) with
- * `res.setHeader("Content-Type", ...)` — Vercel's Node runtime has no `.type()`.
- */
 async function handleServe(req, res, reqId) {
   const sendText = (status, body) => {
     res.status(status).setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -1348,6 +1753,14 @@ async function handleServe(req, res, reqId) {
 
   if (project.deployment?.state === "OFFLINE") {
     return sendText(410, "This project is offline");
+  }
+
+  if (!project.languages?.breakdown || Object.keys(project.languages.breakdown).length === 0) {
+    try {
+      project.languages = await ensureProjectLanguages(pid, project, null);
+    } catch (err) {
+      log("host.serve.languages_failed", { pid, message: err.message });
+    }
   }
 
   const isPublic =
@@ -1407,7 +1820,7 @@ async function handleServe(req, res, reqId) {
 }
 
 // =========================================================================
-// VERSIONS CLEAR
+// VERSIONS CLEAR / CACHE CLEAR
 // =========================================================================
 
 async function handleVersionsClear(req, res, reqId) {
@@ -1430,10 +1843,6 @@ async function handleVersionsClear(req, res, reqId) {
   return res.status(200).json({ success: true, cleared });
 }
 
-// =========================================================================
-// CACHE CLEAR
-// =========================================================================
-
 async function handleCacheClear(req, res, reqId) {
   const { pid } = req.body || {};
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
@@ -1449,6 +1858,103 @@ async function handleCacheClear(req, res, reqId) {
 // =========================================================================
 // PROJECT EXPORT (folio/zip)
 // =========================================================================
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buf) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) {
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buf[i]) & 0xFF];
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function dosDateTime(date = new Date()) {
+  const time = ((date.getHours() & 0x1F) << 11)
+    | ((date.getMinutes() & 0x3F) << 5)
+    | ((Math.floor(date.getSeconds() / 2)) & 0x1F);
+  const dt = (((date.getFullYear() - 1980) & 0x7F) << 9)
+    | (((date.getMonth() + 1) & 0x0F) << 5)
+    | (date.getDate() & 0x1F);
+  return { time, date: dt };
+}
+
+function buildZip(entries) {
+  const localHeaders = [];
+  const centralDir = [];
+  let offset = 0;
+  const { time, date } = dosDateTime();
+
+  for (const entry of entries) {
+    const nameBuf = Buffer.from(entry.name, "utf8");
+    const data = entry.data;
+    const crc = crc32(data);
+
+    const localHeader = Buffer.alloc(30 + nameBuf.length);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x0800, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(time, 10);
+    localHeader.writeUInt16LE(date, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(data.length, 18);
+    localHeader.writeUInt32LE(data.length, 22);
+    localHeader.writeUInt16LE(nameBuf.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    nameBuf.copy(localHeader, 30);
+
+    localHeaders.push(localHeader);
+    localHeaders.push(data);
+
+    const central = Buffer.alloc(46 + nameBuf.length);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt16LE(time, 12);
+    central.writeUInt16LE(date, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    nameBuf.copy(central, 46);
+
+    centralDir.push(central);
+    offset += localHeader.length + data.length;
+  }
+
+  const centralStart = offset;
+  let centralSize = 0;
+  for (const c of centralDir) centralSize += c.length;
+
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(centralDir.length, 8);
+  end.writeUInt16LE(centralDir.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(centralStart, 16);
+  end.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localHeaders, ...centralDir, end]);
+}
 
 async function handleProjectExport(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
@@ -1594,15 +2100,20 @@ async function handleProjectExport(req, res, reqId) {
     publicOnly,
   });
 
-  // 🆕 If a non-owner pulled a copy of a public project, tell the owner.
   try {
     if (publicOnly && access.uid && project.ownerId && project.ownerId !== access.uid) {
       const exporter = await getUser(access.uid);
       const who = exporter?.profile?.username ? `@${exporter.profile.username}` : "a user";
       if (await shouldNotifyOnce(project.ownerId, `export_${pid}_${access.uid}`, 24 * 60 * 60 * 1000)) {
+        let imageUrl = null;
+        try {
+          const t = await db.ref(`projects/${pid}/ogImage/url`).once("value").catch(() => null);
+          if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
+        } catch {}
         await callNotify("project", project.ownerId, {
           title: "Someone downloaded your project",
           body: `${who} exported a copy of "${safeProject.name || "your project"}".`,
+          imageUrl,
           link: `${BASE_URL}/project.html?pid=${pid}`,
           extra: { pid, exporterUid: access.uid, format },
         });
@@ -1629,6 +2140,7 @@ async function handleProjectSyncBack(req, res, reqId) {
   if (!projSnap.exists()) {
     return res.status(404).json({ success: false, error: "Project not found" });
   }
+  const project = projSnap.val();
 
   const result = {
     filesWritten: 0,
@@ -1687,19 +2199,33 @@ async function handleProjectSyncBack(req, res, reqId) {
     manifestAt: manifest?.exportedAt || null,
   });
 
-  if (result.filesWritten > 0 && !projSnap.val().description?.trim()) {
-    await invalidateProjectOgImage(pid);
+  if (result.filesWritten > 0) {
+    try {
+      await ensureProjectLanguages(pid, project, files);
+    } catch (err) {
+      log("host.sync_back.languages_failed", { pid, message: err.message });
+    }
+
+    try {
+      await ensureProjectThumbnail(pid, files);
+    } catch (err) {
+      log("host.sync_back.thumbnail_failed", { pid, message: err.message });
+    }
+
+    await invalidateProjectOgImage(pid).catch(() => {});
   }
 
-  // 🆕 Notify collaborators when significant content was synced back
   try {
     if (result.filesWritten > 0 || result.dbWritten || result.schemaWritten) {
       const audience = await getProjectAudience(pid);
       const others = audience.uids.filter(u => u !== access.uid);
       if (others.length) {
+        const thumb = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
+        const imageUrl = thumb?.exists() && isValidOgUrl(thumb.val()) ? thumb.val() : null;
         await notifyMany("project", others, {
           title: "Project updated from sync",
           body: `${result.filesWritten} file(s) synced back${result.dbWritten ? ", DB imported" : ""}.`,
+          imageUrl,
           link: `${BASE_URL}/project.html?pid=${pid}`,
           extra: { pid, ...result },
         });
@@ -1711,7 +2237,7 @@ async function handleProjectSyncBack(req, res, reqId) {
 }
 
 // =========================================================================
-// FILE LIST + FILE GET (public code viewer support)
+// FILE LIST + FILE GET
 // =========================================================================
 
 async function handleFileList(req, res, reqId) {
@@ -1762,12 +2288,21 @@ async function handleFileList(req, res, reqId) {
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
 
+  let thumbnailUrl = null;
+  try {
+    const thumbSnap = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
+    if (thumbSnap?.exists() && isValidOgUrl(thumbSnap.val())) {
+      thumbnailUrl = thumbSnap.val();
+    }
+  } catch {}
+
   return res.status(200).json({
     success: true,
     files,
     total: files.length,
     isCodePublic,
     isEditor: role === "owner" || role === "editor",
+    thumbnailUrl,
   });
 }
 
@@ -1906,15 +2441,20 @@ async function handleProjectCopy(req, res, reqId) {
     fullCopy: canFullCopy,
   });
 
-  // 🆕 Notify source owner when someone else forks their public project.
   try {
     if (source.ownerId && source.ownerId !== user.uid) {
       if (await shouldNotifyOnce(source.ownerId, `fork_${sourcePid}_${user.uid}`, 24 * 60 * 60 * 1000)) {
         const forker = await getUser(user.uid);
         const who = forker?.profile?.username ? `@${forker.profile.username}` : "someone";
+        let imageUrl = null;
+        try {
+          const t = await db.ref(`projects/${sourcePid}/ogImage/url`).once("value").catch(() => null);
+          if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
+        } catch {}
         await callNotify("project", source.ownerId, {
           title: "Someone copied your project",
           body: `${who} saved a copy of "${source.name || "your project"}".`,
+          imageUrl,
           link: `${BASE_URL}/${forker?.profile?.username || ""}/${newProject.slug || ""}`,
           extra: { sourcePid, newPid: newProject.pid, forkerUid: user.uid },
         });
@@ -1949,7 +2489,6 @@ async function handleDbSet(req, res, reqId) {
   const { pid, key, value, data, mode } = req.body || {};
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
 
-  // ── Rate limit ─────────────────────────────────────────────
   const rl = await checkRateLimit(`pid_${pid}`, "dbSet");
   setRateHeaders(res, rl);
   if (!rl.allowed) {
@@ -1963,18 +2502,14 @@ async function handleDbSet(req, res, reqId) {
   }
   const rateLimitMeta = { limit: rl.limit, remaining: rl.remaining, reset: rl.reset };
 
-  // ── Auth (project key or role) ─────────────────────────────
   const access = await checkProjectKeyOrRole(req, res, pid, "editor");
   if (!access) return;
 
-  const LIMIT = 15 * 1024 * 1024; // 15 MB hard cap
+  const LIMIT = 15 * 1024 * 1024;
   const dbRef = db.ref(`projectData/${pid}`);
   const today = dayString();
   const uidForLog = access.uid === "api" ? null : access.uid;
 
-  // ═══════════════════════════════════════════════════════════
-  // Branch 1 — PATH WRITE (key + value)
-  // ═══════════════════════════════════════════════════════════
   if (key !== undefined) {
     if (data !== undefined) {
       return res.status(400).json({
@@ -2033,7 +2568,6 @@ async function handleDbSet(req, res, reqId) {
       });
     }
 
-    // ── Post-write size check ──
     let finalSize = 0;
     try {
       const sizeSnap = await dbRef.once("value");
@@ -2041,7 +2575,6 @@ async function handleDbSet(req, res, reqId) {
     } catch {}
 
     if (finalSize > LIMIT) {
-      // 🆕 DB full — notify owner (deduped)
       try {
         const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
         if (ownerSnap.exists()) {
@@ -2089,7 +2622,6 @@ async function handleDbSet(req, res, reqId) {
       viaApiKey: access.uid === "api",
     });
 
-    // 🆕 Storage warning at 80% (deduped 12h)
     try {
       if (finalSize > LIMIT * 0.8) {
         const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
@@ -2109,9 +2641,6 @@ async function handleDbSet(req, res, reqId) {
     });
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // Branch 2 — DATA MERGE (data + mode:"merge")
-  // ═══════════════════════════════════════════════════════════
   if (data !== undefined && mode === "merge") {
     const serialized = JSON.stringify(data ?? null);
     if (serialized.length > LIMIT) {
@@ -2202,7 +2731,6 @@ async function handleDbSet(req, res, reqId) {
       viaApiKey: access.uid === "api",
     });
 
-    // 🆕 Storage warning at 80% (deduped)
     try {
       if (finalSize > LIMIT * 0.8) {
         const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
@@ -2222,9 +2750,6 @@ async function handleDbSet(req, res, reqId) {
     });
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // Branch 3 — DATA REPLACE (data, no mode)
-  // ═══════════════════════════════════════════════════════════
   if (data !== undefined) {
     const serialized = JSON.stringify(data ?? null);
     if (serialized.length > LIMIT) {
@@ -2286,7 +2811,6 @@ async function handleDbSet(req, res, reqId) {
       viaApiKey: access.uid === "api",
     });
 
-    // 🆕 Storage warning at 80% — this branch was previously missing it
     try {
       if (finalSize > LIMIT * 0.8) {
         const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
@@ -2466,14 +2990,26 @@ async function handleApiKeyGenerate(req, res, reqId) {
   });
   await logProjectEvent(pid, access.uid, "project", "apikey.generated", {});
 
-  // 🆕 Notify the owner + collaborators (security event)
   try {
     const audience = await getProjectAudience(pid);
     const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
     const pname = nameSnap.exists() ? nameSnap.val() : "your project";
+    let imageUrl = null;
+    try {
+      imageUrl = await notificationImageUrl({
+        title: "New API key",
+        subtitle: `for "${pname}"`,
+        template: "hero-short",
+        scene: "halftone",
+        palette: "mono",
+      });
+    } catch (err) {
+      log("host.apikey_generate.image_error", { message: err.message });
+    }
     await notifyMany("project", audience.uids, {
       title: "New API key generated",
       body: `A new API key was created for "${pname}". If this wasn't you, revoke it now.`,
+      imageUrl,
       link: `${BASE_URL}/project.html?pid=${pid}`,
       extra: { pid, security: true },
     });
@@ -2515,7 +3051,6 @@ async function handleVisibility(req, res, reqId) {
   await db.ref(`projects/${pid}`).update(patch);
   await logProjectEvent(pid, access.uid, "project", "visibility.updated", { changes });
 
-  // 🆕 Only significant flips (profile / liveSite) are worth notifying the team
   try {
     const significant = ["profile", "liveSite"].filter(a => changes[a]);
     if (significant.length) {
@@ -2523,9 +3058,15 @@ async function handleVisibility(req, res, reqId) {
       const others = audience.uids.filter(u => u !== access.uid);
       if (others.length) {
         const wentPublic = significant.some(a => changes[a] === "public");
+        let imageUrl = null;
+        try {
+          const t = await db.ref(`projects/${pid}/ogImage/url`).once("value").catch(() => null);
+          if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
+        } catch {}
         await notifyMany("project", others, {
           title: wentPublic ? "Project went public" : "Project made private",
           body: `${significant.join(", ")} visibility changed.`,
+          imageUrl,
           link: `${BASE_URL}/project.html?pid=${pid}`,
           extra: { pid, changes },
         });
@@ -2602,13 +3143,27 @@ async function handleInviteCreate(req, res, reqId) {
     createdAt: now,
   });
 
-  // Notify invitee
   try {
     const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
     const pname = nameSnap.exists() ? nameSnap.val() : "a project";
+
+    let imageUrl = null;
+    try {
+      imageUrl = await notificationImageUrl({
+        title: `Invited to "${pname}"`,
+        subtitle: `Join as ${role}`,
+        template: "hero-short",
+        scene: "ribbon",
+        palette: "warm",
+      });
+    } catch (err) {
+      log("host.invite_create.image_error", { message: err.message });
+    }
+
     await callNotify("invite", invited.uid, {
       title: "Project invitation",
       body: `You've been invited to join "${pname}" as ${role}.`,
+      imageUrl,
       link: `${BASE_URL}/invite.html?token=${token}`,
       extra: { token, pid, role },
     });
@@ -2697,7 +3252,6 @@ async function handleInviteAccept(req, res, reqId) {
   await db.ref(`invites/${token}`).update({ used: true, usedAt: Date.now() });
   await logProjectEvent(invite.pid, user.uid, "invite", "invite.accepted", { role: invite.role });
 
-  // 🆕 Notify inviter that their invite was accepted
   try {
     if (invite.invitedBy && invite.invitedBy !== user.uid) {
       const [nameSnap, acceptorUser] = await Promise.all([
@@ -2706,9 +3260,15 @@ async function handleInviteAccept(req, res, reqId) {
       ]);
       const pname = nameSnap.exists() ? nameSnap.val() : "your project";
       const who = acceptorUser?.profile?.username ? `@${acceptorUser.profile.username}` : "Someone";
+      let imageUrl = null;
+      try {
+        const t = await db.ref(`projects/${invite.pid}/thumbnail/url`).once("value").catch(() => null);
+        if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
+      } catch {}
       await callNotify("invite", invite.invitedBy, {
         title: "Invitation accepted",
         body: `${who} joined "${pname}" as ${invite.role}.`,
+        imageUrl,
         link: `${BASE_URL}/project.html?pid=${invite.pid}`,
         extra: { pid: invite.pid, uid: user.uid, role: invite.role },
       });
@@ -2733,7 +3293,6 @@ async function handleInviteCancel(req, res, reqId) {
   await db.ref(`invites/${token}`).remove();
   await logProjectEvent(invite.pid, access.uid, "invite", "invite.cancelled", {});
 
-  // 🆕 Notify the invitee that their invite is gone
   try {
     if (invite.invitedUid) {
       const nameSnap = await db.ref(`projects/${invite.pid}/name`).once("value");
@@ -2764,7 +3323,6 @@ async function handleCollaboratorRemove(req, res, reqId) {
   await db.ref(`users/${targetUid}/projectIds/${pid}`).remove();
   await logProjectEvent(pid, access.uid, "invite", "collaborator.removed", { targetUid });
 
-  // 🆕 Tell the removed collaborator
   try {
     const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
     const pname = nameSnap.exists() ? nameSnap.val() : "a project";
@@ -2875,6 +3433,23 @@ async function handleShare(req, res, reqId) {
   }
 
   const { pid, project, owner } = found;
+
+  if (!project.languages?.breakdown || Object.keys(project.languages.breakdown).length === 0) {
+    try {
+      project.languages = await ensureProjectLanguages(pid, project, null);
+    } catch (err) {
+      log("host.share.languages_failed", { pid, message: err.message });
+    }
+  }
+
+  let projectThumbnailUrl = null;
+  try {
+    const t = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
+    if (t?.exists() && isValidOgUrl(t.val())) {
+      projectThumbnailUrl = t.val();
+    }
+  } catch {}
+
   const isProfilePublic = project.visibility?.profile === "public";
 
   let viewerUid = null;
@@ -2910,7 +3485,7 @@ async function handleShare(req, res, reqId) {
   const liveSitePublic = project.visibility?.liveSite === "public";
   const codePublic = project.visibility?.code === "public";
   const dbPublic = project.visibility?.db === "public";
-  const languagesPublic = project.visibility?.languages === "public";
+  const languagesPublic = project.visibility?.languages !== "private";
 
   const liveUrl = liveSitePublic && project.deployment?.url ? project.deployment.url : null;
   const canCopy = isProfilePublic && isSignedIn && !viewerIsOwner;
@@ -2970,6 +3545,10 @@ async function handleShare(req, res, reqId) {
     languages: languagesPublic ? (project.languages?.breakdown || {}) : {},
     updatedAt: project.updatedAt || null,
     createdAt: project.createdAt || null,
+    thumbnailUrl: projectThumbnailUrl || null,
+    ogImageUrl: ogImageUrl || null,
+    scene: project.ogImage?.scene || null,
+    palette: project.ogImage?.palette || null,
     editorUrl: viewerIsOwner ? `${BASE_URL}/project.html?pid=${pid}` : null,
   };
   const projectScript = `<script>window.__PROJECT__ = ${JSON.stringify(payload).replace(/</g, "\\u003c")};</script>`;
@@ -2980,6 +3559,19 @@ async function handleShare(req, res, reqId) {
   const twitterImageMeta = ogImageUrl
     ? `<meta name="twitter:image" content="${escapeHtml(ogImageUrl)}">`
     : "";
+
+  const projectPreviewHtml = projectThumbnailUrl ? `
+    <div class="project-preview">
+      <img src="${escapeHtml(projectThumbnailUrl)}" alt="${escapeHtml(project.name || "")} preview" loading="lazy" />
+    </div>
+  ` : "";
+
+  const ogPreviewHtml = (viewerIsOwner && ogImageUrl) ? `
+    <aside class="og-preview">
+      <span class="og-preview-label">Share preview</span>
+      <img src="${escapeHtml(ogImageUrl)}" alt="OG preview" loading="lazy" />
+    </aside>
+  ` : "";
 
   const tmpl = readTemplate("project-template.html");
   const html = applyTemplate(tmpl, {
@@ -3013,6 +3605,12 @@ async function handleShare(req, res, reqId) {
     CANONICAL_URL: `${BASE_URL}/${owner.profile?.username || username}/${project.slug || ""}`,
     SHARE_URL: `${BASE_URL}/${owner.profile?.username || username}/${project.slug || ""}`,
     INJECT_PROJECT_SCRIPT: { raw: projectScript },
+    PROJECT_PREVIEW_HTML: { raw: projectPreviewHtml },
+    OG_PREVIEW_HTML: { raw: ogPreviewHtml },
+    PROJECT_THUMBNAIL_URL: projectThumbnailUrl || "",
+    PROJECT_OG_IMAGE_URL: ogImageUrl || "",
+    PROJECT_SCENE: project.ogImage?.scene || "",
+    PROJECT_PALETTE: project.ogImage?.palette || "",
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -3034,8 +3632,6 @@ async function handleProfilePublic(req, res, reqId) {
     });
   }
 
-  // 🆕 Reject invalid usernames (contains dot, special chars, etc.)
-  // Prevents crash from /icon.jpg being treated as a username.
   if (!/^[a-z0-9_-]{1,30}$/.test(username)) {
     return sendHtmlPage(res, {
       title: "Invalid username",
@@ -3062,6 +3658,23 @@ async function handleProfilePublic(req, res, reqId) {
     });
   }
 
+  if (!user.profile?.avatarUrl) {
+    (async () => {
+      try {
+        const generated = await ensureUserAvatar(
+          user.uid,
+          user.profile?.displayName,
+          username,
+        );
+        if (generated) {
+          log("host.profile.avatar_generated_bg", { uid: user.uid, username });
+        }
+      } catch (err) {
+        log("host.profile.avatar_bg_failed", { uid: user.uid, message: err.message });
+      }
+    })();
+  }
+
   let viewerUid = null;
   let viewerUsername = null;
   const authHeader = req.headers.authorization || "";
@@ -3086,13 +3699,21 @@ async function handleProfilePublic(req, res, reqId) {
     if (!snap.exists()) continue;
     const p = snap.val();
     if (!isOwner && p.visibility?.profile !== "public") continue;
+
+    let thumbnailUrl = null;
+    try {
+      const t = await db.ref(`projects/${pid}/thumbnail/url`).once("value");
+      if (t?.exists() && isValidOgUrl(t.val())) thumbnailUrl = t.val();
+    } catch {}
+
     projectList.push({
       pid,
       slug: p.slug || "",
       name: p.name || "Untitled",
       description: p.description || "",
       iconUrl: p.iconUrl || null,
-      languages: p.visibility?.languages === "public" ? (p.languages?.breakdown || {}) : {},
+      thumbnailUrl,
+      languages: p.visibility?.languages !== "private" ? (p.languages?.breakdown || {}) : {},
       updatedAt: p.updatedAt || null,
       url: p.slug ? `${BASE_URL}/${username}/${p.slug}` : `${BASE_URL}/${username}`,
     });
@@ -3104,12 +3725,15 @@ async function handleProfilePublic(req, res, reqId) {
         const iconHtml = pr.iconUrl
           ? `<img src="${escapeHtml(pr.iconUrl)}" alt="" style="width:44px;height:44px;border-radius:11px;object-fit:cover;display:block;">`
           : `<span style="display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:11px;background:linear-gradient(135deg,#F59E0B,#f97316);color:#0a0c10;font-weight:800;font-size:15px;">${escapeHtml(initialsOf(pr.name))}</span>`;
+        const thumbHtml = pr.thumbnailUrl
+          ? `<div class="project-card-thumb" style="background-image:url('${escapeHtml(pr.thumbnailUrl)}')"></div>`
+          : `<div class="project-icon">${iconHtml}</div>`;
         const langBadges = Object.entries(pr.languages).slice(0, 3).map(([n, v]) =>
           `<span class="lang-badge"><span class="lang-dot"></span>${escapeHtml(n)} ${v}%</span>`
         ).join("");
         return `
           <a class="project-card" href="${escapeHtml(pr.url)}">
-            <div class="project-icon">${iconHtml}</div>
+            ${thumbHtml}
             <div class="project-info">
               <h3 class="project-name">${escapeHtml(pr.name)}</h3>
               ${pr.description ? `<p class="project-desc">${escapeHtml(pr.description)}</p>` : ""}
@@ -3156,10 +3780,7 @@ async function handleProfilePublic(req, res, reqId) {
        </div>`
     : "";
 
-  let profileOgImage = user.profile?.ogImageUrl || null;
-  if (!profileOgImage) {
-    profileOgImage = await ensureProfileOgImage({ user, username });
-  }
+  const profileOgImage = await ensureProfileOgImage({ user, username });
   const ogImageMeta = profileOgImage
     ? `<meta property="og:image" content="${escapeHtml(profileOgImage)}">`
     : "";
@@ -3177,8 +3798,15 @@ async function handleProfilePublic(req, res, reqId) {
     viewerUsername,
     projectCount: projectList.length,
     joinedAt: user.createdAt || null,
+    ogImageUrl: profileOgImage || null,
+    scene: user.profile?.ogImage?.scene || null,
+    palette: user.profile?.ogImage?.palette || null,
   };
   const profileScript = `<script>window.__PROFILE__ = ${JSON.stringify(profileJson).replace(/</g, "\\u003c")};</script>`;
+
+  const avatarPreloadHtml = user.profile?.avatarUrl
+    ? `<link rel="preload" as="image" href="${escapeHtml(user.profile.avatarUrl)}">`
+    : "";
 
   const tmpl = readTemplate("profile-template.html");
   const html = applyTemplate(tmpl, {
@@ -3202,6 +3830,11 @@ async function handleProfilePublic(req, res, reqId) {
     CANONICAL_URL: `${BASE_URL}/${username}`,
     PROFILE_URL: `${BASE_URL}/${username}`,
     INJECT_PROFILE_SCRIPT: { raw: profileScript },
+    PROFILE_AVATAR_PRELOAD_HTML: { raw: avatarPreloadHtml },
+    PROFILE_AVATAR_URL: user.profile?.avatarUrl || "",
+    PROFILE_OG_IMAGE_URL: profileOgImage || "",
+    PROFILE_SCENE: user.profile?.ogImage?.scene || "",
+    PROFILE_PALETTE: user.profile?.ogImage?.palette || "",
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -3312,45 +3945,36 @@ export default async function handler(req, res) {
   const pidForLog = req.query?.pid || req.body?.pid || null;
 
   try {
-    // Projects CRUD
     if (method === "GET"  && action === "projects/list")        return await handleProjectsList(req, res, reqId);
     if (method === "GET"  && action === "projects/get")         return await handleProjectsGet(req, res, reqId);
     if (method === "POST" && action === "projects/create")      return await handleProjectsCreate(req, res, reqId);
     if (method === "POST" && action === "projects/update")      return await handleProjectsUpdate(req, res, reqId);
     if (method === "POST" && action === "projects/delete")      return await handleProjectsDelete(req, res, reqId);
 
-    // Deploy
     if (method === "POST" && action === "deploy")               return await handleDeploy(req, res, reqId);
     if (method === "POST" && action === "redeploy")             return await handleRedeploy(req, res, reqId);
     if (method === "GET"  && action === "status")               return await handleStatus(req, res, reqId);
 
-    // Deployment history + lifecycle
     if (method === "GET"  && action === "deployment/history")   return await handleDeploymentHistory(req, res, reqId);
     if (method === "POST" && action === "deployment/offline")   return await handleDeploymentOffline(req, res, reqId);
     if (method === "POST" && action === "deployment/delete")    return await handleDeploymentDelete(req, res, reqId);
 
-    // Versions / cache
     if (method === "POST" && action === "versions/clear")       return await handleVersionsClear(req, res, reqId);
     if (method === "POST" && action === "cache/clear")          return await handleCacheClear(req, res, reqId);
 
-    // Project export / sync / copy
     if (method === "GET"  && action === "project/export")       return await handleProjectExport(req, res, reqId);
     if (method === "POST" && action === "project/sync-back")    return await handleProjectSyncBack(req, res, reqId);
     if (method === "POST" && action === "project/copy")         return await handleProjectCopy(req, res, reqId);
 
-    // File list / file get (public code viewer)
     if (method === "GET"  && action === "file/list")            return await handleFileList(req, res, reqId);
     if (method === "GET"  && action === "file/get")             return await handleFileGet(req, res, reqId);
 
-    // Serve from DB (replaces Vercel deployment)
     if (method === "GET"  && action === "serve")                return await handleServe(req, res, reqId);
 
-    // JSON DB
     if (method === "POST" && action === "db/set")               return await handleDbSet(req, res, reqId);
     if (method === "GET"  && action === "db/get")               return await handleDbGet(req, res, reqId);
     if (method === "POST" && action === "db/schema")            return await handleDbSchema(req, res, reqId);
 
-    // Sharing / permissions
     if (method === "POST" && action === "apikey/generate")      return await handleApiKeyGenerate(req, res, reqId);
     if (method === "POST" && action === "visibility")           return await handleVisibility(req, res, reqId);
     if (method === "POST" && action === "file-visibility")      return await handleFileVisibility(req, res, reqId);
@@ -3361,12 +3985,10 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "collaborator/remove")  return await handleCollaboratorRemove(req, res, reqId);
     if (method === "POST" && action === "metatags/save")        return await handleMetatagsSave(req, res, reqId);
 
-    // Public renders
     if (method === "GET"  && action === "share")                return await handleShare(req, res, reqId);
     if (method === "GET"  && action === "profile")              return await handleProfilePublic(req, res, reqId);
     if (method === "POST" && action === "view")                 return await handleView(req, res, reqId);
 
-    // Logs
     if (method === "GET"  && action === "logs")                 return await handleLogs(req, res, reqId);
 
     return res.status(404).json({ success: false, error: `Unknown action: ${action || "(none)"}` });
@@ -3384,3 +4006,16 @@ export default async function handler(req, res) {
 }
 
 export const config = { runtime: "nodejs" };
+
+// =========================================================================
+// MODULE EXPORTS (for cross-module use — e.g. auth.js profile edits)
+// =========================================================================
+
+export {
+  invalidateProfileOgImage,
+  ensureProjectOgImage,
+  ensureProfileOgImage,
+  ensureProjectLanguages,
+  ensureProjectThumbnail,
+  notificationImageUrl,
+};
