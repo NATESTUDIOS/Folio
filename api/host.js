@@ -3405,6 +3405,7 @@ async function handleShare(req, res, reqId) {
   const username = String(req.query?.username || "").trim().toLowerCase();
   const pidParam = String(req.query?.pid || "").trim();
   const slug = String(req.query?.project || "").trim();
+  const fileParam = String(req.query?.file || "").trim();
 
   let found = null;
   if (pidParam) {
@@ -3541,7 +3542,10 @@ async function handleShare(req, res, reqId) {
     isOwnerViewer: viewerIsOwner,
     isSignedIn,
     canCopy,
+    ownerUid: project.ownerId || null,
     viewerUsername,
+    fileParam: fileParam || null,
+    canonicalPath: `/${owner.profile?.username || username}/${project.slug || ""}`,
     languages: languagesPublic ? (project.languages?.breakdown || {}) : {},
     updatedAt: project.updatedAt || null,
     createdAt: project.createdAt || null,
@@ -3549,6 +3553,9 @@ async function handleShare(req, res, reqId) {
     ogImageUrl: ogImageUrl || null,
     scene: project.ogImage?.scene || null,
     palette: project.ogImage?.palette || null,
+    ogImageTemplate: project.ogImage?.template || null,
+    ogImageGeneratedAt: project.ogImage?.generatedAt || null,
+    baseUrl: BASE_URL,
     editorUrl: viewerIsOwner ? `${BASE_URL}/project.html?pid=${pid}` : null,
   };
   const projectScript = `<script>window.__PROJECT__ = ${JSON.stringify(payload).replace(/</g, "\\u003c")};</script>`;
@@ -3561,16 +3568,19 @@ async function handleShare(req, res, reqId) {
     : "";
 
   const projectPreviewHtml = projectThumbnailUrl ? `
-    <div class="project-preview">
-      <img src="${escapeHtml(projectThumbnailUrl)}" alt="${escapeHtml(project.name || "")} preview" loading="lazy" />
+    <div class="project-hero">
+      <img class="project-hero-image" src="${escapeHtml(projectThumbnailUrl)}" alt="${escapeHtml(project.name || "")} preview" loading="lazy" />
     </div>
   ` : "";
 
   const ogPreviewHtml = (viewerIsOwner && ogImageUrl) ? `
-    <aside class="og-preview">
-      <span class="og-preview-label">Share preview</span>
-      <img src="${escapeHtml(ogImageUrl)}" alt="OG preview" loading="lazy" />
-    </aside>
+    <div class="og-preview-panel">
+      <div class="og-preview-head">
+        <span class="og-preview-label">Share preview</span>
+        <span class="og-preview-badge">${escapeHtml(project.ogImage?.template || "auto")}</span>
+      </div>
+      <img class="og-preview-image" src="${escapeHtml(ogImageUrl)}" alt="OG preview" loading="lazy" />
+    </div>
   ` : "";
 
   const tmpl = readTemplate("project-template.html");
@@ -3734,7 +3744,7 @@ async function handleProfilePublic(req, res, reqId) {
         return `
           <a class="project-card" href="${escapeHtml(pr.url)}">
             ${thumbHtml}
-            <div class="project-info">
+            <div class="project-card-body">
               <h3 class="project-name">${escapeHtml(pr.name)}</h3>
               ${pr.description ? `<p class="project-desc">${escapeHtml(pr.description)}</p>` : ""}
               ${langBadges ? `<div class="card-badges">${langBadges}</div>` : ""}
@@ -3758,12 +3768,12 @@ async function handleProfilePublic(req, res, reqId) {
 
   const avatarHtml = avatarHtmlFor(user.profile, { size: 96, username });
   const bioBlock = user.profile?.bio
-    ? `<p class="bio">${escapeHtml(user.profile.bio)}</p>`
+    ? `<p class="profile-bio">${escapeHtml(user.profile.bio)}</p>`
     : "";
   const linksEntries = Object.entries(user.profile?.links || {});
   const linksBlock = linksEntries.length
-    ? `<div class="links">${linksEntries.map(([k, v]) =>
-        `<a href="${escapeHtml(v)}" target="_blank" rel="noopener">${escapeHtml(k)}</a>`
+    ? `<div class="profile-links">${linksEntries.map(([k, v]) =>
+        `<a class="profile-link" href="${escapeHtml(v)}" target="_blank" rel="noopener">${escapeHtml(k)}</a>`
       ).join("")}</div>`
     : "";
 
@@ -3796,11 +3806,16 @@ async function handleProfilePublic(req, res, reqId) {
     isOwner,
     isSignedIn,
     viewerUsername,
+    uid: user.uid,
+    canonicalPath: `/${username}`,
     projectCount: projectList.length,
     joinedAt: user.createdAt || null,
     ogImageUrl: profileOgImage || null,
     scene: user.profile?.ogImage?.scene || null,
+    ogImageTemplate: user.profile?.ogImage?.template || null,
+    ogImageGeneratedAt: user.profile?.ogImage?.generatedAt || null,
     palette: user.profile?.ogImage?.palette || null,
+    baseUrl: BASE_URL,
   };
   const profileScript = `<script>window.__PROFILE__ = ${JSON.stringify(profileJson).replace(/</g, "\\u003c")};</script>`;
 
