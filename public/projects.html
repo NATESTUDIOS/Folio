@@ -47,9 +47,6 @@
 </script>
 
 <style>
-/* ═══════════════════════════════════════════════════════════
-   THEME
-   ═══════════════════════════════════════════════════════════ */
 :root {
   --theme-primary: #F59E0B;
   --theme-primary-hover: #fbbf24;
@@ -135,9 +132,6 @@
   :root { --rail-w: 52px; --header-h: 44px; }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   BASE
-   ═══════════════════════════════════════════════════════════ */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
   height: 100%;
@@ -255,9 +249,6 @@ svg { display: block; }
 }
 .rail-divider { width: 22px; height: 1px; background: var(--theme-divider); margin: 5px 0; }
 
-/* ═══════════════════════════════════════════════════════════
-   MAIN
-   ═══════════════════════════════════════════════════════════ */
 .main {
   flex: 1;
   min-width: 0;
@@ -283,9 +274,6 @@ svg { display: block; }
   .main-inner { padding: 20px 20px 0; gap: 14px; }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   HEADER
-   ═══════════════════════════════════════════════════════════ */
 .page-header {
   display: flex;
   align-items: center;
@@ -466,7 +454,7 @@ svg { display: block; }
 @media (min-width: 640px) { .btn-new .label { display: inline; } }
 
 /* ═══════════════════════════════════════════════════════════
-   STORAGE SUMMARY BAR (plan-wide)
+   STORAGE SUMMARY BAR
    ═══════════════════════════════════════════════════════════ */
 .storage-summary {
   display: flex;
@@ -638,7 +626,6 @@ svg { display: block; }
   .projects-container { grid-template-columns: repeat(3, 1fr); gap: 12px; }
 }
 
-/* ── Project card ── */
 .project-card {
   background: var(--theme-surface-card);
   backdrop-filter: blur(20px);
@@ -664,7 +651,6 @@ svg { display: block; }
   .project-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--theme-surface-card-solid); }
 }
 
-/* Header row — always visible */
 .project-card-row {
   display: flex;
   align-items: center;
@@ -692,8 +678,18 @@ svg { display: block; }
   font-weight: 800;
   font-size: 12px;
   border: 1px solid var(--theme-glass-border);
+  transition: box-shadow 0.2s var(--ease);
 }
 .project-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.project-icon.has-thumb {
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+.project-icon.has-thumb img { display: none; }
+.project-card:hover .project-icon.has-thumb {
+  box-shadow: 0 0 0 2px var(--theme-primary-glow);
+}
 
 .project-header-info { flex: 1; min-width: 0; }
 
@@ -771,7 +767,6 @@ svg { display: block; }
   background: currentColor;
 }
 
-/* Chevron button — expands card */
 .project-expand-btn {
   width: 28px;
   height: 28px;
@@ -799,7 +794,6 @@ svg { display: block; }
   transform: rotate(180deg);
 }
 
-/* Stats row — always visible below header */
 .project-stats-row {
   display: flex;
   align-items: center;
@@ -828,8 +822,11 @@ svg { display: block; }
 }
 .project-stat-warn { color: var(--theme-warning); }
 .project-stat-danger { color: var(--theme-danger); }
+.project-stat-new { color: var(--theme-primary); font-weight: 800; }
 
-/* Expanded detail — slides in */
+/* ═══════════════════════════════════════════════════════════
+   EXPANDED DETAIL
+   ═══════════════════════════════════════════════════════════ */
 .project-card-detail {
   display: none;
   padding: 0 10px 10px;
@@ -847,7 +844,37 @@ svg { display: block; }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Detail — description */
+/* Hero thumbnail */
+.project-detail-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-card-border);
+  margin-bottom: 2px;
+  position: relative;
+}
+.project-detail-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.project-detail-thumb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--theme-text-tertiary);
+  font-size: 10.5px;
+  text-align: center;
+  padding: 12px;
+}
+.project-detail-thumb-empty svg { width: 24px; height: 24px; opacity: 0.5; }
+
+/* Description */
 .detail-desc {
   font-size: 11px;
   color: var(--theme-text-secondary);
@@ -859,7 +886,7 @@ svg { display: block; }
   font-style: italic;
 }
 
-/* Detail — language badges */
+/* Language badges */
 .lang-badges {
   display: flex;
   flex-wrap: wrap;
@@ -882,8 +909,14 @@ svg { display: block; }
   border-radius: 50%;
   background: var(--theme-primary);
 }
+.lang-badge-sub {
+  color: var(--theme-text-tertiary);
+  opacity: 0.7;
+  font-weight: 500;
+  margin-left: 2px;
+}
 
-/* Detail — storage bar */
+/* Storage block */
 .detail-storage {
   display: flex;
   flex-direction: column;
@@ -920,7 +953,120 @@ svg { display: block; }
 .detail-storage-fill.warn { background: var(--theme-warning); }
 .detail-storage-fill.danger { background: var(--theme-danger); }
 
-/* Detail — warning */
+/* OG preview */
+.detail-og {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.detail-og-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.detail-og-label .og-meta {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  font-size: 9px;
+}
+.detail-og img {
+  width: 100%;
+  aspect-ratio: 1200 / 630;
+  object-fit: cover;
+  border-radius: 7px;
+  border: 1px solid var(--theme-card-border);
+  background: var(--theme-surface-elevated);
+}
+
+/* Deployment history */
+.detail-deployments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.detail-deployments-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--theme-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.detail-deployments-label .count {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+.deploy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 7px;
+}
+.deploy-row.current {
+  border-color: var(--theme-primary-glow);
+  background: var(--theme-primary-soft);
+}
+.deploy-thumb {
+  width: 44px;
+  height: 32px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--theme-surface-elevated);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+}
+.deploy-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.deploy-info {
+  flex: 1;
+  min-width: 0;
+}
+.deploy-time {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+.deploy-meta {
+  font-size: 9.5px;
+  color: var(--theme-text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.deploy-meta .current-pill {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+[data-theme="light"] .deploy-meta .current-pill { color: #fff; }
+
+/* Warnings */
 .detail-warning {
   display: flex;
   align-items: center;
@@ -942,19 +1088,30 @@ svg { display: block; }
   stroke-width: 2.2;
   flex-shrink: 0;
 }
-
 .detail-warning.danger {
   background: var(--theme-danger-soft);
   border-color: rgba(239, 68, 68, 0.25);
   color: var(--theme-danger);
 }
 
-/* Detail — action buttons (horizontal grid) */
+/* Meta line */
+.detail-meta-line {
+  font-size: 9.5px;
+  color: var(--theme-text-tertiary);
+  font-family: var(--font-mono);
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+
+/* Action grid */
 .detail-actions {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
   padding-top: 4px;
+}
+@media (min-width: 640px) {
+  .detail-actions { grid-template-columns: repeat(4, 1fr); }
 }
 .detail-action-btn {
   display: flex;
@@ -1119,7 +1276,7 @@ svg { display: block; }
 .btn-block { width: 100%; }
 
 /* ═══════════════════════════════════════════════════════════
-   FULLSCREEN OVERLAY (filters / stats)
+   OVERLAY (filters)
    ═══════════════════════════════════════════════════════════ */
 .fullscreen-overlay {
   position: fixed;
@@ -1587,6 +1744,8 @@ svg { display: block; }
   font-weight: 800;
   font-size: 12px;
   border: 1px solid var(--theme-glass-border);
+  background-size: cover;
+  background-position: center top;
 }
 .action-sheet-icon img { width: 100%; height: 100%; object-fit: cover; }
 .action-sheet-title { flex: 1; min-width: 0; }
@@ -1604,7 +1763,7 @@ svg { display: block; }
   font-weight: 600;
 }
 
-.action-list { padding: 4px; }
+.action-list { padding: 4px; max-height: 60vh; overflow-y: auto; }
 .action-item {
   display: flex;
   align-items: center;
@@ -1824,7 +1983,7 @@ svg { display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   OFFLINE
+   OFFLINE + BANNERS
    ═══════════════════════════════════════════════════════════ */
 .offline-banner {
   display: none;
@@ -1841,32 +2000,6 @@ svg { display: block; }
 .offline-banner.visible { display: flex; }
 .offline-banner svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
 
-/* ═══════════════════════════════════════════════════════════
-   SORT BTN
-   ═══════════════════════════════════════════════════════════ */
-.sort-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 10px;
-  background: var(--theme-glass-bg);
-  border: 1px solid var(--theme-card-border);
-  border-radius: 8px;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-  flex-shrink: 0;
-  transition: all 0.2s var(--ease);
-}
-.sort-btn:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
-.sort-btn svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; }
-.sort-btn .label { display: none; }
-@media (min-width: 640px) { .sort-btn .label { display: inline; } }
-
-/* ═══════════════════════════════════════════════════════════
-   NOTIFICATION BANNER
-   ═══════════════════════════════════════════════════════════ */
 .notif-banner {
   display: flex;
   align-items: center;
@@ -1889,7 +2022,30 @@ svg { display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   ICON PICKER (create flow reuse)
+   SORT BUTTON
+   ═══════════════════════════════════════════════════════════ */
+.sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 8px;
+  color: var(--theme-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all 0.2s var(--ease);
+}
+.sort-btn:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.sort-btn svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+.sort-btn .label { display: none; }
+@media (min-width: 640px) { .sort-btn .label { display: inline; } }
+
+/* ═══════════════════════════════════════════════════════════
+   ICON PICKER
    ═══════════════════════════════════════════════════════════ */
 .icon-tabs {
   display: flex;
@@ -1968,7 +2124,7 @@ svg { display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   DELETE CONFIRM (typed name)
+   DELETE CONFIRM
    ═══════════════════════════════════════════════════════════ */
 .delete-confirm-input {
   width: 100%;
@@ -2007,6 +2163,42 @@ svg { display: block; }
   .detail-action-btn { padding: 9px 4px; min-height: 50px; }
   .detail-action-btn svg { width: 15px; height: 15px; }
   .detail-action-btn .label { font-size: 9px; }
+  .project-detail-thumb { aspect-ratio: 4 / 3; }
+}
+.project-card.expanded {
+  cursor: pointer;
+}
+.project-card.expanded .project-card-detail {
+  position: relative;
+}
+.project-card.expanded .project-card-detail::after {
+  content: 'Open project →';
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--theme-primary);
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+  pointer-events: none;
+}
+.project-card.expanded:hover .project-card-detail::after {
+  opacity: 0.7;
+}
+.project-icon-btn {
+  border: 1px solid var(--theme-glass-border);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s var(--ease);
+}
+.project-icon-btn:hover {
+  border-color: var(--theme-primary);
+  box-shadow: 0 0 0 2px var(--theme-primary-soft);
+  transform: scale(1.05);
+}
+.project-icon-btn:active {
+  transform: scale(0.95);
 }
 </style>
 </head>
@@ -2014,7 +2206,6 @@ svg { display: block; }
 
 <div class="app" id="app">
 
-  <!-- ═══════════ RAIL ═══════════ -->
   <aside class="rail" aria-label="Main navigation">
     <div class="rail-top">
       <a class="rail-logo" href="/" aria-label="Folio">
@@ -2044,7 +2235,6 @@ svg { display: block; }
     </div>
   </aside>
 
-  <!-- ═══════════ MAIN ═══════════ -->
   <main class="main">
     <div class="main-inner" id="mainInner">
 
@@ -2097,7 +2287,6 @@ svg { display: block; }
         <span>Offline — showing cached projects</span>
       </div>
 
-      <!-- Storage summary bar (always visible) -->
       <div class="storage-summary" id="storageSummary">
         <span class="storage-summary-label">
           <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
@@ -2119,7 +2308,6 @@ svg { display: block; }
   </main>
 </div>
 
-<!-- ═══════════ BOTTOM NAV ═══════════ -->
 <nav class="bottom-nav" aria-label="Main navigation">
   <a class="nav-btn" href="/">
     <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -2143,7 +2331,7 @@ svg { display: block; }
   </a>
 </nav>
 
-<!-- ═══════════ FILTERS OVERLAY ═══════════ -->
+<!-- FILTERS OVERLAY -->
 <div class="fullscreen-overlay" id="filtersOverlay" role="dialog" aria-modal="true">
   <div class="overlay-inner">
     <div class="overlay-header">
@@ -2163,7 +2351,7 @@ svg { display: block; }
   </div>
 </div>
 
-<!-- ═══════════ SEARCH SHEET ═══════════ -->
+<!-- SEARCH OVERLAY -->
 <div class="fullscreen-overlay" id="searchOverlay" role="dialog" aria-modal="true">
   <div class="overlay-inner" style="max-width:600px;height:auto;">
     <div class="overlay-header">
@@ -2181,12 +2369,12 @@ svg { display: block; }
   </div>
 </div>
 
-<!-- ═══════════ ACTION MENU ═══════════ -->
+<!-- ACTION MENU -->
 <div class="action-menu" id="actionMenu" role="dialog" aria-modal="true">
   <div class="action-sheet" id="actionSheet"></div>
 </div>
 
-<!-- ═══════════ MODAL ═══════════ -->
+<!-- MODAL -->
 <div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true">
   <div class="modal" id="modalContent">
     <div class="modal-handle"></div>
@@ -2194,14 +2382,14 @@ svg { display: block; }
   </div>
 </div>
 
-<!-- ═══════════ LOADING ═══════════ -->
+<!-- LOADING -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
   <div class="loading-title" id="loadingTitle">Loading…</div>
   <div class="loading-desc" id="loadingDesc"></div>
 </div>
 
-<!-- ═══════════ CELEBRATION ═══════════ -->
+<!-- CELEBRATION -->
 <div class="celebration" id="celebration" role="dialog" aria-modal="true">
   <div class="celebration-card">
     <div class="celebration-icon">
@@ -2218,7 +2406,7 @@ svg { display: block; }
   </div>
 </div>
 
-<!-- ═══════════ TOASTS ═══════════ -->
+<!-- TOASTS -->
 <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
 <script>
@@ -2307,11 +2495,11 @@ svg { display: block; }
   ];
 
   const FILTERS_BY_TAB = {
-    all: ['deployed', 'notDeployed', 'storageWarning', 'recentlyEdited', 'neverDeployed', 'expired'],
-    pinned: ['deployed', 'notDeployed', 'storageWarning'],
-    owned: ['deployed', 'notDeployed', 'storageWarning', 'recentlyEdited'],
+    all: ['deployed', 'notDeployed', 'storageWarning', 'recentlyEdited', 'neverDeployed', 'expired', 'hasPreview'],
+    pinned: ['deployed', 'notDeployed', 'storageWarning', 'hasPreview'],
+    owned: ['deployed', 'notDeployed', 'storageWarning', 'recentlyEdited', 'hasPreview'],
     shared: ['editor', 'viewer', 'commenter'],
-    public: ['deployed'],
+    public: ['deployed', 'hasPreview'],
     archived: [],
   };
 
@@ -2320,6 +2508,7 @@ svg { display: block; }
     editor: 'Editor', viewer: 'Viewer', commenter: 'Commenter',
     storageWarning: 'Storage > 70%', recentlyEdited: 'Recently edited',
     neverDeployed: 'Never deployed',
+    hasPreview: 'Has preview', noPreview: 'No preview',
   };
 
   const SORTS = [
@@ -2329,6 +2518,7 @@ svg { display: block; }
     { id: 'storage', label: 'Storage', fn: (a, b) => (b.storageUsed || 0) - (a.storageUsed || 0) },
     { id: 'deployed', label: 'Recently deployed', fn: (a, b) => (b.deployment?.deployedAt || 0) - (a.deployment?.deployedAt || 0) },
     { id: 'visits', label: 'Most visits', fn: (a, b) => (b.viewCount || 0) - (a.viewCount || 0) },
+    { id: 'lines', label: 'Lines of code', fn: (a, b) => (b.languages?.totalLines || 0) - (a.languages?.totalLines || 0) },
   ];
 
   // ═══════════════════════════════════════════════════════════
@@ -2366,7 +2556,6 @@ svg { display: block; }
     users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
     edit3: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
-    wifiOff: '<line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>',
     'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
     bookmark: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
@@ -2374,13 +2563,49 @@ svg { display: block; }
     unlock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
     dashboard: '<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
+    layout: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>',
   };
 
   const svg = (name, size = 14, sw = 2.2) =>
     `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${SVG[name] || ''}</svg>`;
+window.__folioIconFallback = function (img) {
+  if (!img || !img.parentElement) return;
+  const initials = img.dataset.fallbackInitials || '?';
+  const bg = img.dataset.fallbackBg || 'linear-gradient(135deg, #F59E0B, #f97316)';
+  const size = img.dataset.fallbackSize || '34';
+  const rounded = img.dataset.fallbackRounded || '8';
 
+  const span = document.createElement('span');
+  span.style.cssText = `display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${bg};color:#0a0c10;font-weight:800;border-radius:${rounded}px;font-size:${Math.round(Number(size) * 0.38)}px;`;
+  span.textContent = initials;
+
+  img.parentElement.replaceChild(span, img);
+};
+
+window.__folioHeroFallback = function (img) {
+  if (!img || !img.parentElement) return;
+  const initials = img.dataset.fallbackInitials || '?';
+  const bg = img.dataset.fallbackBg || 'linear-gradient(135deg, #F59E0B, #f97316)';
+  const name = img.dataset.fallbackName || 'Untitled';
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = `display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;height:100%;background:${bg};color:#0a0c10;`;
+
+  const badge = document.createElement('div');
+  badge.style.cssText = 'width:64px;height:64px;border-radius:16px;background:rgba(10,12,16,0.15);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:24px;letter-spacing:-0.5px;';
+  badge.textContent = initials;
+
+  const label = document.createElement('div');
+  label.style.cssText = 'font-size:12px;font-weight:800;max-width:80%;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.85;';
+  label.textContent = name;
+
+  wrap.appendChild(badge);
+  wrap.appendChild(label);
+
+  img.parentElement.replaceChild(wrap, img);
+};
   // ═══════════════════════════════════════════════════════════
-  // IDB v3
+  // IDB
   // ═══════════════════════════════════════════════════════════
 
   let dbConn = null;
@@ -2433,9 +2658,6 @@ svg { display: block; }
     async putFile(pid, path, content) {
       return dbWrap(dbTx('files', 'readwrite').put({ pid, path, content, updatedAt: Date.now() }));
     },
-    async listFiles(pid) {
-      return dbWrap(dbTx('files').index('pid').getAll(pid));
-    },
   };
 
   function normalizeServerProject(p) {
@@ -2451,6 +2673,9 @@ svg { display: block; }
       storageLimit: p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT,
       viewCount: p.viewCount || 0,
       deployment: p.deployment || null,
+      thumbnail: p.thumbnail || null,
+      ogImage: p.ogImage || null,
+      languages: p.languages || null,
       _server: true,
     };
   }
@@ -2462,7 +2687,18 @@ svg { display: block; }
       const existing = await IDB.getProject(p.pid);
       const localUpdated = existing?.updatedAt || 0;
       const serverUpdated = p.updatedAt ? new Date(p.updatedAt).getTime() : 0;
-      if (existing && localUpdated > serverUpdated) continue;
+      if (existing && localUpdated > serverUpdated) {
+        // Keep local record but merge in server-only fields (thumbnail, ogImage, languages)
+        if (p.thumbnail || p.ogImage || p.languages) {
+          await IDB.putProject({
+            ...existing,
+            thumbnail: p.thumbnail || existing.thumbnail || null,
+            ogImage: p.ogImage || existing.ogImage || null,
+            languages: p.languages || existing.languages || null,
+          });
+        }
+        continue;
+      }
       await IDB.putProject(normalizeServerProject(p));
     }
   }
@@ -2476,9 +2712,6 @@ svg { display: block; }
     projects: [], filtered: [],
     activeTab: 'all', activeFilters: new Set(),
     searchQuery: '', sortId: 'modified',
-    createStep: 1, createName: '', createDescription: '',
-    createIconMode: 'name', createIconUrl: null, createIconDataUrl: null,
-    createIconVariants: [], createImageUrlInput: '',
     storageEstimate: null, storageLimit: 10 * 1024 * 1024,
     deploymentCache: new Map(), expiredDeployments: [],
     autoCleanEnabled: true, activeMenuProject: null,
@@ -2563,6 +2796,12 @@ svg { display: block; }
       document.body.removeChild(ta);
       return ok;
     } catch { return false; }
+  }
+
+  function getEstimatedStorage(p) {
+    if (typeof p.storageUsed === 'number' && p.storageUsed > 0) return p.storageUsed;
+    if (p.languages?.totalLines) return p.languages.totalLines * 30;
+    return 0;
   }
 
   function toast(msg, type = 'info', duration = 2400) {
@@ -2668,7 +2907,6 @@ svg { display: block; }
     const params = new URLSearchParams(location.search);
     const pid = params.get('pid');
     if (pid) {
-      // Direct deep-link → navigate to project page
       window.location.replace('/project?pid=' + encodeURIComponent(pid));
       return false;
     }
@@ -2680,7 +2918,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // PIN / UNPIN
+  // PIN
   // ═══════════════════════════════════════════════════════════
 
   function togglePin(pid) {
@@ -2689,10 +2927,6 @@ svg { display: block; }
     try { localStorage.setItem(STORAGE.pinned, JSON.stringify([...S.pinnedProjects])); } catch {}
     toast(S.pinnedProjects.has(pid) ? 'Pinned' : 'Unpinned', 'success', 1200);
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // ARCHIVE
-  // ═══════════════════════════════════════════════════════════
 
   async function toggleArchive(project) {
     const wasArchived = !!project.archived;
@@ -2751,6 +2985,9 @@ svg { display: block; }
         ...(server || {}),
         ...lp,
         _serverData: server || null,
+        thumbnail: server?.thumbnail || lp.thumbnail || null,
+        ogImage: server?.ogImage || lp.ogImage || null,
+        languages: server?.languages || lp.languages || null,
       };
     });
 
@@ -2838,7 +3075,7 @@ svg { display: block; }
   function renderStorageSummary() {
     let totalUsed = 0;
     for (const p of S.projects) {
-      totalUsed += p.storageUsed || 0;
+      totalUsed += getEstimatedStorage(p);
     }
     const limit = S.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
     const pct = Math.min(100, (totalUsed / limit) * 100);
@@ -2908,7 +3145,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // RENDER: HEADER + STORAGE + TABS
+  // RENDER TABS
   // ═══════════════════════════════════════════════════════════
 
   function getCountForTab(tabId) { return S.projects.filter(p => matchesTab(p, tabId)).length; }
@@ -2957,9 +3194,10 @@ svg { display: block; }
     const chips = [];
 
     S.activeFilters.forEach(f => {
+      const label = f.startsWith('lang:') ? f.slice(5) : (FILTER_LABELS[f] || f);
       chips.push(`
         <div class="filter-chip">
-          <span>${escapeHTML(FILTER_LABELS[f] || f)}</span>
+          <span>${escapeHTML(label)}</span>
           <button data-remove-filter="${escapeAttr(f)}" type="button" aria-label="Remove">${svg('x', 9, 2.4)}</button>
         </div>
       `);
@@ -3021,6 +3259,11 @@ svg { display: block; }
   function matchesFilters(p) {
     if (S.activeFilters.size === 0) return true;
     for (const f of S.activeFilters) {
+      if (f.startsWith('lang:')) {
+        const lang = f.slice(5);
+        if (!p.languages?.breakdown?.[lang]) return false;
+        continue;
+      }
       if (f === 'deployed' && !p.deployment?.url) return false;
       if (f === 'notDeployed' && p.deployment?.url) return false;
       if (f === 'neverDeployed' && p.deployment?.url) return false;
@@ -3033,13 +3276,15 @@ svg { display: block; }
       if (f === 'commenter' && p.myRole !== 'commenter') return false;
       if (f === 'storageWarning') {
         const limit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
-        const pct = (p.storageUsed || 0) / limit * 100;
+        const pct = getEstimatedStorage(p) / limit * 100;
         if (pct < 70) return false;
       }
       if (f === 'recentlyEdited') {
         const sevenDays = 7 * 24 * 60 * 60 * 1000;
         if (!p.updatedAt || Date.now() - p.updatedAt > sevenDays) return false;
       }
+      if (f === 'hasPreview' && !p.thumbnail?.url) return false;
+      if (f === 'noPreview' && p.thumbnail?.url) return false;
     }
     return true;
   }
@@ -3057,7 +3302,6 @@ svg { display: block; }
     const sorter = SORTS.find(s => s.id === S.sortId) || SORTS[0];
     list.sort(sorter.fn);
 
-    // Pinned first
     list.sort((a, b) => {
       const aPin = S.pinnedProjects.has(a.pid) ? 1 : 0;
       const bPin = S.pinnedProjects.has(b.pid) ? 1 : 0;
@@ -3155,190 +3399,396 @@ svg { display: block; }
   }
 
   function renderProjectCard(p) {
-    const isExpanded = S.expandedProjects.has(p.pid);
-    const isPinned = S.pinnedProjects.has(p.pid);
+  const isExpanded = S.expandedProjects.has(p.pid);
+  const isPinned = S.pinnedProjects.has(p.pid);
 
-    const iconHTML = p.iconUrl
-      ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
-      : `<span style="background:${getAvatarColor(p.name)};color:#0a0c10;">${escapeHTML(getInitials(p.name))}</span>`;
+  const roleBadge = p.myRole === 'owner'
+    ? '<span class="role-badge owner">Owner</span>'
+    : p.myRole === 'editor'
+      ? '<span class="role-badge editor">Editor</span>'
+      : p.myRole ? `<span class="role-badge">${escapeHTML(p.myRole)}</span>` : '';
 
-    const roleBadge = p.myRole === 'owner'
-      ? '<span class="role-badge owner">Owner</span>'
-      : p.myRole === 'editor'
-        ? '<span class="role-badge editor">Editor</span>'
-        : p.myRole ? `<span class="role-badge">${escapeHTML(p.myRole)}</span>` : '';
-
-    const deployState = p.deployment?.url
-      ? '<span class="live-badge live"><span class="dot"></span>Live</span>'
-      : p.deployment?.state === 'OFFLINE'
-        ? '<span class="live-badge offline"><span class="dot"></span>Offline</span>'
-        : '';
-
-    const lastDeployText = p.deployment?.deployedAt
-      ? `Deployed ${timeAgo(p.deployment.deployedAt)}`
-      : 'Never deployed';
-
-    const langBadges = p.languages?.breakdown
-      ? Object.entries(p.languages.breakdown).slice(0, 3).map(([name, pct]) =>
-          `<span class="lang-badge"><span class="lang-dot"></span>${escapeHTML(name)} ${pct}%</span>`
-        ).join('')
+  const deployState = p.deployment?.url
+    ? '<span class="live-badge live"><span class="dot"></span>Live</span>'
+    : p.deployment?.state === 'OFFLINE'
+      ? '<span class="live-badge offline"><span class="dot"></span>Offline</span>'
       : '';
 
-    const storageUsed = p.storageUsed || 0;
-    const storageLimit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
-    const storagePct = Math.min(100, (storageUsed / storageLimit) * 100);
-    const storageCls = storagePct > 90 ? 'danger' : storagePct > 70 ? 'warn' : '';
+  const lastDeployText = p.deployment?.deployedAt
+    ? `Deployed ${timeAgo(p.deployment.deployedAt)}`
+    : 'Never deployed';
 
-    const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
-    const storageWarn = storagePct > 70;
+  const totalLines = p.languages?.totalLines || 0;
+  const storageUsed = getEstimatedStorage(p);
+  const storageLimit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+  const storagePct = Math.min(100, (storageUsed / storageLimit) * 100);
+  const storageWarn = storagePct > 70;
+  const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
 
-    // Stats row (always visible)
-    const statsRow = `
-      <div class="project-stats-row">
-        <span class="project-stat-item ${storageWarn ? 'project-stat-warn' : ''}">
-          ${svg('database', 9, 2.2)}
-          ${formatBytes(storageUsed)}
-        </span>
+  const statsRow = `
+    <div class="project-stats-row">
+      <span class="project-stat-item ${storageWarn ? 'project-stat-warn' : ''}">
+        ${svg('database', 9, 2.2)}
+        ${formatBytes(storageUsed)}
+      </span>
+      ${totalLines > 0 ? `
         <span class="project-stat-item">
-          ${svg('eye', 9, 2.2)}
-          ${formatNumber(p.viewCount || 0)}
+          ${svg('file', 9, 2.2)}
+          ${formatNumber(totalLines)} lines
         </span>
-        <span class="project-stat-item">
-          ${svg('clock', 9, 2.2)}
-          ${timeAgo(p.updatedAt)}
-        </span>
-        ${hasExpired ? `<span class="project-stat-item project-stat-warn">${svg('alertTriangle', 9, 2.4)} expired</span>` : ''}
+      ` : ''}
+      <span class="project-stat-item">
+        ${svg('eye', 9, 2.2)}
+        ${formatNumber(p.viewCount || 0)}
+      </span>
+      <span class="project-stat-item">
+        ${svg('clock', 9, 2.2)}
+        ${timeAgo(p.updatedAt)}
+      </span>
+      ${hasExpired ? `<span class="project-stat-item project-stat-warn">${svg('alertTriangle', 9, 2.4)} expired</span>` : ''}
+    </div>
+  `;
+
+  return `
+    <div class="project-card${isExpanded ? ' expanded' : ''}" data-pid="${escapeAttr(p.pid)}">
+      <div class="project-card-row">
+        <button class="project-icon project-icon-btn" type="button" data-card-icon="${escapeAttr(p.pid)}" aria-label="Open ${escapeAttr(p.name || 'project')}">
+          ${renderProjectIconWithFallback(p, { size: 34, rounded: 8 })}
+        </button>
+        <div class="project-header-info">
+          <div class="project-name-row">
+            ${isPinned ? `<span class="project-pin-icon">${svg('bookmark', 10, 2.4)}</span>` : ''}
+            <div class="project-name">${escapeHTML(p.name || 'Untitled project')}</div>
+          </div>
+          <div class="project-meta">
+            ${roleBadge}${deployState}
+            <span class="sep">·</span>
+            <span>${escapeHTML(lastDeployText)}</span>
+          </div>
+        </div>
+        <button class="project-expand-btn" data-card-expand="${escapeAttr(p.pid)}" type="button" aria-label="Expand details" aria-expanded="${isExpanded}">
+          ${svg('chevron-down', 14, 2.4)}
+        </button>
       </div>
-    `;
+      ${statsRow}
+      ${isExpanded ? renderExpandedDetail(p) : ''}
+    </div>
+  `;
+}
+function renderExpandedDetail(p) {
+  const thumbUrl = p.thumbnail?.url || null;
 
-    // Expanded detail
-    const detail = isExpanded ? `
-      <div class="project-card-detail">
-        ${p.description ? `<div class="detail-desc">${escapeHTML(p.description)}</div>` : `<div class="detail-desc empty">No description</div>`}
+  const langBreakdown = p.languages?.breakdown || {};
+  const langBadges = Object.keys(langBreakdown).length > 0
+    ? Object.entries(langBreakdown).slice(0, 4).map(([name, pct]) =>
+        `<span class="lang-badge"><span class="lang-dot"></span>${escapeHTML(name)} ${pct}%</span>`
+      ).join('')
+    : '';
 
-        ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
+  const storageUsed = getEstimatedStorage(p);
+  const storageLimit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+  const storagePct = Math.min(100, (storageUsed / storageLimit) * 100);
+  const storageCls = storagePct > 90 ? 'danger' : storagePct > 70 ? 'warn' : '';
 
-        <div class="detail-storage">
-          <div class="detail-storage-header">
-            <span>Storage</span>
-            <span>${formatBytes(storageUsed)} / ${formatBytes(storageLimit)}</span>
-          </div>
-          <div class="detail-storage-bar">
-            <div class="detail-storage-fill ${storageCls}" style="width:${storagePct}%"></div>
-          </div>
-        </div>
+  const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
 
-        ${hasExpired ? `
-          <div class="detail-warning">
-            ${svg('alertTriangle', 11, 2.4)}
-            <span>Some deployments are expired. Clean them to free space.</span>
-          </div>
-        ` : ''}
+  const lastDeployText = p.deployment?.deployedAt
+    ? `Deployed ${timeAgo(p.deployment.deployedAt)}`
+    : 'Never deployed';
 
-        ${storagePct > 90 ? `
-          <div class="detail-warning danger">
-            ${svg('alert', 11, 2.4)}
-            <span>Storage nearly full — delete files to avoid issues.</span>
-          </div>
-        ` : ''}
-
-        <div style="font-size:10px;color:var(--theme-text-tertiary);line-height:1.4;">
-          ${escapeHTML(lastDeployText)} · ${p.slug ? '@' + escapeHTML(p.slug) : escapeHTML(p.pid.slice(-8))}
-        </div>
-
-        <div class="detail-actions">
-          <button class="detail-action-btn primary" data-card-action="editor" data-pid="${escapeAttr(p.pid)}" type="button">
-            ${svg('edit3', 16, 2.2)}
-            <span class="label">Editor</span>
-          </button>
-          <button class="detail-action-btn" data-card-action="view" data-pid="${escapeAttr(p.pid)}" type="button">
-            ${svg('dashboard', 16, 2.2)}
-            <span class="label">View</span>
-          </button>
-          <button class="detail-action-btn danger" data-card-action="delete" data-pid="${escapeAttr(p.pid)}" type="button">
-            ${svg('trash', 16, 2.2)}
-            <span class="label">Delete</span>
-          </button>
-        </div>
+  const deployCache = S.deploymentCache.get(p.pid);
+  const recentDeploys = (deployCache?.deployments || []).slice(0, 3);
+  const deployHistoryHTML = recentDeploys.length > 0 ? `
+    <div class="detail-deployments">
+      <div class="detail-deployments-label">
+        <span>Recent deployments</span>
+        <span class="count">${recentDeploys.length}</span>
       </div>
-    ` : '';
-
-    return `
-      <div class="project-card${isExpanded ? ' expanded' : ''}" data-pid="${escapeAttr(p.pid)}">
-        <div class="project-card-row" data-card-expand="${escapeAttr(p.pid)}">
-          <div class="project-icon">${iconHTML}</div>
-          <div class="project-header-info">
-            <div class="project-name-row">
-              ${isPinned ? `<span class="project-pin-icon">${svg('bookmark', 10, 2.4)}</span>` : ''}
-              <div class="project-name">${escapeHTML(p.name || 'Untitled project')}</div>
+      ${recentDeploys.map(d => {
+        const isCurrent = d.id === deployCache.currentId;
+        return `
+          <div class="deploy-row ${isCurrent ? 'current' : ''}">
+            <div class="deploy-thumb">
+              ${d.thumbnailUrl
+                ? `<img src="${escapeAttr(d.thumbnailUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+                : svg('rocket', 12, 2.2)}
             </div>
-            <div class="project-meta">
-              ${roleBadge}${deployState}
-              <span class="sep">·</span>
-              <span>${escapeHTML(lastDeployText)}</span>
+            <div class="deploy-info">
+              <div class="deploy-time">${timeAgo(d.deployedAt)}</div>
+              <div class="deploy-meta">
+                ${isCurrent ? '<span class="current-pill">Current</span>' : `<span>${escapeHTML(d.state || 'READY')}</span>`}
+              </div>
             </div>
           </div>
-          <button class="project-expand-btn" data-card-expand="${escapeAttr(p.pid)}" type="button" aria-label="Expand details" aria-expanded="${isExpanded}">
-            ${svg('chevron-down', 14, 2.4)}
-          </button>
-        </div>
-        ${statsRow}
-        ${detail}
+        `;
+      }).join('')}
+    </div>
+  ` : '';
+
+  const ogHTML = p.ogImage?.url ? `
+    <div class="detail-og">
+      <div class="detail-og-label">
+        <span>Share preview</span>
+        <span class="og-meta">${escapeHTML(p.ogImage.template || 'auto')} · ${escapeHTML(p.ogImage.scene || '—')}</span>
       </div>
-    `;
+      <img src="${escapeAttr(p.ogImage.url)}" alt="OG preview" loading="lazy">
+    </div>
+  ` : '';
+
+  return `
+    <div class="project-card-detail">
+      ${thumbUrl ? `
+        <div class="project-detail-thumb">
+          <img
+            src="${escapeAttr(thumbUrl)}"
+            alt=""
+            loading="lazy"
+            style="width:100%;height:100%;object-fit:cover;display:block;"
+            data-fallback-initials="${escapeAttr(escapeHTML(getInitials(p.name)))}"
+            data-fallback-bg="${escapeAttr(getAvatarColor(p.name))}"
+            data-fallback-name="${escapeAttr(p.name || 'Untitled')}"
+            onerror="window.__folioHeroFallback && window.__folioHeroFallback(this)"
+          >
+        </div>
+      ` : `
+        <div class="project-detail-thumb">
+          <div class="project-detail-thumb-empty">
+            ${svg('image', 24, 1.6)}
+            <span>No preview yet — deploy to generate</span>
+          </div>
+        </div>
+      `}
+
+      ${p.description ? `<div class="detail-desc">${escapeHTML(p.description)}</div>` : `<div class="detail-desc empty">No description</div>`}
+
+      ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
+
+      <div class="detail-storage">
+        <div class="detail-storage-header">
+          <span>Storage</span>
+          <span>${formatBytes(storageUsed)} / ${formatBytes(storageLimit)}</span>
+        </div>
+        <div class="detail-storage-bar">
+          <div class="detail-storage-fill ${storageCls}" style="width:${storagePct}%"></div>
+        </div>
+      </div>
+
+      ${hasExpired ? `
+        <div class="detail-warning">
+          ${svg('alertTriangle', 11, 2.4)}
+          <span>Some deployments are expired. Clean them to free space.</span>
+        </div>
+      ` : ''}
+
+      ${storagePct > 90 ? `
+        <div class="detail-warning danger">
+          ${svg('alert', 11, 2.4)}
+          <span>Storage nearly full — delete files to avoid issues.</span>
+        </div>
+      ` : ''}
+
+      ${deployHistoryHTML}
+
+      ${ogHTML}
+
+      <div class="detail-meta-line">
+        ${escapeHTML(lastDeployText)}${p.slug ? ' · @' + escapeHTML(p.slug) : ' · ' + escapeHTML(p.pid.slice(-8))}
+      </div>
+
+      <div class="detail-actions">
+        <button class="detail-action-btn primary" data-card-action="editor" data-pid="${escapeAttr(p.pid)}" type="button">
+          ${svg('edit3', 16, 2.2)}
+          <span class="label">Editor</span>
+        </button>
+        <button class="detail-action-btn" data-card-action="view" data-pid="${escapeAttr(p.pid)}" type="button">
+          ${svg('dashboard', 16, 2.2)}
+          <span class="label">View</span>
+        </button>
+        <button class="detail-action-btn" data-card-action="regenerate" data-pid="${escapeAttr(p.pid)}" type="button">
+          ${svg('refresh', 16, 2.2)}
+          <span class="label">Refresh</span>
+        </button>
+        <button class="detail-action-btn danger" data-card-action="delete" data-pid="${escapeAttr(p.pid)}" type="button">
+          ${svg('trash', 16, 2.2)}
+          <span class="label">Delete</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
+  const thumbUrl = p.thumbnail?.url || null;
+  const iconUrl = p.iconUrl || null;
+
+  const initials = escapeHTML(getInitials(p.name));
+  const bgColor = getAvatarColor(p.name);
+
+  // Data attributes for onerror handler to read
+  const initialsAttr = escapeAttr(initials);
+  const bgAttr = escapeAttr(bgColor);
+
+  // The fallback inline <span> — escaped so it survives being placed in an attribute
+  const fallbackSpan = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${bgColor};color:#0a0c10;font-weight:800;border-radius:${rounded}px;">${initials}</span>`;
+
+  // For the image source, prefer the thumbnail (small icon), then iconUrl
+  const imgSrc = thumbUrl || iconUrl;
+
+  if (!imgSrc) {
+    // No image at all — return the span directly
+    return `<span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:${rounded}px;background:${bgColor};color:#0a0c10;font-weight:800;font-size:${Math.round(size * 0.38)}px;">${initials}</span>`;
   }
 
+  // Use DOM-safe attribute: data-fallback-html stores the escaped fallback,
+  // and a tiny global function swaps the img for the span on error.
+  return `<img
+    src="${escapeAttr(imgSrc)}"
+    alt=""
+    loading="lazy"
+    style="width:100%;height:100%;object-fit:cover;display:block;"
+    data-fallback-initials="${initialsAttr}"
+    data-fallback-bg="${bgAttr}"
+    data-fallback-size="${size}"
+    data-fallback-rounded="${rounded}"
+    onerror="window.__folioIconFallback && window.__folioIconFallback(this)"
+  >`;
+}
+  
   function bindProjectCardEvents() {
-    // Expand toggle
-    document.querySelectorAll('[data-card-expand]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const pid = btn.dataset.cardExpand;
-        if (S.expandedProjects.has(pid)) S.expandedProjects.delete(pid);
-        else S.expandedProjects.add(pid);
-        // Update DOM in place
-        const card = document.querySelector(`.project-card[data-pid="${pid}"]`);
-        if (card) {
-          const p = S.filtered.find(x => x.pid === pid);
-          if (p) card.outerHTML = renderProjectCard(p);
-          bindProjectCardEvents();
-        }
-      });
-    });
+  // Chevron — toggles expand in place
+  document.querySelectorAll('[data-card-expand]').forEach(btn => {
+    if (btn._bound) return;
+    btn._bound = true;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pid = btn.dataset.cardExpand;
+      const card = btn.closest('.project-card');
+      if (!card) return;
 
-    // Detail action buttons
-    document.querySelectorAll('[data-card-action]').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const pid = btn.dataset.pid;
-        const action = btn.dataset.cardAction;
-        const p = S.projects.find(x => x.pid === pid);
-        if (!p) return;
-        if (action === 'editor') goEditor(pid);
-        else if (action === 'view') goDashboard(pid);
-        else if (action === 'delete') openDeleteProjectModal(p);
-      });
-    });
+      const isCurrentlyExpanded = S.expandedProjects.has(pid);
 
-    // Prevent row click from doing anything besides expand
-    document.querySelectorAll('.project-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('[data-card-expand]') || e.target.closest('[data-card-action]')) return;
-        // Clicking elsewhere on card also expands
-        const pid = card.dataset.pid;
-        if (S.expandedProjects.has(pid)) S.expandedProjects.delete(pid);
-        else S.expandedProjects.add(pid);
+      if (isCurrentlyExpanded) {
+        S.expandedProjects.delete(pid);
+        card.classList.remove('expanded');
+        const detail = card.querySelector('.project-card-detail');
+        if (detail) detail.remove();
+        const chev = card.querySelector('.project-expand-btn');
+        if (chev) chev.setAttribute('aria-expanded', 'false');
+      } else {
+        S.expandedProjects.add(pid);
+        card.classList.add('expanded');
         const p = S.filtered.find(x => x.pid === pid);
         if (p) {
-          card.outerHTML = renderProjectCard(p);
-          bindProjectCardEvents();
+          const html = renderExpandedDetail(p);
+          card.insertAdjacentHTML('beforeend', html);
         }
-      });
+        const chev = card.querySelector('.project-expand-btn');
+        if (chev) chev.setAttribute('aria-expanded', 'true');
+      }
     });
+  });
+
+  const container = $('projectsContainer');
+  if (!container) return;
+
+  // Action buttons — delegated once
+  if (!container._actionsBound) {
+    container._actionsBound = true;
+    container.addEventListener('click', async (e) => {
+      const actionBtn = e.target.closest('[data-card-action]');
+      if (!actionBtn) return;
+      e.stopPropagation();
+      const pid = actionBtn.dataset.pid;
+      const action = actionBtn.dataset.cardAction;
+      const p = S.projects.find(x => x.pid === pid);
+      if (!p) return;
+      if (action === 'editor') goEditor(pid);
+      else if (action === 'view') goDashboard(pid);
+      else if (action === 'regenerate') regeneratePreview(p);
+      else if (action === 'delete') openDeleteProjectModal(p);
+    });
+  }
+
+  // Icon + card body — delegated once
+  if (!container._bodyBound) {
+    container._bodyBound = true;
+    container.addEventListener('click', (e) => {
+      // Icon → open dashboard directly (no expand)
+      const iconBtn = e.target.closest('[data-card-icon]');
+      if (iconBtn) {
+        e.stopPropagation();
+        const pid = iconBtn.dataset.cardIcon;
+        if (pid) goDashboard(pid);
+        return;
+      }
+
+      // Ignore chevron, action buttons, links
+      if (e.target.closest('[data-card-expand]')) return;
+      if (e.target.closest('[data-card-action]')) return;
+      if (e.target.closest('a')) return;
+
+      const card = e.target.closest('.project-card');
+      if (!card) return;
+
+      const pid = card.dataset.pid;
+      if (!pid) return;
+
+      if (S.expandedProjects.has(pid)) {
+        // Expanded → open dashboard
+        goDashboard(pid);
+      } else {
+        // Collapsed → expand in place
+        S.expandedProjects.add(pid);
+        card.classList.add('expanded');
+        const p = S.filtered.find(x => x.pid === pid);
+        if (p) {
+          const html = renderExpandedDetail(p);
+          card.insertAdjacentHTML('beforeend', html);
+        }
+        const chev = card.querySelector('.project-expand-btn');
+        if (chev) chev.setAttribute('aria-expanded', 'true');
+      }
+    });
+  }
+}
+  // ═══════════════════════════════════════════════════════════
+  // REGENERATE PREVIEW
+  // ═══════════════════════════════════════════════════════════
+
+  async function regeneratePreview(p) {
+    if (!S.online) { toast('Requires internet', 'warning'); return; }
+    showLoading('Refreshing', 'Updating preview and languages…');
+    try {
+      const res = await apiFetch(API_HOST + '?action=project/regenerate-preview', {
+        method: 'POST',
+        body: JSON.stringify({ pid: p.pid }),
+      });
+      hideLoading();
+      if (res.ok && res.data?.success) {
+        // Refresh the specific project
+        const detailRes = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(p.pid));
+        if (detailRes.ok && detailRes.data?.success && detailRes.data.project) {
+          const fresh = detailRes.data.project;
+          await IDB.putProject({
+            ...p,
+            thumbnail: fresh.thumbnail || null,
+            ogImage: fresh.ogImage || null,
+            languages: fresh.languages || null,
+            updatedAt: fresh.updatedAt ? new Date(fresh.updatedAt).getTime() : p.updatedAt,
+          });
+          await loadProjects();
+          toast('Preview refreshed', 'success');
+        }
+      } else {
+        toast(res.data?.error || 'Refresh failed', 'error');
+      }
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Refresh failed', 'error');
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // DELETE PROJECT (typed confirm)
+  // DELETE MODAL
   // ═══════════════════════════════════════════════════════════
 
   function openDeleteProjectModal(p) {
@@ -3404,15 +3854,18 @@ svg { display: block; }
     const shareUrl = p.visibility?.profile === 'public'
       ? `${location.origin}/${S.user?.profile?.username || S.user?.username || ''}/${p.slug || ''}`
       : null;
-    const iconHTML = p.iconUrl
+    const thumbUrl = p.thumbnail?.url || null;
+    const iconInner = thumbUrl ? '' : p.iconUrl
       ? `<img src="${escapeAttr(p.iconUrl)}" alt="">`
       : `<span>${escapeHTML(getInitials(p.name))}</span>`;
-    const iconBg = p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+    const iconStyle = thumbUrl
+      ? `background-image:url('${escapeAttr(thumbUrl)}');background-size:cover;background-position:center top;`
+      : p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
 
     const sheet = $('actionSheet');
     sheet.innerHTML = `
       <div class="action-sheet-header">
-        <div class="action-sheet-icon" style="${iconBg}">${iconHTML}</div>
+        <div class="action-sheet-icon" style="${iconStyle}">${iconInner}</div>
         <div class="action-sheet-title">
           <div class="action-sheet-name">${escapeHTML(p.name || 'Untitled project')}</div>
           <div class="action-sheet-meta">${escapeHTML(p.myRole || 'local')} · ${p.deployment?.url ? 'Live' : 'Local'}</div>
@@ -3425,6 +3878,7 @@ svg { display: block; }
         ${p.deployment?.url ? `<button class="action-item" data-action="copyLive">${svg('copy', 14, 2.2)}<span>Copy live URL</span></button>` : ''}
         ${shareUrl ? `<button class="action-item" data-action="share">${svg('share', 14, 2.2)}<span>Copy share link</span></button>` : ''}
         <div class="action-divider"></div>
+        <button class="action-item" data-action="regenerate">${svg('refresh', 14, 2.2)}<span>Regenerate preview</span></button>
         <button class="action-item" data-action="download">${svg('download', 14, 2.2)}<span>Download .folio</span></button>
         <button class="action-item" data-action="duplicate">${svg('copy', 14, 2.2)}<span>Duplicate</span></button>
         <button class="action-item" data-action="pin">${svg('bookmark', 14, 2.2)}<span>${S.pinnedProjects.has(p.pid) ? 'Unpin' : 'Pin'}</span></button>
@@ -3463,6 +3917,7 @@ svg { display: block; }
         else toast('Copy failed', 'error');
         break;
       }
+      case 'regenerate': regeneratePreview(p); break;
       case 'download': downloadProject(p); break;
       case 'duplicate': duplicateProject(p); break;
       case 'pin':
@@ -3475,10 +3930,6 @@ svg { display: block; }
       case 'delete': openDeleteProjectModal(p); break;
     }
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // ACTIONS
-  // ═══════════════════════════════════════════════════════════
 
   async function downloadProject(p) {
     if (!S.online) { toast('Requires internet', 'warning'); return; }
@@ -3634,26 +4085,18 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // CREATE FLOW (single screen)
+  // CREATE FLOW
   // ═══════════════════════════════════════════════════════════
 
   function openCreateFlow() {
-    S.createName = '';
-    S.createDescription = '';
-    S.createIconMode = 'name';
     S.createIconUrl = null;
-    S.createIconDataUrl = null;
     S.createIconVariants = [];
 
-    renderCreateModal();
-  }
-
-  function renderCreateModal() {
     const templates = [
-      { id: 'blank', label: 'Blank', icon: 'file' },
-      { id: 'landing', label: 'Landing', icon: 'layout' },
-      { id: 'todo', label: 'Todo', icon: 'check' },
-      { id: 'blog', label: 'Blog', icon: 'edit3' },
+      { id: 'blank', label: 'Blank' },
+      { id: 'landing', label: 'Landing' },
+      { id: 'todo', label: 'Todo' },
+      { id: 'blog', label: 'Blog' },
     ];
 
     const body = `
@@ -3675,28 +4118,6 @@ svg { display: block; }
           `).join('')}
         </div>
       </div>
-      <details style="margin-top:8px;">
-        <summary style="cursor:pointer;font-size:11px;font-weight:700;color:var(--theme-text-tertiary);padding:6px 0;">Customize icon (optional)</summary>
-        <div style="padding-top:8px;">
-          <div class="icon-tabs">
-            <button class="icon-tab active" data-icon-tab="presets" type="button">Presets</button>
-            <button class="icon-tab" data-icon-tab="upload" type="button">Upload</button>
-          </div>
-          <div class="icon-mode-panel active" data-icon-panel="presets">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-              <span style="font-size:10px;font-weight:700;color:var(--theme-text-tertiary);text-transform:uppercase;">Presets</span>
-              <button class="btn btn-sm btn-ghost" id="iconShuffleBtn" type="button">${svg('refresh', 10, 2.2)} Shuffle</button>
-            </div>
-            <div id="iconPickerGrid" class="icon-grid"></div>
-          </div>
-          <div class="icon-mode-panel" data-icon-panel="upload">
-            <input type="file" id="iconUploadFile" accept="image/*" style="display:none;">
-            <button class="btn btn-secondary btn-block" id="iconUploadBtn" type="button">${svg('upload', 12, 2.2)} Choose image</button>
-            <div class="field-hint" style="margin-top:6px;">PNG, JPG, WebP. Max 1 MB.</div>
-            <div id="iconUploadStatus" style="font-size:11px;color:var(--theme-text-tertiary);text-align:center;padding:8px;"></div>
-          </div>
-        </div>
-      </details>
       <div class="modal-actions">
         <button class="btn btn-secondary" data-modal-close>Cancel</button>
         <button class="btn btn-primary" id="createSubmit">${svg('check', 12, 2.4)} Create project</button>
@@ -3714,111 +4135,9 @@ svg { display: block; }
       });
     });
 
-    document.querySelectorAll('[data-icon-tab]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-icon-tab]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        document.querySelectorAll('[data-icon-panel]').forEach(p => {
-          p.classList.toggle('active', p.dataset.iconPanel === btn.dataset.iconTab);
-        });
-      });
-    });
-
-    generateIcons();
-    $('iconShuffleBtn')?.addEventListener('click', () => {
-      S.createIconVariants = [];
-      generateIcons({ shuffle: true });
-    });
-
-    $('iconUploadBtn')?.addEventListener('click', () => $('iconUploadFile')?.click());
-    $('iconUploadFile')?.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-      if (file.size > 1024 * 1024) { toast('Image too large (max 1 MB)', 'error'); return; }
-      const status = $('iconUploadStatus');
-      if (status) status.textContent = 'Uploading…';
-      try {
-        const dataUrl = await new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => resolve(r.result);
-          r.onerror = reject;
-          r.readAsDataURL(file);
-        });
-        const upRes = await fetch(API_FLIER + '?action=avatar/upload', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dataUrl,
-            username: (($('createName')?.value || 'project')).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project',
-          }),
-        });
-        const data = await upRes.json();
-        if (!data.success || !data.url) throw new Error(data.error || 'Upload failed');
-        S.createIconUrl = data.url;
-        if (status) status.textContent = 'Uploaded ✓';
-        toast('Icon ready', 'success', 1200);
-      } catch (err) {
-        if (status) status.textContent = '';
-        toast(err.message || 'Upload failed', 'error');
-      }
-    });
-
     $('createName').focus();
-    $('createName').addEventListener('input', () => {
-      const name = $('createName').value.trim();
-      if (name && S.createIconVariants.length === 0 && !S.createIconUrl) {
-        // Reset preview initials for the fallback icon
-      }
-    });
 
     $('createSubmit').addEventListener('click', () => submitCreateProject(selectedTemplate));
-  }
-
-  async function generateIcons({ shuffle = false } = {}) {
-    const grid = $('iconPickerGrid');
-    if (!grid) return;
-    if (S.createIconVariants.length > 0 && !shuffle) {
-      renderIconOptions(grid);
-      return;
-    }
-    grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
-
-    const projectName = $('createName')?.value.trim() || 'Project';
-    const baseSeed = projectName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'project';
-    const suffix = shuffle ? Math.random().toString(36).slice(2, 6) : '';
-
-    try {
-      const res = await fetch(API_FLIER + '?action=avatar/preview', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: baseSeed + suffix, displayName: projectName }),
-      });
-      const data = await res.json();
-      if (!data.success || !Array.isArray(data.variants)) throw new Error('Failed');
-      S.createIconVariants = data.variants;
-      renderIconOptions(grid);
-    } catch {
-      grid.innerHTML = `<div class="icon-placeholder" style="grid-column:1/-1;aspect-ratio:auto;padding:14px;">Could not generate</div>`;
-    }
-  }
-
-  function renderIconOptions(grid) {
-    grid.innerHTML = '';
-    if (S.createIconVariants.length === 0) {
-      grid.innerHTML = `<div class="icon-placeholder" style="grid-column:1/-1;aspect-ratio:auto;padding:14px;">No presets. Tap Shuffle.</div>`;
-      return;
-    }
-    S.createIconVariants.forEach(v => {
-      const btn = document.createElement('button');
-      btn.className = 'icon-option';
-      btn.type = 'button';
-      btn.innerHTML = `<img src="${escapeAttr(v.dataUrl)}" alt="">`;
-      btn.addEventListener('click', () => {
-        S.createIconDataUrl = v.dataUrl;
-        grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
-        btn.classList.add('selected');
-      });
-      grid.appendChild(btn);
-    });
   }
 
   async function submitCreateProject(template) {
@@ -3828,12 +4147,10 @@ svg { display: block; }
 
     showLoading('Creating project', 'Setting up…');
     try {
-      const iconUrl = S.createIconUrl || null;
       let pid;
 
       if (S.session && S.online) {
         const body = { name, description };
-        if (iconUrl) body.iconUrl = iconUrl;
         const res = await apiFetch(API_HOST + '?action=projects/create', {
           method: 'POST', body: JSON.stringify(body),
         });
@@ -3845,18 +4162,17 @@ svg { display: block; }
 
       const slug = name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
       await IDB.putProject({
-        pid, name, slug, description, iconUrl,
+        pid, name, slug, description, iconUrl: null,
         createdAt: Date.now(), updatedAt: Date.now(),
         archived: false,
       });
 
-      // Template seed files
       const seedFiles = getTemplateSeedFiles(template, name);
       for (const [path, content] of Object.entries(seedFiles)) {
         await IDB.putFile(pid, path, content);
       }
 
-      if (!S.isGuest && S.online) {
+      if (S.session && S.online) {
         try {
           await apiFetch(API_HOST + '?action=project/sync-back', {
             method: 'POST',
@@ -3902,9 +4218,6 @@ a { color: #F59E0B; }
 `;
     const baseJs = `console.log('Hello from ${name.replace(/'/g, "\\'")}');`;
 
-    if (template === 'blank') {
-      return { 'index.html': baseIndex, 'style.css': baseStyle, 'app.js': baseJs };
-    }
     if (template === 'landing') {
       return {
         'index.html': `<!DOCTYPE html>
@@ -4089,6 +4402,16 @@ article p { line-height: 1.7; font-size: 1.05rem; }
   }
   function closeFiltersOverlay() { $('filtersOverlay').classList.remove('active'); }
 
+  function getLanguagesInProjects() {
+    const langs = new Set();
+    for (const p of S.projects) {
+      if (p.languages?.breakdown) {
+        Object.keys(p.languages.breakdown).forEach(l => langs.add(l));
+      }
+    }
+    return [...langs].sort();
+  }
+
   function renderFiltersBody() {
     const body = $('filtersBody');
     const subtitle = $('filtersSubtitle');
@@ -4098,11 +4421,25 @@ article p { line-height: 1.7; font-size: 1.05rem; }
     const stats = computeStats();
     const expiredCount = S.expiredDeployments.length;
     const filterPills = FILTERS_BY_TAB[S.activeTab] || [];
+    const langsInProjects = getLanguagesInProjects();
+
     const pillsHTML = filterPills.length > 0 ? `
       <div class="filter-section">
         <div class="filter-label">Filters</div>
         <div class="filter-pills">
-          ${filterPills.map(f => `<button class="filter-pill ${S.activeFilters.has(f) ? 'active' : ''}" data-filter="${escapeAttr(f)}" type="button">${escapeHTML(FILTER_LABELS[f])}</button>`).join('')}
+          ${filterPills.map(f => `<button class="filter-pill ${S.activeFilters.has(f) ? 'active' : ''}" data-filter="${escapeAttr(f)}" type="button">${escapeHTML(FILTER_LABELS[f] || f)}</button>`).join('')}
+        </div>
+      </div>
+    ` : '';
+
+    const langFilterHTML = langsInProjects.length > 0 ? `
+      <div class="filter-section">
+        <div class="filter-label">Languages</div>
+        <div class="filter-pills">
+          ${langsInProjects.map(lang => {
+            const f = 'lang:' + lang;
+            return `<button class="filter-pill ${S.activeFilters.has(f) ? 'active' : ''}" data-filter="${escapeAttr(f)}" type="button">${escapeHTML(lang)}</button>`;
+          }).join('')}
         </div>
       </div>
     ` : '';
@@ -4112,6 +4449,7 @@ article p { line-height: 1.7; font-size: 1.05rem; }
 
     body.innerHTML = `
       ${pillsHTML}
+      ${langFilterHTML}
       <div class="filter-section">
         <div class="filter-label">Overview</div>
         <div class="stats-grid">
@@ -4182,7 +4520,7 @@ article p { line-height: 1.7; font-size: 1.05rem; }
     for (const p of S.projects) {
       if (p.visibility?.profile === 'public') publicCount++;
       if (p.deployment?.url) deployedCount++;
-      totalStorage += p.storageUsed || 0;
+      totalStorage += getEstimatedStorage(p);
     }
     return { publicCount, deployedCount, totalStorage };
   }
@@ -4349,14 +4687,12 @@ article p { line-height: 1.7; font-size: 1.05rem; }
       }
     });
 
-    // Auto-refresh every 60s if visible
     setInterval(() => {
       if (document.visibilityState === 'visible') {
         loadNotificationStats();
       }
     }, 60000);
 
-    // Notification polling
     if (S.notifBellTimer) clearInterval(S.notifBellTimer);
     S.notifBellTimer = setInterval(() => {
       if (document.visibilityState === 'visible') loadNotificationStats();
@@ -4372,7 +4708,6 @@ article p { line-height: 1.7; font-size: 1.05rem; }
     wireThemeMediaQuery();
     readSession();
 
-    // Deep-link ?pid=
     if (!readUrlParams()) return;
 
     try { await openDB(); } catch (err) {
@@ -4394,10 +4729,8 @@ article p { line-height: 1.7; font-size: 1.05rem; }
     renderTabs();
     await loadProjects();
 
-    // Notifications
     loadNotificationStats().catch(() => {});
 
-    // Update sort label / search input to reflect URL state
     if (S.searchQuery) {
       $('searchInput').value = S.searchQuery;
       $('searchClear').classList.add('visible');
