@@ -2042,6 +2042,104 @@
           requestAnimationFrame(function () { el.classList.add('show'); });
           setTimeout(function () { el.classList.remove('show'); setTimeout(function () { el.remove(); }, 320); }, duration);
         }
+          // ═══════════════════════════════════════════════════════════
+// EDITOR HANDOFF — image generator save-to-project
+// ═══════════════════════════════════════════════════════════
+
+function checkEditorHandoff() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('from') !== 'editor') return null;
+
+  const pid = params.get('pid');
+  if (!pid) return null;
+
+  const handoff = {
+    pid,
+    slot: params.get('slot') || 'icon',
+    returnUrl: params.get('return') || '/?pid=' + encodeURIComponent(pid),
+    projectName: params.get('name') || 'Project',
+    projectDesc: params.get('desc') || '',
+  };
+  window.__EDITOR_HANDOFF__ = handoff;
+  return handoff;
+}
+
+function showEditorHandoffBanner(handoff) {
+  if (!handoff) return;
+  const banner = document.createElement('div');
+  banner.className = 'editor-handoff-banner';
+  banner.innerHTML = `
+    <div class="editor-handoff-text">
+      <strong>Generating ${handoff.slot === 'icon' ? 'icon' : handoff.slot}</strong> for "${escapeHtml(handoff.projectName)}"
+    </div>
+    <button class="editor-handoff-return" type="button">← Return to editor</button>
+  `;
+  banner.querySelector('.editor-handoff-return').addEventListener('click', () => {
+    window.location.href = handoff.returnUrl;
+  });
+
+  const bodyEl = document.querySelector('.body-inner') || document.querySelector('.body');
+  if (bodyEl) bodyEl.insertBefore(banner, bodyEl.firstChild);
+}
+
+async function saveImageToProject() {
+  const handoff = window.__EDITOR_HANDOFF__;
+  if (!handoff) return;
+  if (!S.isAuthed) { toast('Sign in to save', 'warning'); return; }
+  if (!S.flier.preview) { toast('Render an image first', 'warning'); return; }
+
+  showLoading('Saving', 'Uploading to project…');
+  try {
+    // 1. Upload the rendered image to the CDN
+    const payload = {
+      mode: 'upload',
+      type: 'template',
+      template: S.flier.template,
+      size: '512x512',
+      data: {
+        text: S.flier.text,
+        style: S.flier.style,
+        images: S.flier.images,
+      },
+      upload: { name: `icon_${handoff.pid}_${Date.now()}` },
+    };
+
+    const res = await api(API_FLIER + '?action=generate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok || !res.data || !res.data.url) {
+      throw new Error((res.data && res.data.error) || 'Upload failed');
+    }
+
+    const imageUrl = res.data.url;
+
+    // 2. Save to project as iconUrl (only slot host.js supports)
+    if (handoff.slot === 'icon') {
+      const saveRes = await api(API_HOST + '?action=projects/update', {
+        method: 'POST',
+        body: JSON.stringify({ pid: handoff.pid, iconUrl: imageUrl }),
+      });
+      if (!saveRes.ok || !saveRes.data?.success) {
+        throw new Error((saveRes.data && saveRes.data.error) || 'Could not save icon');
+      }
+    }
+
+    hideLoading();
+    toast('Saved — returning to editor', 'success', 1500);
+
+    const returnUrl = handoff.returnUrl;
+    const sep = returnUrl.indexOf('?') >= 0 ? '&' : '?';
+    const finalUrl = returnUrl + sep + 'generated=' + encodeURIComponent(handoff.slot) +
+                     '&url=' + encodeURIComponent(imageUrl);
+
+    setTimeout(() => { window.location.href = finalUrl; }, 700);
+  } catch (err) {
+    hideLoading();
+    toast(err.message || 'Save failed', 'error');
+  }
+}
 
         function copyText(text) {
           if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2703,50 +2801,73 @@
         }
 
         function renderImageGeneratorTool(mount) {
-          loadFlierConfig();
-          mount.innerHTML =
-            '<div class="flier">' +
-              '<div class="flier-bar">' +
-                '<div class="flier-mode">' +
-                  ['preview','upload','both'].map(function (m) { return '<button type="button" class="pill ' + (S.flier.mode === m ? 'active' : '') + '" data-mode="' + m + '">' + m + '</button>'; }).join('') +
-                '</div>' +
-                '<div class="flier-autorender"><label><input type="checkbox" id="flierAuto" ' + (S.flier.auto ? 'checked' : '') + '> Auto-render</label></div>' +
-              '</div>' +
-              '<div class="flier-grid">' +
-                '<aside class="flier-left">' +
-                  '<div class="flier-tabs" id="flierTabs">' +
-                    ['templates','style','text','images','scene','background'].map(function (k) { return '<button class="flier-tab ' + (S.flier.tab === k ? 'active' : '') + '" data-ftab="' + k + '" type="button">' + k + '</button>'; }).join('') +
-                  '</div>' +
-                  '<div class="flier-panel" id="flierPanel"></div>' +
-                '</aside>' +
-                '<section class="flier-center">' +
-                  '<div class="flier-frame" id="flierFrame">' +
-                    (S.flier.preview ? '<img src="' + attr(S.flier.preview) + '" alt="">' : '<div class="flier-empty">' + icon('image', 26, 1.6) + '<span>Set up the flier on the left.</span></div>') +
-                    '<div class="flier-frame-loading ' + (S.flier.rendering ? 'visible' : '') + '" id="flierFrameLoading"><div class="spinner"></div></div>' +
-                  '</div>' +
-                  '<div class="flier-meta" id="flierMeta">' + (S.flier.lastResponse ? esc(S.flier.lastResponse.scene || '') : 'No render yet') + '</div>' +
-                  '<div class="flier-actions">' +
-                    '<button class="btn btn-primary" id="flierRenderBtn" type="button">' + icon('refresh', 11, 2.4) + ' Render</button>' +
-                    '<button class="btn btn-secondary" id="flierDownloadBtn" type="button">' + icon('download', 11, 2.4) + ' Download</button>' +
-                    '<button class="btn btn-secondary" id="flierCopyUrlBtn" type="button">' + icon('copy', 11, 2.4) + ' Copy URL</button>' +
-                  '</div>' +
-                '</section>' +
-                '<aside class="flier-right">' +
-                  '<div class="flier-drawer">' +
-                    '<div class="flier-drawer-tabs">' +
-                      ['Output','Request','cURL','Diagnostics'].map(function (t, i) { return '<button class="flier-drawer-tab ' + (i === 0 ? 'active' : '') + '" data-dtab="' + t + '" type="button">' + t + '</button>'; }).join('') +
-                    '</div>' +
-                    '<div class="flier-drawer-body" id="flierDrawerBody"></div>' +
-                  '</div>' +
-                '</aside>' +
-              '</div>' +
-            '</div>';
+  loadFlierConfig();
 
-          wireFlier(mount);
-          renderFlierPanel();
-          renderFlierDrawer('Output');
-          if (!S.flier.preview && S.isAuthed) refreshFlierPreview();
-        }
+  // Apply handoff defaults
+  const handoff = window.__EDITOR_HANDOFF__;
+  if (handoff) {
+    if (!S.flier.text.headline && handoff.projectName) {
+      S.flier.text.headline = handoff.projectName;
+    }
+    if (!S.flier.text.subheadline && handoff.projectDesc) {
+      S.flier.text.subheadline = handoff.projectDesc;
+    }
+  }
+
+  mount.innerHTML = `
+    <div class="flier">
+      <div class="flier-bar">
+        <div class="flier-mode">
+          ${['preview','upload','both'].map(m => `<button type="button" class="pill ${S.flier.mode === m ? 'active' : ''}" data-mode="${m}">${m}</button>`).join('')}
+        </div>
+        <div class="flier-autorender">
+          <label><input type="checkbox" id="flierAuto" ${S.flier.auto ? 'checked' : ''}> Auto-render</label>
+        </div>
+      </div>
+      <div class="flier-grid">
+        <aside class="flier-left">
+          <div class="flier-tabs" id="flierTabs">
+            ${['templates','style','text','images','scene','background'].map(k => `<button class="flier-tab ${S.flier.tab === k ? 'active' : ''}" data-ftab="${k}" type="button">${k}</button>`).join('')}
+          </div>
+          <div class="flier-panel" id="flierPanel"></div>
+        </aside>
+        <section class="flier-center">
+          <div class="flier-frame" id="flierFrame">
+            ${S.flier.preview ? `<img src="${attr(S.flier.preview)}" alt="">` : `<div class="flier-empty">${icon('image', 26, 1.6)}<span>Set up the flier on the left.</span></div>`}
+            <div class="flier-frame-loading ${S.flier.rendering ? 'visible' : ''}" id="flierFrameLoading"><div class="spinner"></div></div>
+          </div>
+          <div class="flier-meta" id="flierMeta">${S.flier.lastResponse ? esc(S.flier.lastResponse.scene || '') : 'No render yet'}</div>
+          <div class="flier-actions">
+            <button class="btn btn-primary" id="flierRenderBtn" type="button">${icon('refresh', 11, 2.4)} Render</button>
+            <button class="btn btn-secondary" id="flierDownloadBtn" type="button">${icon('download', 11, 2.4)} Download</button>
+            <button class="btn btn-secondary" id="flierCopyUrlBtn" type="button">${icon('copy', 11, 2.4)} Copy URL</button>
+            ${handoff ? `<button class="btn btn-primary" id="flierSaveToProjectBtn" type="button">${icon('check', 11, 2.4)} Save to project</button>` : ''}
+          </div>
+        </section>
+        <aside class="flier-right">
+          <div class="flier-drawer">
+            <div class="flier-drawer-tabs">
+              ${['Output','Request','cURL','Diagnostics'].map((t,i) => `<button class="flier-drawer-tab ${i===0?'active':''}" data-dtab="${t}" type="button">${t}</button>`).join('')}
+            </div>
+            <div class="flier-drawer-body" id="flierDrawerBody"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  `;
+
+  wireFlier(mount);
+  renderFlierPanel();
+  renderFlierDrawer('Output');
+
+  // Wire save button if in handoff mode
+  const saveBtn = document.getElementById('flierSaveToProjectBtn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => saveImageToProject());
+  }
+
+  if (!S.flier.preview && S.isAuthed) refreshFlierPreview();
+}
 
         function wireFlier(mount) {
           var modes = mount.querySelectorAll('[data-mode]');
@@ -4283,6 +4404,15 @@
         // ═══════════════════════════════════════════════════════════
         function boot() {
           readSession();
+           // Check for editor handoff
+  const handoff = checkEditorHandoff();
+  if (handoff) {
+    showEditorHandoffBanner(handoff);
+    // Force image-generator tool to be active
+    setTimeout(() => {
+      if (typeof openTool === 'function') openTool('image-generator');
+    }, 100);
+  }
           S.recentTools = readJSON(STORAGE.recentTools, []);
           S.sidebarCollapsed = readJSON(STORAGE.sidebarCollapsed, false) === true;
           loadActivity();

@@ -290,6 +290,7 @@
   <div class="preview-mini-header">
     <span>Preview</span>
     <div class="acts">
+      <select class="preview-file-selector preview-file-selector-mini" id="previewMiniSelector" aria-label="Preview file" style="display:none;"></select>
       <button class="act" id="previewMiniRefresh" aria-label="Refresh">
         <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
       </button>
@@ -310,7 +311,8 @@
       Preview
       <span class="hint">Esc to exit</span>
     </div>
-    <div class="acts" style="display:flex;gap:3px;">
+    <div class="acts" style="display:flex;gap:6px;align-items:center;">
+      <select class="preview-file-selector" id="previewFileSelector" aria-label="Preview file" style="display:none;"></select>
       <button class="btn btn-secondary btn-sm" id="previewFullRefresh">
         <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         Refresh
@@ -517,7 +519,7 @@ const DB_VERSION = 3;
 const AUTOSAVE_DELAY = 2000;
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;                    // 5 MB per file
-const DEFAULT_PROJECT_STORAGE_LIMIT = 50 * 1024 * 1024;    // 50 MB per project
+const DEFAULT_PROJECT_STORAGE_LIMIT = 10 * 1024 * 1024;    // 10 MB per project
 const NOTES_PATH = 'notes.json';
 const NOTES_MAX_COUNT = 200;
 const NOTES_MAX_BODY_BYTES = 200 * 1024;                   // 200 KB per note
@@ -2435,7 +2437,7 @@ async function renderInfoPanel(container) {
     .filter(f => isTextFile(f.path))
     .reduce((n, f) => n + String(f.content || '').split('\n').length, 0);
 
-  // Header with "Open dashboard →" button
+  // ── Header ──
   const headerWrap = el('div', { class: 'info-tab-header' });
   headerWrap.appendChild(el('button', {
     class: 'btn btn-secondary btn-sm btn-block',
@@ -2443,7 +2445,68 @@ async function renderInfoPanel(container) {
     onclick: () => { window.location.href = '/project?pid=' + encodeURIComponent(p.pid); },
   }, icon('external', 12), ' Open dashboard'));
 
-  // Project identity
+  // ── Preview card ──
+  const previewCard = el('div', { class: 'preview-card' });
+  previewCard.appendChild(el('div', { class: 'preview-card-header' },
+    el('span', { class: 'preview-card-label' }, 'Preview'),
+    el('button', {
+      class: 'preview-card-refresh', type: 'button', title: 'Refresh preview',
+      onclick: () => regeneratePreview(),
+    }, icon('refresh', 11))
+  ));
+
+  const thumbUrl = p.thumbnail?.url || null;
+  if (thumbUrl) {
+    const img = el('img', {
+      class: 'preview-card-image',
+      src: thumbUrl,
+      alt: 'Project preview',
+      loading: 'lazy',
+      onerror: (e) => {
+        e.target.style.display = 'none';
+        const ph = previewCard.querySelector('.preview-card-placeholder');
+        if (ph) ph.style.display = 'flex';
+      },
+    });
+    previewCard.appendChild(img);
+    previewCard.appendChild(el('div', { class: 'preview-card-placeholder', style: 'display:none' },
+      icon('image', 22),
+      el('div', { class: 'preview-card-placeholder-text' }, 'Preview unavailable'),
+      el('div', { class: 'preview-card-placeholder-hint' }, 'Try refreshing')
+    ));
+    previewCard.appendChild(el('div', { class: 'preview-card-meta' },
+      p.deployment?.url ? 'Live · ' : '',
+      p.thumbnail?.generatedAt ? `Updated ${relativeTime(p.thumbnail.generatedAt)}` : 'Cached'
+    ));
+  } else {
+    previewCard.appendChild(el('div', { class: 'preview-card-placeholder' },
+      icon('image', 22),
+      el('div', { class: 'preview-card-placeholder-text' }, 'No preview yet'),
+      el('div', { class: 'preview-card-placeholder-hint' }, 'Deploy to generate')
+    ));
+  }
+
+  // ── Generate actions card ──
+  const generateCard = el('div', { class: 'generate-card' });
+  generateCard.appendChild(el('div', { class: 'generate-card-header' },
+    el('span', { class: 'generate-card-label' }, 'Actions')
+  ));
+  generateCard.appendChild(el('div', { class: 'generate-card-actions' },
+    el('button', {
+      class: 'generate-btn', type: 'button',
+      onclick: () => navigateToImageGenerator('icon'),
+    }, icon('image', 14), el('span', {}, 'Icon')),
+    el('button', {
+      class: 'generate-btn', type: 'button',
+      onclick: () => regeneratePreview(),
+    }, icon('refresh', 14), el('span', {}, 'Refresh')),
+    el('button', {
+      class: 'generate-btn', type: 'button',
+      onclick: () => hostProject(),
+    }, icon('rocket', 14), el('span', {}, 'Deploy'))
+  ));
+
+  // ── Project identity ──
   const idCard = el('div', { class: 'info-identity' });
   const iconWrap = el('div', { class: 'info-identity-icon' });
   if (p.iconUrl) {
@@ -2463,7 +2526,7 @@ async function renderInfoPanel(container) {
   if (p.description) idInfo.appendChild(el('div', { class: 'info-identity-desc' }, p.description));
   idCard.appendChild(idInfo);
 
-  // Stats grid
+  // ── Stats grid ──
   const stats = el('div', { class: 'info-stats' });
   const stat = (label, value) => el('div', { class: 'info-stat' },
     el('div', { class: 'info-stat-label' }, label),
@@ -2474,7 +2537,7 @@ async function renderInfoPanel(container) {
   stats.appendChild(stat('Versions', versions.length));
   stats.appendChild(stat('Lines', totalLines));
 
-  // Storage section
+  // ── Storage ──
   const storage = el('div', { class: 'storage-bar-full' });
   storage.appendChild(el('div', { class: 'storage-bar-header' },
     el('span', { class: 'storage-bar-label' }, 'Storage'),
@@ -2489,7 +2552,7 @@ async function renderInfoPanel(container) {
     : `${formatBytes(totalLimit - totalBytes)} remaining`
   ));
 
-  // Deployments
+  // ── Deployments ──
   const deployments = el('div', { class: 'info-deployments' });
   deployments.appendChild(el('div', { class: 'sidebar-section-title' },
     el('span', {}, 'Deployments'),
@@ -2581,7 +2644,7 @@ async function renderInfoPanel(container) {
     deployments.appendChild(hist);
   }
 
-  // Meta tags form
+  // ── Meta tags form ──
   const metaSection = el('div', { class: 'meta-form' });
   metaSection.appendChild(el('div', { class: 'sidebar-section-title' }, el('span', {}, 'Meta tags')));
 
@@ -2633,7 +2696,7 @@ async function renderInfoPanel(container) {
     },
   }, icon('file-code', 12), ' Inject into index.html'));
 
-  // File types breakdown
+  // ── File types ──
   const fileTypes = el('div', { class: 'info-file-types' });
   fileTypes.appendChild(el('div', { class: 'sidebar-section-title' }, el('span', {}, 'File types')));
   const kindCounts = {};
@@ -2654,7 +2717,7 @@ async function renderInfoPanel(container) {
     ));
   }
 
-  // Timeline
+  // ── Timeline ──
   const timeline = el('div', { class: 'info-timeline' });
   timeline.appendChild(el('div', { class: 'sidebar-section-title' }, el('span', {}, 'Timeline')));
   timeline.appendChild(el('div', { class: 'list-row' },
@@ -2668,7 +2731,7 @@ async function renderInfoPanel(container) {
     el('span', { class: 'value' }, relativeTime(p.updatedAt || Date.now()))
   ));
 
-  // Danger zone
+  // ── Danger ──
   const danger = el('button', {
     class: 'btn btn-outline-danger btn-block btn-sm',
     type: 'button',
@@ -2694,6 +2757,8 @@ async function renderInfoPanel(container) {
 
   // Assemble
   container.appendChild(headerWrap);
+  container.appendChild(previewCard);
+  container.appendChild(generateCard);
   container.appendChild(idCard);
   container.appendChild(stats);
   container.appendChild(storage);
@@ -3854,12 +3919,15 @@ function setCtrlLatch(on) {
 
 async function launchPreview() {
   if (!S.currentProject) { toast('No project', 'warning'); return; }
-  if (S.previewMode === 'fullscreen') openFullscreenPreview();
-  else if (S.previewMode === 'tab') openTabPreview();
-  else if (S.previewMode === 'mini') openMiniPreview();
+  const isHtmlActive = S.activeFile && /\.html?$/i.test(S.activeFile);
+  const fileToPreview = isHtmlActive ? S.activeFile : null;
+
+  if (S.previewMode === 'fullscreen') openFullscreenPreview(fileToPreview);
+  else if (S.previewMode === 'tab') openTabPreview(fileToPreview);
+  else if (S.previewMode === 'mini') openMiniPreview(fileToPreview);
 }
 
-async function buildPreviewHtml() {
+async function buildPreviewHtml(fileToPreview = null) {
   if (!S.currentProject) return null;
   const files = await db.listFiles(S.currentProject.pid);
   const htmlFiles = files.filter(f =>
@@ -3867,6 +3935,7 @@ async function buildPreviewHtml() {
   );
 
   const htmlFile =
+    (fileToPreview && htmlFiles.find(f => f.path === fileToPreview)) ||
     htmlFiles.find(f => f.path === 'index.html') ||
     htmlFiles.find(f => /(^|\/)index\.html?$/i.test(f.path)) ||
     htmlFiles[0];
@@ -3881,23 +3950,47 @@ async function buildPreviewHtml() {
 
   let html = htmlFile.content;
 
-  html = html.replace(
-    /<link[^>]*href=["']([^"']+\.css)["'][^>]*>/gi,
-    (match, href) => {
-      const key = href.replace(/^\.\//, '').toLowerCase();
-      if (fileMapLower[key] != null) {
-        return TAG_STYLE_OPEN + '\n' + fileMapLower[key] + '\n' + TAG_STYLE_CLOSE;
-      }
-      return match;
+  // Inline CSS <link>
+  html = html.replace(/<link([^>]*)href=["']([^"']+\.css)["']([^>]*)>/gi, (match, before, href, after) => {
+    const key = href.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
+    if (fileMapLower[key] != null) {
+      return TAG_STYLE_OPEN + '\n' + fileMapLower[key] + '\n' + TAG_STYLE_CLOSE;
     }
-  );
+    return match;
+  });
 
-  html = html.replace(/<script([^>]*)src=["']([^"']+\.js)["'][^>]*>\s*<\/script>/gi, (match, attrs, src) => {
-    const key = src.replace(/^\.\//, '').toLowerCase();
+  // Inline JS <script src>
+  html = html.replace(/<script([^>]*)src=["']([^"']+\.js)["']([^>]*)>\s*<\/script>/gi, (match, before, src, after) => {
+    const key = src.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
     if (fileMapLower[key] != null) {
       return TAG_SCRIPT_OPEN + '\n' + fileMapLower[key] + '\n' + TAG_SCRIPT_CLOSE;
     }
     return match;
+  });
+
+  // Inline images stored as data URIs
+  html = html.replace(/<img([^>]*)src=["']([^"']+)["']([^>]*)>/gi, (match, before, src, after) => {
+    if (src.startsWith('data:')) return match;
+    const key = src.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
+    const content = fileMapLower[key];
+    if (content && content.startsWith('data:')) {
+      return `<img${before}src="${content}"${after}>`;
+    }
+    return match;
+  });
+
+  // Inline CSS url() inside <style> blocks
+  html = html.replace(/<style>([\s\S]*?)<\/style>/gi, (match, css) => {
+    const inlinedCss = css.replace(/url\(\s*["']?([^"')]+)["']?\s*\)/gi, (m, ref) => {
+      if (ref.startsWith('data:') || ref.startsWith('http')) return m;
+      const key = ref.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
+      const content = fileMapLower[key];
+      if (content && content.startsWith('data:')) {
+        return `url("${content}")`;
+      }
+      return m;
+    });
+    return `<style>${inlinedCss}</style>`;
   });
 
   const bridge =
@@ -3910,7 +4003,6 @@ async function buildPreviewHtml() {
 
   html = html.replace(/<head[^>]*>/i, (m) => m + bridge);
 
-  // Inject meta from projectMeta (in-memory only)
   try {
     const meta = (await db.getProjectMeta(S.currentProject.pid)).meta || {};
     if (Object.keys(meta).length > 0) {
@@ -3921,23 +4013,56 @@ async function buildPreviewHtml() {
   return html;
 }
 
-async function openFullscreenPreview() {
-  const html = await buildPreviewHtml();
+async function openFullscreenPreview(fileToPreview = null) {
+  const html = await buildPreviewHtml(fileToPreview);
   if (!html) { toast('No HTML file found. Create index.html or import one.', 'warning', 4000); return; }
   $('previewFullFrame').srcdoc = html;
   $('previewConsole').innerHTML = '';
+
+  const options = await getPreviewFileOptions();
+  const selector = $('previewFileSelector');
+  if (selector) {
+    selector.innerHTML = '';
+    const active = fileToPreview || 'index.html';
+    for (const path of options) {
+      const opt = document.createElement('option');
+      opt.value = path;
+      opt.textContent = path;
+      if (path === active) opt.selected = true;
+      selector.appendChild(opt);
+    }
+    selector.style.display = options.length > 1 ? 'inline-block' : 'none';
+  }
+
   $('previewFullscreen').classList.add('visible');
 }
 
-async function openMiniPreview() {
-  const html = await buildPreviewHtml();
+async function openMiniPreview(fileToPreview = null) {
+  const html = await buildPreviewHtml(fileToPreview);
   if (!html) { toast('No HTML file found. Create index.html or import one.', 'warning', 4000); return; }
   $('previewMiniFrame').srcdoc = html;
+
+  const options = await getPreviewFileOptions();
+  const selector = $('previewMiniSelector');
+  if (selector) {
+    selector.innerHTML = '';
+    const active = fileToPreview || 'index.html';
+    for (const path of options) {
+      const opt = document.createElement('option');
+      opt.value = path;
+      opt.textContent = path.split('/').pop();
+      opt.title = path;
+      if (path === active) opt.selected = true;
+      selector.appendChild(opt);
+    }
+    selector.style.display = options.length > 1 ? 'inline-block' : 'none';
+  }
+
   $('previewMini').classList.add('visible');
 }
 
-async function openTabPreview() {
-  const html = await buildPreviewHtml();
+async function openTabPreview(fileToPreview = null) {
+  const html = await buildPreviewHtml(fileToPreview);
   if (!html) { toast('No HTML file found. Create index.html or import one.', 'warning', 4000); return; }
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
@@ -4084,7 +4209,90 @@ async function hostProject() {
     loadDeploymentHistoryFor(S.currentProject.pid).then(() => refreshInfoIfOpen());
   }, 2000);
 }
+// ═══════════════════════════════════════════════════════════
+// IMAGE HANDOFF — /tools navigation
+// ═══════════════════════════════════════════════════════════
 
+function navigateToImageGenerator(slot) {
+  if (!S.currentProject) return;
+  if (S.isGuest) { toast('Sign in to generate images', 'warning'); return; }
+
+  const returnUrl = '/?pid=' + encodeURIComponent(S.currentProject.pid);
+  const params = new URLSearchParams({
+    tool: 'image-generator',
+    from: 'editor',
+    pid: S.currentProject.pid,
+    slot: slot || 'icon',
+    return: returnUrl,
+    name: S.currentProject.name || '',
+    desc: (S.currentProject.description || '').slice(0, 120),
+  });
+  window.location.href = '/tools?' + params.toString();
+}
+
+async function regeneratePreview() {
+  if (!S.currentProject) return;
+  if (!S.online) { toast('Requires internet', 'warning'); return; }
+  if (S.isGuest) { toast('Sign in to refresh preview', 'warning'); return; }
+
+  const previewCard = document.querySelector('.preview-card');
+  const refreshBtn = previewCard?.querySelector('.preview-card-refresh');
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+    refreshBtn.style.opacity = '0.5';
+  }
+
+  try {
+    const res = await apiFetch(API_HOST + '?action=project/regenerate-preview', {
+      method: 'POST',
+      body: JSON.stringify({ pid: S.currentProject.pid }),
+    });
+    if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+
+    // Re-fetch the project to get updated thumbnail/languages/og
+    const detailRes = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
+    if (detailRes.ok && detailRes.data?.success && detailRes.data.project) {
+      const fresh = detailRes.data.project;
+      if (fresh.thumbnail) S.currentProject.thumbnail = fresh.thumbnail;
+      if (fresh.languages) S.currentProject.languages = fresh.languages;
+      if (fresh.ogImage) S.currentProject.ogImage = fresh.ogImage;
+
+      const local = await db.getProject(S.currentProject.pid);
+      if (local) {
+        await db.putProject({
+          ...local,
+          thumbnail: S.currentProject.thumbnail,
+          languages: S.currentProject.languages,
+          ogImage: S.currentProject.ogImage,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
+    toast('Preview refreshed', 'success');
+    refreshInfoIfOpen();
+  } catch (err) {
+    toast(err.message || 'Refresh failed', 'error');
+  } finally {
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.style.opacity = '';
+    }
+  }
+}
+
+async function getPreviewFileOptions() {
+  if (!S.currentProject) return [];
+  const files = await db.listFiles(S.currentProject.pid);
+  return files
+    .filter(f => /\.html?$/i.test(f.path) && !isSystemFile(f.path))
+    .map(f => f.path)
+    .sort((a, b) => {
+      if (a === 'index.html') return -1;
+      if (b === 'index.html') return 1;
+      return a.localeCompare(b);
+    });
+}
 // ═══════════════════════════════════════════════════════════
 // KEYBOARD / UI WIRING
 // ═══════════════════════════════════════════════════════════
@@ -4213,6 +4421,13 @@ function wireUI() {
     $('previewMini').classList.remove('visible');
     openFullscreenPreview();
   });
+  // Preview file selectors
+$('previewFileSelector')?.addEventListener('change', (e) => {
+  openFullscreenPreview(e.target.value);
+});
+$('previewMiniSelector')?.addEventListener('change', (e) => {
+  openMiniPreview(e.target.value);
+});
 
   $('guestBannerClose')?.addEventListener('click', () => {
     $('guestBanner').classList.remove('visible');
@@ -4334,6 +4549,41 @@ async function boot() {
   wireThemeMediaQuery();
   readSession();
   applyGuestState();
+  
+// Handle return from image generator
+const bootParams = new URLSearchParams(location.search);
+const generatedSlot = bootParams.get('generated');
+if (generatedSlot) {
+  setTimeout(async () => {
+    toast(`Image updated — ${generatedSlot === 'icon' ? 'icon' : 'generated'}`, 'success', 3000);
+
+    if (S.currentProject) {
+      try {
+        const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
+        if (res.ok && res.data?.success && res.data.project) {
+          const fresh = normalizeServerProject(res.data.project);
+          S.currentProject = { ...S.currentProject, ...fresh };
+          const local = await db.getProject(S.currentProject.pid);
+          if (local) {
+            await db.putProject({
+              ...local,
+              iconUrl: fresh.iconUrl,
+              name: fresh.name,
+              updatedAt: fresh.updatedAt,
+            });
+          }
+          updateBreadcrumb();
+          renderSidebar();
+        }
+      } catch {}
+    }
+
+    const cleanUrl = new URL(location.href);
+    cleanUrl.searchParams.delete('generated');
+    cleanUrl.searchParams.delete('slot');
+    history.replaceState(null, '', cleanUrl.toString());
+  }, 500);
+}
 
   loadPrefs();
   try { S.previewMode = localStorage.getItem(STORAGE.previewMode) || 'fullscreen'; } catch {}
@@ -4377,6 +4627,7 @@ async function boot() {
         S.session = null;
         S.isGuest = true;
         applyGuestState();
+  
         toast('Session expired — you are now a guest', 'warning', 4000);
       }
     }).catch(() => {});
