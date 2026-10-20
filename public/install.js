@@ -1,10 +1,11 @@
 /* ============================================================
    Folio — install.js
-   PWA install prompt manager.
+   Bottom-sheet install prompt (Play Store–style).
 
    Usage:
      <script src="/install.js" defer></script>
 
+   API:
      FOLIO.install.show();
      FOLIO.install.prompt();
      FOLIO.install.hide();
@@ -19,6 +20,14 @@
        cooldowns: [5h, 24h, 7d, Infinity],
        autoPromptDelayMs: 2000,
        showDialogOnFirstVisit: true,
+       screenshots: ['/screenshots/screenshot1.png', ...],
+       appName: 'Folio',
+       developer: 'Folio Labs',
+       description: 'Code from your pocket...',
+       version: '2026.10.19',
+       updated: 'Oct 19, 2026',
+       size: '~2 MB',
+       icon: '/icons/icon-192.png',
      };
    ============================================================ */
 (function () {
@@ -31,17 +40,35 @@
   const CFG = Object.assign({
     dismissCountdownMs: 5000,
     cooldowns: [
-      5 * 60 * 60 * 1000,        // 1st dismiss → 5h
-      24 * 60 * 60 * 1000,       // 2nd dismiss → 24h
-      7 * 24 * 60 * 60 * 1000,   // 3rd dismiss → 7d
-      Infinity,                   // 4th dismiss → never
+      5 * 60 * 60 * 1000,
+      24 * 60 * 60 * 1000,
+      7 * 24 * 60 * 60 * 1000,
+      Infinity,
     ],
     autoPromptDelayMs: 2000,
     showDialogOnFirstVisit: true,
+    screenshots: [
+      '/screenshots/screenshot1.png',
+      '/screenshots/screenshot2.png',
+      '/screenshots/screenshot3.png',
+      '/screenshots/screenshot4.png',
+      '/screenshots/screenshot5.png',
+      '/screenshots/screenshot6.png',
+    ],
+    appName: 'Folio',
+    developer: 'Folio Labs',
+    description: 'Code from your pocket. A fast, offline-first editor with your projects stored on-device — instant launch, no browser tab, no account required.',
+    version: '2026.10.19',
+    updated: 'Oct 19, 2026',
+    size: '~2 MB',
+    icon: '/icons/icon-192.png',
+    features: ['Works offline', 'Instant launch', 'Local projects', 'No account'],
+    rating: '4.8',
+    downloads: '1K+',
   }, window.FOLIO_INSTALL_CONFIG || {});
 
   const KEYS = {
-    dismissed: 'folio.install.dismissed',   // JSON { t, count }
+    dismissed: 'folio.install.dismissed',
     installed: 'folio.install.installed',
     asked:     'folio.install.asked',
   };
@@ -56,7 +83,9 @@
     dismissCountdownTimer: null,
     listeners: {},
     overlayEl: null,
+    scrimEl: null,
     escListener: null,
+    shotsBuilt: false,
   };
 
   // ═══════════════════════════════════════════════════════════
@@ -90,7 +119,10 @@
     try {
       if (localStorage.getItem('folio.reducedMotion') === 'true') return true;
     } catch {}
-    return matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    try {
+      if (document.documentElement.getAttribute('data-reduced-motion') === 'true') return true;
+    } catch {}
+    return matchMedia?.('(prefers-reduced-motion: reduce)').matches || false;
   };
 
   // ═══════════════════════════════════════════════════════════
@@ -151,7 +183,6 @@
 
   const haptic = () => { try { navigator.vibrate?.(8); } catch {} };
 
-  /* Toast bridge — positional args to match editor */
   const toast = (msg, type = 'info', duration = 2500) => {
     try {
       if (typeof window.toast === 'function') window.toast(msg, type, duration);
@@ -159,7 +190,6 @@
     } catch {}
   };
 
-  /* Update-manager cooperation */
   const pauseUpdates  = () => { try { window.__updateManager?.pause?.();  } catch {} };
   const resumeUpdates = () => { try { window.__updateManager?.resume?.(); } catch {} };
 
@@ -174,213 +204,334 @@
     }
 
     const css = `
-      .folio-inst {
-        position: fixed; inset: 0; z-index: 999990;
-        display: flex; align-items: center; justify-content: center;
-        padding: 16px;
-        background: rgba(10, 12, 16, 0.72);
-        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        opacity: 0; pointer-events: none;
-        transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
-        font-family: var(--font, "Inter", -apple-system, system-ui, sans-serif);
-      }
-      .folio-inst.open { opacity: 1; pointer-events: auto; }
+      /* ─── Fonts ──────────────────────────────────────────── */
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-      .folio-inst-card {
-        width: 100%; max-width: 360px;
-        background: var(--bg-card, #151922);
-        border: 1px solid var(--border, #222831);
-        border-radius: 20px;
-        padding: 26px 22px 20px;
-        text-align: center;
-        transform: scale(0.94) translateY(14px);
-        transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+      .folio-inst-scrim {
+        position: fixed; inset: 0; z-index: 999990;
+        background: rgba(0, 0, 0, 0.65);
+        opacity: 0; pointer-events: none;
+        transition: opacity 220ms ease;
+      }
+      .folio-inst-scrim.open { opacity: 1; pointer-events: auto; }
+
+      .folio-inst {
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        z-index: 999991;
+        background: #000000;
+        border-top-left-radius: 28px;
+        border-top-right-radius: 28px;
+        max-width: 500px;
+        margin: 0 auto;
+        transform: translateY(100%);
+        transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+        max-height: 90vh;
+        display: flex; flex-direction: column;
+        overflow: hidden;
+        font-family: "Inter", -apple-system, "Roboto", "Segoe UI", system-ui, sans-serif;
+        font-feature-settings: "cv11", "ss01";
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+        color: #e3e3e3;
+        line-height: 1.45;
+      }
+      .folio-inst.open { transform: translateY(0); }
+
+      /* ─── Handle ─────────────────────────────────────────── */
+      .folio-inst-handle-wrap {
+        display: flex; justify-content: center;
+        padding: 10px 0 4px;
+        flex-shrink: 0;
+      }
+      .folio-inst-handle {
+        width: 32px; height: 4px;
+        border-radius: 4px;
+        background: #3a3a3a;
+      }
+
+      /* ─── Header ─────────────────────────────────────────── */
+      .folio-inst-head {
+        display: flex; gap: 16px; align-items: flex-start;
+        padding: 8px 20px 16px;
+        flex-shrink: 0;
+      }
+      .folio-inst-icon {
+        width: 72px; height: 72px;
+        border-radius: 16px;
+        flex-shrink: 0;
+        background: #ffffff;
+        color: #000000;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 34px;
+        letter-spacing: -1.5px;
         position: relative;
         overflow: hidden;
       }
-      .folio-inst.open .folio-inst-card { transform: scale(1) translateY(0); }
-
-      /* Ambient amber glow at the top */
-      .folio-inst-card::after {
-        content: '';
-        position: absolute;
-        inset: -40% -40% auto -40%;
-        height: 60%;
-        background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
-        pointer-events: none;
-        opacity: 0.9;
+      .folio-inst-icon img {
+        position: absolute; inset: 0;
+        width: 100%; height: 100%;
+        object-fit: cover;
+        display: block;
+        opacity: 0;
+        transition: opacity 220ms ease;
       }
-
-      .folio-inst-icon {
-        width: 64px; height: 64px; margin: 0 auto 16px;
-        border-radius: 18px;
-        background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(249, 115, 22, 0.10));
-        border: 1px solid rgba(245, 158, 11, 0.32);
+      .folio-inst-icon img.loaded { opacity: 1; }
+      .folio-inst-icon .letter {
+        position: absolute; inset: 0;
         display: flex; align-items: center; justify-content: center;
-        color: #F59E0B;
-        position: relative;
-        z-index: 1;
       }
-      .folio-inst-icon::after {
+      .folio-inst-icon.has-logo .letter { display: none; }
+
+      .folio-inst-meta { flex: 1; min-width: 0; padding-top: 2px; }
+      .folio-inst-name {
+        font-size: 22px; font-weight: 600;
+        letter-spacing: -0.4px; line-height: 1.15;
+        color: #ffffff; margin: 0 0 4px;
+      }
+      .folio-inst-dev {
+        font-size: 13px; color: #34a853;
+        font-weight: 500; margin: 0 0 8px;
+        letter-spacing: 0.05px;
+      }
+      .folio-inst-stats {
+        display: flex; align-items: center; gap: 12px;
+        font-size: 12px; color: #9aa0a6;
+        font-weight: 400; letter-spacing: 0.05px;
+      }
+      .folio-inst-stats .stat { display: flex; align-items: center; gap: 4px; }
+      .folio-inst-stats svg {
+        width: 11px; height: 11px; fill: #9aa0a6; stroke: none;
+      }
+      .folio-inst-stats .divider {
+        width: 1px; height: 11px; background: #2a2a2a;
+      }
+
+      /* ─── Install button ─────────────────────────────────── */
+      .folio-inst-cta-row { padding: 0 20px 16px; flex-shrink: 0; }
+      .folio-inst-cta {
+        width: 100%;
+        font-family: inherit;
+        font-size: 14.5px; font-weight: 500;
+        letter-spacing: 0.1px;
+        padding: 13px 20px;
+        background: #34a853;
+        color: #000000;
+        border: none; border-radius: 100px;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        gap: 8px;
+        transition: background 140ms ease, transform 120ms ease;
+      }
+      .folio-inst-cta:hover:not(:disabled) { background: #46b960; }
+      .folio-inst-cta:active:not(:disabled) { transform: scale(0.99); }
+      .folio-inst-cta:disabled { cursor: default; }
+      .folio-inst-cta svg {
+        width: 16px; height: 16px;
+        stroke: currentColor; fill: none;
+        stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+      }
+      .folio-inst-cta.loading svg { animation: folioInstSpin 0.9s linear infinite; }
+      @keyframes folioInstSpin { to { transform: rotate(360deg); } }
+
+      /* ─── Body ───────────────────────────────────────────── */
+      .folio-inst-body {
+        overflow-y: auto; overflow-x: hidden;
+        flex: 1; min-height: 0;
+        scrollbar-width: none;
+      }
+      .folio-inst-body::-webkit-scrollbar { display: none; }
+
+      /* ─── Screenshots ────────────────────────────────────── */
+      .folio-inst-shots-wrap { padding: 4px 0 20px; flex-shrink: 0; }
+      .folio-inst-shots {
+        display: flex; gap: 10px;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scroll-padding-inline: 20px;
+        padding: 0 0 0 20px;
+        margin: 0;
+        scrollbar-width: none;
+      }
+      .folio-inst-shots::-webkit-scrollbar { display: none; }
+      .folio-inst-shots::after { content: ''; flex: 0 0 12px; }
+
+      .folio-inst-shot {
+        flex: 0 0 auto;
+        width: 156px; height: 278px;
+        border-radius: 12px;
+        scroll-snap-align: start;
+        border: 1px solid #1e1e1e;
+        overflow: hidden;
+        background: #131314;
+        position: relative;
+      }
+      .folio-inst-shot img {
+        position: absolute; inset: 0;
+        width: 100%; height: 100%;
+        object-fit: cover;
+        display: block;
+        opacity: 0;
+        transition: opacity 260ms ease;
+      }
+      .folio-inst-shot img.loaded { opacity: 1; }
+      .folio-inst-shot-skel {
+        position: absolute; inset: 0;
+        background: linear-gradient(100deg,
+          rgba(255,255,255,0.02) 30%,
+          rgba(255,255,255,0.06) 50%,
+          rgba(255,255,255,0.02) 70%);
+        background-size: 200% 100%;
+        animation: folioInstShimmer 1.6s linear infinite;
+        transition: opacity 260ms ease;
+      }
+      .folio-inst-shot.loaded .folio-inst-shot-skel { opacity: 0; pointer-events: none; }
+      .folio-inst-shot.error .folio-inst-shot-skel {
+        animation: none;
+        background: #1f1f1f;
+      }
+      .folio-inst-shot.error::after {
         content: '';
-        position: absolute;
-        inset: -6px;
-        border-radius: 24px;
-        border: 1px dashed rgba(245, 158, 11, 0.22);
-        animation: folioInstRing 2.6s ease-in-out infinite;
+        position: absolute; inset: 0;
+        background: repeating-linear-gradient(45deg,
+          transparent 0 7px,
+          rgba(255,255,255,0.02) 7px 8px);
         pointer-events: none;
       }
-      @keyframes folioInstRing {
-        0%, 100% { opacity: 0.35; transform: scale(1); }
-        50% { opacity: 0.75; transform: scale(1.05); }
-      }
-      .folio-inst-icon svg {
-        width: 28px; height: 28px;
-        stroke: currentColor; fill: none;
-        stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+      @keyframes folioInstShimmer {
+        0%   { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
       }
 
-      .folio-inst-title {
-        font-size: 18px; font-weight: 700; letter-spacing: -0.3px;
-        color: var(--text, #e8ecf1); margin: 0 0 6px; line-height: 1.25;
-        position: relative; z-index: 1;
+      /* ─── Sections ───────────────────────────────────────── */
+      .folio-inst-section {
+        padding: 16px 20px;
+        border-top: 1px solid #1e1e1e;
       }
-      .folio-inst-sub {
-        font-size: 13px; line-height: 1.55;
-        color: var(--text-muted, #a8b0bc); margin: 0 0 18px;
-        position: relative; z-index: 1;
+      .folio-inst-section-title {
+        font-size: 15.5px; font-weight: 600;
+        letter-spacing: -0.1px;
+        color: #ffffff; margin: 0 0 10px;
+      }
+      .folio-inst-about {
+        font-size: 13.5px; color: #e3e3e3;
+        line-height: 1.6; margin: 0;
+        letter-spacing: 0.05px;
+      }
+      .folio-inst-chips {
+        display: flex; flex-wrap: wrap; gap: 8px;
+        margin-top: 2px;
+      }
+      .folio-inst-chip {
+        display: inline-flex; align-items: center;
+        padding: 8px 14px;
+        background: transparent;
+        border: 1px solid #2a2a2a;
+        border-radius: 100px;
+        font-size: 12.5px; font-weight: 500;
+        color: #e3e3e3;
+        letter-spacing: 0.05px;
+      }
+      .folio-inst-data {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px 24px;
+        margin-top: 4px;
+      }
+      .folio-inst-data-cell .label {
+        font-size: 11px; color: #5f6368;
+        font-weight: 500; margin-bottom: 3px;
+        letter-spacing: 0.2px;
+      }
+      .folio-inst-data-cell .value {
+        font-size: 13px; color: #e3e3e3;
+        font-weight: 400;
+        letter-spacing: 0.05px;
       }
 
-      .folio-inst-list {
-        display: flex; flex-direction: column; gap: 8px;
-        margin: 0 0 20px; padding: 12px 14px;
-        background: var(--bg-input, #1a1f2a);
-        border: 1px solid var(--border, #222831);
-        border-radius: 12px; text-align: left;
-        position: relative; z-index: 1;
-      }
-      .folio-inst-row {
-        display: flex; align-items: center; gap: 10px;
-        font-size: 12.5px; color: var(--text-muted, #a8b0bc); line-height: 1.35;
-      }
-      .folio-inst-row svg {
-        width: 14px; height: 14px; flex-shrink: 0;
-        stroke: #F59E0B; fill: none; stroke-width: 2.5;
-        stroke-linecap: round; stroke-linejoin: round;
-      }
-
+      /* ─── iOS steps ──────────────────────────────────────── */
       .folio-inst-steps {
-        display: flex; flex-direction: column; gap: 10px;
-        margin: 0 0 18px; padding: 14px 16px;
-        background: var(--bg-input, #1a1f2a);
-        border: 1px solid var(--border, #222831);
-        border-radius: 12px; text-align: left;
-        position: relative; z-index: 1;
+        display: flex; flex-direction: column; gap: 12px;
+        padding: 16px 20px;
+        border-top: 1px solid #1e1e1e;
       }
       .folio-inst-step {
-        display: flex; gap: 10px; align-items: flex-start;
-        font-size: 12.5px; line-height: 1.5;
-        color: var(--text-muted, #a8b0bc);
+        display: flex; gap: 12px; align-items: flex-start;
+        font-size: 13.5px; line-height: 1.55;
+        color: #e3e3e3;
       }
-      .folio-inst-step b { color: var(--text, #e8ecf1); font-weight: 600; }
+      .folio-inst-step b { color: #ffffff; font-weight: 600; }
       .folio-inst-num {
-        flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
-        background: #F59E0B; color: #0a0c10;
-        font-size: 11px; font-weight: 700;
+        flex-shrink: 0;
+        width: 22px; height: 22px;
+        border-radius: 50%;
+        background: #34a853;
+        color: #000000;
+        font-size: 12px; font-weight: 700;
         display: flex; align-items: center; justify-content: center;
         margin-top: 1px;
       }
 
-      .folio-inst-actions {
-        display: flex; flex-direction: column; gap: 8px;
-        position: relative; z-index: 1;
+      /* ─── Footer ─────────────────────────────────────────── */
+      .folio-inst-footer {
+        padding: 10px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+        background: #000000;
+        border-top: 1px solid #1e1e1e;
+        flex-shrink: 0;
       }
-      .folio-inst-btn {
-        font-family: inherit; font-size: 13.5px; font-weight: 600;
-        padding: 12px 16px; border-radius: 12px;
-        border: 1px solid transparent;
-        cursor: pointer; display: flex; align-items: center; justify-content: center;
-        gap: 6px; transition: all 140ms ease;
-        touch-action: manipulation; user-select: none;
-        -webkit-tap-highlight-color: transparent;
-      }
-      .folio-inst-btn.primary {
-        background: #F59E0B; color: #0a0c10;
-        box-shadow: 0 6px 20px rgba(245, 158, 11, 0.30);
-      }
-      .folio-inst-btn.primary:hover:not(:disabled) { background: #fbbf24; transform: translateY(-1px); box-shadow: 0 10px 26px rgba(245, 158, 11, 0.38); }
-      .folio-inst-btn.primary:active:not(:disabled) { transform: scale(0.98); }
-
-      .folio-inst-btn.ghost {
+      .folio-inst-dismiss {
+        width: 100%;
+        font-family: inherit;
+        font-size: 13px; font-weight: 500;
+        letter-spacing: 0.1px;
+        padding: 10px 16px;
         background: transparent;
-        color: var(--text-muted, #a8b0bc);
-        border-color: var(--border, #222831);
+        color: #9aa0a6;
+        border: 1px solid #2a2a2a;
+        border-radius: 100px;
+        cursor: pointer;
+        transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
       }
-      .folio-inst-btn.ghost:hover:not(:disabled) {
-        color: var(--text, #e8ecf1);
-        background: var(--bg-input, #1a1f2a);
+      .folio-inst-dismiss:hover:not(:disabled) {
+        color: #ffffff;
+        background: #131314;
+        border-color: #3a3a3a;
       }
-      .folio-inst-btn.ghost:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
+      .folio-inst-dismiss:disabled { opacity: 0.45; cursor: not-allowed; }
+
+      /* ─── Success ────────────────────────────────────────── */
+      .folio-inst.success .folio-inst-cta {
+        background: #34a853;
+        color: #000000;
+        cursor: default;
       }
 
-      .folio-inst-btn:active:not(:disabled) { transform: scale(0.97); }
-      .folio-inst-btn:focus-visible { outline: 2px solid #F59E0B; outline-offset: 2px; }
-      .folio-inst-btn svg {
-        width: 14px; height: 14px;
-        stroke: currentColor; fill: none; stroke-width: 2.2;
-        stroke-linecap: round; stroke-linejoin: round;
-      }
-
-      .folio-inst-btn.primary.loading {
-        pointer-events: none;
-        opacity: 0.85;
-      }
-      .folio-inst-btn.primary.loading svg {
-        animation: folioInstSpin 0.9s linear infinite;
-      }
-      @keyframes folioInstSpin { to { transform: rotate(360deg); } }
-
-      /* Success state — green check + hide actions */
-      .folio-inst-card.success .folio-inst-icon {
-        background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(5, 150, 105, 0.12));
-        border-color: rgba(16, 185, 129, 0.4);
-        color: #10B981;
-      }
-      .folio-inst-card.success .folio-inst-icon::after {
-        border-color: rgba(16, 185, 129, 0.25);
-        animation: none;
-      }
-
+      /* ─── Mobile ─────────────────────────────────────────── */
       @media (max-width: 480px) {
-        .folio-inst { align-items: flex-end; padding: 0; }
-        .folio-inst-card {
-          max-width: 100%;
-          border-radius: 20px 20px 0 0;
-          padding: 22px 20px calc(18px + env(safe-area-inset-bottom, 0px));
-          transform: translateY(100%);
-        }
-        .folio-inst.open .folio-inst-card { transform: translateY(0); }
-        .folio-inst-card::before {
-          content: '';
-          position: absolute;
-          top: 8px; left: 50%;
-          transform: translateX(-50%);
-          width: 36px; height: 4px; border-radius: 4px;
-          background: var(--border, #222831);
-          z-index: 1;
-        }
+        .folio-inst { max-width: 100%; border-radius: 24px 24px 0 0; }
+        .folio-inst-head { padding: 6px 16px 14px; gap: 14px; }
+        .folio-inst-icon { width: 64px; height: 64px; font-size: 30px; border-radius: 14px; }
+        .folio-inst-name { font-size: 20px; }
+        .folio-inst-cta-row { padding: 0 16px 14px; }
+        .folio-inst-shots { scroll-padding-inline: 16px; padding-left: 16px; }
+        .folio-inst-section, .folio-inst-steps { padding-left: 16px; padding-right: 16px; }
+        .folio-inst-footer { padding: 8px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+        .folio-inst-shot { width: 144px; height: 260px; }
       }
 
+      /* ─── Reduced motion ─────────────────────────────────── */
       @media (prefers-reduced-motion: reduce) {
-        .folio-inst,
-        .folio-inst-card,
-        .folio-inst-icon::after,
-        .folio-inst-btn { transition-duration: 0.01ms !important; animation: none !important; }
+        .folio-inst, .folio-inst-scrim,
+        .folio-inst-cta, .folio-inst-dismiss,
+        .folio-inst-shot img, .folio-inst-shot-skel,
+        .folio-inst-icon img {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+        }
       }
-      html[data-reduced-motion="true"] .folio-inst-icon::after,
-      html[data-reduced-motion="true"] .folio-inst-btn.primary.loading svg {
+      html[data-reduced-motion="true"] .folio-inst-shot-skel,
+      html[data-reduced-motion="true"] .folio-inst-cta.loading svg {
         animation: none !important;
       }
     `;
@@ -392,14 +543,8 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // DIALOG MARKUP
+  // MARKUP
   // ═══════════════════════════════════════════════════════════
-
-  const checkRow = (text) => `
-    <div class="folio-inst-row">
-      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-      <span>${text}</span>
-    </div>`;
 
   const downloadIcon = `
     <svg viewBox="0 0 24 24">
@@ -418,51 +563,157 @@
       <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
     </svg>`;
 
+  const starIcon = `<svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+
   function buildStandardHTML() {
+    const chips = (CFG.features || []).map(f => `<span class="folio-inst-chip">${f}</span>`).join('');
     return `
-      <div class="folio-inst-card" role="dialog" aria-modal="true" aria-labelledby="folio-inst-title">
-        <div class="folio-inst-icon" id="folioInstIcon">${downloadIcon}</div>
-        <h3 class="folio-inst-title" id="folio-inst-title">Install Folio</h3>
-        <p class="folio-inst-sub">Code from your pocket — offline, fast, always with you.</p>
-        <div class="folio-inst-list">
-          ${checkRow('Works fully offline')}
-          ${checkRow('Instant launch — no browser tab')}
-          ${checkRow('Projects stored on your device')}
+      <div class="folio-inst-handle-wrap"><div class="folio-inst-handle"></div></div>
+
+      <div class="folio-inst-head">
+        <div class="folio-inst-icon" id="folioInstIcon">
+          <div class="letter">${(CFG.appName || 'F').charAt(0).toUpperCase()}</div>
+          <img src="${CFG.icon}" alt="${CFG.appName}" decoding="async"
+               onload="this.classList.add('loaded');this.parentElement.classList.add('has-logo')">
         </div>
-        <div class="folio-inst-actions">
-          <button class="folio-inst-btn primary" data-folio-action="install" id="folioInstInstallBtn">
-            <span id="folioInstInstallIcon">${downloadIcon}</span>
-            <span>Install</span>
-          </button>
-          <button class="folio-inst-btn ghost" data-folio-action="dismiss" id="folioInstDismissBtn" disabled>
-            Not now (5s)
-          </button>
+        <div class="folio-inst-meta">
+          <h2 class="folio-inst-name" id="folio-inst-title">${CFG.appName}</h2>
+          <p class="folio-inst-dev">${CFG.developer}</p>
+          <div class="folio-inst-stats">
+            <span class="stat">${CFG.rating} ${starIcon}</span>
+            <span class="divider"></span>
+            <span class="stat">${CFG.downloads} downloads</span>
+          </div>
         </div>
-      </div>`;
+      </div>
+
+      <div class="folio-inst-cta-row">
+        <button class="folio-inst-cta" id="folioInstCta" data-folio-action="install">
+          <span id="folioInstCtaIcon">${downloadIcon}</span>
+          <span id="folioInstCtaLabel">Install</span>
+        </button>
+      </div>
+
+      <div class="folio-inst-body" id="folioInstBody">
+        <div class="folio-inst-shots-wrap">
+          <div class="folio-inst-shots" id="folioInstShots"></div>
+        </div>
+
+        <div class="folio-inst-section">
+          <h3 class="folio-inst-section-title">About this app</h3>
+          <p class="folio-inst-about">${CFG.description}</p>
+        </div>
+
+        <div class="folio-inst-section">
+          <h3 class="folio-inst-section-title">What's inside</h3>
+          <div class="folio-inst-chips">${chips}</div>
+        </div>
+
+        <div class="folio-inst-section">
+          <h3 class="folio-inst-section-title">App info</h3>
+          <div class="folio-inst-data">
+            <div class="folio-inst-data-cell">
+              <div class="label">Updated on</div>
+              <div class="value">${CFG.updated}</div>
+            </div>
+            <div class="folio-inst-data-cell">
+              <div class="label">Size</div>
+              <div class="value">${CFG.size}</div>
+            </div>
+            <div class="folio-inst-data-cell">
+              <div class="label">Version</div>
+              <div class="value">${CFG.version}</div>
+            </div>
+            <div class="folio-inst-data-cell">
+              <div class="label">Works on</div>
+              <div class="value">Any browser</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="folio-inst-footer">
+        <button class="folio-inst-dismiss" id="folioInstDismissBtn" data-folio-action="dismiss" disabled>
+          Not now
+        </button>
+      </div>
+    `;
   }
 
   function buildIOSHTML() {
     return `
-      <div class="folio-inst-card" role="dialog" aria-modal="true" aria-labelledby="folio-inst-title">
-        <div class="folio-inst-icon">${downloadIcon}</div>
-        <h3 class="folio-inst-title" id="folio-inst-title">Install Folio</h3>
-        <p class="folio-inst-sub">Add Folio to your home screen in two steps.</p>
-        <div class="folio-inst-steps">
-          <div class="folio-inst-step">
-            <div class="folio-inst-num">1</div>
-            <div>Tap the <b>Share</b> button in Safari's toolbar.</div>
-          </div>
-          <div class="folio-inst-step">
-            <div class="folio-inst-num">2</div>
-            <div>Scroll and tap <b>Add to Home Screen</b>, then <b>Add</b>.</div>
+      <div class="folio-inst-handle-wrap"><div class="folio-inst-handle"></div></div>
+
+      <div class="folio-inst-head">
+        <div class="folio-inst-icon" id="folioInstIcon">
+          <div class="letter">${(CFG.appName || 'F').charAt(0).toUpperCase()}</div>
+          <img src="${CFG.icon}" alt="${CFG.appName}" decoding="async"
+               onload="this.classList.add('loaded');this.parentElement.classList.add('has-logo')">
+        </div>
+        <div class="folio-inst-meta">
+          <h2 class="folio-inst-name" id="folio-inst-title">${CFG.appName}</h2>
+          <p class="folio-inst-dev">${CFG.developer}</p>
+          <div class="folio-inst-stats">
+            <span class="stat">${CFG.rating} ${starIcon}</span>
+            <span class="divider"></span>
+            <span class="stat">${CFG.downloads} downloads</span>
           </div>
         </div>
-        <div class="folio-inst-actions">
-          <button class="folio-inst-btn ghost" data-folio-action="dismiss" id="folioInstDismissBtn" disabled>
-            Got it (5s)
-          </button>
+      </div>
+
+      <div class="folio-inst-steps">
+        <div class="folio-inst-step">
+          <div class="folio-inst-num">1</div>
+          <div>Tap the <b>Share</b> button in Safari's toolbar.</div>
         </div>
-      </div>`;
+        <div class="folio-inst-step">
+          <div class="folio-inst-num">2</div>
+          <div>Scroll and tap <b>Add to Home Screen</b>, then <b>Add</b>.</div>
+        </div>
+      </div>
+
+      <div class="folio-inst-footer">
+        <button class="folio-inst-dismiss" id="folioInstDismissBtn" data-folio-action="dismiss" disabled>
+          Got it
+        </button>
+      </div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SCREENSHOT BUILDER (fixed: img in DOM before src set)
+  // ═══════════════════════════════════════════════════════════
+
+  function buildShots(container) {
+    if (!container || S.shotsBuilt) return;
+    S.shotsBuilt = true;
+    container.innerHTML = '';
+
+    (CFG.screenshots || []).forEach((src, i) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'folio-inst-shot';
+
+      const skel = document.createElement('div');
+      skel.className = 'folio-inst-shot-skel';
+      wrap.appendChild(skel);
+
+      const img = document.createElement('img');
+      img.alt = `${CFG.appName} screenshot ${i + 1}`;
+      img.decoding = 'async';
+      img.loading = 'lazy';
+
+      img.addEventListener('load', () => {
+        img.classList.add('loaded');
+        wrap.classList.add('loaded');
+      });
+      img.addEventListener('error', () => {
+        wrap.classList.add('error');
+      });
+
+      wrap.appendChild(img);
+      container.appendChild(wrap);
+      img.src = src;
+    });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -472,13 +723,29 @@
   function ensureOverlay() {
     if (S.overlayEl && document.body.contains(S.overlayEl)) return S.overlayEl;
 
+    injectStyles();
+
+    const scrim = document.createElement('div');
+    scrim.className = 'folio-inst-scrim';
+    scrim.id = 'folio-install-scrim';
+    document.body.appendChild(scrim);
+    S.scrimEl = scrim;
+
     const ov = document.createElement('div');
     ov.className = 'folio-inst';
     ov.id = 'folio-install-overlay';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('aria-labelledby', 'folio-inst-title');
     ov.innerHTML = (isiOS() && !isStandalone()) ? buildIOSHTML() : buildStandardHTML();
     document.body.appendChild(ov);
     S.overlayEl = ov;
 
+    // Build screenshots (standard layout only)
+    const shotsEl = ov.querySelector('#folioInstShots');
+    if (shotsEl) buildShots(shotsEl);
+
+    // Wire actions
     ov.querySelectorAll('[data-folio-action]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -488,7 +755,7 @@
       });
     });
 
-    ov.addEventListener('click', (e) => { if (e.target === ov) tryDismiss(); });
+    scrim.addEventListener('click', tryDismiss);
 
     S.escListener = (e) => {
       if (e.key === 'Escape' && S.open) {
@@ -553,12 +820,13 @@
   function show() {
     if (isInstalled()) return false;
     if (!navigator.onLine) {
-      toast('Connect to the internet to install Folio', 'warning', 3000);
+      toast('Connect to the internet to install', 'warning', 3000);
       return false;
     }
     injectStyles();
     const ov = ensureOverlay();
     document.body.style.overflow = 'hidden';
+    if (S.scrimEl) S.scrimEl.classList.add('open');
     void ov.offsetWidth;
     ov.classList.add('open');
     S.open = true;
@@ -571,6 +839,7 @@
   function hide() {
     const ov = S.overlayEl || document.getElementById('folio-install-overlay');
     if (!ov) return;
+    if (S.scrimEl) S.scrimEl.classList.remove('open');
     ov.classList.remove('open');
     document.body.style.overflow = '';
     S.open = false;
@@ -585,12 +854,12 @@
 
   function tryDismiss() {
     const btn = document.getElementById('folioInstDismissBtn');
-    if (btn && btn.disabled) return; // still locked
+    if (btn && btn.disabled) return;
     haptic();
     hide();
     const count = markDismissed();
     emit('dismissed', { count });
-    setTimeout(() => toast('You can install Folio anytime from Settings', 'info', 3000), 220);
+    setTimeout(() => toast('You can install anytime from Settings', 'info', 3000), 220);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -616,12 +885,14 @@
     haptic();
     pauseUpdates();
 
-    const installBtn = document.getElementById('folioInstInstallBtn');
-    const installIcon = document.getElementById('folioInstInstallIcon');
+    const cta = document.getElementById('folioInstCta');
+    const ctaIcon = document.getElementById('folioInstCtaIcon');
+    const ctaLabel = document.getElementById('folioInstCtaLabel');
     const dismissBtn = document.getElementById('folioInstDismissBtn');
 
-    if (installBtn) installBtn.classList.add('loading');
-    if (installIcon) installIcon.innerHTML = spinnerIcon;
+    if (cta) cta.classList.add('loading');
+    if (ctaIcon) ctaIcon.innerHTML = spinnerIcon;
+    if (ctaLabel) ctaLabel.textContent = 'Installing…';
     if (dismissBtn) dismissBtn.disabled = true;
 
     try {
@@ -635,7 +906,7 @@
         clearDismissed();
         showSuccess();
         emit('installed');
-        toast('Folio installed', 'success', 2500);
+        toast('Installed', 'success', 2500);
         updateAllButtons();
         setTimeout(() => hide(), 1400);
       } else {
@@ -651,8 +922,9 @@
     } finally {
       S.prompt = null;
       S.installing = false;
-      if (installBtn) installBtn.classList.remove('loading');
-      if (installIcon) installIcon.innerHTML = downloadIcon;
+      if (cta) cta.classList.remove('loading');
+      if (ctaIcon) ctaIcon.innerHTML = downloadIcon;
+      if (ctaLabel) ctaLabel.textContent = 'Install';
       resumeUpdates();
     }
   }
@@ -661,21 +933,20 @@
     const ov = S.overlayEl || document.getElementById('folio-install-overlay');
     if (!ov) return;
 
-    const card = ov.querySelector('.folio-inst-card');
-    if (!card) return;
-    card.classList.add('success');
+    ov.classList.add('success');
 
-    const iconEl = document.getElementById('folioInstIcon');
-    if (iconEl) iconEl.innerHTML = checkIcon;
+    const cta = document.getElementById('folioInstCta');
+    const ctaIcon = document.getElementById('folioInstCtaIcon');
+    const ctaLabel = document.getElementById('folioInstCtaLabel');
+    if (cta) cta.disabled = true;
+    if (ctaIcon) ctaIcon.innerHTML = checkIcon;
+    if (ctaLabel) ctaLabel.textContent = 'Installed';
 
-    const titleEl = card.querySelector('.folio-inst-title');
-    if (titleEl) titleEl.textContent = 'Installed';
-
-    const subEl = card.querySelector('.folio-inst-sub');
-    if (subEl) subEl.textContent = 'Folio is now on your home screen.';
-
-    const actions = card.querySelector('.folio-inst-actions');
-    if (actions) actions.style.display = 'none';
+    const dismissBtn = document.getElementById('folioInstDismissBtn');
+    if (dismissBtn) {
+      dismissBtn.textContent = 'Close';
+      dismissBtn.disabled = false;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -700,7 +971,7 @@
     btn.__folioWired = true;
 
     if (!btn.hasChildNodes() || btn.innerHTML.trim() === '') {
-      btn.innerHTML = `<span>Install Folio</span>`;
+      btn.innerHTML = `<span>Install</span>`;
     }
 
     btn.addEventListener('click', (e) => {
@@ -753,7 +1024,7 @@
       if (S.open) showSuccess();
       setTimeout(() => hide(), 1200);
       emit('installed');
-      toast('Folio installed', 'success', 2500);
+      toast('Installed', 'success', 2500);
       updateAllButtons();
     });
 
@@ -800,7 +1071,10 @@
       S.autoShownThisSession = false;
       if (S.open) hide();
       try { S.overlayEl?.remove(); } catch {}
+      try { S.scrimEl?.remove(); } catch {}
       S.overlayEl = null;
+      S.scrimEl = null;
+      S.shotsBuilt = false;
       if (S.escListener) {
         try { document.removeEventListener('keydown', S.escListener); } catch {}
         S.escListener = null;
