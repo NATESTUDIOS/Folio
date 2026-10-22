@@ -5,7 +5,7 @@
 // ── Date-based versioning ───────────────────────────────────
 // Format: YYYY-MM-DD-<n>
 //   Increment <n> for same-day deploys; bump date on a new day.
-const CACHE_VERSION = '2026-10-22-1';
+const CACHE_VERSION = '2026-10-22-2';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
 
