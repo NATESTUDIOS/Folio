@@ -1,33 +1,23 @@
 // api/flier.js
 // ═══════════════════════════════════════════════════════════════════
-//  FLIER — universal image generator  (v3.0.0-folio)
+//  FLIER — universal image generator  (v3.1.0-folio)
 //  ────────────────────────────────────────────────────────────────
 //
-//  v3.0.0-folio changes (visual system + endpoints):
-//    • NEW: ?action=generate  — main workhorse (7/day anon, 70/day authed)
-//    • NEW: ?action=upload    — strict user image upload (5/day anon, 30/day authed)
-//    • NEW: ?action=scenes    — admin introspection of scene catalog
-//    • Watermark always on — three-layer monogram mark, palette-aware
-//    • 18 scenes (editorial/tech/music/home/abstract), random by default
-//    • New gradient system: linear/radial/mesh, 2–3 stops
-//    • Hardened image fetch (SSRF, magic bytes, size, redirects)
-//    • imageReport — per-image success/failure in the response
-//    • Caches: preview, image, avatar, thumbnail, scene
-//    • Text system: fitText, wrapToWidth, layoutStack, typeScale, safeArea
-//    • Templates rewritten to use the text system
-//    • Per-request warnings (no more module-level array)
-//    • Rate limit maps swept on expiry
-//
-//  SPLIT FILE NOTE:
-//    This file is delivered as 3 parts, each pasted one after the other.
-//    Part 1 ends at "CONTINUE: templates".
-//    Part 2 ends at "CONTINUE: handlers".
-//    Part 3 completes the module with export default.
+//  v3.1.0-folio changes:
+//    • Seeded random palettes when colors/bg not explicitly set
+//    • Gradient derives from colors when bg.from/bg.to missing
+//    • Avatar preview variants: random palettes per variant (seeded)
+//    • OG/thumbnail callers keep primary amber, accent seeded
+//    • New browser-frame template (needs detailed index.html)
+//    • Fetched SVGs sanitized (script/foreignObject/external href)
+//    • Static dns/promises import
+//    • All existing endpoints/caches/rate limits preserved
 // ═══════════════════════════════════════════════════════════════════
 
 import { Resvg } from "@resvg/resvg-js";
 import * as cheerio from "cheerio";
 import crypto from "crypto";
+import dns from "node:dns";
 import { log, newReqId } from "../utils/log.js";
 import { verifySession } from "../utils/users.js";
 
@@ -148,7 +138,36 @@ const UPLOAD_MAX_BYTES = 1 * 1024 * 1024;
 const UPLOAD_MAX_EDGE = 4096;
 
 // ═══════════════════════════════════════════════════════════════════
-//  STROKE FONT — glyph table (unchanged from v2.2)
+//  PALETTE SEEDS — 12 curated quadruples
+//  Each entry: { primary, accent, from, to }
+//  Used when caller doesn't set colors/background. Deterministic via
+//  seed hash so the same project renders the same tint each time.
+// ═══════════════════════════════════════════════════════════════════
+
+const PALETTE_SEEDS = [
+  { primary: "#F59E0B", accent: "#fbbf24", from: "#F59E0B", to: "#f97316" }, // amber
+  { primary: "#3B82F6", accent: "#60a5fa", from: "#3B82F6", to: "#6366f1" }, // sky
+  { primary: "#a855f7", accent: "#c084fc", from: "#a855f7", to: "#6d28d9" }, // violet
+  { primary: "#10B981", accent: "#34d399", from: "#10B981", to: "#059669" }, // emerald
+  { primary: "#ec4899", accent: "#f472b6", from: "#ec4899", to: "#be185d" }, // rose
+  { primary: "#06b6d4", accent: "#22d3ee", from: "#06b6d4", to: "#0891b2" }, // cyan
+  { primary: "#6366f1", accent: "#818cf8", from: "#6366f1", to: "#4f46e5" }, // indigo
+  { primary: "#14b8a6", accent: "#2dd4bf", from: "#14b8a6", to: "#0d9488" }, // teal
+  { primary: "#f97316", accent: "#fb923c", from: "#f97316", to: "#ea580c" }, // orange
+  { primary: "#84cc16", accent: "#a3e635", from: "#84cc16", to: "#65a30d" }, // lime
+  { primary: "#d946ef", accent: "#e879f9", from: "#d946ef", to: "#a21caf" }, // fuchsia
+  { primary: "#64748b", accent: "#94a3b8", from: "#64748b", to: "#475569" }, // slate
+];
+
+function pickPaletteSeed(seed) {
+  const s = String(seed || "x");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return PALETTE_SEEDS[Math.abs(h) % PALETTE_SEEDS.length];
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  STROKE FONT — glyph table
 // ═══════════════════════════════════════════════════════════════════
 
 const GLYPHS = {
@@ -261,8 +280,7 @@ function glyphFor(ch) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  SCENE LIBRARY — 18 scenes, 6 palettes, deterministic picks
-//  All pure SVG. No external assets. ~40–80 nodes each.
+//  SCENES + PALETTES (unchanged)
 // ═══════════════════════════════════════════════════════════════════
 
 const PALETTES = {
@@ -282,7 +300,6 @@ function resolvePalette(name, primaryHex, accentHex) {
 }
 
 const SCENES = {
-  // ── Editorial ───────────────────────────────────────────────
   paper_stack: (ctx) => {
     const { W, H, palette: p, seed } = ctx;
     const rng = seededRandom(seed + "paper");
@@ -305,7 +322,6 @@ const SCENES = {
     }
     return `<g opacity="${ctx.opacity}">${sheets.join("")}${lines.join("")}</g>`;
   },
-
   newspaper_fold: (ctx) => {
     const { W, H, palette: p } = ctx;
     const foldY = H * 0.30;
@@ -320,7 +336,6 @@ const SCENES = {
       <rect x="${(W * 0.64).toFixed(1)}" y="${(H * 0.234).toFixed(1)}" width="${(W * 0.20).toFixed(1)}" height="${(H * 0.015).toFixed(1)}" rx="${(H * 0.003).toFixed(1)}" fill="${p.primary}" opacity="0.3"/>
     </g>`;
   },
-
   type_specimen: (ctx) => {
     const { W, H, palette: p } = ctx;
     const letter = String.fromCharCode(65 + Math.floor(seededRandom(ctx.seed + "letter")() * 26));
@@ -344,7 +359,6 @@ const SCENES = {
       <line x1="${(-size * 0.15).toFixed(1)}" y1="${(size * 1.05).toFixed(1)}" x2="${(size * 0.4).toFixed(1)}" y2="${(size * 1.05).toFixed(1)}" stroke="${p.accent}" stroke-width="${(size * 0.008).toFixed(1)}" opacity="0.4"/>
     </g>`;
   },
-
   book_spine: (ctx) => {
     const { W, H, palette: p, seed } = ctx;
     const rng = seededRandom(seed + "books");
@@ -364,8 +378,6 @@ const SCENES = {
     books.push(`<rect x="${pulledX.toFixed(1)}" y="${(baseY - bookH * 1.1).toFixed(1)}" width="${(W * 0.06).toFixed(1)}" height="${(bookH * 1.1).toFixed(1)}" rx="${(W * 0.003).toFixed(1)}" fill="${p.primary}" opacity="0.9" transform="rotate(-12 ${pulledX.toFixed(1)} ${(baseY - bookH * 1.1).toFixed(1)})"/>`);
     return `<g opacity="${ctx.opacity}">${books.join("")}<line x1="${(W * 0.10).toFixed(1)}" y1="${baseY.toFixed(1)}" x2="${(W * 0.90).toFixed(1)}" y2="${baseY.toFixed(1)}" stroke="${p.primary}" stroke-width="${(W * 0.0015).toFixed(2)}" opacity="0.5"/></g>`;
   },
-
-  // ── Tech ────────────────────────────────────────────────────
   terminal: (ctx) => {
     const { W, H, palette: p, seed } = ctx;
     const rng = seededRandom(seed + "term");
@@ -389,7 +401,6 @@ const SCENES = {
       <rect x="${(x0 + w * 0.06).toFixed(1)}" y="${(y0 + h * 0.88).toFixed(1)}" width="${(w * 0.012).toFixed(2)}" height="${(h * 0.06).toFixed(2)}" fill="${p.accent}" opacity="0.9"/>
     </g>`;
   },
-
   grid_wave: (ctx) => {
     const { W, H, palette: p } = ctx;
     const lines = [];
@@ -414,7 +425,6 @@ const SCENES = {
     }
     return `<g opacity="${ctx.opacity}">${lines.join("")}</g>`;
   },
-
   circuit: (ctx) => {
     const { W, H, palette: p, seed } = ctx;
     const rng = seededRandom(seed + "circ");
@@ -432,7 +442,6 @@ const SCENES = {
     }
     return `<g opacity="${ctx.opacity}">${traces.join("")}</g>`;
   },
-
   skyline: (ctx) => {
     const { W, H, palette: p, seed, night } = ctx;
     const rng = seededRandom(seed + "sky");
@@ -457,8 +466,6 @@ const SCENES = {
     }
     return `<g opacity="${ctx.opacity}">${buildings.join("")}${lit.join("")}<line x1="0" y1="${baseY.toFixed(1)}" x2="${W}" y2="${baseY.toFixed(1)}" stroke="${p.accent}" stroke-width="${(W * 0.0015).toFixed(2)}" opacity="0.5"/></g>`;
   },
-
-  // ── Music ───────────────────────────────────────────────────
   soundwave: (ctx) => {
     const { W, H, palette: p, seed } = ctx;
     const rng = seededRandom(seed + "wave");
@@ -475,7 +482,6 @@ const SCENES = {
     }
     return `<g opacity="${ctx.opacity}">${bars.join("")}</g>`;
   },
-
   vinyl: (ctx) => {
     const { W, H, palette: p } = ctx;
     const cx = W * 0.5;
@@ -493,7 +499,6 @@ const SCENES = {
       <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(r * 0.05).toFixed(1)}" fill="${p.ground}"/>
     </g>`;
   },
-
   stage_light: (ctx) => {
     const { W, H, palette: p, seed } = ctx;
     const rng = seededRandom(seed + "stage");
@@ -513,7 +518,6 @@ const SCENES = {
       <circle cx="${(W * 0.11).toFixed(1)}" cy="${(H * 0.74).toFixed(1)}" r="${(W * 0.020).toFixed(1)}" fill="${p.accent}" opacity="0.5"/>`;
     return `<g opacity="${ctx.opacity}">${beams.join("")}${motes.join("")}${speaker}</g>`;
   },
-
   cassette: (ctx) => {
     const { W, H, palette: p } = ctx;
     const x0 = W * 0.18;
@@ -533,8 +537,6 @@ const SCENES = {
       <rect x="${(x0 + w * 0.10).toFixed(1)}" y="${(y0 + h * 0.80).toFixed(1)}" width="${(w * 0.60).toFixed(1)}" height="${(h * 0.08).toFixed(1)}" rx="${(W * 0.003).toFixed(1)}" fill="${p.primary}" opacity="0.4"/>
     </g>`;
   },
-
-  // ── Home ────────────────────────────────────────────────────
   window_sill: (ctx) => {
     const { W, H, palette: p, night } = ctx;
     const x0 = W * 0.18;
@@ -553,7 +555,6 @@ const SCENES = {
     const sill = `<rect x="${(W * 0.14).toFixed(1)}" y="${(y0 + h).toFixed(1)}" width="${(W * 0.72).toFixed(1)}" height="${(H * 0.05).toFixed(1)}" fill="${p.ground}" opacity="0.9"/>`;
     return `<g opacity="${ctx.opacity}">${frame}${sun}${plant}${sill}</g>`;
   },
-
   shelf: (ctx) => {
     const { W, H, palette: p, seed } = ctx;
     const rng = seededRandom(seed + "shelf");
@@ -572,7 +573,6 @@ const SCENES = {
     }
     return `<g opacity="${ctx.opacity}">${shelves.join("")}</g>`;
   },
-
   rooftop: (ctx) => {
     const { W, H, palette: p, night } = ctx;
     const baseY = H * 0.68;
@@ -590,8 +590,6 @@ const SCENES = {
       <rect x="${(W * 0.24).toFixed(1)}" y="${(baseY - H * 0.045).toFixed(1)}" width="${(W * 0.10).toFixed(1)}" height="${(H * 0.012).toFixed(1)}" fill="${p.accent}" opacity="0.6"/>
     </g>`;
   },
-
-  // ── Abstract ────────────────────────────────────────────────
   ribbon: (ctx) => {
     const { W, H, palette: p } = ctx;
     const path = `M${(W * 0.05).toFixed(1)},${(H * 0.60).toFixed(1)} C${(W * 0.25).toFixed(1)},${(H * 0.30).toFixed(1)} ${(W * 0.45).toFixed(1)},${(H * 0.75).toFixed(1)} ${(W * 0.65).toFixed(1)},${(H * 0.45).toFixed(1)} C${(W * 0.85).toFixed(1)},${(H * 0.20).toFixed(1)} ${(W * 0.95).toFixed(1)},${(H * 0.55).toFixed(1)} ${(W * 1.05).toFixed(1)},${(H * 0.40).toFixed(1)}`;
@@ -605,7 +603,6 @@ const SCENES = {
       <path d="${path}" fill="none" stroke="${p.ink}" stroke-width="${(W * 0.002).toFixed(1)}" opacity="0.25"/>
     </g>`;
   },
-
   glass_cards: (ctx) => {
     const { W, H, palette: p } = ctx;
     const cards = [
@@ -625,7 +622,6 @@ const SCENES = {
     });
     return `<g opacity="${ctx.opacity}">${els.join("")}</g>`;
   },
-
   halftone: (ctx) => {
     const { W, H, palette: p, seed } = ctx;
     const rng = seededRandom(seed + "half");
@@ -675,23 +671,24 @@ const SCENE_META = {
 const SCENE_IDS = Object.keys(SCENES);
 
 const SCENE_AFFINITY = {
-  "scene-poster":     ["skyline", "ribbon", "grid_wave", "terminal", "stage_light"],
-  "scene-card":       ["shelf", "window_sill", "vinyl", "glass_cards", "paper_stack"],
-  "strip-bottom":     ["soundwave", "halftone", "newspaper_fold", "rooftop"],
-  "hero-short":       ["ribbon", "halftone", "grid_wave", "type_specimen"],
-  "poster-centered":  ["ribbon", "skyline", "type_specimen", "halftone"],
-  "quote-card":       ["ribbon", "glass_cards", "paper_stack"],
-  "stat-hero":        ["grid_wave", "circuit", "halftone"],
-  "newspaper-classic":["newspaper_fold", "paper_stack", "type_specimen"],
-  "event-poster":     ["stage_light", "cassette", "soundwave"],
-  "random-lines-top": ["halftone", "grid_wave", "ribbon"],
-  "product-grid-2":   ["shelf", "glass_cards", "paper_stack"],
-  "feature-image-top":["window_sill", "shelf", "rooftop"],
-  "split-image-side": ["rooftop", "shelf", "skyline"],
+  "scene-poster":       ["skyline", "ribbon", "grid_wave", "terminal", "stage_light"],
+  "scene-card":         ["shelf", "window_sill", "vinyl", "glass_cards", "paper_stack"],
+  "strip-bottom":       ["soundwave", "halftone", "newspaper_fold", "rooftop"],
+  "hero-short":         ["ribbon", "halftone", "grid_wave", "type_specimen"],
+  "poster-centered":    ["ribbon", "skyline", "type_specimen", "halftone"],
+  "quote-card":         ["ribbon", "glass_cards", "paper_stack"],
+  "stat-hero":          ["grid_wave", "circuit", "halftone"],
+  "newspaper-classic":  ["newspaper_fold", "paper_stack", "type_specimen"],
+  "event-poster":       ["stage_light", "cassette", "soundwave"],
+  "random-lines-top":   ["halftone", "grid_wave", "ribbon"],
+  "product-grid-2":     ["shelf", "glass_cards", "paper_stack"],
+  "feature-image-top":  ["window_sill", "shelf", "rooftop"],
+  "split-image-side":   ["rooftop", "shelf", "skyline"],
   "image-badge-overlay":["vinyl", "circuit", "grid_wave"],
   "image-shadow-bottom":["skyline", "rooftop", "window_sill"],
-  "image-blur-text":  ["ribbon", "halftone", "glass_cards"],
+  "image-blur-text":    ["ribbon", "halftone", "glass_cards"],
   "image-card-side-text":["shelf", "window_sill", "vinyl"],
+  "browser-frame":      ["ribbon", "grid_wave", "halftone", "glass_cards"],
 };
 
 function pickScene(seed, template, explicit) {
@@ -709,12 +706,7 @@ function pickScene(seed, template, explicit) {
 }
 
 function sceneSafe(W, H) {
-  return {
-    centerX: W * 0.5,
-    centerY: H * 0.5,
-    quietTop: H * 0.30,
-    quietBottom: H * 0.70,
-  };
+  return { centerX: W * 0.5, centerY: H * 0.5, quietTop: H * 0.30, quietBottom: H * 0.70 };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -739,7 +731,7 @@ function stableHash(str) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  TEXT MEASUREMENT + LAYOUT HELPERS
+//  TEXT MEASUREMENT + LAYOUT
 // ═══════════════════════════════════════════════════════════════════
 
 const WEIGHT_NUM = { regular: 400, medium: 500, bold: 700, black: 900 };
@@ -767,9 +759,7 @@ function fitText(text, maxWidth, maxSize, weight = "regular", minSize = 12) {
   const str = String(text ?? "");
   if (!str) return maxSize;
   let size = maxSize;
-  while (size > minSize && measureText(str, size, weight) > maxWidth) {
-    size -= 1;
-  }
+  while (size > minSize && measureText(str, size, weight) > maxWidth) size -= 1;
   return size;
 }
 
@@ -785,15 +775,8 @@ function wrapToWidth(text, maxWidth, size, weight = "regular") {
       line = candidate;
       continue;
     }
-    if (line) {
-      lines.push(line);
-      line = "";
-    }
-    if (measureText(w, size, weight) <= maxWidth) {
-      line = w;
-      continue;
-    }
-    // hard-break long word by measured slice
+    if (line) { lines.push(line); line = ""; }
+    if (measureText(w, size, weight) <= maxWidth) { line = w; continue; }
     let remaining = w;
     while (remaining.length > 0) {
       let cut = remaining.length;
@@ -814,23 +797,23 @@ function safeArea(W, H) {
 function typeScale(H, base = "poster") {
   if (base === "compact") {
     return {
-      display:   Math.round(H * 0.16),
-      headline:  Math.round(H * 0.062),
-      sub:       Math.round(H * 0.026),
-      body:      Math.round(H * 0.019),
-      caption:   Math.round(H * 0.016),
-      kicker:    Math.round(H * 0.018),
-      label:     Math.round(H * 0.014),
+      display: Math.round(H * 0.16),
+      headline: Math.round(H * 0.062),
+      sub: Math.round(H * 0.026),
+      body: Math.round(H * 0.019),
+      caption: Math.round(H * 0.016),
+      kicker: Math.round(H * 0.018),
+      label: Math.round(H * 0.014),
     };
   }
   return {
-    display:   Math.round(H * 0.24),
-    headline:  Math.round(H * 0.078),
-    sub:       Math.round(H * 0.030),
-    body:      Math.round(H * 0.021),
-    caption:   Math.round(H * 0.018),
-    kicker:    Math.round(H * 0.020),
-    label:     Math.round(H * 0.016),
+    display: Math.round(H * 0.24),
+    headline: Math.round(H * 0.078),
+    sub: Math.round(H * 0.030),
+    body: Math.round(H * 0.021),
+    caption: Math.round(H * 0.018),
+    kicker: Math.round(H * 0.020),
+    label: Math.round(H * 0.016),
   };
 }
 
@@ -852,7 +835,7 @@ function applyHeadlineCase(text, mode) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  WATERMARK — three-layer monogram mark, palette-aware
+//  WATERMARK
 // ═══════════════════════════════════════════════════════════════════
 
 function watermark(dims, theme) {
@@ -922,60 +905,16 @@ function watermark(dims, theme) {
   return `<g>${grad}${backdrop}${markRect}${fPaths.join("")}${wordEl}</g>`;
 }
 
-// ═══ CONTINUE: rendering helpers ═══
+// ═══════════════════════════════════════════════════════════════════
+//  TEXT RENDERING
+// ═══════════════════════════════════════════════════════════════════
 
 function esc(s) {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
-
 function escAttr(s) {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-
-function parseInlineStyle(s) {
-  const out = {};
-  if (!s) return out;
-  for (const part of String(s).split(";")) {
-    const [k, ...rest] = part.split(":");
-    if (!k || !rest.length) continue;
-    const key = k.trim().toLowerCase();
-    const val = rest.join(":").trim();
-    if (key && val && key.length < 40 && val.length < 200) out[key] = val;
-  }
-  return out;
-}
-
-function cssPx(v, base = 16, fallback = 0) {
-  if (v == null) return fallback;
-  const s = String(v).trim();
-  const m = s.match(/^(-?\d*\.?\d+)(px|pt|em|rem|%)?$/);
-  if (!m) return fallback;
-  const n = parseFloat(m[1]);
-  const unit = m[2] || "px";
-  if (unit === "px") return n;
-  if (unit === "pt") return (n * 4) / 3;
-  if (unit === "em" || unit === "rem") return n * base;
-  if (unit === "%") return (n / 100) * base;
-  return n;
-}
-
-function tagDefaults(tag) {
-  switch (tag) {
-    case "h1": return { size: 64, weight: "black" };
-    case "h2": return { size: 48, weight: "bold" };
-    case "h3": return { size: 32, weight: "bold" };
-    case "h4": return { size: 24, weight: "bold" };
-    case "h5": return { size: 20, weight: "medium" };
-    case "h6": return { size: 16, weight: "medium" };
-    case "p": return { size: 20, weight: "regular" };
-    case "small": return { size: 14, weight: "regular" };
-    default: return { size: 20, weight: "regular" };
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  TEXT RENDERING — stroke or bundled font
-// ═══════════════════════════════════════════════════════════════════
 
 function textNode({ x, y, text, anchor = "start", size, weight = "regular", fill, letterSpacing = null, opacity = null, style = null, family = null, fillOpacity = null }) {
   const str = String(text ?? "");
@@ -1097,7 +1036,7 @@ function tryVerifyJwt(req) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  RATE LIMIT
+//  RATE LIMITS
 // ═══════════════════════════════════════════════════════════════════
 
 const RL = new Map();
@@ -1204,7 +1143,6 @@ function setRateHeaders(res, rl, bucket, scope) {
   if (scope) res.setHeader("X-RateLimit-Scope", scope);
 }
 
-// Sweep expired buckets every 10 minutes
 if (typeof setInterval === "function") {
   const sweep = setInterval(() => {
     const now = Date.now();
@@ -1235,10 +1173,7 @@ function canonicalize(v) {
   for (const k of Object.keys(v).sort()) out[k] = canonicalize(v[k]);
   return out;
 }
-
-function cacheKey(obj) {
-  return crypto.createHash("sha256").update(JSON.stringify(canonicalize(obj))).digest("hex");
-}
+function cacheKey(obj) { return crypto.createHash("sha256").update(JSON.stringify(canonicalize(obj))).digest("hex"); }
 
 function lruGet(map, key, ttl) {
   const entry = map.get(key);
@@ -1248,46 +1183,35 @@ function lruGet(map, key, ttl) {
   map.set(key, entry);
   return entry.v;
 }
-
 function lruSet(map, key, value, max) {
-  if (map.size >= max) {
-    const first = map.keys().next().value;
-    if (first) map.delete(first);
-  }
+  if (map.size >= max) { const first = map.keys().next().value; if (first) map.delete(first); }
   map.set(key, { v: value, t: Date.now() });
 }
-
 function cacheGet(key) { return lruGet(previewCache, key, PREVIEW_CACHE_TTL); }
 function cacheSet(key, value) { lruSet(previewCache, key, value, PREVIEW_CACHE_MAX); }
-
 function imageCacheGet(key) { return lruGet(IMAGE_CACHE, key, IMAGE_CACHE_TTL); }
 function imageCacheSet(key, value) { lruSet(IMAGE_CACHE, key, value, IMAGE_CACHE_MAX); }
-
 function avatarCacheGet(key) { return lruGet(AVATAR_CACHE, key, AVATAR_CACHE_TTL); }
 function avatarCacheSet(key, value) { lruSet(AVATAR_CACHE, key, value, AVATAR_CACHE_MAX); }
-
 function thumbCacheGet(key) { return lruGet(THUMB_CACHE, key, THUMB_CACHE_TTL); }
 function thumbCacheSet(key, value) { lruSet(THUMB_CACHE, key, value, THUMB_CACHE_MAX); }
-
 function sceneCacheGet(key) { return lruGet(SCENE_CACHE, key, SCENE_CACHE_TTL); }
 function sceneCacheSet(key, value) { lruSet(SCENE_CACHE, key, value, SCENE_CACHE_MAX); }
 
 // ═══════════════════════════════════════════════════════════════════
-//  SANITIZE HELPERS
+//  SANITIZE
 // ═══════════════════════════════════════════════════════════════════
 
 function cleanText(v, max) {
   if (v == null) return "";
   return String(v).replace(/[\x00-\x1F\x7F]/g, " ").trim().slice(0, max);
 }
-
 function cleanColor(v, fallback) {
   if (!v) return fallback;
   const s = String(v).trim();
   if (/^[a-zA-Z0-9#(),.%\s-]+$/.test(s) && s.length <= 40) return s;
   return fallback;
 }
-
 function cleanSize(v) { return SIZES[v] ? v : "1080x1080"; }
 function cleanFont() { return "FlierSans"; }
 function cleanAlign(v) { return ["left", "center", "right"].includes(v) ? v : "center"; }
@@ -1297,20 +1221,18 @@ function cleanVariant(v) { return ["dark", "light", "auto"].includes(v) ? v : "d
 function cleanPattern(v) { return ["none", "dots", "grid", "diagonal", "noise"].includes(v) ? v : "none"; }
 function cleanAccentPosition(v) { return ["top-left", "top-right", "bottom-left", "bottom-right"].includes(v) ? v : "top-left"; }
 function cleanHeadlineCase(v) { return ["auto", "upper", "title", "sentence"].includes(v) ? v : "auto"; }
-
 function cleanScene(v) {
   if (v === false || v === "none" || v === "random") return v;
   if (typeof v === "string" && SCENES[v]) return v;
   return null;
 }
-
 function sanitizeUploadName(name) {
   const s = String(name || "").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 60);
   return s || `flier_${Date.now()}`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  IMAGE FETCH — hardened, with cache and report
+//  IMAGE FETCH — hardened, with SVG sanitization on fetched content
 // ═══════════════════════════════════════════════════════════════════
 
 const MAGIC_BYTES = {
@@ -1400,9 +1322,7 @@ async function resolveHostSafe(host) {
   const nums = parseIPv4(raw);
   if (nums) return !isPrivateIPv4(nums);
   try {
-    const dns = await import("dns").then(m => m.promises || m).catch(() => null);
-    if (!dns || !dns.lookup) return true;
-    const result = await dns.lookup(raw, { all: true });
+    const result = await dns.promises.lookup(raw, { all: true });
     for (const r of result) {
       const v4 = parseIPv4(r.address);
       if (v4 && isPrivateIPv4(v4)) return false;
@@ -1412,6 +1332,21 @@ async function resolveHostSafe(host) {
   } catch {
     return true;
   }
+}
+
+// SVG content safety — reused by both fetch and upload paths
+function isSafeSvgText(text) {
+  if (typeof text !== "string") return false;
+  if (/<script[\s>]/i.test(text)) return false;
+  if (/<foreignObject[\s>]/i.test(text)) return false;
+  if (/javascript:/i.test(text)) return false;
+  // Block external hrefs on <image>/<use> inside SVG
+  const externalHref = /<[^>]+\b(?:href|xlink:href)\s*=\s*["'](https?:|\/\/)[^"']+["']/i;
+  if (externalHref.test(text)) {
+    // Only reject if it's on use/image/link — allow <a href>
+    if (/<(?:use|image|link)[^>]+\b(?:href|xlink:href)\s*=\s*["'](https?:|\/\/)/i.test(text)) return false;
+  }
+  return true;
 }
 
 async function fetchImageAsDataUri(url, warn, referer = null) {
@@ -1442,13 +1377,9 @@ async function fetchImageAsDataUri(url, warn, referer = null) {
 
     let res;
     try {
-      const headers = { Accept: "image/*", "User-Agent": "FolioFlier/3.0" };
+      const headers = { Accept: "image/*", "User-Agent": "FolioFlier/3.1" };
       if (referer) headers.Referer = referer;
-      res = await fetch(currentUrl, {
-        signal: controller.signal,
-        redirect: "manual",
-        headers,
-      });
+      res = await fetch(currentUrl, { signal: controller.signal, redirect: "manual", headers });
     } catch (e) {
       clearTimeout(timer);
       if (warn) warn(`image fetch failed: ${e.message}`);
@@ -1517,6 +1448,14 @@ async function fetchImageAsDataUri(url, warn, referer = null) {
       return { error: "NOT_IMAGE", message: "magic bytes mismatch" };
     }
 
+    if (sniffed === "image/svg+xml") {
+      const text = buf.toString("utf8");
+      if (!isSafeSvgText(text)) {
+        if (warn) warn("svg content rejected (unsafe)");
+        return { error: "UNSAFE_SVG", message: "svg contained disallowed content" };
+      }
+    }
+
     const dataUri = `data:${sniffed};base64,${buf.toString("base64")}`;
     const result = { dataUri, mime: sniffed, bytes: buf.length, ms: Date.now() - start, cached: false };
     imageCacheSet(cacheHash, { dataUri, mime: sniffed, bytes: buf.length });
@@ -1548,9 +1487,7 @@ async function imageToDataUri(spec, warn, budget) {
 
   if (spec.base64 && typeof spec.base64 === "string") {
     const s = spec.base64;
-    if (!s.startsWith("data:image/")) {
-      return { error: "INVALID_IMAGE", message: "data URI required" };
-    }
+    if (!s.startsWith("data:image/")) return { error: "INVALID_IMAGE", message: "data URI required" };
     const comma = s.indexOf(",");
     if (comma < 0) return { error: "INVALID_IMAGE", message: "malformed data URI" };
     const declared = s.slice(5, comma).split(";")[0];
@@ -1560,8 +1497,12 @@ async function imageToDataUri(spec, warn, budget) {
     if (buf.length > MAX_IMAGE_BYTES) return { error: "TOO_LARGE", message: "base64 exceeds limit" };
     const sniffed = sniffMime(buf);
     if (!sniffed) return { error: "INVALID_IMAGE", message: "magic bytes mismatch" };
-    if (declared && !sniffed.includes(declared.split("/")[1] || "")) {
-      // permissive: allow jpeg<->jpg mismatch
+    if (sniffed === "image/svg+xml") {
+      if (!isSafeSvgText(buf.toString("utf8"))) {
+        return { error: "UNSAFE_SVG", message: "svg contained disallowed content" };
+      }
+    }
+    if (declared) {
       const norm = declared.split("/")[1];
       if (norm && norm !== "jpg" && !sniffed.includes(norm)) {
         return { error: "INVALID_IMAGE", message: "declared MIME does not match bytes" };
@@ -1603,6 +1544,7 @@ function normalizeInput(raw) {
     size: raw.size || "1080x1080",
     svg: raw.svg || null,
     html: raw.html || null,
+    seed: raw.seed || null,
     data: { text: {}, style: {}, images: {} },
     upload: raw.upload || {},
     warnings,
@@ -1654,10 +1596,7 @@ function normalizeInput(raw) {
 
   if (out.type === "template") {
     const hasText = out.data.text.headline || out.data.text.subheadline || out.data.text.body || out.data.text.metric;
-    if (!hasText) {
-      out.data.text.headline = "Your image";
-      warn("no text provided, using placeholder");
-    }
+    if (!hasText) { out.data.text.headline = "Your image"; warn("no text provided, using placeholder"); }
   }
   if (out.type === "svg" && !out.svg) throw Object.assign(new Error("svg required when type=svg"), { status: 400 });
   if (out.type === "html" && !out.html) throw Object.assign(new Error("html required when type=html"), { status: 400 });
@@ -1667,7 +1606,7 @@ function normalizeInput(raw) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  THEME + TEXT RESOLVERS
+//  THEME — resolved with seeded random palette defaults
 // ═══════════════════════════════════════════════════════════════════
 
 const LIGHT_PALETTE = { text: "#0f0f12", muted: "rgba(15,15,18,0.68)", surface: "rgba(0,0,0,0.06)" };
@@ -1688,7 +1627,7 @@ function isLightColor(c) {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.65;
 }
 
-function resolveTheme(data) {
+function resolveTheme(data, seed) {
   const style = data?.style || {};
   const colors = style.colors || {};
   const bg = data?.images?.background || {};
@@ -1702,15 +1641,26 @@ function resolveTheme(data) {
     } else effectiveVariant = "dark";
   }
   const palette = effectiveVariant === "light" ? LIGHT_PALETTE : DARK_PALETTE;
-
   const scene = cleanScene(style.scene);
+
+  // Seed-derived palette defaults — used only when the caller didn't specify
+  const paletteSeed = pickPaletteSeed(seed || style.seed || data?.text?.headline || "flier");
+
+  const primary = colors.primary ? cleanColor(colors.primary, paletteSeed.primary) : paletteSeed.primary;
+  const accent = colors.accent ? cleanColor(colors.accent, paletteSeed.accent) : paletteSeed.accent;
+
+  // Gradient endpoints: explicit bg wins; otherwise derive from colors; otherwise from seed
+  const bgFrom = bg.from ? cleanColor(bg.from, primary) : primary;
+  const bgTo = bg.to ? cleanColor(bg.to, accent) : accent;
+  const bgVia = bg.via ? cleanColor(bg.via, null) : null;
 
   return {
     variant: effectiveVariant,
+    seed: seed || null,
     colors: {
-      primary: cleanColor(colors.primary, "#F59E0B"),
+      primary,
       text: cleanColor(colors.text, palette.text),
-      accent: cleanColor(colors.accent, "#fbbf24"),
+      accent,
       muted: cleanColor(colors.muted, palette.muted),
       surface: cleanColor(colors.surface, palette.surface),
     },
@@ -1729,14 +1679,14 @@ function resolveTheme(data) {
     background: {
       type: ["solid", "gradient", "linear", "radial", "mesh", "image"].includes(bg.type) ? bg.type : "gradient",
       color: cleanColor(bg.color, "#0a0a0d"),
-      from: cleanColor(bg.from, "#F59E0B"),
-      via: bg.via ? cleanColor(bg.via, null) : null,
-      to: cleanColor(bg.to, "#f97316"),
+      from: bgFrom,
+      via: bgVia,
+      to: bgTo,
       angle: cleanNumber(bg.angle, 0, 360, 135),
       cx: cleanNumber(bg.cx, 0, 1, 0.5),
       cy: cleanNumber(bg.cy, 0, 1, 0.5),
       r: cleanNumber(bg.r, 0.1, 1, 0.7),
-      stops: Array.isArray(bg.stops) ? bg.stops.map(s => ({ offset: Number(s.offset) || 0, color: cleanColor(s.color, "#F59E0B") })) : null,
+      stops: Array.isArray(bg.stops) ? bg.stops.map(s => ({ offset: Number(s.offset) || 0, color: cleanColor(s.color, bgFrom) })) : null,
       overlay: cleanColor(bg.overlay, "rgba(0,0,0,0.55)"),
       blur: cleanNumber(bg.blur, 0, 40, 0),
       dataUri: null,
@@ -1796,20 +1746,12 @@ function sceneLayer(dims, theme, template) {
 
   let sceneSvg = sceneCacheGet(sceneCacheKey);
   if (!sceneSvg) {
-    const ctx = {
-      W, H,
-      palette,
-      opacity: 1,
-      seed: theme.seed || sceneId,
-      variant: theme.variant,
-      night: theme.sceneNight,
-    };
+    const ctx = { W, H, palette, opacity: 1, seed: theme.seed || sceneId, variant: theme.variant, night: theme.sceneNight };
     const fn = SCENES[sceneId];
     if (!fn) return "";
     sceneSvg = fn(ctx);
     sceneCacheSet(sceneCacheKey, sceneSvg);
   }
-
   return `<g opacity="${theme.sceneOpacity}">${sceneSvg}</g>`;
 }
 
@@ -1849,7 +1791,6 @@ function gradientDefs(W, H, bg, idSuffix = "") {
       rect: `<rect width="${W}" height="${H}" fill="${escAttr(bg.color)}"/>${rects.join("")}`,
     };
   }
-  // linear
   const rad = (bg.angle * Math.PI) / 180;
   const x1 = 0.5 - Math.cos(rad) * 0.5;
   const y1 = 0.5 - Math.sin(rad) * 0.5;
@@ -1888,7 +1829,7 @@ function svgWrap(dims, theme, body) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  TEMPLATES — 17 total (15 existing + scene-poster + scene-card)
+//  TEMPLATES (existing + browser-frame)
 // ═══════════════════════════════════════════════════════════════════
 
 function tpl_default(data, theme, dims) {
@@ -2351,7 +2292,6 @@ function tpl_strip_bottom(data, theme, dims) {
 
   const out = [backgroundLayer(dims, theme, "strip-bottom")];
 
-  // Draw strip FIRST (so text can be clipped on top)
   const imageData = data.images?.primary?.dataUri;
   if (imageData) {
     out.push(`<defs><clipPath id="strip-clip"><rect x="0" y="${stripY}" width="${W}" height="${stripH}"/></clipPath></defs><image href="${escAttr(imageData)}" x="0" y="${stripY}" width="${W}" height="${stripH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#strip-clip)"/><rect x="0" y="${stripY}" width="${W}" height="${stripH}" fill="${escAttr(theme.colors.primary)}" opacity="0.18"/>`);
@@ -2366,7 +2306,6 @@ function tpl_strip_bottom(data, theme, dims) {
     out.push(`<g opacity="0.7">${stripes.join("")}</g>`);
   }
 
-  // Draw text on top, with clip to y < stripY
   out.push(`<defs><clipPath id="strip-text-clip"><rect x="0" y="0" width="${W}" height="${stripY}"/></clipPath></defs>`);
   const textGroup = [];
   let y = blockTop;
@@ -2460,7 +2399,6 @@ function tpl_product_grid_2(data, theme, dims) {
   return svgWrap(dims, theme, out.join("\n"));
 }
 
-// ── NEW: scene-poster ────────────────────────────────────────
 function tpl_scene_poster(data, theme, dims) {
   const { w: W, h: H } = dims;
   const t = data.text;
@@ -2480,7 +2418,6 @@ function tpl_scene_poster(data, theme, dims) {
   const blockTop = H - blockH - sa.bottom - H * 0.03;
 
   const out = [backgroundLayer(dims, theme, "scene-poster")];
-  // Scrim at bottom for text contrast
   out.push(`<defs><linearGradient id="scene-scrim" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="rgba(0,0,0,0)"/>
     <stop offset="0.6" stop-color="rgba(0,0,0,0.45)"/>
@@ -2500,7 +2437,6 @@ function tpl_scene_poster(data, theme, dims) {
   return svgWrap(dims, theme, out.join("\n"));
 }
 
-// ── NEW: scene-card ─────────────────────────────────────────
 function tpl_scene_card(data, theme, dims) {
   const { w: W, h: H } = dims;
   const t = data.text;
@@ -2524,18 +2460,151 @@ function tpl_scene_card(data, theme, dims) {
   let y = cardY + (cardH - blockH) / 2 + headSize * 0.85;
 
   const out = [];
-  // scene background (top half only via clipPath)
   out.push(`<defs><clipPath id="sc-card-clip"><rect x="0" y="0" width="${W}" height="${sceneH.toFixed(1)}"/></clipPath></defs>`);
   out.push(`<g clip-path="url(#sc-card-clip)">${backgroundLayer(dims, theme, "scene-card")}</g>`);
-  // card background (solid, from theme)
   out.push(`<rect x="0" y="${cardY.toFixed(1)}" width="${W}" height="${(H - cardY).toFixed(1)}" fill="${escAttr(theme.variant === "light" ? "#ffffff" : "#0f0f12")}"/>`);
-  // subtle divider line
   out.push(`<rect x="0" y="${(cardY - 2).toFixed(1)}" width="${W}" height="2" fill="${escAttr(theme.colors.primary)}"/>`);
 
   const textX = sa.left + cardPad;
   for (const line of headLines) { out.push(textNode({ x: textX, y, text: line, size: headSize, weight: "black", fill: theme.colors.text })); y += headLH; }
   if (subLines.length) { y += Math.round(subSize * 0.5); for (const line of subLines) { out.push(textNode({ x: textX, y, text: line, size: subSize, weight: "medium", fill: theme.colors.muted })); y += subLH; } }
   if (bodyLines.length) { y += Math.round(bodySize * 0.7); for (const line of bodyLines) { out.push(textNode({ x: textX, y, text: line, size: bodySize, weight: "regular", fill: theme.colors.muted })); y += bodyLH; } }
+
+  out.push(watermark(dims, theme));
+  return svgWrap(dims, theme, out.join("\n"));
+}
+
+// ── NEW: browser-frame ───────────────────────────────────────
+function tpl_browser_frame(data, theme, dims) {
+  const { w: W, h: H } = dims;
+  const t = data.text;
+  const sa = safeArea(W, H);
+  const chromeH = Math.round(H * 0.075);
+  const radius = Math.round(Math.min(W, H) * 0.022);
+  const pad = Math.round(Math.min(W, H) * 0.04);
+  const frameX = pad;
+  const frameY = pad;
+  const frameW = W - pad * 2;
+  const frameH = H - pad * 2;
+  const contentX = frameX + Math.round(frameW * 0.05);
+  const contentY = frameY + chromeH + Math.round(frameH * 0.06);
+  const contentW = frameW - Math.round(frameW * 0.10);
+
+  const scale = typeScale(frameH, "compact");
+  const headSize = scale.headline * 1.15;
+  const subSize = scale.sub;
+  const kickSize = scale.kicker * 0.9;
+  const headline = applyHeadlineCase(t.headline, theme.headlineCase);
+  const headLines = wrapToWidth(headline, contentW, headSize, "black");
+  const subLines = wrapToWidth(t.subheadline, contentW, subSize, "medium");
+  const headLH = headSize * 1.05;
+  const subLH = subSize * 1.4;
+
+  const isLight = theme.variant === "light";
+  const frameBg = isLight ? "#ffffff" : "#0f1118";
+  const chromeBg = isLight ? "#f1f2f4" : "#191c24";
+  const chromeBorder = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.10)";
+  const dotRed = "#ef4444";
+  const dotYel = "#f59e0b";
+  const dotGrn = "#10b981";
+  const urlChipBg = isLight ? "#ffffff" : "#0a0c10";
+  const urlChipBorder = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)";
+
+  const out = [backgroundLayer(dims, theme, "browser-frame")];
+
+  // Frame shadow
+  out.push(`<defs><filter id="bf-shadow" x="-5%" y="-5%" width="110%" height="110%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="${Math.round(W * 0.02)}"/>
+    <feOffset dx="0" dy="${Math.round(W * 0.01)}"/>
+    <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
+    <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter></defs>`);
+
+  // Frame base
+  out.push(`<g filter="url(#bf-shadow)">
+    <rect x="${frameX}" y="${frameY}" width="${frameW}" height="${frameH}" rx="${radius}" fill="${frameBg}" stroke="${chromeBorder}" stroke-width="1.5"/>
+  </g>`);
+
+  // Chrome bar
+  out.push(`<path d="M${frameX + radius},${frameY} h${frameW - radius * 2} a${radius},${radius} 0 0 1 ${radius},${radius} v${chromeH - radius} h${-frameW} v${-(chromeH - radius)} a${radius},${radius} 0 0 1 ${radius},${-radius} z" fill="${chromeBg}"/>`);
+  out.push(`<line x1="${frameX}" y1="${frameY + chromeH}" x2="${frameX + frameW}" y2="${frameY + chromeH}" stroke="${chromeBorder}" stroke-width="1"/>`);
+
+  // Traffic lights
+  const dotR = Math.max(4, Math.round(chromeH * 0.14));
+  const dotY = frameY + chromeH / 2;
+  const dotStart = frameX + Math.round(frameW * 0.028);
+  const dotGap = Math.round(dotR * 2.6);
+  out.push(`<circle cx="${dotStart}" cy="${dotY}" r="${dotR}" fill="${dotRed}" opacity="0.85"/>`);
+  out.push(`<circle cx="${dotStart + dotGap}" cy="${dotY}" r="${dotR}" fill="${dotYel}" opacity="0.85"/>`);
+  out.push(`<circle cx="${dotStart + dotGap * 2}" cy="${dotY}" r="${dotR}" fill="${dotGrn}" opacity="0.85"/>`);
+
+  // URL chip
+  const urlX = dotStart + dotGap * 2 + Math.round(dotGap * 1.2);
+  const urlW = frameW - (urlX - frameX) - Math.round(frameW * 0.028);
+  const urlH = Math.round(chromeH * 0.60);
+  const urlY = frameY + (chromeH - urlH) / 2;
+  const urlR = Math.round(urlH * 0.28);
+  out.push(`<rect x="${urlX}" y="${urlY}" width="${urlW}" height="${urlH}" rx="${urlR}" fill="${urlChipBg}" stroke="${urlChipBorder}" stroke-width="1"/>`);
+  const urlText = t.kicker ? t.kicker.replace(/^https?:\/\//, "") : "your-project.folio.app";
+  const urlFontSize = Math.round(urlH * 0.55);
+  const lockX = urlX + Math.round(urlH * 0.5);
+  const lockY = urlY + urlH / 2;
+  const lockR = Math.round(urlH * 0.18);
+  out.push(`<rect x="${lockX - lockR * 0.8}" y="${lockY - lockR * 0.2}" width="${lockR * 1.6}" height="${lockR * 1.3}" rx="${lockR * 0.25}" fill="${isLight ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.45)"}"/>`);
+  out.push(textNode({
+    x: lockX + lockR * 1.8,
+    y: lockY + urlFontSize * 0.34,
+    text: urlText,
+    size: urlFontSize,
+    weight: "medium",
+    fill: isLight ? "rgba(15,15,18,0.55)" : "rgba(255,255,255,0.55)",
+  }));
+
+  // Icon (top of content)
+  const iconSize = Math.round(frameH * 0.10);
+  const primaryImage = data.images?.primary?.dataUri;
+  if (primaryImage) {
+    out.push(`<defs><clipPath id="bf-icon-clip"><rect x="${contentX}" y="${contentY}" width="${iconSize}" height="${iconSize}" rx="${Math.round(iconSize * 0.22)}"/></clipPath></defs>
+      <image href="${escAttr(primaryImage)}" x="${contentX}" y="${contentY}" width="${iconSize}" height="${iconSize}" preserveAspectRatio="xMidYMid slice" clip-path="url(#bf-icon-clip)"/>
+      <rect x="${contentX}" y="${contentY}" width="${iconSize}" height="${iconSize}" rx="${Math.round(iconSize * 0.22)}" fill="none" stroke="${escAttr(theme.colors.primary)}" stroke-width="1.5" opacity="0.5"/>`);
+  } else {
+    out.push(`<rect x="${contentX}" y="${contentY}" width="${iconSize}" height="${iconSize}" rx="${Math.round(iconSize * 0.22)}" fill="${escAttr(theme.colors.primary)}" opacity="0.85"/>`);
+  }
+
+  // Text block
+  let y = contentY + iconSize + Math.round(frameH * 0.05) + headSize * 0.85;
+  for (const line of headLines) {
+    out.push(textNode({ x: contentX, y, text: line, size: headSize, weight: "black", fill: theme.colors.text }));
+    y += headLH;
+  }
+  if (subLines.length) {
+    y += Math.round(subSize * 0.6);
+    for (const line of subLines) {
+      out.push(textNode({ x: contentX, y, text: line, size: subSize, weight: "medium", fill: theme.colors.muted }));
+      y += subLH;
+    }
+  }
+
+  // CTA pill
+  if (t.footer || t.body) {
+    const ctaText = t.footer || (t.body.length > 40 ? t.body.slice(0, 40) + "…" : t.body);
+    const ctaSize = Math.round(headSize * 0.42);
+    const ctaPad = Math.round(ctaSize * 1.2);
+    const ctaW = Math.min(contentW, measureText(ctaText, ctaSize, "bold") + ctaPad * 2);
+    const ctaH = Math.round(ctaSize * 2.2);
+    const ctaX = contentX;
+    const ctaY = y + Math.round(subSize * 0.8);
+    out.push(`<rect x="${ctaX}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="${Math.round(ctaH / 2)}" fill="${escAttr(theme.colors.primary)}"/>`);
+    out.push(textNode({
+      x: ctaX + ctaW / 2,
+      y: ctaY + ctaH / 2 + ctaSize * 0.34,
+      text: ctaText,
+      anchor: "middle",
+      size: ctaSize,
+      weight: "bold",
+      fill: isLight ? "#0a0c10" : "#0a0c10",
+    }));
+  }
 
   out.push(watermark(dims, theme));
   return svgWrap(dims, theme, out.join("\n"));
@@ -2560,6 +2629,7 @@ const TEMPLATES = {
   "product-grid-2": tpl_product_grid_2,
   "scene-poster": tpl_scene_poster,
   "scene-card": tpl_scene_card,
+  "browser-frame": tpl_browser_frame,
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2577,8 +2647,15 @@ async function buildSvg(body) {
   const sizeKey = body.size;
   const dims = enforceOutputEdge({ w: SIZES[sizeKey].w, h: SIZES[sizeKey].h });
   const text = resolveText(body.data);
-  const theme = resolveTheme(body.data);
-  theme.seed = text.headline || body.template || "flier";
+
+  // Determine seed for palette + scene selection
+  const seed = body.seed
+    || text.headline
+    || body.template
+    || `t_${Date.now()}`;
+
+  const theme = resolveTheme(body.data, seed);
+  theme.seed = seed;
   theme.text = text;
 
   const warn = (msg) => { if (!body.warnings.includes(msg)) body.warnings.push(msg); };
@@ -2621,7 +2698,7 @@ async function buildSvg(body) {
     const svg = TEMPLATES[name](data, theme, dims);
     const chosenScene = theme.scene === "none" || theme.scene === false ? null
       : (theme.scene === "random" ? "random" : (theme.scene || pickScene(theme.seed, name, null)));
-    return { svg, dims, template: name, scene: chosenScene, imageReport };
+    return { svg, dims, template: name, scene: chosenScene, imageReport, seed };
   }
   if (body.type === "svg") {
     const clean = sanitizeSvg(body.svg);
@@ -2631,14 +2708,14 @@ async function buildSvg(body) {
     $("svg").attr("height", String(dims.h));
     let svg = $.xml();
     svg = svg.replace(/<\/svg>\s*$/i, `${watermark(dims, theme)}</svg>`);
-    return { svg, dims, template: "svg", scene: null, imageReport };
+    return { svg, dims, template: "svg", scene: null, imageReport, seed };
   }
   if (body.type === "html") {
     const html = String(body.html || "");
     if (html.length > MAX_HTML_CHARS) throw Object.assign(new Error("html too large"), { status: 413 });
     const bodySvg = htmlToSvgBody(html, dims, theme);
     const out = [backgroundLayer(dims, theme, "html"), bodySvg, watermark(dims, theme)];
-    return { svg: svgWrap(dims, theme, out.join("\n")), dims, template: "html", scene: null, imageReport };
+    return { svg: svgWrap(dims, theme, out.join("\n")), dims, template: "html", scene: null, imageReport, seed };
   }
   throw Object.assign(new Error(`unknown type: ${body.type}`), { status: 400 });
 }
@@ -2651,8 +2728,49 @@ function summarizeImageResult(r) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  HTML → SVG  (unchanged from v2.2)
+//  HTML → SVG (fallback renderer)
 // ═══════════════════════════════════════════════════════════════════
+
+function parseInlineStyle(s) {
+  const out = {};
+  if (!s) return out;
+  for (const part of String(s).split(";")) {
+    const [k, ...rest] = part.split(":");
+    if (!k || !rest.length) continue;
+    const key = k.trim().toLowerCase();
+    const val = rest.join(":").trim();
+    if (key && val && key.length < 40 && val.length < 200) out[key] = val;
+  }
+  return out;
+}
+
+function cssPx(v, base = 16, fallback = 0) {
+  if (v == null) return fallback;
+  const s = String(v).trim();
+  const m = s.match(/^(-?\d*\.?\d+)(px|pt|em|rem|%)?$/);
+  if (!m) return fallback;
+  const n = parseFloat(m[1]);
+  const unit = m[2] || "px";
+  if (unit === "px") return n;
+  if (unit === "pt") return (n * 4) / 3;
+  if (unit === "em" || unit === "rem") return n * base;
+  if (unit === "%") return (n / 100) * base;
+  return n;
+}
+
+function tagDefaults(tag) {
+  switch (tag) {
+    case "h1": return { size: 64, weight: "black" };
+    case "h2": return { size: 48, weight: "bold" };
+    case "h3": return { size: 32, weight: "bold" };
+    case "h4": return { size: 24, weight: "bold" };
+    case "h5": return { size: 20, weight: "medium" };
+    case "h6": return { size: 16, weight: "medium" };
+    case "p": return { size: 20, weight: "regular" };
+    case "small": return { size: 14, weight: "regular" };
+    default: return { size: 20, weight: "regular" };
+  }
+}
 
 function htmlToSvgBody(html, dims, theme) {
   const { w: W, h: H } = dims;
@@ -2773,7 +2891,10 @@ function sanitizeSvg(svg) {
 
   return $.xml();
 }
-// ═══ CONTINUE: render, upload, handlers ═══
+
+// ═══════════════════════════════════════════════════════════════════
+//  RENDER + UPLOAD
+// ═══════════════════════════════════════════════════════════════════
 
 async function renderPng(svg, dims, reqId) {
   const opts = { fitTo: { mode: "original" }, background: "transparent" };
@@ -2787,11 +2908,7 @@ async function uploadPng(pngBuffer, name, reqId) {
   try {
     res = await fetch(IMAGE_UPLOAD_API, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${ADMIN_API_KEY}`,
-        "X-API-Key": ADMIN_API_KEY,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${ADMIN_API_KEY}`, "X-API-Key": ADMIN_API_KEY },
       body: JSON.stringify({ image: Buffer.from(pngBuffer).toString("base64"), name }),
       signal: AbortSignal.timeout(20_000),
     });
@@ -2810,548 +2927,13 @@ async function uploadPng(pngBuffer, name, reqId) {
   return data;
 }
 
-export const runtime = "nodejs";
-
-export const config = {
-  api: { bodyParser: { sizeLimit: "10mb" } },
-  maxDuration: 60,
-};
-
-export default async function handler(req, res) {
-  const reqId = newReqId();
-  const t0 = Date.now();
-  res.setHeader("X-Request-Id", reqId);
-
-  if (req.method === "OPTIONS") {
-    if (!applyCors(req, res)) return res.status(403).json({ error: "Origin not allowed" });
-    return res.status(200).end();
-  }
-  if (!applyCors(req, res)) {
-    log("cors.reject", { reqId, origin: req.headers.origin });
-    return res.status(403).json({ error: "Origin not allowed" });
-  }
-
-  const action = String(req.query?.action || req.body?.action || "").trim();
-  const identity = tryVerifyJwt(req);
-
-  // ══════════════════════════════════════════════════════════════
-  //  AVATAR PREVIEW (public, IP rate-limited, parallelized, cached)
-  // ══════════════════════════════════════════════════════════════
-  if (action === "avatar/preview") {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-    const rl = avatarRateLimit(`avatar:${ipHash(req)}`);
-    setRateHeaders(res, rl, "preview", "ip");
-    if (!rl.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip", retryAfter: 3600 });
-
-    const { username, displayName } = req.body || {};
-    if (!username || typeof username !== "string") {
-      return res.status(400).json({ success: false, error: "Missing username" });
-    }
-    if (username.length < 1 || username.length > 40) {
-      return res.status(400).json({ success: false, error: "Invalid username length" });
-    }
-
-    const safeUsername = String(username).slice(0, 40).replace(/[^a-zA-Z0-9_-]/g, "");
-    const safeDisplayName = String(displayName || username).slice(0, 60).trim();
-    const cacheHash = cacheKey({ safeUsername, safeDisplayName, v: 3 });
-    const cached = avatarCacheGet(cacheHash);
-    if (cached) {
-      res.setHeader("Cache-Control", "private, max-age=300");
-      return res.status(200).json({ success: true, variants: cached, cached: true });
-    }
-
-    const AVATAR_VARIANTS = [
-      { id: "v1", kind: "initials-solid", label: "Initials", template: "hero-short", scene: "ribbon", palette: "warm" },
-      { id: "v2", kind: "initials-gradient", label: "Gradient", template: "poster-centered", scene: "grid_wave", palette: "cool" },
-      { id: "v3", kind: "username-dark", label: "Username", template: "poster-centered", scene: "terminal", palette: "mono" },
-      { id: "v4", kind: "initials-pattern", label: "Patterned", template: "random-lines-top", scene: "halftone", palette: "neon" },
-      { id: "v5", kind: "fullname-badge", label: "Badge", template: "image-badge-overlay", scene: "vinyl", palette: "earth" },
-    ];
-
-    function initialsFrom(displayName, username) {
-      const src = (displayName || username || "?").trim();
-      const parts = src.split(/\s+/).filter(Boolean);
-      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-      return src.slice(0, 2).toUpperCase();
-    }
-
-    const initials = initialsFrom(safeDisplayName, safeUsername);
-
-    const results = await Promise.allSettled(AVATAR_VARIANTS.map(async (variant) => {
-      const base = {
-        mode: "preview",
-        type: "template",
-        template: variant.template,
-        size: "512x512",
-        data: {
-          text: {},
-          style: {
-            variant: "dark",
-            scene: variant.scene,
-            scenePalette: variant.palette,
-            colors: {},
-            background: { type: "gradient", from: "#0a0a0d", to: "#1a1a1f", angle: 135 },
-          },
-          images: {},
-        },
-      };
-      switch (variant.id) {
-        case "v1": base.data.text.headline = initials; base.data.style.colors = { primary: "#F59E0B", accent: "#fbbf24" }; break;
-        case "v2": base.data.text.headline = initials; base.data.style.colors = { primary: "#3B82F6", accent: "#6366f1" }; break;
-        case "v3": base.data.text.headline = safeUsername ? `@${safeUsername}` : initials; base.data.style.colors = { primary: "#a1a1aa", accent: "#ffffff" }; break;
-        case "v4": base.data.text.headline = initials; base.data.style.colors = { primary: "#ec4899", accent: "#06b6d4" }; break;
-        case "v5": base.data.text.headline = safeDisplayName || safeUsername || initials; base.data.text.kicker = initials; base.data.style.colors = { primary: "#b0793a", accent: "#d9a441" }; break;
-      }
-      const body = normalizeInput(base);
-      const built = await buildSvg(body);
-      const png = await renderPng(built.svg, built.dims, reqId);
-      return {
-        id: variant.id,
-        kind: variant.kind,
-        label: variant.label,
-        dataUrl: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
-        width: built.dims.w,
-        height: built.dims.h,
-        scene: built.scene,
-      };
-    }));
-
-    const variants = results.filter(r => r.status === "fulfilled").map(r => r.value);
-
-    if (variants.length === 0) return res.status(500).json({ success: false, error: "Could not generate avatars" });
-
-    avatarCacheSet(cacheHash, variants);
-    res.setHeader("Cache-Control", "private, max-age=300");
-    return res.status(200).json({ success: true, variants });
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  AVATAR UPLOAD (public, IP rate-limited)
-  // ══════════════════════════════════════════════════════════════
-  if (action === "avatar/upload") {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-    const rl = avatarRateLimit(`avatar:${ipHash(req)}`);
-    setRateHeaders(res, rl, "preview", "ip");
-    if (!rl.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip", retryAfter: 3600 });
-
-    const { dataUrl, username } = req.body || {};
-    const validation = validateUpload(dataUrl);
-    if (!validation.ok) {
-      return res.status(validation.status || 400).json({ success: false, error: validation.error });
-    }
-    const safeUsername = String(username || "user").slice(0, 40).replace(/[^a-zA-Z0-9_-]/g, "") || "user";
-    const uploadName = `avatar_${safeUsername}_${Date.now()}`;
-
-    try {
-      const uploaded = await uploadPng(validation.buffer, uploadName, reqId);
-      const url = uploaded.url || uploaded.display_url;
-      if (!url || !String(url).startsWith("https://")) return res.status(502).json({ success: false, error: "Upload returned no URL" });
-      res.setHeader("Cache-Control", "no-store");
-      return res.status(200).json({ success: true, url, width: uploaded.width || null, height: uploaded.height || null, bytes: validation.buffer.length });
-    } catch (err) {
-      log("avatar.upload.error", { reqId, message: err.message });
-      return res.status(err.status || 500).json({ success: false, error: err.message || "Upload failed" });
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  AVATAR CUSTOM (LEGACY, frozen — authed, 60/hr per uid)
-  // ══════════════════════════════════════════════════════════════
-  if (action === "avatar/custom") {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-    if (!identity.isAuth) {
-      return res.status(401).json({ success: false, error: "Authentication required" });
-    }
-
-    const rl = avatarCustomRateLimit(identity.uid);
-    setRateHeaders(res, rl, "custom", "uid");
-    if (!rl.ok) {
-      log("avatar.custom.rate_limit", { reqId, uid: identity.uid });
-      return res.status(429).json({
-        success: false,
-        error: "Rate limit exceeded",
-        retryAfter: Math.ceil((new Date(rl.resetAt).getTime() - Date.now()) / 1000),
-      });
-    }
-
-    try {
-      const raw = req.body || {};
-      const body = normalizeInput(raw);
-      const key = cacheKey({ ...body, __mode: "avatar-custom" });
-      let png = cacheGet(key);
-      let cached = false;
-      let built;
-      if (png) { cached = true; built = { dims: enforceOutputEdge({ w: SIZES[body.size].w, h: SIZES[body.size].h }), template: body.template, scene: null, imageReport: {} }; }
-      else {
-        built = await buildSvg(body);
-        png = await renderPng(built.svg, built.dims, reqId);
-        if (png.length > MAX_OUTPUT_BYTES) {
-          return res.status(413).json({ success: false, error: "Rendered image exceeds 5 MB" });
-        }
-        cacheSet(key, png);
-      }
-
-      if (body.mode === "upload") {
-        const name = sanitizeUploadName(body.upload?.name || `avatar_${identity.uid.slice(0, 8)}_${Date.now()}`);
-        const uploaded = await uploadPng(png, name, reqId);
-        const url = uploaded.url || uploaded.display_url;
-        return res.status(200).json({
-          success: true,
-          url,
-          width: built.dims.w,
-          height: built.dims.h,
-          bytes: png.length,
-          template: built.template,
-          scene: built.scene,
-          cached,
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        preview: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
-        width: built.dims.w,
-        height: built.dims.h,
-        bytes: png.length,
-        template: built.template,
-        scene: built.scene,
-        imageReport: built.imageReport,
-        cached,
-      });
-    } catch (err) {
-      log("avatar.custom.error", { reqId, uid: identity.uid, message: err.message });
-      return res.status(err.status || 500).json({ success: false, error: err.message || "Render failed" });
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  GENERATE — main workhorse (7/day anon, 70/day authed)
-  // ══════════════════════════════════════════════════════════════
-  if (action === "generate") {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-    const mode = String(req.body?.mode || "preview");
-    const isThumb = mode === "thumb";
-    const isUpload = mode === "upload";
-
-    if (isThumb) {
-      const rl = thumbRateLimit(`thumb:${ipHash(req)}`);
-      setRateHeaders(res, rl, "thumb", "ip");
-      if (!rl.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip", bucket: "thumb" });
-
-      const thumbKey = cacheKey({ body: req.body || {}, __thumb: true });
-      const cachedThumb = thumbCacheGet(thumbKey);
-      if (cachedThumb) {
-        return res.status(200).json({ success: true, mode: "thumb", preview: cachedThumb, cached: true, remaining: rl.remaining });
-      }
-
-      try {
-        const body = normalizeInput({ ...req.body, mode: "preview", size: "512x512" });
-        const built = await buildSvg(body);
-        const png = await renderPng(built.svg, built.dims, reqId);
-        const dataUri = `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
-        thumbCacheSet(thumbKey, dataUri);
-        return res.status(200).json({
-          success: true, mode: "thumb",
-          preview: dataUri,
-          width: built.dims.w, height: built.dims.h, bytes: png.length,
-          template: built.template, scene: built.scene, imageReport: built.imageReport,
-          remaining: rl.remaining,
-        });
-      } catch (err) {
-        log("generate.thumb.error", { reqId, message: err.message });
-        return res.status(err.status || 500).json({ success: false, error: err.message || "Render failed" });
-      }
-    }
-
-    const quotaMap = identity.isAuth ? RL_GENERATE_UID : RL_GENERATE_IP;
-    const quotaKey = identity.isAuth ? `gen:uid:${identity.uid}` : `gen:ip:${ipHash(req)}`;
-    const quotaLimit = identity.isAuth ? GENERATE_DAILY_LIMIT_UID : GENERATE_DAILY_LIMIT_IP;
-    const quota = checkDailyQuota(quotaMap, quotaKey, quotaLimit);
-    setRateHeaders(res, { limit: quota.limit, remaining: quota.remaining, resetAt: quota.resetAt }, "generate", identity.isAuth ? "uid" : "ip");
-    if (!quota.ok) {
-      return res.status(429).json({
-        success: false,
-        error: "Daily limit reached",
-        limit: quota.limit,
-        scope: identity.isAuth ? "uid" : "ip",
-        bucket: "generate",
-        resetAt: quota.resetAt,
-      });
-    }
-
-    try {
-      const raw = req.body || {};
-      const body = normalizeInput(raw);
-      const key = cacheKey({ ...body, __mode: isUpload ? "generate-upload" : "generate" });
-      let png = cacheGet(key);
-      let cached = false;
-      let built;
-
-      if (png && !isUpload) {
-        cached = true;
-        built = { dims: enforceOutputEdge({ w: SIZES[body.size].w, h: SIZES[body.size].h }), template: body.template, scene: null, imageReport: {} };
-      } else {
-        built = await buildSvg(body);
-        png = await renderPng(built.svg, built.dims, reqId);
-        if (png.length > MAX_OUTPUT_BYTES) {
-          return res.status(413).json({ success: false, error: "Image exceeds 5 MB", limit: quota.limit, resetAt: quota.resetAt });
-        }
-        if (!isUpload) cacheSet(key, png);
-      }
-
-      if (isUpload) {
-        const name = sanitizeUploadName(body.upload?.name || `flier_${(identity.uid || ipHash(req)).slice(0, 8)}_${Date.now()}`);
-        const uploaded = await uploadPng(png, name, reqId);
-        const url = uploaded.url || uploaded.display_url;
-        return res.status(200).json({
-          success: true, mode: "upload",
-          url, display_url: uploaded.display_url || url,
-          id: uploaded.id || null,
-          width: built.dims.w, height: built.dims.h, bytes: png.length,
-          template: built.template, scene: built.scene,
-          imageReport: built.imageReport, cached,
-          remaining: quota.remaining,
-          limit: quota.limit,
-          resetAt: quota.resetAt,
-        });
-      }
-
-      return res.status(200).json({
-        success: true, mode: "preview",
-        preview: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
-        width: built.dims.w, height: built.dims.h, bytes: png.length,
-        template: built.template, scene: built.scene,
-        imageReport: built.imageReport, cached,
-        remaining: quota.remaining,
-        limit: quota.limit,
-        resetAt: quota.resetAt,
-      });
-    } catch (err) {
-      log("generate.error", { reqId, message: err.message, stack: err.stack?.slice(0, 300) });
-      return res.status(err.status || 500).json({ success: false, error: err.message || "Render failed" });
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  UPLOAD — strict user image upload (5/day anon, 30/day authed)
-  // ══════════════════════════════════════════════════════════════
-  if (action === "upload") {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-    const quotaMap = identity.isAuth ? RL_UPLOAD_UID : RL_UPLOAD_IP;
-    const quotaKey = identity.isAuth ? `up:uid:${identity.uid}` : `up:ip:${ipHash(req)}`;
-    const quotaLimit = identity.isAuth ? UPLOAD_DAILY_LIMIT_UID : UPLOAD_DAILY_LIMIT_IP;
-    const quota = checkDailyQuota(quotaMap, quotaKey, quotaLimit);
-    setRateHeaders(res, { limit: quota.limit, remaining: quota.remaining, resetAt: quota.resetAt }, "upload", identity.isAuth ? "uid" : "ip");
-    if (!quota.ok) {
-      return res.status(429).json({
-        success: false,
-        error: "Daily upload limit reached",
-        limit: quota.limit,
-        scope: identity.isAuth ? "uid" : "ip",
-        bucket: "upload",
-        resetAt: quota.resetAt,
-      });
-    }
-
-    const { dataUrl, kind } = req.body || {};
-    const validation = validateUpload(dataUrl, kind);
-    if (!validation.ok) {
-      return res.status(validation.status || 400).json({
-        success: false,
-        error: validation.error,
-        remaining: quota.remaining,
-        limit: quota.limit,
-        resetAt: quota.resetAt,
-      });
-    }
-
-    const safeKind = kind === "icon" ? "icon" : "image";
-    const name = sanitizeUploadName(`upload_${safeKind}_${(identity.uid || ipHash(req)).slice(0, 8)}_${Date.now()}`);
-
-    try {
-      const uploaded = await uploadPng(validation.buffer, name, reqId);
-      const url = uploaded.url || uploaded.display_url;
-      if (!url || !String(url).startsWith("https://")) {
-        return res.status(502).json({ success: false, error: "Upload returned no URL", remaining: quota.remaining, limit: quota.limit });
-      }
-      return res.status(200).json({
-        success: true,
-        url,
-        display_url: uploaded.display_url || url,
-        bytes: validation.buffer.length,
-        mime: validation.mime,
-        width: uploaded.width || null,
-        height: uploaded.height || null,
-        remaining: quota.remaining,
-        limit: quota.limit,
-        resetAt: quota.resetAt,
-      });
-    } catch (err) {
-      log("upload.error", { reqId, message: err.message });
-      return res.status(err.status || 500).json({ success: false, error: err.message || "Upload failed", remaining: quota.remaining, limit: quota.limit });
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  SCENES — admin introspection
-  // ══════════════════════════════════════════════════════════════
-  if (action === "scenes") {
-    if (!isAdmin(req)) return res.status(401).json({ success: false, error: "Admin credentials required" });
-    const scenes = Object.entries(SCENE_META).map(([id, meta]) => ({
-      id,
-      label: meta.label,
-      group: meta.group,
-      hasNight: meta.hasNight,
-    }));
-    return res.status(200).json({
-      success: true,
-      scenes,
-      palettes: Object.keys(PALETTES),
-      templates: Object.keys(TEMPLATES),
-      sizes: Object.keys(SIZES),
-    });
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  GET (admin)
-  // ══════════════════════════════════════════════════════════════
-  if (req.method === "GET") {
-    if (!isAdmin(req)) return res.status(401).json({ success: false, error: "Admin credentials required" });
-
-    const q = req.query || {};
-    if (!q.text && !q.template && !q.headline && !q.html && !q.svg && !q.metric) {
-      initFont();
-      return res.status(200).json({
-        success: true,
-        version: "3.0.0-folio",
-        sizes: Object.keys(SIZES),
-        types: ["template", "svg", "html"],
-        modes: ["preview", "upload", "thumb"],
-        templates: Object.keys(TEMPLATES),
-        scenes: Object.keys(SCENES),
-        palettes: Object.keys(PALETTES),
-        actions: {
-          "generate": "POST — main workhorse (7/day anon, 70/day authed). mode: preview | upload | thumb",
-          "upload": "POST { dataUrl, kind } → { url } (5/day anon, 30/day authed)",
-          "scenes": "GET — scene catalog (admin only)",
-          "avatar/preview": "POST — 5 icon variants (public, IP rate-limited)",
-          "avatar/upload": "POST { dataUrl } → { url } (public, IP rate-limited)",
-          "avatar/custom": "POST — legacy (authed, 60/hr per uid)",
-        },
-      });
-    }
-
-    const rl = rateLimit(`get:${ipHash(req)}`, RATE_LIMIT_IP);
-    setRateHeaders(res, rl, "generate", "ip");
-    if (!rl.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip" });
-
-    const raw = {
-      mode: "preview",
-      type: q.html ? "html" : q.svg ? "svg" : "template",
-      template: q.template || "default",
-      size: q.size, text: q.text, subtitle: q.subtitle, caption: q.caption,
-      tag: q.tag, color: q.color, bg: q.bg, image: q.image, html: q.html, svg: q.svg,
-      date: q.date, location: q.location, price: q.price, cta: q.cta,
-      metric: q.metric, metricLabel: q.metricLabel,
-      variant: q.variant, pattern: q.pattern, align: q.align, headlineCase: q.headlineCase, radius: q.radius,
-      scene: q.scene, sceneNight: q.sceneNight, sceneOpacity: q.sceneOpacity,
-      data: {},
-    };
-    if (q.blur) raw.data.images = { background: { blur: Number(q.blur) } };
-
-    try {
-      const body = normalizeInput(raw);
-      const key = cacheKey(body);
-      let png = cacheGet(key);
-      let cached = false;
-      if (png) cached = true;
-      else {
-        const built = await buildSvg(body);
-        png = await renderPng(built.svg, built.dims, reqId);
-        if (png.length > MAX_OUTPUT_BYTES) return res.status(413).json({ success: false, error: "Image exceeds 5 MB" });
-        cacheSet(key, png);
-      }
-      res.setHeader("Content-Type", "image/png");
-      res.setHeader("Cache-Control", "public, max-age=60");
-      if (cached) res.setHeader("X-Cache", "HIT");
-      if (body.warnings.length) res.setHeader("X-Flier-Warnings", body.warnings.join("; ").slice(0, 240));
-      return res.status(200).send(Buffer.from(png));
-    } catch (e) {
-      return res.status(e.status || 500).json({ success: false, error: e.message });
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  POST (admin) — direct render, no quota
-  // ══════════════════════════════════════════════════════════════
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-  if (!isAdmin(req)) return res.status(401).json({ error: "Admin credentials required" });
-
-  const rlIp = rateLimit(`ip:${ipHash(req)}`, RATE_LIMIT_IP);
-  const rlKey = rateLimit(`key:${keyHash(req)}`, RATE_LIMIT_KEY);
-  setRateHeaders(res, rlIp, "generate", "ip");
-  if (!rlIp.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip" });
-  if (!rlKey.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "key" });
-
-  try {
-    const raw = req.body || {};
-    const body = normalizeInput(raw);
-    const mode = body.mode;
-    const built = await buildSvg(body);
-    const key = cacheKey({ ...body, __mode: "render" });
-    let png = cacheGet(key);
-    let cached = false;
-    if (png) cached = true;
-    else {
-      png = await renderPng(built.svg, built.dims, reqId);
-      if (png.length > MAX_OUTPUT_BYTES) return res.status(413).json({ success: false, error: "Image exceeds 5 MB" });
-      cacheSet(key, png);
-    }
-
-    if (mode === "preview") {
-      return res.status(200).json({
-        success: true, mode: "preview",
-        preview: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
-        width: built.dims.w, height: built.dims.h, bytes: png.length,
-        template: built.template, scene: built.scene,
-        imageReport: built.imageReport, cached,
-      });
-    }
-
-    const name = sanitizeUploadName(body.upload?.name || `flier_${Date.now()}`);
-    const uploaded = await uploadPng(png, name, reqId);
-    const response = {
-      success: true, mode,
-      id: uploaded.id || null,
-      url: uploaded.url,
-      display_url: uploaded.display_url || uploaded.url,
-      width: built.dims.w, height: built.dims.h, bytes: png.length,
-      template: built.template, scene: built.scene,
-      imageReport: built.imageReport, cached,
-    };
-    if (mode === "both") response.preview = `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
-    return res.status(200).json(response);
-  } catch (e) {
-    return res.status(e.status || 500).json({ success: false, error: e.message || "Render failed" });
-  }
-}
-
 // ═══════════════════════════════════════════════════════════════════
-//  UPLOAD VALIDATION — strict (magic bytes, size, SVG sanitize)
+//  UPLOAD VALIDATION
 // ═══════════════════════════════════════════════════════════════════
 
 function validateUpload(dataUrl, kind) {
-  if (!dataUrl || typeof dataUrl !== "string") {
-    return { ok: false, status: 400, error: "Missing dataUrl" };
-  }
-  if (!dataUrl.startsWith("data:image/")) {
-    return { ok: false, status: 400, error: "dataUrl must be a base64 image" };
-  }
+  if (!dataUrl || typeof dataUrl !== "string") return { ok: false, status: 400, error: "Missing dataUrl" };
+  if (!dataUrl.startsWith("data:image/")) return { ok: false, status: 400, error: "dataUrl must be a base64 image" };
   const comma = dataUrl.indexOf(",");
   if (comma < 0) return { ok: false, status: 400, error: "Malformed data URL" };
 
@@ -3362,9 +2944,7 @@ function validateUpload(dataUrl, kind) {
   let buf;
   try { buf = Buffer.from(b64, "base64"); } catch { return { ok: false, status: 400, error: "Invalid base64" }; }
   if (buf.length === 0) return { ok: false, status: 400, error: "Empty image" };
-  if (buf.length > UPLOAD_MAX_BYTES) {
-    return { ok: false, status: 413, error: `Image exceeds ${UPLOAD_MAX_BYTES / 1024} KB` };
-  }
+  if (buf.length > UPLOAD_MAX_BYTES) return { ok: false, status: 413, error: `Image exceeds ${UPLOAD_MAX_BYTES / 1024} KB` };
 
   const sniffed = sniffMime(buf);
   if (!sniffed) return { ok: false, status: 400, error: "Not a valid image (magic bytes)" };
@@ -3376,8 +2956,7 @@ function validateUpload(dataUrl, kind) {
   }
 
   if (sniffed === "image/svg+xml") {
-    const text = buf.toString("utf8");
-    if (/<script[\s>]/i.test(text) || /<foreignObject[\s>]/i.test(text) || /href\s*=\s*["']https?:/i.test(text) && /<use[\s>]/i.test(text)) {
+    if (!isSafeSvgText(buf.toString("utf8"))) {
       return { ok: false, status: 400, error: "SVG contains disallowed content" };
     }
   } else {
@@ -3424,11 +3003,488 @@ function getImageDimensions(buf, mime) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  MODULE EXPORTS
+//  HANDLER
 // ═══════════════════════════════════════════════════════════════════
+
+export const runtime = "nodejs";
+export const config = { api: { bodyParser: { sizeLimit: "10mb" } }, maxDuration: 60 };
+
+export default async function handler(req, res) {
+  const reqId = newReqId();
+  const t0 = Date.now();
+  res.setHeader("X-Request-Id", reqId);
+
+  if (req.method === "OPTIONS") {
+    if (!applyCors(req, res)) return res.status(403).json({ error: "Origin not allowed" });
+    return res.status(200).end();
+  }
+  if (!applyCors(req, res)) {
+    log("cors.reject", { reqId, origin: req.headers.origin });
+    return res.status(403).json({ error: "Origin not allowed" });
+  }
+
+  const action = String(req.query?.action || req.body?.action || "").trim();
+  const identity = tryVerifyJwt(req);
+
+  // ── AVATAR PREVIEW — 5 variants, seeded random palettes per variant ──
+  if (action === "avatar/preview") {
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+    const rl = avatarRateLimit(`avatar:${ipHash(req)}`);
+    setRateHeaders(res, rl, "preview", "ip");
+    if (!rl.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip", retryAfter: 3600 });
+
+    const { username, displayName } = req.body || {};
+    if (!username || typeof username !== "string") return res.status(400).json({ success: false, error: "Missing username" });
+    if (username.length < 1 || username.length > 40) return res.status(400).json({ success: false, error: "Invalid username length" });
+
+    const safeUsername = String(username).slice(0, 40).replace(/[^a-zA-Z0-9_-]/g, "");
+    const safeDisplayName = String(displayName || username).slice(0, 60).trim();
+    const cacheHash = cacheKey({ safeUsername, safeDisplayName, v: 4 });
+    const cached = avatarCacheGet(cacheHash);
+    if (cached) {
+      res.setHeader("Cache-Control", "private, max-age=300");
+      return res.status(200).json({ success: true, variants: cached, cached: true });
+    }
+
+    // Note: only templates/scenes are fixed per variant. Colors are seeded
+    // random per (username, variantId) so every user gets a distinct palette.
+    const AVATAR_VARIANTS = [
+      { id: "v1", kind: "initials-solid",   label: "Initials",  template: "hero-short",            scene: "ribbon" },
+      { id: "v2", kind: "initials-gradient",label: "Gradient",  template: "poster-centered",       scene: "grid_wave" },
+      { id: "v3", kind: "username-dark",    label: "Username",  template: "poster-centered",       scene: "terminal" },
+      { id: "v4", kind: "initials-pattern", label: "Patterned", template: "random-lines-top",      scene: "halftone" },
+      { id: "v5", kind: "fullname-badge",   label: "Badge",     template: "image-badge-overlay",   scene: "vinyl" },
+    ];
+
+    function initialsFrom(displayName, username) {
+      const src = (displayName || username || "?").trim();
+      const parts = src.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return src.slice(0, 2).toUpperCase();
+    }
+
+    const initials = initialsFrom(safeDisplayName, safeUsername);
+
+    const results = await Promise.allSettled(AVATAR_VARIANTS.map(async (variant) => {
+      // Seed = username + variantId. This makes the palette deterministic per
+      // user + variant, but different between variants (so the 5 avatars are
+      // visually distinct beyond just template/scene).
+      const seed = `${safeUsername}:${variant.id}`;
+      const base = {
+        mode: "preview",
+        type: "template",
+        template: variant.template,
+        size: "512x512",
+        seed,
+        data: {
+          text: {},
+          style: {
+            variant: "dark",
+            scene: variant.scene,
+            scenePalette: "auto",
+            // Intentionally do NOT set colors or background —
+            // resolveTheme() seeds them from `seed`.
+          },
+          images: {},
+        },
+      };
+      switch (variant.id) {
+        case "v1": base.data.text.headline = initials; break;
+        case "v2": base.data.text.headline = initials; break;
+        case "v3": base.data.text.headline = safeUsername ? `@${safeUsername}` : initials; break;
+        case "v4": base.data.text.headline = initials; break;
+        case "v5":
+          base.data.text.headline = safeDisplayName || safeUsername || initials;
+          base.data.text.kicker = initials;
+          break;
+      }
+      const body = normalizeInput(base);
+      const built = await buildSvg(body);
+      const png = await renderPng(built.svg, built.dims, reqId);
+      return {
+        id: variant.id,
+        kind: variant.kind,
+        label: variant.label,
+        dataUrl: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
+        width: built.dims.w,
+        height: built.dims.h,
+        scene: built.scene,
+      };
+    }));
+
+    const variants = results.filter(r => r.status === "fulfilled").map(r => r.value);
+    if (variants.length === 0) return res.status(500).json({ success: false, error: "Could not generate avatars" });
+
+    avatarCacheSet(cacheHash, variants);
+    res.setHeader("Cache-Control", "private, max-age=300");
+    return res.status(200).json({ success: true, variants });
+  }
+
+  // ── AVATAR UPLOAD ──
+  if (action === "avatar/upload") {
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+    const rl = avatarRateLimit(`avatar:${ipHash(req)}`);
+    setRateHeaders(res, rl, "preview", "ip");
+    if (!rl.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip", retryAfter: 3600 });
+
+    const { dataUrl, username } = req.body || {};
+    const validation = validateUpload(dataUrl);
+    if (!validation.ok) return res.status(validation.status || 400).json({ success: false, error: validation.error });
+
+    const safeUsername = String(username || "user").slice(0, 40).replace(/[^a-zA-Z0-9_-]/g, "") || "user";
+    const uploadName = `avatar_${safeUsername}_${Date.now()}`;
+
+    try {
+      const uploaded = await uploadPng(validation.buffer, uploadName, reqId);
+      const url = uploaded.url || uploaded.display_url;
+      if (!url || !String(url).startsWith("https://")) return res.status(502).json({ success: false, error: "Upload returned no URL" });
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ success: true, url, width: uploaded.width || null, height: uploaded.height || null, bytes: validation.buffer.length });
+    } catch (err) {
+      log("avatar.upload.error", { reqId, message: err.message });
+      return res.status(err.status || 500).json({ success: false, error: err.message || "Upload failed" });
+    }
+  }
+
+  // ── AVATAR CUSTOM (legacy) ──
+  if (action === "avatar/custom") {
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+    if (!identity.isAuth) return res.status(401).json({ success: false, error: "Authentication required" });
+
+    const rl = avatarCustomRateLimit(identity.uid);
+    setRateHeaders(res, rl, "custom", "uid");
+    if (!rl.ok) {
+      log("avatar.custom.rate_limit", { reqId, uid: identity.uid });
+      return res.status(429).json({
+        success: false, error: "Rate limit exceeded",
+        retryAfter: Math.ceil((new Date(rl.resetAt).getTime() - Date.now()) / 1000),
+      });
+    }
+
+    try {
+      const raw = req.body || {};
+      const body = normalizeInput(raw);
+      const key = cacheKey({ ...body, __mode: "avatar-custom" });
+      let png = cacheGet(key);
+      let cached = false;
+      let built;
+      if (png) {
+        cached = true;
+        built = { dims: enforceOutputEdge({ w: SIZES[body.size].w, h: SIZES[body.size].h }), template: body.template, scene: null, imageReport: {}, seed: body.seed || null };
+      } else {
+        built = await buildSvg(body);
+        png = await renderPng(built.svg, built.dims, reqId);
+        if (png.length > MAX_OUTPUT_BYTES) return res.status(413).json({ success: false, error: "Rendered image exceeds 5 MB" });
+        cacheSet(key, png);
+      }
+
+      if (body.mode === "upload") {
+        const name = sanitizeUploadName(body.upload?.name || `avatar_${identity.uid.slice(0, 8)}_${Date.now()}`);
+        const uploaded = await uploadPng(png, name, reqId);
+        const url = uploaded.url || uploaded.display_url;
+        return res.status(200).json({
+          success: true, url,
+          width: built.dims.w, height: built.dims.h, bytes: png.length,
+          template: built.template, scene: built.scene, cached,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        preview: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
+        width: built.dims.w, height: built.dims.h, bytes: png.length,
+        template: built.template, scene: built.scene,
+        imageReport: built.imageReport, cached,
+      });
+    } catch (err) {
+      log("avatar.custom.error", { reqId, uid: identity.uid, message: err.message });
+      return res.status(err.status || 500).json({ success: false, error: err.message || "Render failed" });
+    }
+  }
+
+  // ── GENERATE ──
+  if (action === "generate") {
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+    const mode = String(req.body?.mode || "preview");
+    const isThumb = mode === "thumb";
+    const isUpload = mode === "upload";
+
+    if (isThumb) {
+      const rl = thumbRateLimit(`thumb:${ipHash(req)}`);
+      setRateHeaders(res, rl, "thumb", "ip");
+      if (!rl.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip", bucket: "thumb" });
+
+      const thumbKey = cacheKey({ body: req.body || {}, __thumb: true });
+      const cachedThumb = thumbCacheGet(thumbKey);
+      if (cachedThumb) return res.status(200).json({ success: true, mode: "thumb", preview: cachedThumb, cached: true, remaining: rl.remaining });
+
+      try {
+        const body = normalizeInput({ ...req.body, mode: "preview", size: "512x512" });
+        const built = await buildSvg(body);
+        const png = await renderPng(built.svg, built.dims, reqId);
+        const dataUri = `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
+        thumbCacheSet(thumbKey, dataUri);
+        return res.status(200).json({
+          success: true, mode: "thumb", preview: dataUri,
+          width: built.dims.w, height: built.dims.h, bytes: png.length,
+          template: built.template, scene: built.scene, imageReport: built.imageReport,
+          remaining: rl.remaining,
+        });
+      } catch (err) {
+        log("generate.thumb.error", { reqId, message: err.message });
+        return res.status(err.status || 500).json({ success: false, error: err.message || "Render failed" });
+      }
+    }
+
+    const quotaMap = identity.isAuth ? RL_GENERATE_UID : RL_GENERATE_IP;
+    const quotaKey = identity.isAuth ? `gen:uid:${identity.uid}` : `gen:ip:${ipHash(req)}`;
+    const quotaLimit = identity.isAuth ? GENERATE_DAILY_LIMIT_UID : GENERATE_DAILY_LIMIT_IP;
+    const quota = checkDailyQuota(quotaMap, quotaKey, quotaLimit);
+    setRateHeaders(res, { limit: quota.limit, remaining: quota.remaining, resetAt: quota.resetAt }, "generate", identity.isAuth ? "uid" : "ip");
+    if (!quota.ok) {
+      return res.status(429).json({
+        success: false, error: "Daily limit reached",
+        limit: quota.limit, scope: identity.isAuth ? "uid" : "ip", bucket: "generate",
+        resetAt: quota.resetAt,
+      });
+    }
+
+    try {
+      const raw = req.body || {};
+      const body = normalizeInput(raw);
+      const key = cacheKey({ ...body, __mode: isUpload ? "generate-upload" : "generate" });
+      let png = cacheGet(key);
+      let cached = false;
+      let built;
+
+      if (png && !isUpload) {
+        cached = true;
+        built = {
+          dims: enforceOutputEdge({ w: SIZES[body.size].w, h: SIZES[body.size].h }),
+          template: body.template, scene: null, imageReport: {}, seed: body.seed || null,
+        };
+      } else {
+        built = await buildSvg(body);
+        png = await renderPng(built.svg, built.dims, reqId);
+        if (png.length > MAX_OUTPUT_BYTES) {
+          return res.status(413).json({ success: false, error: "Image exceeds 5 MB", limit: quota.limit, resetAt: quota.resetAt });
+        }
+        if (!isUpload) cacheSet(key, png);
+      }
+
+      if (isUpload) {
+        const name = sanitizeUploadName(body.upload?.name || `flier_${(identity.uid || ipHash(req)).slice(0, 8)}_${Date.now()}`);
+        const uploaded = await uploadPng(png, name, reqId);
+        const url = uploaded.url || uploaded.display_url;
+        return res.status(200).json({
+          success: true, mode: "upload",
+          url, display_url: uploaded.display_url || url, id: uploaded.id || null,
+          width: built.dims.w, height: built.dims.h, bytes: png.length,
+          template: built.template, scene: built.scene,
+          imageReport: built.imageReport, cached,
+          remaining: quota.remaining, limit: quota.limit, resetAt: quota.resetAt,
+        });
+      }
+
+      return res.status(200).json({
+        success: true, mode: "preview",
+        preview: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
+        width: built.dims.w, height: built.dims.h, bytes: png.length,
+        template: built.template, scene: built.scene,
+        imageReport: built.imageReport, cached,
+        remaining: quota.remaining, limit: quota.limit, resetAt: quota.resetAt,
+      });
+    } catch (err) {
+      log("generate.error", { reqId, message: err.message, stack: err.stack?.slice(0, 300) });
+      return res.status(err.status || 500).json({ success: false, error: err.message || "Render failed" });
+    }
+  }
+
+  // ── UPLOAD ──
+  if (action === "upload") {
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+    const quotaMap = identity.isAuth ? RL_UPLOAD_UID : RL_UPLOAD_IP;
+    const quotaKey = identity.isAuth ? `up:uid:${identity.uid}` : `up:ip:${ipHash(req)}`;
+    const quotaLimit = identity.isAuth ? UPLOAD_DAILY_LIMIT_UID : UPLOAD_DAILY_LIMIT_IP;
+    const quota = checkDailyQuota(quotaMap, quotaKey, quotaLimit);
+    setRateHeaders(res, { limit: quota.limit, remaining: quota.remaining, resetAt: quota.resetAt }, "upload", identity.isAuth ? "uid" : "ip");
+    if (!quota.ok) {
+      return res.status(429).json({
+        success: false, error: "Daily upload limit reached",
+        limit: quota.limit, scope: identity.isAuth ? "uid" : "ip", bucket: "upload", resetAt: quota.resetAt,
+      });
+    }
+
+    const { dataUrl, kind } = req.body || {};
+    const validation = validateUpload(dataUrl, kind);
+    if (!validation.ok) {
+      return res.status(validation.status || 400).json({
+        success: false, error: validation.error,
+        remaining: quota.remaining, limit: quota.limit, resetAt: quota.resetAt,
+      });
+    }
+
+    const safeKind = kind === "icon" ? "icon" : "image";
+    const name = sanitizeUploadName(`upload_${safeKind}_${(identity.uid || ipHash(req)).slice(0, 8)}_${Date.now()}`);
+
+    try {
+      const uploaded = await uploadPng(validation.buffer, name, reqId);
+      const url = uploaded.url || uploaded.display_url;
+      if (!url || !String(url).startsWith("https://")) {
+        return res.status(502).json({ success: false, error: "Upload returned no URL", remaining: quota.remaining, limit: quota.limit });
+      }
+      return res.status(200).json({
+        success: true, url, display_url: uploaded.display_url || url,
+        bytes: validation.buffer.length, mime: validation.mime,
+        width: uploaded.width || null, height: uploaded.height || null,
+        remaining: quota.remaining, limit: quota.limit, resetAt: quota.resetAt,
+      });
+    } catch (err) {
+      log("upload.error", { reqId, message: err.message });
+      return res.status(err.status || 500).json({ success: false, error: err.message || "Upload failed", remaining: quota.remaining, limit: quota.limit });
+    }
+  }
+
+  // ── SCENES (admin) ──
+  if (action === "scenes") {
+    if (!isAdmin(req)) return res.status(401).json({ success: false, error: "Admin credentials required" });
+    const scenes = Object.entries(SCENE_META).map(([id, meta]) => ({ id, label: meta.label, group: meta.group, hasNight: meta.hasNight }));
+    return res.status(200).json({
+      success: true, scenes,
+      palettes: Object.keys(PALETTES),
+      paletteSeeds: PALETTE_SEEDS.length,
+      templates: Object.keys(TEMPLATES),
+      sizes: Object.keys(SIZES),
+    });
+  }
+
+  // ── GET (admin) ──
+  if (req.method === "GET") {
+    if (!isAdmin(req)) return res.status(401).json({ success: false, error: "Admin credentials required" });
+
+    const q = req.query || {};
+    if (!q.text && !q.template && !q.headline && !q.html && !q.svg && !q.metric) {
+      initFont();
+      return res.status(200).json({
+        success: true,
+        version: "3.1.0-folio",
+        sizes: Object.keys(SIZES),
+        types: ["template", "svg", "html"],
+        modes: ["preview", "upload", "thumb"],
+        templates: Object.keys(TEMPLATES),
+        scenes: Object.keys(SCENES),
+        palettes: Object.keys(PALETTES),
+        paletteSeeds: PALETTE_SEEDS.length,
+        actions: {
+          "generate": "POST — main workhorse (7/day anon, 70/day authed). mode: preview | upload | thumb",
+          "upload": "POST { dataUrl, kind } → { url } (5/day anon, 30/day authed)",
+          "scenes": "GET — scene catalog (admin only)",
+          "avatar/preview": "POST — 5 icon variants with seeded random palettes (public, IP rate-limited)",
+          "avatar/upload": "POST { dataUrl } → { url } (public, IP rate-limited)",
+          "avatar/custom": "POST — legacy (authed, 60/hr per uid)",
+        },
+      });
+    }
+
+    const rl = rateLimit(`get:${ipHash(req)}`, RATE_LIMIT_IP);
+    setRateHeaders(res, rl, "generate", "ip");
+    if (!rl.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip" });
+
+    const raw = {
+      mode: "preview",
+      type: q.html ? "html" : q.svg ? "svg" : "template",
+      template: q.template || "default",
+      size: q.size, text: q.text, subtitle: q.subtitle, caption: q.caption,
+      tag: q.tag, color: q.color, bg: q.bg, image: q.image, html: q.html, svg: q.svg,
+      date: q.date, location: q.location, price: q.price, cta: q.cta,
+      metric: q.metric, metricLabel: q.metricLabel,
+      variant: q.variant, pattern: q.pattern, align: q.align, headlineCase: q.headlineCase, radius: q.radius,
+      scene: q.scene, sceneNight: q.sceneNight, sceneOpacity: q.sceneOpacity,
+      seed: q.seed || null,
+      data: {},
+    };
+    if (q.blur) raw.data.images = { background: { blur: Number(q.blur) } };
+
+    try {
+      const body = normalizeInput(raw);
+      const key = cacheKey(body);
+      let png = cacheGet(key);
+      let cached = false;
+      if (png) cached = true;
+      else {
+        const built = await buildSvg(body);
+        png = await renderPng(built.svg, built.dims, reqId);
+        if (png.length > MAX_OUTPUT_BYTES) return res.status(413).json({ success: false, error: "Image exceeds 5 MB" });
+        cacheSet(key, png);
+      }
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=60");
+      if (cached) res.setHeader("X-Cache", "HIT");
+      if (body.warnings.length) res.setHeader("X-Flier-Warnings", body.warnings.join("; ").slice(0, 240));
+      return res.status(200).send(Buffer.from(png));
+    } catch (e) {
+      return res.status(e.status || 500).json({ success: false, error: e.message });
+    }
+  }
+
+  // ── POST (admin) ──
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (!isAdmin(req)) return res.status(401).json({ error: "Admin credentials required" });
+
+  const rlIp = rateLimit(`ip:${ipHash(req)}`, RATE_LIMIT_IP);
+  const rlKey = rateLimit(`key:${keyHash(req)}`, RATE_LIMIT_KEY);
+  setRateHeaders(res, rlIp, "generate", "ip");
+  if (!rlIp.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "ip" });
+  if (!rlKey.ok) return res.status(429).json({ error: "RATE_LIMITED", dimension: "key" });
+
+  try {
+    const raw = req.body || {};
+    const body = normalizeInput(raw);
+    const mode = body.mode;
+    const built = await buildSvg(body);
+    const key = cacheKey({ ...body, __mode: "render" });
+    let png = cacheGet(key);
+    let cached = false;
+    if (png) cached = true;
+    else {
+      png = await renderPng(built.svg, built.dims, reqId);
+      if (png.length > MAX_OUTPUT_BYTES) return res.status(413).json({ success: false, error: "Image exceeds 5 MB" });
+      cacheSet(key, png);
+    }
+
+    if (mode === "preview") {
+      return res.status(200).json({
+        success: true, mode: "preview",
+        preview: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
+        width: built.dims.w, height: built.dims.h, bytes: png.length,
+        template: built.template, scene: built.scene,
+        imageReport: built.imageReport, cached,
+      });
+    }
+
+    const name = sanitizeUploadName(body.upload?.name || `flier_${Date.now()}`);
+    const uploaded = await uploadPng(png, name, reqId);
+    const response = {
+      success: true, mode,
+      id: uploaded.id || null,
+      url: uploaded.url, display_url: uploaded.display_url || uploaded.url,
+      width: built.dims.w, height: built.dims.h, bytes: png.length,
+      template: built.template, scene: built.scene,
+      imageReport: built.imageReport, cached,
+    };
+    if (mode === "both") response.preview = `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
+    return res.status(200).json(response);
+  } catch (e) {
+    return res.status(e.status || 500).json({ success: false, error: e.message || "Render failed" });
+  }
+}
 
 export { buildSvg, renderPng, uploadPng };
 
 // ═══════════════════════════════════════════════════════════════════
-//  END OF FILE — v3.0.0-folio
+//  END OF FILE — v3.1.0-folio
 // ═══════════════════════════════════════════════════════════════════
