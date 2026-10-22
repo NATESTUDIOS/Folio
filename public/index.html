@@ -244,6 +244,24 @@
         <svg viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/></svg>
         <span class="label">Host</span>
       </button>
+      <button class="toolbar-btn" id="tbFoldAll" aria-label="Collapse all code">
+  <svg viewBox="0 0 24 24">
+    <polyline points="4 14 10 14 10 20"/>
+    <polyline points="20 10 14 10 14 4"/>
+    <line x1="14" y1="10" x2="21" y2="3"/>
+    <line x1="3" y1="21" x2="10" y2="14"/>
+  </svg>
+  <span class="label">Collapse</span>
+</button>
+<button class="toolbar-btn" id="tbUnfoldAll" aria-label="Expand all code">
+  <svg viewBox="0 0 24 24">
+    <polyline points="15 3 21 3 21 9"/>
+    <polyline points="9 21 3 21 3 15"/>
+    <line x1="21" y1="3" x2="14" y2="10"/>
+    <line x1="3" y1="21" x2="10" y2="14"/>
+  </svg>
+  <span class="label">Expand</span>
+</button>
     </div>
   </div>
 
@@ -397,6 +415,7 @@
     <symbol id="i-file-image" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="10" cy="14" r="2"/><path d="m20 18-4-4-6 6"/></symbol>
     <symbol id="i-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
     <symbol id="i-chevron-left" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
@@ -426,6 +445,17 @@
     <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
     <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="currentColor"/></symbol>
+    <symbol id="i-bold" viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 0 8H6z"/><path d="M6 12h9a4 4 0 0 1 0 8H6z"/></symbol>
+    <symbol id="i-italic" viewBox="0 0 24 24"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></symbol>
+    <symbol id="i-strike" viewBox="0 0 24 24"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" y1="12" x2="20" y2="12"/></symbol>
+    <symbol id="i-h1" viewBox="0 0 24 24"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M17 10l2-2v10"/></symbol>
+    <symbol id="i-h2" viewBox="0 0 24 24"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M21 18h-4c0-4 4-3 4-6 0-1.5-2-2.5-4-1"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></symbol>
+    <symbol id="i-list-ol" viewBox="0 0 24 24"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></symbol>
+    <symbol id="i-quote" viewBox="0 0 24 24"><path d="M3 21c3 0 7-1 7-8V5H3v7h4c0 3-1 5-4 6z"/><path d="M14 21c3 0 7-1 7-8V5h-7v7h4c0 3-1 5-4 6z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></symbol>
+    <symbol id="i-underline" viewBox="0 0 24 24"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="4" y1="21" x2="20" y2="21"/></symbol>
   </defs>
 </svg>
 
@@ -445,9 +475,9 @@
 
 <script type="module">
 "use strict";
-
+import { initCreateProject, createNewProject, handleNewProjectImageReturn } from '/js/create-project.js';
 // ═══════════════════════════════════════════════════════════
-// THEME
+// THEME (unchanged)
 // ═══════════════════════════════════════════════════════════
 
 function applyTheme(pref) {
@@ -501,6 +531,8 @@ function wireThemeMediaQuery() {
 const API_BASE = 'https://foliostudios.vercel.app/api';
 const API_AUTH = API_BASE + '/auth';
 const API_HOST = API_BASE + '/host';
+const API_FLIER = API_BASE + '/flier';
+const BASE_URL = 'https://foliostudios.vercel.app';
 
 const STORAGE = {
   theme: 'folio.theme',
@@ -518,11 +550,11 @@ const DB_NAME = 'folio';
 const DB_VERSION = 3;
 const AUTOSAVE_DELAY = 2000;
 
-const MAX_FILE_BYTES = 5 * 1024 * 1024;                    // 5 MB per file
-const DEFAULT_PROJECT_STORAGE_LIMIT = 10 * 1024 * 1024;    // 10 MB per project
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const DEFAULT_PROJECT_STORAGE_LIMIT = 10 * 1024 * 1024;
 const NOTES_PATH = 'notes.json';
 const NOTES_MAX_COUNT = 200;
-const NOTES_MAX_BODY_BYTES = 200 * 1024;                   // 200 KB per note
+const NOTES_MAX_BODY_BYTES = 200 * 1024;
 
 const NOTE_COLORS = {
   amber:  '#F59E0B',
@@ -569,6 +601,9 @@ const S = {
   notesCorruptWarned: false,
 };
 
+
+  
+  
 // ═══════════════════════════════════════════════════════════
 // DOM HELPERS
 // ═══════════════════════════════════════════════════════════
@@ -607,10 +642,6 @@ function icon(name, size = 14) {
   use.setAttribute('href', '#i-' + name);
   svg.appendChild(use);
   return svg;
-}
-
-function iconHTML(name, size = 14) {
-  return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-' + name + '"/></svg>';
 }
 
 function relativeTime(ts) {
@@ -738,6 +769,20 @@ function readSession() {
   S.isGuest = !S.session;
 }
 
+function handle401() {
+  try {
+    localStorage.removeItem(STORAGE.session);
+    localStorage.removeItem(STORAGE.user);
+  } catch {}
+  if (!sessionStorage.getItem('folio.authRedirectShown')) {
+    sessionStorage.setItem('folio.authRedirectShown', '1');
+    setTimeout(() => {
+      const next = encodeURIComponent(location.pathname + location.search);
+      location.href = '/register?next=' + next;
+    }, 800);
+  }
+}
+
 async function apiFetch(url, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   if (S.session) headers['Authorization'] = `Bearer ${S.session}`;
@@ -745,6 +790,7 @@ async function apiFetch(url, opts = {}) {
     const res = await fetch(url, { ...opts, headers });
     let data = {};
     try { data = await res.json(); } catch {}
+    if (res.status === 401) handle401();
     return { ok: res.ok, status: res.status, data };
   } catch (err) {
     return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
@@ -752,25 +798,54 @@ async function apiFetch(url, opts = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// TOAST
+// CLIENT ERROR REPORTING
+// ═══════════════════════════════════════════════════════════
+
+function reportClientError(message, stack) {
+  try {
+    if (!message) return;
+    const key = 'folio.clientError.last';
+    const last = Number(sessionStorage.getItem(key) || 0);
+    if (Date.now() - last < 5000) return;
+    sessionStorage.setItem(key, String(Date.now()));
+    fetch(API_HOST + '?action=client-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: String(message).slice(0, 2000),
+        stack: String(stack || '').slice(0, 4000),
+        url: location.href,
+        source: 'index.html',
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {}
+}
+window.addEventListener('error', (e) => reportClientError(e.message, e.error?.stack));
+window.addEventListener('unhandledrejection', (e) => reportClientError(String(e.reason?.message || e.reason), e.reason?.stack));
+
+// ═══════════════════════════════════════════════════════════
+// TOAST (queue — max 3 visible, cap total stack)
 // ═══════════════════════════════════════════════════════════
 
 const toastQueue = [];
-let toastActive = false;
+let toastActive = 0;
+const TOAST_MAX_VISIBLE = 3;
 
 function toast(message, type = 'info', duration) {
   const d = duration ?? (type === 'error' || type === 'warning' ? 5000 : 3000);
   toastQueue.push({ message, type, duration: d });
-  if (!toastActive) drainToast();
+  drainToast();
 }
 window.toast = toast;
 
 function drainToast() {
+  if (toastActive >= TOAST_MAX_VISIBLE) return;
   const next = toastQueue.shift();
-  if (!next) { toastActive = false; return; }
-  toastActive = true;
+  if (!next) return;
+  toastActive++;
   const container = $('toastContainer');
-  if (!container) { toastActive = false; return; }
+  if (!container) { toastActive--; return; }
   const node = el('div', { class: `toast ${next.type}` },
     icon(next.type === 'success' ? 'check' : next.type === 'error' ? 'alert' : next.type === 'warning' ? 'alert' : 'info', 12),
     el('span', {}, next.message)
@@ -781,7 +856,7 @@ function drainToast() {
     node.classList.remove('show');
     setTimeout(() => {
       node.remove();
-      toastActive = false;
+      toastActive--;
       drainToast();
     }, 250);
   }, next.duration);
@@ -892,30 +967,82 @@ function resolveConfirm(value) {
 
 function promptSheet(title, placeholder = '', defaultValue = '') {
   return new Promise((resolve) => {
-    const input = el('input', { class: 'input', placeholder, value: defaultValue });
-    const body = el('div', {}, el('div', { class: 'field', style: 'margin:0' }, input));
-    const footer = el('div', { style: 'display:flex;gap:6px;width:100%;' },
-      el('button', { class: 'btn btn-secondary', type: 'button', onclick: () => { closeSheet(); resolve(null); } }, 'Cancel'),
-      el('button', {
-        class: 'btn btn-primary', type: 'button',
-        onclick: () => { const v = input.value.trim(); closeSheet(); resolve(v || null); },
-      }, 'OK')
+    const overlay = el('div', {
+      style: {
+        position: 'fixed', inset: '0', zIndex: '1000',
+        background: 'rgba(10,12,16,0.75)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px',
+      },
+    });
+
+    const input = el('input', {
+      class: 'input',
+      placeholder,
+      value: defaultValue,
+      style: { width: '100%', marginTop: '10px' },
+    });
+
+    const card = el('div', {
+      style: {
+        background: 'var(--theme-surface-card-solid)',
+        border: '1px solid var(--theme-glass-border)',
+        borderRadius: '16px',
+        padding: '20px',
+        width: '100%',
+        maxWidth: '360px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+      },
+    },
+      el('div', { style: { fontSize: '15px', fontWeight: '800', color: 'var(--theme-text)' } }, title || 'Enter value'),
+      input,
+      el('div', { style: { display: 'flex', gap: '8px', marginTop: '16px' } },
+        el('button', {
+          class: 'btn btn-secondary',
+          type: 'button',
+          style: { flex: '1' },
+          onclick: () => { cleanup(); resolve(null); },
+        }, 'Cancel'),
+        el('button', {
+          class: 'btn btn-primary',
+          type: 'button',
+          style: { flex: '1' },
+          onclick: () => { const v = input.value.trim(); cleanup(); resolve(v || null); },
+        }, 'OK')
+      )
     );
-    openSheet({ title, body, footer, onClose: () => resolve(null) });
-    setTimeout(() => input.focus(), 100);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    function cleanup() {
+      try { overlay.remove(); } catch {}
+    }
+
+    setTimeout(() => input.focus(), 50);
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         const v = input.value.trim();
-        closeSheet();
+        cleanup();
         resolve(v || null);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cleanup();
+        resolve(null);
       }
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) { cleanup(); resolve(null); }
     });
   });
 }
 
 // ═══════════════════════════════════════════════════════════
-// INDEXEDDB
+// INDEXEDDB (retry on transient failures)
 // ═══════════════════════════════════════════════════════════
 
 let dbConn = null;
@@ -925,6 +1052,19 @@ async function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onerror = () => reject(req.error);
+    req.onblocked = () => {
+      try {
+        if (!sessionStorage.getItem('folio.idbBlockedWarned')) {
+          sessionStorage.setItem('folio.idbBlockedWarned', '1');
+          toast('Close other Folio tabs', 'warning', 3000);
+        }
+      } catch {}
+      setTimeout(() => {
+        try { req.result?.close?.(); } catch {}
+        dbConn = null;
+        openDB().then(resolve, reject);
+      }, 800);
+    };
     req.onsuccess = () => { dbConn = req.result; resolve(dbConn); };
     req.onupgradeneeded = (event) => {
       const conn = event.target.result;
@@ -947,10 +1087,13 @@ async function openDB() {
   });
 }
 
-function dbWrap(req) {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+function dbWrap(req, retries = 1) {
+  return new Promise((res, rej) => {
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => {
+      if (retries > 0) return dbWrap(req, retries - 1).then(res, rej);
+      rej(req.error);
+    };
   });
 }
 
@@ -1007,10 +1150,6 @@ const db = {
       }
     }
   },
-  async enqueueSync(op) {
-    if (!S.session) return;
-    return dbWrap(dbTx('syncQueue', 'readwrite').add({ ...op, ts: Date.now() }));
-  },
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1031,8 +1170,6 @@ async function checkStorageBudget(pid, addBytes) {
   if (used + addBytes > limit) {
     const err = new Error(`Storage limit exceeded. ${formatBytes(used)}/${formatBytes(limit)} used.`);
     err.code = 'QUOTA_EXCEEDED';
-    err.used = used;
-    err.limit = limit;
     throw err;
   }
   return { used, limit, remaining: limit - used };
@@ -1217,6 +1354,7 @@ function normalizeServerProject(p) {
     updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now(),
     storageLimit: p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT,
     deployment: p.deployment || null,
+    ownerUsername: p.ownerUsername || null,
     _server: true,
     _serverData: p,
   };
@@ -1307,6 +1445,7 @@ async function loadDeploymentHistoryFor(pid) {
       S.deploymentCache.set(pid, {
         deployments: res.data.deployments || [],
         currentId: res.data.currentDeploymentId || null,
+        maxDeployments: res.data.maxDeployments || 5,
       });
     }
   } catch {}
@@ -1433,30 +1572,38 @@ const cm = {
   _loading: null,
   _initToken: 0,
   _prettierCache: new Map(),
+  
 
   async loadModules() {
     if (this.modules) return this.modules;
     if (this._loading) return this._loading;
 
     this._loading = (async () => {
-      const [codemirrorPkg, oneDark, searchMod, commandsMod, viewMod, stateMod, lintMod, mergeMod] = await Promise.all([
-        import('codemirror/codemirror/dist/index.js'),
-        import('codemirror/theme-one-dark/dist/index.js'),
-        import('codemirror/search/dist/index.js'),
-        import('codemirror/commands/dist/index.js'),
-        import('codemirror/view/dist/index.js'),
-        import('codemirror/state/dist/index.js'),
-        import('codemirror/lint/dist/index.js'),
-        import('codemirror/merge/dist/index.js'),
-      ]);
+  const [codemirrorPkg, oneDark, searchMod, commandsMod, viewMod, stateMod, lintMod, mergeMod, languageMod] = await Promise.all([
+    import('codemirror/codemirror/dist/index.js'),
+    import('codemirror/theme-one-dark/dist/index.js'),
+    import('codemirror/search/dist/index.js'),
+    import('codemirror/commands/dist/index.js'),
+    import('codemirror/view/dist/index.js'),
+    import('codemirror/state/dist/index.js'),
+    import('codemirror/lint/dist/index.js'),
+    import('codemirror/merge/dist/index.js'),
+    import('codemirror/language/dist/index.js'),
+  ]);
 
-      this.modules = {
-        basicSetup: codemirrorPkg.basicSetup,
-        EditorView: viewMod.EditorView,
-        EditorState: stateMod.EditorState,
-        keymap: viewMod.keymap,
-        oneDark: oneDark.oneDark,
-      };
+  this.modules = {
+    basicSetup: codemirrorPkg.basicSetup,
+    EditorView: viewMod.EditorView,
+    EditorState: stateMod.EditorState,
+    keymap: viewMod.keymap,
+    oneDark: oneDark.oneDark,
+    foldGutter: languageMod.foldGutter,
+    foldAll: languageMod.foldAll,
+    unfoldAll: languageMod.unfoldAll,
+    foldCode: languageMod.foldCode,
+    unfoldCode: languageMod.unfoldCode,
+    foldKeymap: languageMod.foldKeymap,
+  };
       this.commands = {
         undo: commandsMod.undo,
         redo: commandsMod.redo,
@@ -1538,53 +1685,55 @@ const cm = {
   },
 
   async init(container, content, path) {
-    const m = await this.loadModules();
-    const token = ++this._initToken;
-    if (this.view) { this.view.destroy(); this.view = null; }
+  const m = await this.loadModules();
+  const token = ++this._initToken;
+  if (this.view) { this.view.destroy(); this.view = null; }
 
-    const extensions = [
-      m.basicSetup,
-      m.oneDark,
-      this.buildTheme(),
-      m.EditorView.contentAttributes.of({ inputstyle: 'contenteditable' }),
-    ];
+  const extensions = [
+    m.basicSetup,
+    m.oneDark,
+    this.buildTheme(),
+    m.EditorView.contentAttributes.of({ inputstyle: 'contenteditable' }),
+    m.foldGutter(),
+    m.keymap.of(m.foldKeymap),
+  ];
 
-    const langExt = await this.getLanguageExtension(path);
-    if (langExt && token === this._initToken) extensions.push(langExt);
+  const langExt = await this.getLanguageExtension(path);
+  if (langExt && token === this._initToken) extensions.push(langExt);
 
-    if (S.prefs.wordWrap) extensions.push(m.EditorView.lineWrapping);
-    if (!S.prefs.lineNumbers) extensions.push(m.EditorView.theme({ '.cm-lineNumbers': { display: 'none' } }));
+  if (S.prefs.wordWrap) extensions.push(m.EditorView.lineWrapping);
+  if (!S.prefs.lineNumbers) extensions.push(m.EditorView.theme({ '.cm-lineNumbers': { display: 'none' } }));
 
-    if (this.detectLanguage(path) === 'json' && this.lintMod) {
-      try {
-        const m2 = await import('codemirror/lang-json/dist/index.js');
-        if (m2.jsonParseLinter && token === this._initToken) {
-          extensions.push(this.lintMod.linter(m2.jsonParseLinter()));
-        }
-      } catch {}
+  if (this.detectLanguage(path) === 'json' && this.lintMod) {
+    try {
+      const m2 = await import('codemirror/lang-json/dist/index.js');
+      if (m2.jsonParseLinter && token === this._initToken) {
+        extensions.push(this.lintMod.linter(m2.jsonParseLinter()));
+      }
+    } catch {}
+  }
+
+  extensions.push(m.EditorView.updateListener.of((update) => {
+    if (update.docChanged) {
+      if (token !== this._initToken) return;
+      workspace.markDirty();
+      this.scheduleAutosave();
     }
+  }));
 
-    extensions.push(m.EditorView.updateListener.of((update) => {
-      if (update.docChanged) {
-        if (token !== this._initToken) return;
-        workspace.markDirty();
-        this.scheduleAutosave();
-      }
-    }));
+  const state = m.EditorState.create({ doc: content || '', extensions });
+  if (token !== this._initToken) return null;
 
-    const state = m.EditorState.create({ doc: content || '', extensions });
-    if (token !== this._initToken) return null;
+  this.view = new m.EditorView({ state, parent: container });
 
-    this.view = new m.EditorView({ state, parent: container });
+  this.view.contentDOM.addEventListener('blur', () => {
+    if (workspace.activeFile && workspace.dirtyFiles.has(workspace.activeFile)) {
+      workspace.saveActiveFile({ silent: true });
+    }
+  });
 
-    this.view.contentDOM.addEventListener('blur', () => {
-      if (workspace.activeFile && workspace.dirtyFiles.has(workspace.activeFile)) {
-        workspace.saveActiveFile({ silent: true });
-      }
-    });
-
-    return this.view;
-  },
+  return this.view;
+},
 
   scheduleAutosave() {
     if (this._autosaveTimer) clearTimeout(this._autosaveTimer);
@@ -1642,6 +1791,17 @@ const cm = {
     if (!this.view) return;
     this.view.dispatch({ changes: { from: 0, to: this.view.state.doc.length, insert: text } });
   },
+
+  foldAll() {
+  if (!this.view || !this.modules) return;
+  this.modules.foldAll(this.view);
+  this.view.focus();
+},
+unfoldAll() {
+  if (!this.view || !this.modules) return;
+  this.modules.unfoldAll(this.view);
+  this.view.focus();
+},
   async formatCurrent() {
     if (!this.view || !workspace.activeFile) { toast('Open a file first', 'info'); return; }
     const lang = this.detectLanguage(workspace.activeFile);
@@ -1711,7 +1871,7 @@ const cm = {
 };
 
 // ═══════════════════════════════════════════════════════════
-// FILE VIEWER (non-code)
+// FILE VIEWER
 // ═══════════════════════════════════════════════════════════
 
 function renderFileViewer(kind, path, content) {
@@ -1809,12 +1969,10 @@ const workspace = {
     updateDirtyDot();
     renderSidebar();
 
-    // Load deployment history for this project
     loadDeploymentHistoryFor(project.pid).then(() => {
       refreshInfoIfOpen();
     });
 
-    // Migrate legacy notepad
     migrateLegacyNotes(project.pid).catch(() => {});
 
     let files = [];
@@ -1839,7 +1997,6 @@ const workspace = {
   async openFile(path) {
     if (!S.currentProject) return;
     if (isSystemFile(path) && path === NOTES_PATH) {
-      // Notes.json is a system file — never open in editor
       openSidebar('notes');
       return;
     }
@@ -1930,7 +2087,6 @@ const workspace = {
       return;
     }
 
-    // Warn (don't block) if over budget
     try {
       const project = await db.getProject(S.currentProject.pid);
       const limit = project?.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
@@ -1950,9 +2106,6 @@ const workspace = {
       updateDirtyDot();
       updateTabs();
       refreshInfoIfOpen();
-      if (!S.isGuest) {
-        db.enqueueSync({ action: 'file:put', pid: S.currentProject.pid, path: S.activeFile, content }).catch(() => {});
-      }
       if (!silent) { toast(S.isGuest ? 'Saved locally' : 'Saved', 'success'); haptic(6); }
     } catch (err) {
       if (err?.name === 'QuotaExceededError') {
@@ -1979,9 +2132,27 @@ const workspace = {
     haptic(10);
   },
 };
-
+  
+initCreateProject({
+  apiFetch,
+  db,
+  toast,
+  workspace,
+  setPidInUrl,
+  getAvatarColor,
+  getInitials,
+  renderSidebar,
+  renderEmptyRecent,
+  DEFAULT_PROJECT_STORAGE_LIMIT,
+  API_HOST,
+  isGuest: () => S.isGuest,
+  isOnline: () => S.online,
+  getUsername: () => S.user?.profile?.username || null,
+  getSession: () => S.session,
+});
+  
 // ═══════════════════════════════════════════════════════════
-// HEADER / TABS / EMPTY STATE
+// HEADER / TABS / EMPTY
 // ═══════════════════════════════════════════════════════════
 
 function updateDirtyDot() {
@@ -2083,7 +2254,7 @@ function showEditorError() {
   const box = el('div', { class: 'editor-empty', style: 'display:flex' });
 
   const iconWrap = el('div', { class: 'editor-empty-icon' });
-  iconWrap.innerHTML = iconHTML('alert', 24);
+  iconWrap.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
 
   const title = el('h2', { class: 'editor-empty-title' }, 'Editor failed to load');
   const desc = el('p', { class: 'editor-empty-desc' }, 'CodeMirror needs internet the first time. Check your connection and try again.');
@@ -2196,7 +2367,7 @@ function renderSidebar() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FILES PANEL (with pinned block)
+// FILES PANEL
 // ═══════════════════════════════════════════════════════════
 
 async function renderFilesPanel(container) {
@@ -2223,7 +2394,6 @@ async function renderFilesPanel(container) {
   const explicitFolders = await db.listFolders(S.currentProject.pid).catch(() => []);
   const visibleFiles = files.filter(f => !isSystemFile(f.path));
 
-  // Pinned project block
   const totalBytes = files.reduce((n, f) => n + estimateBytes(f.content), 0);
   const limit = S.currentProject.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
   const pct = Math.min(100, (totalBytes / limit) * 100);
@@ -2282,7 +2452,6 @@ async function renderFilesPanel(container) {
 
   container.appendChild(pinned);
 
-  // Section title with actions
   container.appendChild(el('div', { class: 'sidebar-section-title' },
     el('span', {}, `Files (${visibleFiles.length})`),
     el('div', { class: 'actions' },
@@ -2410,7 +2579,7 @@ async function renderTreeNodes(container, node, depth) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// INFO PANEL
+// INFO PANEL — with meta auto-fill from project data
 // ═══════════════════════════════════════════════════════════
 
 async function renderInfoPanel(container) {
@@ -2437,7 +2606,6 @@ async function renderInfoPanel(container) {
     .filter(f => isTextFile(f.path))
     .reduce((n, f) => n + String(f.content || '').split('\n').length, 0);
 
-  // ── Header ──
   const headerWrap = el('div', { class: 'info-tab-header' });
   headerWrap.appendChild(el('button', {
     class: 'btn btn-secondary btn-sm btn-block',
@@ -2486,7 +2654,7 @@ async function renderInfoPanel(container) {
     ));
   }
 
-  // ── Generate actions card ──
+  // ── Generate actions ──
   const generateCard = el('div', { class: 'generate-card' });
   generateCard.appendChild(el('div', { class: 'generate-card-header' },
     el('span', { class: 'generate-card-label' }, 'Actions')
@@ -2506,7 +2674,6 @@ async function renderInfoPanel(container) {
     }, icon('rocket', 14), el('span', {}, 'Deploy'))
   ));
 
-  // ── Project identity ──
   const idCard = el('div', { class: 'info-identity' });
   const iconWrap = el('div', { class: 'info-identity-icon' });
   if (p.iconUrl) {
@@ -2526,7 +2693,6 @@ async function renderInfoPanel(container) {
   if (p.description) idInfo.appendChild(el('div', { class: 'info-identity-desc' }, p.description));
   idCard.appendChild(idInfo);
 
-  // ── Stats grid ──
   const stats = el('div', { class: 'info-stats' });
   const stat = (label, value) => el('div', { class: 'info-stat' },
     el('div', { class: 'info-stat-label' }, label),
@@ -2537,7 +2703,6 @@ async function renderInfoPanel(container) {
   stats.appendChild(stat('Versions', versions.length));
   stats.appendChild(stat('Lines', totalLines));
 
-  // ── Storage ──
   const storage = el('div', { class: 'storage-bar-full' });
   storage.appendChild(el('div', { class: 'storage-bar-header' },
     el('span', { class: 'storage-bar-label' }, 'Storage'),
@@ -2620,33 +2785,33 @@ async function renderInfoPanel(container) {
           rel: 'noopener',
           'aria-label': 'Open',
         }, icon('external', 10)) : null,
-        el('button', {
-          class: 'deploy-history-action danger',
+        d.hasSnapshot && !isCurrent ? el('button', {
+          class: 'deploy-history-action',
           type: 'button',
-          title: 'Delete',
-          onclick: async () => {
-            const ok = await confirm({ title: 'Delete deployment?', message: 'This removes the deployed version.', confirmLabel: 'Delete', danger: true });
-            if (!ok) return;
-            const res = await apiFetch(API_HOST + '?action=deployment/delete', {
-              method: 'POST', body: JSON.stringify({ pid: p.pid, deploymentId: d.id }),
-            });
-            if (res.ok && res.data?.success) {
-              toast('Deleted', 'success');
-              await loadDeploymentHistoryFor(p.pid);
-              refreshInfoIfOpen();
-            } else {
-              toast(res.data?.error || 'Delete failed', 'error');
-            }
+          title: 'Preview',
+          onclick: () => {
+            if (!deployUrl) return;
+            const u = new URL(deployUrl);
+            u.searchParams.set('from', d.id);
+            window.open(u.toString(), '_blank', 'noopener');
           },
-        }, icon('trash', 10))
+        }, icon('external', 10)) : null
       ));
     }
     deployments.appendChild(hist);
   }
 
-  // ── Meta tags form ──
+  // ── Meta tags form (with auto-fill from project data) ──
   const metaSection = el('div', { class: 'meta-form' });
-  metaSection.appendChild(el('div', { class: 'sidebar-section-title' }, el('span', {}, 'Meta tags')));
+  metaSection.appendChild(el('div', { class: 'sidebar-section-title' },
+    el('span', {}, 'Meta tags'),
+    el('div', { class: 'actions' },
+      el('button', {
+        class: 'act', type: 'button', title: 'Auto-fill from project',
+        onclick: () => autoFillMeta(metaSection, p, meta),
+      }, icon('refresh', 12))
+    )
+  ));
 
   const metaFields = [
     ['title', 'Title', 'Page title'],
@@ -2666,6 +2831,7 @@ async function renderInfoPanel(container) {
     const input = el('input', {
       class: 'input', type: 'text', placeholder,
       value: metaValues[key] || '',
+      'data-meta-key': key,
       onblur: debounce(async (e) => {
         const current = await db.getProjectMeta(p.pid);
         const m = current.meta || {};
@@ -2696,7 +2862,7 @@ async function renderInfoPanel(container) {
     },
   }, icon('file-code', 12), ' Inject into index.html'));
 
-  // ── File types ──
+  // File types
   const fileTypes = el('div', { class: 'info-file-types' });
   fileTypes.appendChild(el('div', { class: 'sidebar-section-title' }, el('span', {}, 'File types')));
   const kindCounts = {};
@@ -2717,7 +2883,7 @@ async function renderInfoPanel(container) {
     ));
   }
 
-  // ── Timeline ──
+  // Timeline
   const timeline = el('div', { class: 'info-timeline' });
   timeline.appendChild(el('div', { class: 'sidebar-section-title' }, el('span', {}, 'Timeline')));
   timeline.appendChild(el('div', { class: 'list-row' },
@@ -2731,7 +2897,7 @@ async function renderInfoPanel(container) {
     el('span', { class: 'value' }, relativeTime(p.updatedAt || Date.now()))
   ));
 
-  // ── Danger ──
+  // Danger
   const danger = el('button', {
     class: 'btn btn-outline-danger btn-block btn-sm',
     type: 'button',
@@ -2755,7 +2921,6 @@ async function renderInfoPanel(container) {
     },
   }, icon('trash', 11), ' Delete project');
 
-  // Assemble
   container.appendChild(headerWrap);
   container.appendChild(previewCard);
   container.appendChild(generateCard);
@@ -2767,6 +2932,34 @@ async function renderInfoPanel(container) {
   container.appendChild(fileTypes);
   container.appendChild(timeline);
   container.appendChild(danger);
+}
+
+function autoFillMeta(metaSection, project, existingMeta) {
+  const fields = metaSection.querySelectorAll('[data-meta-key]');
+  const existing = existingMeta.meta || {};
+  const auto = {
+    title: project.name || '',
+    description: project.description || '',
+    keywords: '',
+    author: (S.user?.profile?.displayName || S.user?.username || ''),
+    ogTitle: project.name || '',
+    ogDescription: project.description || '',
+    ogImage: project.metaTags?.ogImage || project.ogImage?.url || project.iconUrl || '',
+    canonical: project.deployment?.url
+      || (project.ownerUsername && project.slug
+        ? `${BASE_URL}/${project.ownerUsername}/project/${project.slug}/`
+        : ''),
+  };
+  let filled = 0;
+  fields.forEach(input => {
+    const key = input.dataset.metaKey;
+    if (!existing[key] && auto[key]) {
+      input.value = auto[key];
+      filled++;
+    }
+  });
+  if (filled > 0) toast(`Auto-filled ${filled} empty field${filled === 1 ? '' : 's'}`, 'success', 2000);
+  else toast('Nothing to auto-fill', 'info', 1500);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2816,6 +3009,20 @@ async function deleteFile(path) {
   if (!S.currentProject) return;
   const ok = await confirm({ title: `Delete ${path.split('/').pop()}?`, message: "This can't be undone.", confirmLabel: 'Delete', danger: true });
   if (!ok) return;
+
+  // Server delete (best-effort) then local delete
+  if (S.session && navigator.onLine && S.currentProject._server) {
+    try {
+      const res = await apiFetch(API_HOST + '?action=file/delete', {
+        method: 'POST',
+        body: JSON.stringify({ pid: S.currentProject.pid, path }),
+      });
+      if (!res.ok || !res.data?.success) {
+        toast(res.data?.error || 'Server delete failed — removing locally', 'warning', 4000);
+      }
+    } catch {}
+  }
+
   await db.deleteFile(S.currentProject.pid, path);
   S.dirtyFiles.delete(path);
   const idx = S.openFiles.indexOf(path);
@@ -2851,6 +3058,12 @@ async function deleteFolder(path) {
   });
   if (!ok) return;
   for (const f of inFolder) {
+    if (S.session && navigator.onLine && S.currentProject._server) {
+      apiFetch(API_HOST + '?action=file/delete', {
+        method: 'POST',
+        body: JSON.stringify({ pid: S.currentProject.pid, path: f.path }),
+      }).catch(() => {});
+    }
     await db.deleteFile(S.currentProject.pid, f.path);
     S.dirtyFiles.delete(f.path);
   }
@@ -2977,9 +3190,27 @@ async function expandAllFolders() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// NOTES PANEL + EDITOR
+// NOTES PANEL
 // ═══════════════════════════════════════════════════════════
-
+function notePreviewText(md) {
+  const cleaned = String(md || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^>\s?/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/^---+$/gm, ' ');
+  // Prefer the first non-heading line with actual content
+  const lines = cleaned.split('\n').map(l => l.replace(/^#{1,6}\s+/, '').trim()).filter(Boolean);
+  const prose = lines.find(l => l.length > 0) || '';
+  return prose.replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+  
 async function renderNotesPanel(container) {
   if (!S.currentProject) {
     container.appendChild(el('div', { class: 'empty-state', style: 'padding:20px 6px' },
@@ -3025,7 +3256,7 @@ async function renderNotesPanel(container) {
       onclick: () => openNoteEditor(note.id),
     },
       el('div', { class: 'note-card-title' }, note.title || 'Untitled'),
-      el('div', { class: 'note-card-preview' }, (note.body || '').slice(0, 120) || 'Empty note'),
+      el('div', { class: 'note-card-preview' }, notePreviewText(note.body || '') || 'Empty note'),
       el('div', { class: 'note-card-meta' },
         note.pinned ? el('span', { class: 'note-pin' }, icon('bookmark', 9)) : null,
         el('span', {}, relativeTime(note.updatedAt || note.createdAt || 0))
@@ -3040,6 +3271,125 @@ function openNoteEditor(noteId) {
   showFullscreenNoteEditor(noteId);
 }
 
+// ═══════════════════════════════════════════════════════════
+// NOTE EDITOR — markdown toolbar (Google-Docs-style)
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// MINIMAL MARKDOWN RENDERER (no deps)
+// ═══════════════════════════════════════════════════════════
+
+function renderMarkdownSafe(text) {
+  // Escape first, then re-introduce only safe tags.
+  let src = String(text ?? '');
+  // Fenced code blocks (extract first so inline rules don't touch them)
+  const codeBlocks = [];
+  src = src.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (m, lang, body) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push({ lang, body });
+    return `\u0000CODE${idx}\u0000`;
+  });
+  // Escape remaining HTML
+  src = src
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  const lines = src.split('\n');
+  const out = [];
+  let inUl = false, inOl = false, inBlockquote = false;
+
+  const closeLists = () => {
+    if (inUl) { out.push('</ul>'); inUl = false; }
+    if (inOl) { out.push('</ol>'); inOl = false; }
+  };
+  const closeBlockquote = () => {
+    if (inBlockquote) { out.push('</blockquote>'); inBlockquote = false; }
+  };
+
+  const inlineFmt = (s) => {
+    // images: ![alt](url)
+    s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img alt="$1" src="$2">');
+    // links: [text](url)
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // bold
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // italic
+    s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // strikethrough
+    s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    // inline code
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    return s;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const line = inlineFmt(raw);
+
+    if (/^\s*\u0000CODE\d+\u0000\s*$/.test(raw)) {
+      closeLists(); closeBlockquote();
+      const match = raw.match(/\u0000CODE(\d+)\u0000/);
+      const cb = codeBlocks[+match[1]];
+      out.push(`<pre><code${cb.lang ? ` class="language-${cb.lang}"` : ''}>${cb.body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`);
+      continue;
+    }
+
+    if (/^\s*$/.test(raw)) {
+      closeLists(); closeBlockquote();
+      continue;
+    }
+
+    const h = raw.match(/^(#{1,6})\s+(.*)$/);
+    if (h) {
+      closeLists(); closeBlockquote();
+      const lvl = h[1].length;
+      out.push(`<h${lvl}>${inlineFmt(h[2])}</h${lvl}>`);
+      continue;
+    }
+
+    if (/^---+$/.test(raw.trim())) {
+      closeLists(); closeBlockquote();
+      out.push('<hr>');
+      continue;
+    }
+
+    const bq = raw.match(/^>\s?(.*)$/);
+    if (bq) {
+      closeLists();
+      if (!inBlockquote) { out.push('<blockquote>'); inBlockquote = true; }
+      out.push(`<p>${inlineFmt(bq[1])}</p>`);
+      continue;
+    } else {
+      closeBlockquote();
+    }
+
+    const ul = raw.match(/^\s*[-*]\s+(.*)$/);
+    if (ul) {
+      closeLists();
+      if (!inUl) { out.push('<ul>'); inUl = true; }
+      out.push(`<li>${inlineFmt(ul[1])}</li>`);
+      continue;
+    } else if (inUl) {
+      out.push('</ul>'); inUl = false;
+    }
+
+    const ol = raw.match(/^\s*\d+\.\s+(.*)$/);
+    if (ol) {
+      if (!inOl) { out.push('<ol>'); inOl = true; }
+      out.push(`<li>${inlineFmt(ol[1])}</li>`);
+      continue;
+    } else if (inOl) {
+      out.push('</ol>'); inOl = false;
+    }
+
+    out.push(`<p>${line}</p>`);
+  }
+
+  closeLists();
+  closeBlockquote();
+  return out.join('\n');
+}
 async function showFullscreenNoteEditor(noteId) {
   const data = await readNotes(S.currentProject.pid);
   const existing = noteId ? data.notes.find(n => n.id === noteId) : null;
@@ -3053,8 +3403,12 @@ async function showFullscreenNoteEditor(noteId) {
     updatedAt: Date.now(),
   };
 
+  // Empty new notes go straight to edit
+  const startInEdit = !existing || !(note.body || '').trim();
+
   const overlay = el('div', { class: 'note-editor-overlay' });
 
+  // Header
   const header = el('div', { class: 'note-editor-header' });
   const backBtn = el('button', {
     class: 'note-editor-back', type: 'button', 'aria-label': 'Back',
@@ -3069,7 +3423,21 @@ async function showFullscreenNoteEditor(noteId) {
   });
   header.appendChild(titleInput);
 
+  // Title in reading mode
+  const titleDisplay = el('div', { class: 'note-editor-title-readonly' }, note.title || 'Untitled');
+  header.appendChild(titleDisplay);
+
   const actions = el('div', { class: 'note-editor-actions' });
+
+  // Mode toggle button (Edit / Done)
+  const modeBtn = el('button', {
+    class: 'note-editor-action note-mode-btn',
+    type: 'button',
+    'aria-label': 'Edit note',
+    title: 'Edit note',
+    onclick: () => toggleMode(),
+  }, icon('edit', 14));
+  actions.appendChild(modeBtn);
 
   const pinBtn = el('button', {
     class: `note-editor-action${note.pinned ? ' active' : ''}`,
@@ -3101,14 +3469,60 @@ async function showFullscreenNoteEditor(noteId) {
   header.appendChild(actions);
   overlay.appendChild(header);
 
+  // ── Formatting toolbar (edit mode only) ──
+  const fmtBar = el('div', { class: 'note-format-bar hidden' });
+  const fmtGroups = [
+    [
+      { id: 'h1', label: 'Heading 1', prefix: '# ', block: true },
+      { id: 'h2', label: 'Heading 2', prefix: '## ', block: true },
+      { id: 'h3', label: 'Heading 3', prefix: '### ', block: true },
+    ],
+    [
+      { id: 'bold', label: 'Bold', wrap: ['**', '**'] },
+      { id: 'italic', label: 'Italic', wrap: ['*', '*'] },
+      { id: 'strike', label: 'Strikethrough', wrap: ['~~', '~~'] },
+    ],
+    [
+      { id: 'ul', label: 'Bulleted list', prefix: '- ', block: true },
+      { id: 'ol', label: 'Numbered list', prefix: '1. ', block: true },
+      { id: 'quote', label: 'Quote', prefix: '> ', block: true },
+    ],
+    [
+      { id: 'link', label: 'Link', wrap: ['[', '](https://)'] },
+      { id: 'image', label: 'Image', wrap: ['![', '](https://)'] },
+      { id: 'code', label: 'Inline code', wrap: ['`', '`'] },
+    ],
+  ];
   const bodyArea = el('textarea', {
-    class: 'note-editor-body',
-    placeholder: 'Start writing…',
+    class: 'note-editor-body hidden',
+    placeholder: 'Start writing… Markdown supported.',
     oninput: () => { note.body = bodyArea.value; scheduleAutosave(); },
   });
   bodyArea.value = note.body || '';
-  overlay.appendChild(bodyArea);
 
+  const bodyRead = el('div', { class: 'note-editor-body-readonly' });
+  bodyRead.addEventListener('click', () => {
+    if (overlay.dataset.mode === 'read') toggleMode();
+  });
+
+  for (const group of fmtGroups) {
+    const g = el('div', { class: 'note-format-group' });
+    for (const btn of group) {
+      const b = el('button', {
+        class: 'note-format-btn', type: 'button', 'aria-label': btn.label, title: btn.label,
+        onmousedown: (e) => e.preventDefault(),
+        onclick: () => applyMarkdown(btn),
+      }, icon(btn.id, 13));
+      g.appendChild(b);
+    }
+    fmtBar.appendChild(g);
+  }
+  overlay.appendChild(fmtBar);
+
+  overlay.appendChild(bodyArea);
+  overlay.appendChild(bodyRead);
+
+  // Footer / status
   const status = el('div', { class: 'note-editor-status' });
   const wordCount = el('span', { class: 'note-editor-words' }, '0 words');
   const saveState = el('span', { class: 'note-editor-save' }, 'Saved');
@@ -3141,14 +3555,96 @@ async function showFullscreenNoteEditor(noteId) {
     markDirty();
   }
 
+  // ── Mode toggle ──
+  function setMode(mode) {
+    overlay.dataset.mode = mode;
+    const isEdit = mode === 'edit';
+
+    titleInput.classList.toggle('hidden', !isEdit);
+    titleDisplay.classList.toggle('hidden', isEdit);
+    fmtBar.classList.toggle('hidden', !isEdit);
+    bodyArea.classList.toggle('hidden', !isEdit);
+    bodyRead.classList.toggle('hidden', isEdit);
+
+    modeBtn.innerHTML = '';
+    modeBtn.appendChild(icon(isEdit ? 'check' : 'edit', 14));
+    modeBtn.setAttribute('aria-label', isEdit ? 'Done editing' : 'Edit note');
+    modeBtn.setAttribute('title', isEdit ? 'Done editing' : 'Edit note');
+    modeBtn.classList.toggle('active', isEdit);
+
+    if (isEdit) {
+      titleDisplay.textContent = titleInput.value || 'Untitled';
+      setTimeout(() => bodyArea.focus(), 50);
+    } else {
+      // Render reading view
+      titleDisplay.textContent = titleInput.value || 'Untitled';
+      bodyRead.innerHTML = renderMarkdownSafe(bodyArea.value || '');
+      if (dirty) doSave();
+    }
+  }
+
+  function toggleMode() {
+    const current = overlay.dataset.mode || 'read';
+    setMode(current === 'read' ? 'edit' : 'read');
+  }
+
+  function applyMarkdown(action) {
+    const start = bodyArea.selectionStart;
+    const end = bodyArea.selectionEnd;
+    const value = bodyArea.value;
+    const selected = value.slice(start, end);
+
+    if (action.block) {
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const lineEnd = value.indexOf('\n', start);
+      const targetEnd = lineEnd === -1 ? value.length : lineEnd;
+      const line = value.slice(lineStart, targetEnd);
+
+      if (line.startsWith(action.prefix)) {
+        bodyArea.value = value.slice(0, lineStart) + line.slice(action.prefix.length) + value.slice(targetEnd);
+        bodyArea.selectionStart = Math.max(lineStart, start - action.prefix.length);
+        bodyArea.selectionEnd = Math.max(lineStart, end - action.prefix.length);
+      } else {
+        if (selected.includes('\n') && (action.id === 'ul' || action.id === 'ol')) {
+          const selStart = value.lastIndexOf('\n', start - 1) + 1;
+          const selEnd = value.indexOf('\n', end);
+          const blockEnd = selEnd === -1 ? value.length : selEnd;
+          const block = value.slice(selStart, blockEnd);
+          const prefixed = block.split('\n').map((l, i) => {
+            if (action.id === 'ol') return `${i + 1}. ${l}`;
+            return `${action.prefix}${l}`;
+          }).join('\n');
+          bodyArea.value = value.slice(0, selStart) + prefixed + value.slice(blockEnd);
+          bodyArea.selectionStart = selStart;
+          bodyArea.selectionEnd = selStart + prefixed.length;
+        } else {
+          bodyArea.value = value.slice(0, lineStart) + action.prefix + value.slice(lineStart);
+          bodyArea.selectionStart = start + action.prefix.length;
+          bodyArea.selectionEnd = end + action.prefix.length;
+        }
+      }
+    } else if (action.wrap) {
+      const [before, after] = action.wrap;
+      const wrapped = before + (selected || '') + after;
+      bodyArea.value = value.slice(0, start) + wrapped + value.slice(end);
+      bodyArea.selectionStart = start + before.length;
+      bodyArea.selectionEnd = start + before.length + (selected || '').length;
+    }
+
+    note.body = bodyArea.value;
+    scheduleAutosave();
+    bodyArea.focus();
+  }
+
   async function doSave() {
     if (!dirty || isDeleted) return;
     try {
       if (!note.title.trim()) {
-        const m = bodyArea.value.match(/^#\s+(.+)$/m);
+        const m = bodyArea.value.match(/^#{1,6}\s+(.+)$/m);
         if (m) {
           note.title = m[1].trim().slice(0, 120);
           titleInput.value = note.title;
+          titleDisplay.textContent = note.title;
         }
       }
       note.updatedAt = Date.now();
@@ -3219,8 +3715,8 @@ async function showFullscreenNoteEditor(noteId) {
   }
 
   function openColorPicker(note, anchor) {
-    const existing = document.querySelector('.note-color-popover');
-    if (existing) { existing.remove(); return; }
+    const existingPop = document.querySelector('.note-color-popover');
+    if (existingPop) { existingPop.remove(); return; }
 
     const pop = el('div', { class: 'note-color-popover' });
     for (const [name, hex] of Object.entries(NOTE_COLORS)) {
@@ -3251,12 +3747,17 @@ async function showFullscreenNoteEditor(noteId) {
   }
 
   document.body.appendChild(overlay);
-  requestAnimationFrame(() => overlay.classList.add('open'));
+  requestAnimationFrame(() => {
+    overlay.classList.add('open');
+    setMode(startInEdit ? 'edit' : 'read');
+  });
 
   setTimeout(() => {
-    if (!note.title) titleInput.focus();
-    else bodyArea.focus();
-  }, 100);
+    if (startInEdit) {
+      if (!note.title) titleInput.focus();
+      else bodyArea.focus();
+    }
+  }, 150);
 
   const escHandler = (e) => {
     if (e.key === 'Escape') {
@@ -3453,8 +3954,12 @@ async function renderVersionsPanel(container) {
   for (let i = 0; i < versions.length; i++) {
     const v = versions[i];
     const prev = versions[i + 1];
-    list.appendChild(el('div', { class: 'version-item' },
-      el('div', { class: 'msg' }, v.message),
+    const isDeploy = v.kind === 'deploy';
+    list.appendChild(el('div', { class: `version-item${isDeploy ? ' version-deploy' : ''}` },
+      el('div', { class: 'msg' },
+        isDeploy ? el('span', { class: 'deploy-pill' }, 'Deploy') : null,
+        v.message
+      ),
       el('div', { class: 'meta' },
         el('span', {}, relativeTime(v.createdAt)),
         el('span', {}, `${Object.keys(v.files || {}).length} files`)
@@ -3462,7 +3967,7 @@ async function renderVersionsPanel(container) {
       el('div', { class: 'acts' },
         el('button', { class: 'btn btn-secondary btn-sm', type: 'button', onclick: () => restoreVersion(v.vid) }, 'Restore'),
         prev ? el('button', { class: 'btn btn-secondary btn-sm', type: 'button', onclick: () => showVersionDiff(prev, v) }, 'Diff') : null,
-        el('button', { class: 'btn btn-ghost btn-sm btn-icon', type: 'button', style: 'color:var(--theme-danger)', onclick: () => deleteVersionConfirm(v.vid) }, icon('trash', 10))
+        !isDeploy ? el('button', { class: 'btn btn-ghost btn-sm btn-icon', type: 'button', style: 'color:var(--theme-danger)', onclick: () => deleteVersionConfirm(v.vid) }, icon('trash', 10)) : null
       )
     ));
   }
@@ -3508,9 +4013,10 @@ async function restoreVersion(vid) {
     });
   } catch (err) { console.warn('[Restore] auto-snapshot failed:', err); }
 
+  const isDeploy = version.kind === 'deploy';
   const ok = await confirm({
     title: 'Restore this version?',
-    message: `Replaces ${files.length} file${files.length === 1 ? '' : 's'}. Current state auto-saved.`,
+    message: `Replaces ${files.length} file${files.length === 1 ? '' : 's'}. Current state auto-saved.${isDeploy ? ' The live deployment stays live until you redeploy.' : ''}`,
     confirmLabel: 'Restore', danger: true,
   });
   if (!ok) return;
@@ -3760,109 +4266,12 @@ async function createVersion(message) {
   await db.putVersion({
     vid, pid: S.currentProject.pid, message, files: snapshot, createdAt: Date.now(),
   });
-  if (!S.isGuest) {
-    db.enqueueSync({ action: 'version:create', pid: S.currentProject.pid, vid, message }).catch(() => {});
-  }
   toast(S.isGuest ? 'Committed locally' : 'Version committed', 'success');
   haptic(10);
   renderSidebar();
   refreshInfoIfOpen();
 }
 
-// ═══════════════════════════════════════════════════════════
-// CREATE PROJECT
-// ═══════════════════════════════════════════════════════════
-
-async function createNewProject() {
-  if (!S.isGuest && !S.online) { toast('Requires internet to create cloud project', 'warning'); return; }
-  const name = await promptSheet('New project', 'Project name');
-  if (!name) return;
-  const cleaned = name.trim();
-  if (!cleaned) return;
-
-  let pid;
-  let slug;
-  let createdAt = Date.now();
-
-  if (S.isGuest) {
-    pid = `local_${Date.now()}`;
-    slug = cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
-  } else {
-    const res = await apiFetch(API_HOST + '?action=projects/create', {
-      method: 'POST',
-      body: JSON.stringify({ name: cleaned, description: '' }),
-    });
-    if (!res.ok || !res.data?.success) {
-      toast(res.data?.error || 'Could not create project', 'error');
-      return;
-    }
-    const serverProject = res.data.project || null;
-    pid = res.data.pid;
-    slug = serverProject?.slug
-      || cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
-      || 'project';
-    createdAt = serverProject?.createdAt
-      ? (typeof serverProject.createdAt === 'number' ? serverProject.createdAt : new Date(serverProject.createdAt).getTime())
-      : Date.now();
-  }
-
-  const project = {
-    pid, name: cleaned, slug, description: '',
-    iconUrl: null,
-    createdAt, updatedAt: Date.now(),
-    storageLimit: DEFAULT_PROJECT_STORAGE_LIMIT,
-    myRole: 'owner',
-    _server: !S.isGuest,
-  };
-
-  try {
-    await db.putProject(project);
-  } catch (err) {
-    console.error('[CreateProject] putProject failed:', err);
-    toast('Could not save project locally', 'error');
-    return;
-  }
-
-  const indexHtml = '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>' + cleaned + '</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>' + cleaned + '</h1>\n  <p>Edit this file to get started.</p>\n  <script src="app.js"><' + '/script>\n</body>\n</html>';
-  const styleCss = 'body {\n  font-family: system-ui, sans-serif;\n  margin: 2rem;\n  background: #0a0c10;\n  color: #e8ecf1;\n}\n';
-  const appJs = "console.log('Hello from " + cleaned.replace(/'/g, "\\'") + "');\n";
-
-  try {
-    await db.putFile(pid, 'index.html', indexHtml);
-    await db.putFile(pid, 'style.css', styleCss);
-    await db.putFile(pid, 'app.js', appJs);
-  } catch (err) {
-    console.error('[CreateProject] putFile failed:', err);
-  }
-
-  if (!S.isGuest && S.online) {
-    try {
-      const sync = await apiFetch(API_HOST + '?action=project/sync-back', {
-        method: 'POST',
-        body: JSON.stringify({
-          pid,
-          files: { 'index.html': indexHtml, 'style.css': styleCss, 'app.js': appJs },
-        }),
-      });
-      if (!sync.ok || !sync.data?.success) {
-        toast('Project created, but files not synced to server', 'warning', 4000);
-      }
-    } catch (err) {
-      toast('Project created, but files not synced to server', 'warning', 4000);
-    }
-  }
-
-  toast(S.isGuest ? `Created ${cleaned} (local)` : `Created ${cleaned}`, 'success');
-  try {
-    await workspace.openProject(project);
-    setPidInUrl(project.pid);
-    renderSidebar();
-    renderEmptyRecent();
-  } catch (err) {
-    console.error('[CreateProject] openProject failed:', err);
-    toast('Project created, but could not open editor', 'warning');
-  }
-}
 
 // ═══════════════════════════════════════════════════════════
 // SYMBOLS / PREVIEW / SETUP / HOST
@@ -3903,7 +4312,6 @@ function shiftEditorForSymbols(open) {
     container.style.paddingBottom = '0';
   }
 }
-
 function setCtrlLatch(on) {
   S.ctrlLatch = on;
   const btn = $('tbCtrl');
@@ -3950,7 +4358,6 @@ async function buildPreviewHtml(fileToPreview = null) {
 
   let html = htmlFile.content;
 
-  // Inline CSS <link>
   html = html.replace(/<link([^>]*)href=["']([^"']+\.css)["']([^>]*)>/gi, (match, before, href, after) => {
     const key = href.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
     if (fileMapLower[key] != null) {
@@ -3959,7 +4366,6 @@ async function buildPreviewHtml(fileToPreview = null) {
     return match;
   });
 
-  // Inline JS <script src>
   html = html.replace(/<script([^>]*)src=["']([^"']+\.js)["']([^>]*)>\s*<\/script>/gi, (match, before, src, after) => {
     const key = src.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
     if (fileMapLower[key] != null) {
@@ -3968,7 +4374,6 @@ async function buildPreviewHtml(fileToPreview = null) {
     return match;
   });
 
-  // Inline images stored as data URIs
   html = html.replace(/<img([^>]*)src=["']([^"']+)["']([^>]*)>/gi, (match, before, src, after) => {
     if (src.startsWith('data:')) return match;
     const key = src.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
@@ -3979,7 +4384,6 @@ async function buildPreviewHtml(fileToPreview = null) {
     return match;
   });
 
-  // Inline CSS url() inside <style> blocks
   html = html.replace(/<style>([\s\S]*?)<\/style>/gi, (match, css) => {
     const inlinedCss = css.replace(/url\(\s*["']?([^"')]+)["']?\s*\)/gi, (m, ref) => {
       if (ref.startsWith('data:') || ref.startsWith('http')) return m;
@@ -4108,7 +4512,7 @@ function openSetupDialog() {
         window.location.href = page.href;
       },
     },
-      el('div', { class: 'setup-row-icon' }, icon(page.icon, 16)),
+      el('div', { class: 'setup-row-icon' }, icon(page.icon.replace('i-', ''), 16)),
       el('div', { class: 'setup-row-info' },
         el('div', { class: 'setup-row-title' }, page.title),
         el('div', { class: 'setup-row-desc' }, requiresAuth ? 'Sign in required' : page.desc)
@@ -4171,12 +4575,12 @@ async function hostProject() {
 
   const ok = await confirm({
     title: 'Deploy project?',
-    message: 'Your project will be built and deployed to a live URL.',
+    message: 'Your project will be built and deployed to a live URL. Each deploy creates a snapshot that stays previewable.',
     confirmLabel: 'Deploy', danger: false,
   });
   if (!ok) return;
 
-  toast('Deploying…', 'info', 2000);
+  toast('Preparing deploy…', 'info', 1500);
   const files = await db.listFiles(S.currentProject.pid);
   const fileMap = {};
   for (const f of files) {
@@ -4185,7 +4589,6 @@ async function hostProject() {
     fileMap[f.path] = f.content;
   }
 
-  // Apply meta tags to index.html in-memory before upload
   try {
     const meta = (await db.getProjectMeta(S.currentProject.pid)).meta || {};
     if (Object.keys(meta).length > 0 && fileMap['index.html']) {
@@ -4193,22 +4596,71 @@ async function hostProject() {
     }
   } catch {}
 
+  // Step 1: snapshot to a deploy-kind version
+  const vid = `v_deploy_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  toast('Uploading snapshot…', 'info', 1500);
+  try {
+    const snapshotRes = await apiFetch(API_HOST + '?action=project/sync-back', {
+      method: 'POST',
+      body: JSON.stringify({
+        pid: S.currentProject.pid,
+        versions: {
+          [vid]: {
+            message: `Deploy — ${new Date().toLocaleString()}`,
+            files: fileMap,
+            createdAt: Date.now(),
+            kind: 'deploy',
+          },
+        },
+      }),
+    });
+    if (!snapshotRes.ok || !snapshotRes.data?.success) {
+      throw new Error(snapshotRes.data?.error || 'Snapshot failed');
+    }
+  } catch (err) {
+    toast(err.message || 'Could not create deploy snapshot', 'error');
+    return;
+  }
+
+  // Step 2: deploy
+  toast('Deploying…', 'info', 1500);
   const res = await apiFetch(API_HOST + '?action=deploy', {
     method: 'POST',
-    body: JSON.stringify({ pid: S.currentProject.pid, files: fileMap }),
+    body: JSON.stringify({ pid: S.currentProject.pid, files: fileMap, versionId: vid }),
   });
 
   if (!res.ok || !res.data?.success) {
     toast(res.data?.error || 'Deploy failed', 'error');
     return;
   }
-  toast('Deployed: ' + (res.data.url || 'success'), 'success', 4000);
 
-  // Refresh deployment cache
+  // Step 3: poll status once
+  let live = false;
+  try {
+    const st = await apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.currentProject.pid));
+    live = !!(st.ok && st.data?.success && st.data.deployment?.url);
+    if (live) {
+      S.currentProject.deployment = st.data.deployment;
+      const local = await db.getProject(S.currentProject.pid);
+      if (local) await db.putProject({ ...local, deployment: st.data.deployment, updatedAt: Date.now() });
+    }
+  } catch {}
+
+  if (live) {
+    toast('Deployed · ' + res.data.url, 'success', 4000);
+  } else {
+    toast('Deploy recorded — propagation delayed', 'warning', 4000);
+  }
+  if (res.data.filesSkipped > 0) {
+    toast(`${res.data.filesSkipped} file${res.data.filesSkipped === 1 ? '' : 's'} skipped`, 'warning', 4000);
+  }
+
   setTimeout(() => {
     loadDeploymentHistoryFor(S.currentProject.pid).then(() => refreshInfoIfOpen());
-  }, 2000);
+    updateBreadcrumb();
+  }, 1500);
 }
+
 // ═══════════════════════════════════════════════════════════
 // IMAGE HANDOFF — /tools navigation
 // ═══════════════════════════════════════════════════════════
@@ -4249,7 +4701,6 @@ async function regeneratePreview() {
     });
     if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
 
-    // Re-fetch the project to get updated thumbnail/languages/og
     const detailRes = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
     if (detailRes.ok && detailRes.data?.success && detailRes.data.project) {
       const fresh = detailRes.data.project;
@@ -4293,6 +4744,7 @@ async function getPreviewFileOptions() {
       return a.localeCompare(b);
     });
 }
+
 // ═══════════════════════════════════════════════════════════
 // KEYBOARD / UI WIRING
 // ═══════════════════════════════════════════════════════════
@@ -4411,7 +4863,8 @@ function wireUI() {
   $('tbCommit')?.addEventListener('click', openCommitDialog);
   $('tbPreview')?.addEventListener('click', launchPreview);
   $('tbHost')?.addEventListener('click', hostProject);
-
+$('tbFoldAll')?.addEventListener('click', () => cm.view ? cm.foldAll() : toast('Open a file first', 'info'));
+$('tbUnfoldAll')?.addEventListener('click', () => cm.view ? cm.unfoldAll() : toast('Open a file first', 'info'));
   $('symbolsClose')?.addEventListener('click', closeSymbolsSheet);
   $('previewFullClose')?.addEventListener('click', () => $('previewFullscreen').classList.remove('visible'));
   $('previewFullRefresh')?.addEventListener('click', () => openFullscreenPreview());
@@ -4421,13 +4874,12 @@ function wireUI() {
     $('previewMini').classList.remove('visible');
     openFullscreenPreview();
   });
-  // Preview file selectors
-$('previewFileSelector')?.addEventListener('change', (e) => {
-  openFullscreenPreview(e.target.value);
-});
-$('previewMiniSelector')?.addEventListener('change', (e) => {
-  openMiniPreview(e.target.value);
-});
+  $('previewFileSelector')?.addEventListener('change', (e) => {
+    openFullscreenPreview(e.target.value);
+  });
+  $('previewMiniSelector')?.addEventListener('change', (e) => {
+    openMiniPreview(e.target.value);
+  });
 
   $('guestBannerClose')?.addEventListener('click', () => {
     $('guestBanner').classList.remove('visible');
@@ -4549,40 +5001,45 @@ async function boot() {
   wireThemeMediaQuery();
   readSession();
   applyGuestState();
-  
-// Handle return from image generator
-const bootParams = new URLSearchParams(location.search);
-const generatedSlot = bootParams.get('generated');
-if (generatedSlot) {
-  setTimeout(async () => {
-    toast(`Image updated — ${generatedSlot === 'icon' ? 'icon' : 'generated'}`, 'success', 3000);
 
-    if (S.currentProject) {
-      try {
-        const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
-        if (res.ok && res.data?.success && res.data.project) {
-          const fresh = normalizeServerProject(res.data.project);
-          S.currentProject = { ...S.currentProject, ...fresh };
-          const local = await db.getProject(S.currentProject.pid);
-          if (local) {
-            await db.putProject({
-              ...local,
-              iconUrl: fresh.iconUrl,
-              name: fresh.name,
-              updatedAt: fresh.updatedAt,
-            });
+// Handle return from /tools for the create-project form
+if (handleNewProjectImageReturn()) {
+  // Returned true — form will reopen, skip the "image updated" toast
+} else {
+  // Existing behaviour for return-from-tools when editing an existing project
+  const bootParams = new URLSearchParams(location.search);
+  const generatedSlot = bootParams.get('generated');
+  if (generatedSlot) {
+    setTimeout(async () => {
+      toast(`Image updated — ${generatedSlot === 'icon' ? 'icon' : generatedSlot}`, 'success', 3000);
+
+      if (S.currentProject) {
+        try {
+          const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
+          if (res.ok && res.data?.success && res.data.project) {
+            const fresh = normalizeServerProject(res.data.project);
+            S.currentProject = { ...S.currentProject, ...fresh };
+            const local = await db.getProject(S.currentProject.pid);
+            if (local) {
+              await db.putProject({
+                ...local,
+                iconUrl: fresh.iconUrl,
+                name: fresh.name,
+                updatedAt: fresh.updatedAt,
+              });
+            }
+            updateBreadcrumb();
+            renderSidebar();
           }
-          updateBreadcrumb();
-          renderSidebar();
-        }
-      } catch {}
-    }
+        } catch {}
+      }
 
-    const cleanUrl = new URL(location.href);
-    cleanUrl.searchParams.delete('generated');
-    cleanUrl.searchParams.delete('slot');
-    history.replaceState(null, '', cleanUrl.toString());
-  }, 500);
+      const cleanUrl = new URL(location.href);
+      cleanUrl.searchParams.delete('generated');
+      cleanUrl.searchParams.delete('slot');
+      history.replaceState(null, '', cleanUrl.toString());
+    }, 500);
+  }
 }
 
   loadPrefs();
@@ -4627,7 +5084,6 @@ if (generatedSlot) {
         S.session = null;
         S.isGuest = true;
         applyGuestState();
-  
         toast('Session expired — you are now a guest', 'warning', 4000);
       }
     }).catch(() => {});
