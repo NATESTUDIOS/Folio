@@ -11,27 +11,42 @@
     { "source": "/settings", "destination": "/settings.html" },
     { "source": "/analytics", "destination": "/analytics.html" },
     { "source": "/offline", "destination": "/offline.html" },
+    { "source": "/invite", "destination": "/invite.html" },
+    { "source": "/notifications", "destination": "/notifications.html" },
 
     { "source": "/p/:pid", "destination": "/api/host?action=share&pid=:pid" },
 
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-
     {
-      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|favicon\\.ico$|robots\\.txt$|register$|profile$|project$|tools$|settings$|analytics$|offline$)[^/]+)/:project/:file",
+      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|firebase-messaging-sw\\.js$|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|register$|profile$|project$|tools$|settings$|analytics$|offline$|invite$|notifications$|p$)[^/]+)/project/:projectname/:path*",
+      "destination": "/api/host?action=serve&username=:username&project=:projectname&path=:path*"
+    },
+    {
+      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|firebase-messaging-sw\\.js$|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|register$|profile$|project$|tools$|settings$|analytics$|offline$|invite$|notifications$|p$)[^/]+)/project/:projectname",
+      "destination": "/api/host?action=serve&username=:username&project=:projectname"
+    },
+    {
+      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|firebase-messaging-sw\\.js$|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|register$|profile$|project$|tools$|settings$|analytics$|offline$|invite$|notifications$|p$)[^/]+)/:project/:file",
       "destination": "/api/host?action=share&username=:username&project=:project&file=:file"
     },
     {
-      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|favicon\\.ico$|robots\\.txt$|register$|profile$|project$|tools$|settings$|analytics$|offline$)[^/]+)/:project",
+      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|firebase-messaging-sw\\.js$|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|register$|profile$|project$|tools$|settings$|analytics$|offline$|invite$|notifications$|p$)[^/]+)/:project",
       "destination": "/api/host?action=share&username=:username&project=:project"
     },
     {
-      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|favicon\\.ico$|robots\\.txt$|register$|profile$|project$|tools$|settings$|analytics$|offline$)[^/]+)",
+      "source": "/:username((?!api$|_next$|icons$|js$|css$|syntax\\.json$|manifest\\.json$|sw\\.js$|firebase-messaging-sw\\.js$|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|register$|profile$|project$|tools$|settings$|analytics$|offline$|invite$|notifications$|p$)[^/]+)",
       "destination": "/api/host?action=profile&username=:username"
     }
   ],
   "headers": [
     {
       "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "source": "/firebase-messaging-sw.js",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
         { "key": "Service-Worker-Allowed", "value": "/" }
@@ -54,7 +69,7 @@
     {
       "source": "/icons/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        { "key": "Cache-Control", "value": "public, max-age=86400" }
       ]
     },
     {
@@ -70,12 +85,23 @@
       ]
     },
     {
-      "source": "/(.*)",
+      "source": "/api/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "geolocation=(), microphone=(), camera=()" }
+        { "key": "Permissions-Policy", "value": "geolocation=(), microphone=(), camera=()" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "geolocation=(), microphone=(), camera=()" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" }
       ]
     }
   ]
