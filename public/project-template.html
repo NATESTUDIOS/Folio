@@ -231,6 +231,46 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   Project preview (server-rendered .project-hero from host.js)
+   ═══════════════════════════════════════════════════════════════ */
+.project-hero {
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  border: 1px solid var(--theme-card-border);
+  background: var(--theme-surface-card-solid);
+  box-shadow: 0 16px 48px -16px rgba(0, 0, 0, 0.35);
+  aspect-ratio: 16 / 10;
+  position: relative;
+  contain: paint;
+  isolation: isolate;
+  transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
+}
+.project-hero:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 56px -20px rgba(0, 0, 0, 0.4);
+}
+@media (min-width: 1024px) { .project-hero { aspect-ratio: 16 / 9; } }
+.project-hero-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.project-hero-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--theme-primary-soft), var(--theme-surface-elevated));
+  color: var(--theme-primary);
+  font-size: 64px;
+  font-weight: 900;
+  letter-spacing: -3px;
+}
+
+/* Legacy .browser-frame support (in case host.js still uses it) */
 .browser-frame {
   border-radius: var(--r-lg); overflow: hidden;
   border: 1px solid var(--theme-card-border);
@@ -354,6 +394,42 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
 .pill.owner { background: var(--theme-primary-soft); border-color: var(--theme-primary-glow); color: var(--theme-primary); text-transform: none; letter-spacing: 0; font-size: 11px; }
 .pill[hidden] { display: none; }
 
+/* ═══════════════════════════════════════════════════════════════
+   Server-rendered badge classes from host.js
+   ═══════════════════════════════════════════════════════════════ */
+.status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  background: var(--theme-glass-bg); border: 1px solid var(--theme-glass-border);
+  font-size: 10.5px; font-weight: 700; color: var(--theme-text-secondary);
+  text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.2;
+}
+.status-badge.live {
+  background: var(--theme-success-soft);
+  border-color: rgba(16, 185, 129, 0.28);
+  color: var(--theme-success);
+}
+.status-badge .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex-shrink: 0;
+}
+
+/* ── Language badges (from host.js {{LANGUAGES}}) ── */
+.lang-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 6px;
+  background: var(--theme-glass-bg); border: 1px solid var(--theme-glass-border);
+  font-size: 11px; font-weight: 700;
+  color: var(--theme-text-secondary); font-family: var(--font-mono);
+  transition: all 0.15s var(--ease);
+}
+.lang-badge:hover { background: var(--theme-surface-elevated); color: var(--theme-text); }
+.lang-badge .lang-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  /* Default colour if host.js didn't inline one */
+  background: var(--theme-primary);
+}
+
 /* ── People row ── */
 .people-row {
   display: flex;
@@ -393,7 +469,7 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; font-size: 9px; font-weight: 800; color: #0a0c10;
 }
-.people-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.people-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .people-avatar-owner {
   background: linear-gradient(135deg, var(--theme-primary), #f97316);
 }
@@ -419,6 +495,7 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
 @media (max-width: 639px) { .people-handle { display: none; } }
 
 .people-contributors { display: flex; align-items: center; }
+.people-contributors[hidden] { display: none !important; }
 .people-contributors-btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 3px 10px 3px 3px; border-radius: 999px;
@@ -551,9 +628,40 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
   transition: all 0.15s var(--ease);
 }
 .lang-pill:hover { background: var(--theme-surface-elevated); color: var(--theme-text); }
-.lang-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.lang-pill .lang-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--theme-primary); }
+.lang-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--theme-primary); }
 .lang-pct { color: var(--theme-text-tertiary); font-weight: 500; margin-left: 1px; }
 
+/* Owner OG preview panel (from host.js {{OG_PREVIEW_HTML}}) */
+.og-preview-panel {
+  padding: 14px;
+  background: var(--theme-surface-card);
+  border: 1px dashed var(--theme-glass-border);
+  border-radius: var(--r-lg);
+  display: none;
+}
+.og-preview-panel.open { display: block; animation: reveal 300ms var(--ease); }
+.og-preview-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px; gap: 8px; flex-wrap: wrap;
+}
+.og-preview-label {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.6px; color: var(--theme-text-tertiary);
+}
+.og-preview-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 7px; border-radius: 4px;
+  background: var(--theme-primary-soft); color: var(--theme-primary);
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+}
+.og-preview-image {
+  width: 100%; aspect-ratio: 1200 / 630; object-fit: cover;
+  border-radius: 8px; border: 1px solid var(--theme-glass-border);
+  background: var(--theme-surface-elevated);
+}
+
+/* Legacy .share-preview-* aliases (also map to OG preview) */
 .share-preview-panel {
   padding: 14px;
   background: var(--theme-surface-card);
@@ -951,7 +1059,7 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
       <section class="project-section" id="languagesSection">
         <div class="section-title">Languages</div>
         <div class="lang-bar" id="langBar"></div>
-        <div class="lang-pills">
+        <div class="lang-pills" id="langPills">
           {{LANGUAGES}}
         </div>
       </section>
@@ -1224,19 +1332,25 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     }
   }
 
-  // ── Language bar ──
+  // ── Language bar + pills ──
+  // FIX: this also rewrites the SSR-rendered {{LANGUAGES}} pills with
+  // per-language colours, matching the bar segments.
   function renderLangBar() {
     var bar = $('langBar');
     if (!bar) return;
     var section = $('languagesSection');
     var splitRow = document.querySelector('.split-row');
+    var pillsWrap = $('langPills');
     var langs = P.languages || {};
-    var keys = Object.keys(langs);
+    var keys = Object.keys(langs).filter(function (k) {
+      return typeof langs[k] === 'number' && langs[k] > 0;
+    });
 
     if (keys.length === 0) {
       if (section) section.style.display = 'none';
+      if (pillsWrap) pillsWrap.innerHTML = '';
       if (splitRow) {
-        var previewOpen = splitRow.querySelector('.share-preview-panel.open');
+        var previewOpen = splitRow.querySelector('.og-preview-panel.open, .share-preview-panel.open');
         if (previewOpen) {
           splitRow.style.gridTemplateColumns = '1fr';
         } else {
@@ -1246,12 +1360,14 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
       return;
     }
 
-    // Language section has data — make sure split-row is visible
     if (splitRow) splitRow.classList.remove('is-empty');
     if (section) section.style.display = '';
 
-    var sorted = keys.map(function (k) { return { name: k, pct: langs[k] }; })
-      .sort(function (a, b) { return b.pct - a.pct; });
+    var sorted = keys.map(function (k) {
+      return { name: k, pct: langs[k] };
+    }).sort(function (a, b) { return b.pct - a.pct; });
+
+    // Bar segments
     var html = '';
     for (var i = 0; i < sorted.length; i++) {
       var lang = sorted[i];
@@ -1259,20 +1375,53 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
       html += '<div class="lang-bar-seg" style="--seg-pct:' + lang.pct + '%; background:' + color + '"></div>';
     }
     bar.innerHTML = html;
+
+    // FIX: rewrite the SSR pills with coloured dots + percentages.
+    // This replaces whatever host.js emitted so colours always match
+    // the bar segments, and every dot gets its language colour.
+    if (pillsWrap) {
+      pillsWrap.innerHTML = sorted.map(function (lang) {
+        var color = LANG_COLORS[lang.name] || 'var(--theme-primary)';
+        var pctLabel = Number.isFinite(lang.pct)
+          ? (Math.round(lang.pct * 10) / 10) + '%'
+          : '';
+        return '<span class="lang-badge">' +
+          '<span class="lang-dot" style="background:' + color + '"></span>' +
+          escapeHtml(lang.name) +
+          (pctLabel ? ' <span class="lang-pct">' + pctLabel + '</span>' : '') +
+        '</span>';
+      }).join('');
+    }
   }
 
   // ── Cover fallback ──
+  // FIX: targets .project-hero (server-rendered) as well as legacy .browser-frame.
   function applyCoverFallback() {
+    var hero = document.querySelector('.project-hero');
+    if (hero) {
+      var img = hero.querySelector('.project-hero-image');
+      if (img) {
+        img.addEventListener('error', function () {
+          if (hero.querySelector('.project-hero-fallback')) return;
+          img.style.display = 'none';
+          var ph = document.createElement('div');
+          ph.className = 'project-hero-fallback';
+          ph.textContent = (P.name || '?').charAt(0).toUpperCase();
+          hero.appendChild(ph);
+        });
+      }
+      return;
+    }
     var frame = document.querySelector('.browser-frame-content');
     if (!frame) return;
-    var img = frame.querySelector('img');
-    if (!img) return;
-    img.addEventListener('error', function () {
-      img.style.display = 'none';
-      var ph = document.createElement('div');
-      ph.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:linear-gradient(135deg,var(--theme-primary-soft),var(--theme-surface-elevated));color:var(--theme-primary);font-size:48px;font-weight:900;letter-spacing:-2px;';
-      ph.textContent = (P.name || '?').charAt(0).toUpperCase();
-      frame.appendChild(ph);
+    var frameImg = frame.querySelector('img');
+    if (!frameImg) return;
+    frameImg.addEventListener('error', function () {
+      frameImg.style.display = 'none';
+      var ph2 = document.createElement('div');
+      ph2.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:linear-gradient(135deg,var(--theme-primary-soft),var(--theme-surface-elevated));color:var(--theme-primary);font-size:48px;font-weight:900;letter-spacing:-2px;';
+      ph2.textContent = (P.name || '?').charAt(0).toUpperCase();
+      frame.appendChild(ph2);
     });
   }
 
@@ -1288,7 +1437,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     if (!contributors.length) {
       // Remove the entire contributors block from the DOM so no gap remains
       if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
-      // Add a modifier class so CSS can tighten the row
       if (row) row.classList.add('no-contributors');
       return;
     }
@@ -1617,7 +1765,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
         panel.classList.remove('open');
         panel.style.display = 'none';
         btn.classList.remove('active');
-        // Re-check if the split-row should be hidden
         var section = document.getElementById('languagesSection');
         var langsEmpty = !P.languages || Object.keys(P.languages).length === 0;
         if (splitRow && langsEmpty && section && section.style.display === 'none') {
@@ -1698,7 +1845,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action="share"], [data-action="copy-link"]');
     if (!btn) return;
-    // Use modal for "share" so QR is visible, otherwise direct copy
     if (btn.dataset.action === 'share') {
       e.preventDefault();
       openShareModal();
