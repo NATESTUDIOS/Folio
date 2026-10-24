@@ -325,12 +325,17 @@ function makePreviewScheduler(fn, { debounceMs = 500, minGapMs = 900 } = {}) {
 
 export async function createNewProject() {
   if (!deps) throw new Error('initCreateProject() not called');
-  const { isGuest, isOnline, toast } = deps;
+  const { isGuest, isOnline, toast, getUsername } = deps;
 
-  if (!isGuest() && !isOnline()) {
-    toast('Requires internet to create cloud project', 'warning');
-    return;
-  }
+  // Offline-first: creation is ALWAYS allowed.
+  //  - Guest, any connection → local project
+  //  - Signed in, online       → server project
+  //  - Signed in, offline      → local project, flagged for promotion on reconnect
+  //
+  // Local projects are `local_<ts>` pids. They live entirely in IndexedDB
+  // until promoted. The UI treats them identically to server projects
+  // except for the "not synced" badge in the sidebar and a "Push to server"
+  // button on the project page.
 
   const result = await newProjectForm();
   if (!result) return;
@@ -342,51 +347,85 @@ export async function createNewProject() {
   const {
     apiFetch, db, workspace, setPidInUrl, renderSidebar,
     renderEmptyRecent, DEFAULT_PROJECT_STORAGE_LIMIT,
-    API_HOST, getUsername,
+    API_HOST,
   } = deps;
 
-  let pid, slug, createdAt = Date.now();
+  const online = isOnline && isOnline();
+  const guest = isGuest && isGuest();
 
-  if (isGuest()) {
-    pid = `local_${Date.now()}`;
-    slug = cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
-  } else {
-    const res = await apiFetch(API_HOST + '?action=projects/create', {
-      method: 'POST',
-      body: JSON.stringify({ name: cleaned, description }),
-    });
-    if (!res.ok || !res.data?.success) {
-      toast(res.data?.error || 'Could not create project', 'error');
-      return;
-    }
-    const serverProject = res.data.project || null;
-    pid = res.data.pid;
-    slug = serverProject?.slug
-      || cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
-      || 'project';
-    createdAt = serverProject?.createdAt
-      ? (typeof serverProject.createdAt === 'number'
-          ? serverProject.createdAt
-          : new Date(serverProject.createdAt).getTime())
-      : Date.now();
+  // Offline (or guest) → always create locally.
+  // Online + signed in → try server; on network failure, fall back to local.
+  let pid = null;
+  let slug = null;
+  let createdAt = Date.now();
+  let usedServer = false;
 
-    if (iconUrl) {
-      await apiFetch(API_HOST + '?action=projects/update', {
+  if (!guest && online) {
+    try {
+      const res = await apiFetch(API_HOST + '?action=projects/create', {
         method: 'POST',
-        body: JSON.stringify({ pid, iconUrl }),
-      }).catch(() => {});
+        body: JSON.stringify({ name: cleaned, description }),
+      });
+      if (res.ok && res.data?.success) {
+        const serverProject = res.data.project || null;
+        pid = res.data.pid;
+        slug = serverProject?.slug
+          || cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+          || 'project';
+        createdAt = serverProject?.createdAt
+          ? (typeof serverProject.createdAt === 'number'
+              ? serverProject.createdAt
+              : new Date(serverProject.createdAt).getTime())
+          : Date.now();
+        usedServer = true;
+      } else if (res.status === 401) {
+        // Session expired mid-flow — treat as guest and create locally.
+        // The user will be prompted to re-auth on next sync attempt.
+        toast('Session expired — project saved locally', 'warning', 3500);
+      } else {
+        // Server returned a specific error (e.g. quota, bad name).
+        // Respect it — don't silently fall back to local.
+        toast(res.data?.error || 'Could not create project', 'error');
+        return;
+      }
+    } catch {
+      // Network error despite `online` claiming true — fall through to local.
+      toast('Network error — project saved locally', 'warning', 3000);
     }
   }
 
+  if (!pid) {
+    // Local-only project. `local_` prefix tells the editor not to attempt
+    // server sync. The pid is stable across reloads.
+    pid = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    slug = cleaned.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'project';
+    createdAt = Date.now();
+  }
+
+  // If we went server-side and got an icon, push it up.
+  if (usedServer && iconUrl) {
+    await apiFetch(API_HOST + '?action=projects/update', {
+      method: 'POST',
+      body: JSON.stringify({ pid, iconUrl }),
+    }).catch(() => {});
+  }
+
   const project = {
-    pid, name: cleaned, slug, description,
+    pid,
+    name: cleaned,
+    slug,
+    description,
     iconUrl: iconUrl || null,
     createdAt,
     updatedAt: Date.now(),
     storageLimit: DEFAULT_PROJECT_STORAGE_LIMIT,
     myRole: 'owner',
-    ownerUsername: getUsername(),
-    _server: !isGuest(),
+    ownerUsername: getUsername ? getUsername() : null,
+    _server: usedServer,
+    // Flag for auto-promotion. Set only for signed-in users who created
+    // offline (or fell back to local due to network failure). Guest projects
+    // are also flagged so they promote when the guest signs in later.
+    _needsPromotion: !usedServer,
   };
 
   try {
@@ -409,7 +448,8 @@ export async function createNewProject() {
     console.error('[CreateProject] putFile failed:', err);
   }
 
-  if (!isGuest() && isOnline()) {
+  // Best-effort sync-back for server-side projects.
+  if (usedServer) {
     try {
       const sync = await apiFetch(API_HOST + '?action=project/sync-back', {
         method: 'POST',
@@ -447,7 +487,15 @@ export async function createNewProject() {
     } catch {}
   }
 
-  toast(isGuest() ? `Created ${cleaned} (local)` : `Created ${cleaned}`, 'success');
+  // Feedback
+  if (usedServer) {
+    toast(`Created ${cleaned}`, 'success');
+  } else if (guest) {
+    toast(`Created ${cleaned} (local)`, 'success');
+  } else {
+    toast(`Created ${cleaned} locally — will sync when online`, 'success', 3500);
+  }
+
   try {
     await workspace.openProject(project);
     setPidInUrl(project.pid);
@@ -486,7 +534,158 @@ export function handleNewProjectImageReturn() {
     return false;
   }
 }
+// ═══════════════════════════════════════════════════════════
+// PROMOTION — auto-push local projects to the server when
+// the user is signed in and back online
+// ═══════════════════════════════════════════════════════════
+//
+// Called by the editor's boot sequence (and on `online` events) to
+// promote any local_* projects that were created offline or as a guest.
+// Safe to call repeatedly: already-promoted projects are removed from
+// the local DB and skipped.
+//
+// Returns { promoted, failed, skipped } — useful for toast messaging.
 
+export async function promoteQueuedLocalProjects() {
+  if (!deps) return { promoted: 0, failed: 0, skipped: 0 };
+  const { isGuest, isOnline, apiFetch, db, toast, getUsername } = deps;
+
+  if (isGuest && isGuest()) {
+    // Guests have no server account — nothing to promote.
+    return { promoted: 0, failed: 0, skipped: 0 };
+  }
+  if (!isOnline || !isOnline()) {
+    return { promoted: 0, failed: 0, skipped: 0 };
+  }
+  if (!db || !apiFetch) return { promoted: 0, failed: 0, skipped: 0 };
+
+  const API_HOST = deps.API_HOST;
+  const username = getUsername ? getUsername() : null;
+
+  let all = [];
+  try {
+    all = await db.listProjects();
+  } catch {
+    return { promoted: 0, failed: 0, skipped: 0 };
+  }
+
+  const candidates = (all || []).filter(p =>
+    p && p.pid && p.pid.startsWith('local_') && p._needsPromotion !== false
+  );
+
+  if (candidates.length === 0) {
+    return { promoted: 0, failed: 0, skipped: 0 };
+  }
+
+  let promoted = 0;
+  let failed = 0;
+  const pidMap = {}; // oldLocalPid -> newServerPid
+
+  for (const localProject of candidates) {
+    const oldPid = localProject.pid;
+    try {
+      // 1. Create the server project.
+      const createRes = await apiFetch(API_HOST + '?action=projects/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: localProject.name || 'Untitled project',
+          description: localProject.description || '',
+        }),
+      });
+      if (!createRes.ok || !createRes.data?.success) {
+        failed++;
+        continue;
+      }
+      const newPid = createRes.data.pid;
+      const serverProject = createRes.data.project || {};
+
+      // 2. Push files.
+      const files = await db.listFiles(oldPid).catch(() => []);
+      const fileMap = {};
+      for (const f of files) {
+        if (!f || typeof f.path !== 'string') continue;
+        if (typeof f.content !== 'string') continue;
+        // Skip system files but keep notes.json
+        if (f.path === 'notes.json' || !f.path.match(/^\./)) {
+          fileMap[f.path] = f.content;
+        }
+      }
+
+      if (Object.keys(fileMap).length > 0) {
+        const syncRes = await apiFetch(API_HOST + '?action=project/sync-back', {
+          method: 'POST',
+          body: JSON.stringify({ pid: newPid, files: fileMap }),
+        });
+        if (!syncRes.ok || !syncRes.data?.success) {
+          failed++;
+          // Best-effort cleanup of the half-created server project.
+          await apiFetch(API_HOST + '?action=projects/delete', {
+            method: 'POST',
+            body: JSON.stringify({ pid: newPid }),
+          }).catch(() => {});
+          continue;
+        }
+      }
+
+      // 3. Push icon if set.
+      if (localProject.iconUrl && localProject.iconUrl.startsWith('https://')) {
+        await apiFetch(API_HOST + '?action=projects/update', {
+          method: 'POST',
+          body: JSON.stringify({ pid: newPid, iconUrl: localProject.iconUrl }),
+        }).catch(() => {});
+      }
+
+      // 4. Copy files + versions into the new pid in IndexedDB, then
+      //    delete the old local project record and files.
+      const serverRecord = {
+        pid: newPid,
+        name: localProject.name || 'Untitled project',
+        slug: serverProject.slug || localProject.slug || '',
+        description: localProject.description || '',
+        iconUrl: localProject.iconUrl || null,
+        createdAt: localProject.createdAt || Date.now(),
+        updatedAt: Date.now(),
+        storageLimit: localProject.storageLimit || deps.DEFAULT_PROJECT_STORAGE_LIMIT,
+        myRole: 'owner',
+        ownerUsername: username,
+        _server: true,
+        _needsPromotion: false,
+      };
+      await db.putProject(serverRecord);
+
+      for (const f of files) {
+        try { await db.putFile(newPid, f.path, f.content); } catch {}
+      }
+
+      // Clear out the old local project (files included).
+      try { await db.deleteProject(oldPid); } catch {}
+
+      pidMap[oldPid] = newPid;
+      promoted++;
+    } catch (err) {
+      console.warn('[Promote] failed for', oldPid, err);
+      failed++;
+    }
+  }
+
+  if (promoted > 0) {
+    const plural = promoted === 1 ? '' : 's';
+    toast(
+      `Synced ${promoted} local project${plural} to your account`,
+      'success',
+      3500
+    );
+  }
+  if (failed > 0) {
+    toast(
+      `${failed} project${failed === 1 ? '' : 's'} could not be synced — will retry later`,
+      'warning',
+      4500
+    );
+  }
+
+  return { promoted, failed, skipped: candidates.length - promoted - failed, pidMap };
+}
 // ─── The form ──────────────────────────────────────────────
 
 function newProjectForm() {
