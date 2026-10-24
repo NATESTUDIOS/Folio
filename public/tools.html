@@ -1552,6 +1552,46 @@
         font-size: 12px;
         cursor: pointer;
       }
+.editor-handoff-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  flex-wrap: wrap;
+}
+.editor-handoff-banner .editor-handoff-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+.editor-handoff-banner .editor-handoff-text strong {
+  color: var(--theme-primary);
+  font-weight: 700;
+}
+.editor-handoff-banner .editor-handoff-return {
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: var(--theme-primary);
+  color: #0a0c10;
+  font-size: 11px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.editor-handoff-banner .editor-handoff-return:hover {
+  background: var(--theme-primary-hover);
+}
+[data-theme="light"] .editor-handoff-banner .editor-handoff-return {
+  color: #ffffff;
+        }
     </style>
     <script>
       (function () {
@@ -2066,11 +2106,17 @@ function checkEditorHandoff() {
 
 function showEditorHandoffBanner(handoff) {
   if (!handoff) return;
+  // Remove any existing banner first (idempotent)
+  const existing = document.getElementById('editorHandoffBanner');
+  if (existing) existing.remove();
+
   const banner = document.createElement('div');
+  banner.id = 'editorHandoffBanner';
   banner.className = 'editor-handoff-banner';
   banner.innerHTML = `
     <div class="editor-handoff-text">
-      <strong>Generating ${handoff.slot === 'icon' ? 'icon' : handoff.slot}</strong> for "${escapeHtml(handoff.projectName)}"
+      <strong>Generating ${handoff.slot === 'icon' ? 'icon' : handoff.slot}</strong>
+      for "${escapeHtml(handoff.projectName)}"
     </div>
     <button class="editor-handoff-return" type="button">← Return to editor</button>
   `;
@@ -2078,7 +2124,7 @@ function showEditorHandoffBanner(handoff) {
     window.location.href = handoff.returnUrl;
   });
 
-  const bodyEl = document.querySelector('.body-inner') || document.querySelector('.body');
+  const bodyEl = document.querySelector('.body-inner');
   if (bodyEl) bodyEl.insertBefore(banner, bodyEl.firstChild);
 }
 
@@ -2088,42 +2134,56 @@ async function saveImageToProject() {
   if (!S.isAuthed) { toast('Sign in to save', 'warning'); return; }
   if (!S.flier.preview) { toast('Render an image first', 'warning'); return; }
 
+  if (handoff.slot !== 'icon') {
+    toast(`Saving "${handoff.slot}" isn't supported yet`, 'warning');
+    return;
+  }
+
   showLoading('Saving', 'Uploading to project…');
   try {
-    // 1. Upload the rendered image to the CDN
-    const payload = {
-      mode: 'upload',
-      type: 'template',
-      template: S.flier.template,
-      size: '512x512',
-      data: {
-        text: S.flier.text,
-        style: S.flier.style,
-        images: S.flier.images,
-      },
-      upload: { name: `icon_${handoff.pid}_${Date.now()}` },
-    };
+    let imageUrl = null;
 
-    const res = await api(API_FLIER + '?action=generate', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok || !res.data || !res.data.url) {
-      throw new Error((res.data && res.data.error) || 'Upload failed');
+    // Fast path: upload the exact image on screen
+    if (typeof S.flier.preview === 'string' && S.flier.preview.startsWith('data:image/')) {
+      const upRes = await api(API_FLIER + '?action=upload', {
+        method: 'POST',
+        body: JSON.stringify({ dataUrl: S.flier.preview, kind: 'icon' }),
+      });
+      if (upRes.ok && upRes.data && upRes.data.url) {
+        imageUrl = upRes.data.url;
+      }
     }
 
-    const imageUrl = res.data.url;
-
-    // 2. Save to project as iconUrl (only slot host.js supports)
-    if (handoff.slot === 'icon') {
-      const saveRes = await api(API_HOST + '?action=projects/update', {
+    // Fallback: server render + upload
+    if (!imageUrl) {
+      const payload = {
+        mode: 'upload',
+        type: 'template',
+        template: S.flier.template,
+        size: '512x512',
+        data: {
+          text: S.flier.text,
+          style: S.flier.style,
+          images: S.flier.images,
+        },
+        upload: { name: `icon_${handoff.pid}_${Date.now()}` },
+      };
+      const res = await api(API_FLIER + '?action=generate', {
         method: 'POST',
-        body: JSON.stringify({ pid: handoff.pid, iconUrl: imageUrl }),
+        body: JSON.stringify(payload),
       });
-      if (!saveRes.ok || !saveRes.data?.success) {
-        throw new Error((saveRes.data && saveRes.data.error) || 'Could not save icon');
+      if (!res.ok || !res.data || !res.data.url) {
+        throw new Error((res.data && res.data.error) || 'Upload failed');
       }
+      imageUrl = res.data.url;
+    }
+
+    const saveRes = await api(API_BASE + '/host?action=projects/update', {
+      method: 'POST',
+      body: JSON.stringify({ pid: handoff.pid, iconUrl: imageUrl }),
+    });
+    if (!saveRes.ok || !saveRes.data || !saveRes.data.success) {
+      throw new Error((saveRes.data && saveRes.data.error) || 'Could not save icon');
     }
 
     hideLoading();
@@ -2131,8 +2191,9 @@ async function saveImageToProject() {
 
     const returnUrl = handoff.returnUrl;
     const sep = returnUrl.indexOf('?') >= 0 ? '&' : '?';
-    const finalUrl = returnUrl + sep + 'generated=' + encodeURIComponent(handoff.slot) +
-                     '&url=' + encodeURIComponent(imageUrl);
+    const finalUrl = returnUrl + sep +
+      'generated=' + encodeURIComponent(handoff.slot) +
+      '&url=' + encodeURIComponent(imageUrl);
 
     setTimeout(() => { window.location.href = finalUrl; }, 700);
   } catch (err) {
@@ -4406,13 +4467,15 @@ async function saveImageToProject() {
           readSession();
            // Check for editor handoff
   const handoff = checkEditorHandoff();
-  if (handoff) {
-    showEditorHandoffBanner(handoff);
-    // Force image-generator tool to be active
-    setTimeout(() => {
-      if (typeof openTool === 'function') openTool('image-generator');
-    }, 100);
-  }
+if (handoff) {
+  // Force image-generator tool to be active
+  setTimeout(() => {
+    if (typeof openTool === 'function') openTool('image-generator');
+    // Re-mount the banner *after* openTool renders, so the
+    // renderToolShell() doesn't wipe it out.
+    setTimeout(() => showEditorHandoffBanner(handoff), 60);
+  }, 100);
+}
           S.recentTools = readJSON(STORAGE.recentTools, []);
           S.sidebarCollapsed = readJSON(STORAGE.sidebarCollapsed, false) === true;
           loadActivity();
