@@ -3476,8 +3476,6 @@ window.__folioHeroFallback = function (img) {
   `;
 }
 function renderExpandedDetail(p) {
-  const thumbUrl = p.thumbnail?.url || null;
-
   const langBreakdown = p.languages?.breakdown || {};
   const langBadges = Object.keys(langBreakdown).length > 0
     ? Object.entries(langBreakdown).slice(0, 4).map(([name, pct]) =>
@@ -3525,40 +3523,8 @@ function renderExpandedDetail(p) {
     </div>
   ` : '';
 
-  const ogHTML = p.ogImage?.url ? `
-    <div class="detail-og">
-      <div class="detail-og-label">
-        <span>Share preview</span>
-        <span class="og-meta">${escapeHTML(p.ogImage.template || 'auto')} · ${escapeHTML(p.ogImage.scene || '—')}</span>
-      </div>
-      <img src="${escapeAttr(p.ogImage.url)}" alt="OG preview" loading="lazy">
-    </div>
-  ` : '';
-
   return `
     <div class="project-card-detail">
-      ${thumbUrl ? `
-        <div class="project-detail-thumb">
-          <img
-            src="${escapeAttr(thumbUrl)}"
-            alt=""
-            loading="lazy"
-            style="width:100%;height:100%;object-fit:cover;display:block;"
-            data-fallback-initials="${escapeAttr(escapeHTML(getInitials(p.name)))}"
-            data-fallback-bg="${escapeAttr(getAvatarColor(p.name))}"
-            data-fallback-name="${escapeAttr(p.name || 'Untitled')}"
-            onerror="window.__folioHeroFallback && window.__folioHeroFallback(this)"
-          >
-        </div>
-      ` : `
-        <div class="project-detail-thumb">
-          <div class="project-detail-thumb-empty">
-            ${svg('image', 24, 1.6)}
-            <span>No preview yet — deploy to generate</span>
-          </div>
-        </div>
-      `}
-
       ${p.description ? `<div class="detail-desc">${escapeHTML(p.description)}</div>` : `<div class="detail-desc empty">No description</div>`}
 
       ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
@@ -3588,8 +3554,6 @@ function renderExpandedDetail(p) {
       ` : ''}
 
       ${deployHistoryHTML}
-
-      ${ogHTML}
 
       <div class="detail-meta-line">
         ${escapeHTML(lastDeployText)}${p.slug ? ' · @' + escapeHTML(p.slug) : ' · ' + escapeHTML(p.pid.slice(-8))}
@@ -3652,7 +3616,7 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
     onerror="window.__folioIconFallback && window.__folioIconFallback(this)"
   >`;
 }
-  
+
   function bindProjectCardEvents() {
   // Chevron — toggles expand in place
   document.querySelectorAll('[data-card-expand]').forEach(btn => {
