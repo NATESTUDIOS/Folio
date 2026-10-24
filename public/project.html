@@ -3851,85 +3851,127 @@ async function generateCoverViaFlier({
   // ═══════════════════════════════════════════════════════════
 
   async function renderSharingPanel(panel) {
-    if (!gate(panel, { label: 'Sharing', requiresOnline: false })) return;
-    const vis = S.project.visibility || {};
-    const collaborators = S.project.roles || {};
-    const publicUrl = buildProjectShareUrl() || '';
+  if (!gate(panel, { label: 'Sharing', requiresOnline: false })) return;
+  const vis = S.project.visibility || {};
+  const collaborators = S.project.roles || {};
+  const publicUrl = buildProjectShareUrl() || '';
+  const pid = S.pid;
 
-    panel.innerHTML = `
-      <div class="card">
-        <div class="card-header"><div class="card-title">${svg('eye', 13, 2.2)} Visibility</div></div>
-        <div class="card-body">
-          ${['profile', 'liveSite', 'code', 'languages', 'db'].map(axis => `
-            <div class="toggle-row">
-              <div class="toggle-info">
-                <div class="toggle-title">${escapeHTML(axisLabel(axis))}</div>
-                <div class="toggle-desc">${escapeHTML(axisDesc(axis))}</div>
-              </div>
-              <button class="switch ${vis[axis] === 'public' ? 'on' : ''}" data-vis-axis="${escapeAttr(axis)}" aria-label="Toggle ${escapeAttr(axis)}"></button>
+  // Format the PID for display: keep it fully selectable, but truncate
+  // visually if it's very long so it doesn't break the card layout.
+  const pidDisplay = pid.length > 44 ? pid.slice(0, 44) + '…' : pid;
+
+  panel.innerHTML = `
+    <div class="card">
+      <div class="card-header"><div class="card-title">${svg('eye', 13, 2.2)} Visibility</div></div>
+      <div class="card-body">
+        ${['profile', 'liveSite', 'code', 'languages', 'db'].map(axis => `
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-title">${escapeHTML(axisLabel(axis))}</div>
+              <div class="toggle-desc">${escapeHTML(axisDesc(axis))}</div>
             </div>
-          `).join('')}
+            <button class="switch ${vis[axis] === 'public' ? 'on' : ''}" data-vis-axis="${escapeAttr(axis)}" aria-label="Toggle ${escapeAttr(axis)}"></button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">${svg('share', 13, 2.2)} Share link</div></div>
+      <div class="card-body">
+        <div style="display:flex;gap:5px;">
+          <input class="input mono" value="${escapeAttr(publicUrl)}" readonly>
+          <button class="btn btn-secondary btn-icon" id="btnCopyShare" aria-label="Copy">${svg('copy', 12, 2.2)}</button>
+        </div>
+        <div class="field-hint" style="margin-top:5px;">Requires profile visibility: public.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">${svg('key', 13, 2.2)} Project ID</div>
+        <button class="btn btn-ghost btn-icon" id="btnCopyPidHeader" aria-label="Copy project ID" title="Copy project ID" type="button">
+          ${svg('copy', 12, 2.2)}
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="pid-display" id="pidDisplay" title="${escapeAttr(pid)}">
+          <code class="mono">${escapeHTML(pidDisplay)}</code>
+        </div>
+        <div class="field-hint" style="margin-top:6px;">
+          Used in API calls, invite links, and support requests. Immutable — safe to share.
+        </div>
+        <button class="btn btn-secondary btn-block btn-sm" id="btnCopyPid" type="button" style="margin-top:10px;">
+          ${svg('copy', 10, 2.2)} Copy ID
+        </button>
+      </div>
+    </div>
+
+    ${S.isOwner ? `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('user', 13, 2.2)} Collaborators (${Object.keys(collaborators).length})</div>
+          <button class="btn btn-sm btn-secondary" id="btnInviteCollab">${svg('plus', 10, 2.4)} Invite</button>
+        </div>
+        <div class="card-body tight">
+          ${Object.keys(collaborators).length === 0
+            ? emptyState('user', 'No collaborators', 'Invite others to work on this project.')
+            : `<div class="row-list">${Object.entries(collaborators).map(([uid, role]) => `
+              <div class="row-item">
+                <div class="collab-avatar">${escapeHTML(uid.slice(-2).toUpperCase())}</div>
+                <div class="row-content">
+                  <div class="row-title mono" style="font-size:10px;">${escapeHTML(uid)}</div>
+                  <div class="row-sub">${escapeHTML(role)}</div>
+                </div>
+                <button class="btn btn-ghost btn-sm btn-icon" data-remove-collab="${escapeAttr(uid)}" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>
+              </div>`).join('')}</div>`}
         </div>
       </div>
 
       <div class="card">
-        <div class="card-header"><div class="card-title">${svg('share', 13, 2.2)} Share link</div></div>
+        <div class="card-header"><div class="card-title">${svg('key', 13, 2.2)} API key</div></div>
         <div class="card-body">
-          <div style="display:flex;gap:5px;">
-            <input class="input mono" value="${escapeAttr(publicUrl)}" readonly>
-            <button class="btn btn-secondary btn-icon" id="btnCopyShare" aria-label="Copy">${svg('copy', 12, 2.2)}</button>
+          <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">
+            ${S.project.apiKeyHash ? 'Active' : 'Not generated'}
           </div>
-          <div class="field-hint" style="margin-top:5px;">Requires profile visibility: public.</div>
+          <button class="btn btn-sm btn-secondary" id="btnGenApiKey">${svg('key', 10, 2.2)} ${S.project.apiKeyHash ? 'Regenerate' : 'Generate'} key</button>
         </div>
       </div>
+    ` : ''}
+  `;
 
-      ${S.isOwner ? `
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">${svg('user', 13, 2.2)} Collaborators (${Object.keys(collaborators).length})</div>
-            <button class="btn btn-sm btn-secondary" id="btnInviteCollab">${svg('plus', 10, 2.4)} Invite</button>
-          </div>
-          <div class="card-body tight">
-            ${Object.keys(collaborators).length === 0
-              ? emptyState('user', 'No collaborators', 'Invite others to work on this project.')
-              : `<div class="row-list">${Object.entries(collaborators).map(([uid, role]) => `
-                <div class="row-item">
-                  <div class="collab-avatar">${escapeHTML(uid.slice(-2).toUpperCase())}</div>
-                  <div class="row-content">
-                    <div class="row-title mono" style="font-size:10px;">${escapeHTML(uid)}</div>
-                    <div class="row-sub">${escapeHTML(role)}</div>
-                  </div>
-                  <button class="btn btn-ghost btn-sm btn-icon" data-remove-collab="${escapeAttr(uid)}" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>
-                </div>`).join('')}</div>`}
-          </div>
-        </div>
+  // Existing handlers
+  document.querySelectorAll('[data-vis-axis]').forEach(btn => {
+    btn.addEventListener('click', () => toggleVisibility(btn.dataset.visAxis, btn));
+  });
+  $('btnCopyShare')?.addEventListener('click', () => {
+    if (copyToClipboard(publicUrl)) toast('Link copied', 'success', 1200);
+    else toast('Copy failed', 'error');
+  });
+  $('btnInviteCollab')?.addEventListener('click', openInviteModal);
+  document.querySelectorAll('[data-remove-collab]').forEach(btn => {
+    btn.addEventListener('click', () => confirmRemoveCollab(btn.dataset.removeCollab));
+  });
+  $('btnGenApiKey')?.addEventListener('click', generateApiKey);
 
-        <div class="card">
-          <div class="card-header"><div class="card-title">${svg('key', 13, 2.2)} API key</div></div>
-          <div class="card-body">
-            <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">
-              ${S.project.apiKeyHash ? 'Active' : 'Not generated'}
-            </div>
-            <button class="btn btn-sm btn-secondary" id="btnGenApiKey">${svg('key', 10, 2.2)} ${S.project.apiKeyHash ? 'Regenerate' : 'Generate'} key</button>
-          </div>
-        </div>
-      ` : ''}
-    `;
+  // ── NEW: Project ID copy handlers ──
+  const copyPid = () => {
+    if (copyToClipboard(pid)) toast('Project ID copied', 'success', 1400);
+    else toast('Copy failed', 'error');
+  };
 
-    document.querySelectorAll('[data-vis-axis]').forEach(btn => {
-      btn.addEventListener('click', () => toggleVisibility(btn.dataset.visAxis, btn));
-    });
-    $('btnCopyShare')?.addEventListener('click', () => {
-      if (copyToClipboard(publicUrl)) toast('Link copied', 'success', 1200);
-      else toast('Copy failed', 'error');
-    });
-    $('btnInviteCollab')?.addEventListener('click', openInviteModal);
-    document.querySelectorAll('[data-remove-collab]').forEach(btn => {
-      btn.addEventListener('click', () => confirmRemoveCollab(btn.dataset.removeCollab));
-    });
-    $('btnGenApiKey')?.addEventListener('click', generateApiKey);
-  }
+  $('btnCopyPid')?.addEventListener('click', copyPid);
+  $('btnCopyPidHeader')?.addEventListener('click', copyPid);
 
+  // Clicking the pid itself also copies (matches chip pattern elsewhere)
+  $('pidDisplay')?.addEventListener('click', () => {
+    // On mobile, allow native selection instead of copying so users can
+    // grab a partial pid if they really want to. On desktop, click = copy.
+    const isTouch = matchMedia('(pointer: coarse)').matches;
+    if (!isTouch) copyPid();
+  });
+}
   function axisLabel(axis) {
     return { profile: 'Show in profile', liveSite: 'Live site link', code: 'Code viewer', languages: 'Language breakdown', db: 'JSON database API' }[axis] || axis;
   }

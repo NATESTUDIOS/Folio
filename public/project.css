@@ -721,7 +721,42 @@ svg { display: block; }
 @media (prefers-reduced-transparency: reduce) {
   .card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--theme-surface-card-solid); }
 }
+/* Project ID display block in Sharing tab */
+.pid-display {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: text;
+}
+.pid-display:hover {
+  background: var(--theme-surface-elevated);
+  border-color: var(--theme-primary-soft);
+}
+.pid-display code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--theme-text-secondary);
+  letter-spacing: -0.01em;
+}
 
+@media (pointer: coarse) {
+  /* On touch devices, disable the "click = copy" affordance so users can
+     tap-and-hold to select the pid natively */
+  .pid-display:hover {
+    background: var(--theme-glass-bg);
+    border-color: var(--theme-card-border);
+  }
+}
 /* ═══════════════════════════════════════════════════════════
    STATUS LINE
    ═══════════════════════════════════════════════════════════ */
