@@ -197,25 +197,42 @@ svg { display: block; flex-shrink: 0; }
 .page-main > .reveal:nth-child(5) { animation-delay: 280ms; }
 @keyframes reveal { to { opacity: 1; transform: translateY(0); } }
 
+/* ═══════════════════════════════════════════════════════════════
+   HERO — FIX #4: contain + isolation to keep cover image clipped
+   ═══════════════════════════════════════════════════════════════ */
 .hero {
   margin-bottom: 14px;
-  border-radius: var(--r-lg); overflow: hidden;
+  border-radius: var(--r-lg);
+  overflow: hidden;
   border: 1px solid var(--theme-card-border);
   background: var(--theme-surface-card);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  /* FIX: clip all descendants — critical for background-image containment */
+  contain: layout paint;
+  isolation: isolate;
+  position: relative;
 }
 .hero-cover {
-  position: relative; height: 100px;
+  position: relative;
+  height: 100px;
   background:
     radial-gradient(circle at 30% 20%, rgba(168, 85, 247, 0.5) 0%, transparent 60%),
     radial-gradient(circle at 75% 80%, rgba(236, 72, 153, 0.4) 0%, transparent 60%),
     radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.3) 0%, transparent 70%),
     linear-gradient(135deg, #1a0f2e 0%, #2d1b4e 100%);
   overflow: hidden;
+  /* FIX: explicit background sizing so images stay inside the card */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  contain: paint;
+  isolation: isolate;
 }
 .hero-cover.has-image {
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
 }
 .hero-cover::before {
   content: ""; position: absolute; inset: 0;
@@ -242,9 +259,12 @@ svg { display: block; flex-shrink: 0; }
   }
 }
 
+/* FIX: isolation + z-index keeps avatar overlap inside the card */
 .hero-avatar-wrap {
   margin-top: -34px; margin-bottom: 10px;
   display: inline-block; position: relative; align-self: end;
+  isolation: isolate;
+  z-index: 1;
 }
 @media (min-width: 1024px) { .hero-avatar-wrap { margin-top: -46px; margin-bottom: 0; } }
 
@@ -1548,7 +1568,8 @@ body.qr-open { overflow: hidden; }
         updated: p.updatedAt || 0,
         live: !!p.deploymentUrl || false,
         visits: typeof p.viewCount === 'number' ? p.viewCount : 0,
-        url: p.url || (BASE_URL + '/' + PROFILE_HANDLE + '/project/' + encodeURIComponent(p.slug || ''))
+        // FIX #2: use /username/slug (not /username/project/slug/)
+        url: p.url || (BASE_URL + '/' + PROFILE_HANDLE + '/' + encodeURIComponent(p.slug || ''))
       };
     });
   }
@@ -1556,7 +1577,7 @@ body.qr-open { overflow: hidden; }
   // ── Render links ──
   function renderLinks() {
     var wrap = document.querySelector('.hero-links');
-    if (wrap) return; // server already injected
+    if (wrap) return;
     var links = P.links || {};
     var keys = Object.keys(links);
     if (keys.length === 0) return;
@@ -1569,16 +1590,26 @@ body.qr-open { overflow: hidden; }
         escapeHtml(meta.label) +
       '</a>';
     }).join('');
-    // Insert after bio/toggle in hero-info
     var infoEl = document.querySelector('.hero-info');
     if (infoEl) infoEl.appendChild(linksEl);
   }
 
-  // ── Cover ──  function renderCover() {
+  // ── Cover (FIX #4: preload before applying, so image stays clipped) ──
+  function renderCover() {
     var cover = $('heroCover');
     if (!cover || !P.ogImageUrl) return;
-    cover.style.backgroundImage = 'url("' + P.ogImageUrl + '")';
-    cover.classList.add('has-image');
+    var testImg = new Image();
+    testImg.onload = function () {
+      cover.style.backgroundImage = 'url("' + P.ogImageUrl + '")';
+      cover.style.backgroundSize = 'cover';
+      cover.style.backgroundPosition = 'center';
+      cover.style.backgroundRepeat = 'no-repeat';
+      cover.classList.add('has-image');
+    };
+    testImg.onerror = function () {
+      if (window.console) console.warn('[Profile] cover image failed to load:', P.ogImageUrl);
+    };
+    testImg.src = P.ogImageUrl;
   }
 
   // ── Status dot ──
@@ -1739,9 +1770,17 @@ body.qr-open { overflow: hidden; }
           '<p>' + escapeHtml(emptyData.desc) + '</p>' +
           (emptyData.cta ? (emptyData.href
             ? '<a class="util-btn primary" href="' + emptyData.href + '">' + escapeHtml(emptyData.cta) + '</a>'
-            : '<button class="util-btn primary" type="button" onclick="(function(){var s=window.__profileState;if(s){s.filter=\'all\';document.getElementById(\'toolbarTabs\').dispatchEvent(new Event(\'reset\'));}})()">' + escapeHtml(emptyData.cta) + '</button>'
+            : '<button class="util-btn primary" type="button" data-reset-filter>' + escapeHtml(emptyData.cta) + '</button>'
           ) : '') +
         '</div>';
+      var resetBtn = bento.querySelector('[data-reset-filter]');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+          state.filter = 'all';
+          renderTabs();
+          renderBento();
+        });
+      }
       return;
     }
 
@@ -1749,6 +1788,7 @@ body.qr-open { overflow: hidden; }
 
     if (P.isOwner) {
       bento.querySelectorAll('.star-btn').forEach(function (btn) {
+        if (btn.dataset.pid === state.pinnedFeatured) btn.classList.add('pinned');
         btn.addEventListener('click', function (e) {
           e.preventDefault();
           e.stopPropagation();
@@ -1772,7 +1812,10 @@ body.qr-open { overflow: hidden; }
     $('qrWrap').innerHTML = generateQR(PROFILE_URL, { cells: 25 });
     modal.classList.add('open');
   }
-  function closeShareModal() { $('shareModal').classList.remove('open'); }
+  function closeShareModal() {
+    var m = $('shareModal');
+    if (m) m.classList.remove('open');
+  }
 
   // ── Fullscreen QR ──
   function openQrPage() {
@@ -1947,13 +1990,11 @@ body.qr-open { overflow: hidden; }
 
     if (isOwner) {
       document.body.classList.add('is-owner');
-      var cta = $('folioCta');
-      if (cta) cta.hidden = true;
-    } else {
-      // Signed-in non-owner: hide the CTA (they have an account)
-      var cta2 = $('folioCta');
-      if (cta2) cta2.hidden = true;
     }
+
+    // Hide CTA for any signed-in user
+    var cta = $('folioCta');
+    if (cta) cta.hidden = true;
   }
 
   function showCtaForGuest() {
@@ -2015,7 +2056,7 @@ body.qr-open { overflow: hidden; }
   setupBioToggle();
   renderLinks();
 
-  // Visits stat (only if we have data)
+  // Visits stat
   var totalVisits = state.projects.reduce(function (sum, p) { return sum + (p.visits || 0); }, 0);
   var visitsEl = $('statVisits');
   var visitsWrap = $('statVisitsWrap');
