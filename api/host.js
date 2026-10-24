@@ -546,6 +546,19 @@ function buildProjectCleanUrl(username, project) {
   if (!slug) return `${BASE_URL}/${username}/${encodeURIComponent(shortId(project?.pid || ""))}`;
   return `${BASE_URL}/${username}/${encodeURIComponent(slug)}`;
 }
+function buildLiveSiteUrl(username, project) {
+  const slug = project?.slug || "";
+  if (!username || !slug) return null;
+  return `${BASE_URL}/${username}/project/${encodeURIComponent(slug)}`;
+}
+
+function buildLiveSiteUrlForPath(username, project, relPath) {
+  const base = buildLiveSiteUrl(username, project);
+  if (!base) return null;
+  if (!relPath) return base;
+  const clean = String(relPath).replace(/^\/+/, "");
+  return base + "/" + clean.split("/").map(encodeURIComponent).join("/");
+}
 
 function buildProjectCleanUrlForPath(username, project, relPath) {
   const base = buildProjectCleanUrl(username, project);
@@ -1820,7 +1833,7 @@ async function resolveRequestPath(pid, wantPath, contentMap) {
 }
 
 async function renderFolderListing(res, { pid, project, folderPath, contentMap, username, slug, cacheKey, fromId, canAccessPrivate }) {
-  if (!canAccessPrivate && project.visibility?.code !== "public") {
+  if (!canAccessPrivate && project.visibility?.liveSite !== "public") {
     return sendHtmlPage(res, {
       title: "Private folder",
       heading: "This folder is private",
@@ -1845,6 +1858,7 @@ async function renderFolderListing(res, { pid, project, folderPath, contentMap, 
   direct.sort((a, b) => a.name.localeCompare(b.name));
   const foldersArr = [...subFolders].sort();
 
+  // ✅ FIX: three-segment base for live-site folder browsing
   const buildHref = (rel) => {
     const relPath = folderPath ? `${folderPath}/${rel}` : rel;
     const base = username && slug
@@ -1893,7 +1907,6 @@ async function handleServe(req, res, reqId) {
     return res.send(body);
   };
 
-  // ── Resolve identity ──
   let username = String(req.query?.username || "").trim().toLowerCase();
   let projectSlug = String(req.query?.project || "").trim();
   let pid = String(req.query?.pid || "").trim();
@@ -1903,9 +1916,8 @@ async function handleServe(req, res, reqId) {
     try {
       const prev = await db.ref(`previousUsernames/${username}`).once("value");
       if (prev.exists() && prev.val() && prev.val() !== username) {
-        const url = new URL(req.url, BASE_URL);
-        url.pathname = `/${prev.val()}/project/${projectSlug}${url.pathname.includes("/project/") ? url.pathname.slice(url.pathname.indexOf("/project/") + 8) : "/"}`;
-        return res.redirect(301, url.toString());
+        const target = `/` + prev.val() + `/project/` + encodeURIComponent(projectSlug);
+        return res.redirect(301, `${BASE_URL}${target}`);
       }
     } catch {}
   }
@@ -1916,26 +1928,20 @@ async function handleServe(req, res, reqId) {
     if (found) {
       if (found.pid !== pid) pid = found.pid;
     } else if (pid) {
-      // slug mismatched but pid known - check previousSlugs
       try {
         const ps = await db.ref(`previousSlugs/${pid}`).once("value");
         if (ps.exists()) {
           const map = ps.val() || {};
           if (map[projectSlug]) {
-            const url = new URL(req.url, BASE_URL);
-            url.pathname = url.pathname.replace(`/${projectSlug}`, `/${map[projectSlug]}`);
-            return res.redirect(301, url.toString());
+            return res.redirect(301, `${BASE_URL}/${username}/project/${map[projectSlug]}`);
           }
         }
       } catch {}
     } else {
-      // No project found for username+slug
       return sendHtmlPage(res, {
-        title: "Project not found",
-        heading: "Project not found",
+        title: "Project not found", heading: "Project not found",
         message: "The link you followed may be broken, or the project may have been deleted.",
-        icon: "alert",
-        status: 404,
+        icon: "alert", status: 404,
       });
     }
   }
@@ -1946,11 +1952,9 @@ async function handleServe(req, res, reqId) {
     const found = await findProjectBySlug(username, projectSlug);
     if (!found) {
       return sendHtmlPage(res, {
-        title: "Project not found",
-        heading: "Project not found",
+        title: "Project not found", heading: "Project not found",
         message: "The link you followed may be broken, or the project may have been deleted.",
-        icon: "alert",
-        status: 404,
+        icon: "alert", status: 404,
       });
     }
     pid = found.pid;
@@ -1961,30 +1965,44 @@ async function handleServe(req, res, reqId) {
   const project = await getProjectCached(pid);
   if (!project) {
     return sendHtmlPage(res, {
-      title: "Not found",
-      heading: "Project not found",
+      title: "Not found", heading: "Project not found",
       message: "This project does not exist or has been deleted.",
-      icon: "alert",
-      status: 404,
+      icon: "alert", status: 404,
     });
   }
 
-  if (project.deployment?.state === "OFFLINE" && !req.query?.from) {
-    return sendText(410, "This project is offline");
-  }
-
-  // ── Visibility check ──
+  // ── Viewer identity ──
   const signedIn = await canAccessProjectFromReq(req);
   const canAccessPrivate = signedIn && (signedIn.role === "owner" || signedIn.role === "editor");
-  const isPublic = project.visibility?.profile === "public" || project.visibility?.liveSite === "public";
-  if (!isPublic && !canAccessPrivate) {
+
+  // ── GATE: live site only exists if visibility.liveSite === "public" ──
+  const liveSitePublic = project.visibility?.liveSite === "public";
+  const isHistoricPreview = !!String(req.query?.from || "").length;
+
+  if (!liveSitePublic && !canAccessPrivate) {
+    const ownerUsername = username
+      || project.ownerUsername
+      || (await getProjectOwnerUsername(pid, project))
+      || "";
+    // If the details page IS public, send visitors there so they can see
+    // why the live URL isn't available (e.g., "not deployed" state).
+    if (ownerUsername && project.slug && project.visibility?.profile === "public") {
+      return res.redirect(301, `${BASE_URL}/${ownerUsername}/${project.slug}`);
+    }
     return sendHtmlPage(res, {
-      title: "Private project",
-      heading: "This project is private",
-      message: "The owner hasn't published this project publicly. Sign in if it's yours.",
-      signinUrl: signedIn ? null : `${BASE_URL}/register?next=${encodeURIComponent("/" + (username || "") + "/" + (project.slug || ""))}`,
-      icon: "lock",
-      status: 403,
+      title: "Not found", heading: "This site is not live",
+      message: "The owner hasn't published this project's live site publicly.",
+      icon: "lock", status: 404,
+    });
+  }
+
+  // ── Historic previews require owner/editor ──
+  if (isHistoricPreview && !canAccessPrivate) {
+    return sendHtmlPage(res, {
+      title: "Preview restricted",
+      heading: "This preview is for the owner",
+      message: "Sign in as the owner to preview historical deployments.",
+      icon: "lock", status: 403,
     });
   }
 
@@ -1995,31 +2013,24 @@ async function handleServe(req, res, reqId) {
     const dSnap = await db.ref(`projects/${pid}/deployments/${fromId}`).once("value");
     if (!dSnap.exists()) {
       return sendHtmlPage(res, {
-        title: "Deployment not found",
-        heading: "Deployment not found",
-        message: "This deployment no longer exists.",
-        icon: "alert",
-        status: 404,
+        title: "Deployment not found", heading: "Deployment not found",
+        message: "This deployment no longer exists.", icon: "alert", status: 404,
       });
     }
     const vid = dSnap.val()?.versionId;
     if (!vid) {
       return sendHtmlPage(res, {
-        title: "Snapshot unavailable",
-        heading: "Snapshot unavailable",
+        title: "Snapshot unavailable", heading: "Snapshot unavailable",
         message: "This deployment was created before snapshots were supported.",
-        icon: "alert",
-        status: 404,
+        icon: "alert", status: 404,
       });
     }
     const vSnap = await db.ref(`versions/${pid}/${vid}`).once("value");
     if (!vSnap.exists()) {
       return sendHtmlPage(res, {
-        title: "Snapshot unavailable",
-        heading: "Snapshot unavailable",
+        title: "Snapshot unavailable", heading: "Snapshot unavailable",
         message: "The snapshot for this deployment has been deleted.",
-        icon: "alert",
-        status: 404,
+        icon: "alert", status: 404,
       });
     }
     contentMap = vSnap.val()?.files || {};
@@ -2037,7 +2048,10 @@ async function handleServe(req, res, reqId) {
 
   // ── Folder listing ──
   if (resolved.kind === "folder") {
-    const ownerUsername = username || project.ownerUsername || (await getProjectOwnerUsername(pid, project)) || "";
+    const ownerUsername = username
+      || project.ownerUsername
+      || (await getProjectOwnerUsername(pid, project))
+      || "";
     const cacheKey = fromId || project.deployment?.deploymentId || "dev";
     return renderFolderListing(res, {
       pid, project, folderPath: resolved.path, contentMap,
@@ -2049,11 +2063,9 @@ async function handleServe(req, res, reqId) {
   // ── 404 ──
   if (resolved.kind === "notfound" || !resolved.content) {
     return sendHtmlPage(res, {
-      title: "Not found",
-      heading: "Not found",
+      title: "Not found", heading: "Not found",
       message: "The page you requested doesn't exist.",
-      icon: "alert",
-      status: 404,
+      icon: "alert", status: 404,
     });
   }
 
@@ -2064,7 +2076,10 @@ async function handleServe(req, res, reqId) {
     return sendText(413, "File too large to serve");
   }
 
-  const ownerUsername = username || project.ownerUsername || (await getProjectOwnerUsername(pid, project)) || "";
+  const ownerUsername = username
+    || project.ownerUsername
+    || (await getProjectOwnerUsername(pid, project))
+    || "";
   const cacheKey = fromId || project.deployment?.deploymentId || "dev";
   const mime = mimeFor(relPath);
 
@@ -2079,13 +2094,13 @@ async function handleServe(req, res, reqId) {
     let html = content;
     try {
       const meta = await resolveProjectMeta(pid, project);
-      const canonicalPath = relPath === "index.html" || relPath === "index.htm"
+      const canonicalPath = (relPath === "index.html" || relPath === "index.htm")
         ? ""
         : relPath;
-      const canonicalUrl = buildProjectCleanUrlForPath(ownerUsername, project, canonicalPath);
+      const canonicalUrl = buildLiveSiteUrlForPath(ownerUsername, project, canonicalPath);
       html = injectMetaIntoHtml(html, {
         project, meta, canonicalUrl,
-        robotsNoIndex: !!fromId || (!isPublic && !canAccessPrivate),
+        robotsNoIndex: !!fromId || !liveSitePublic,
       });
     } catch (err) {
       log("host.serve.meta_failed", { pid, message: err.message });
@@ -3674,7 +3689,6 @@ async function handleShare(req, res, reqId) {
     }
   }
 
-  // Guard: if languages still empty, force clean empty shape
   const langsAvailable = project.languages?.breakdown &&
                          Object.keys(project.languages.breakdown).length > 0;
   if (!langsAvailable) {
@@ -3700,18 +3714,22 @@ async function handleShare(req, res, reqId) {
         viewerUid = decoded.uid;
         const v = await getUser(decoded.uid);
         viewerUsername = v?.profile?.username || null;
-        viewerIsOwner = (project.ownerId === decoded.uid) || (project.roles && project.roles[decoded.uid] === "editor");
+        viewerIsOwner = (project.ownerId === decoded.uid) ||
+          (project.roles && project.roles[decoded.uid] === "editor");
       }
     } catch {}
   }
   const isSignedIn = !!viewerUid;
 
+  // ✅ GATE: details page only exists if visibility.profile === "public"
+  // (or the viewer is the owner/editor). 404 — not 200 — for everyone else.
   if (!isProfilePublic && !viewerIsOwner) {
     return sendHtmlPage(res, {
-      title: "Private project", heading: "This project is private",
-      message: "The owner hasn't published this project publicly. Sign in if it's yours.",
-      signinUrl: isSignedIn ? null : `${BASE_URL}/register?next=${encodeURIComponent("/" + (owner.profile?.username || "") + "/" + (project.slug || ""))}`,
-      icon: "lock", status: 200,
+      title: "Private project",
+      heading: "This project page is private",
+      message: "The owner hasn't published this project page yet.",
+      icon: "lock",
+      status: 404,
     });
   }
 
@@ -3721,9 +3739,17 @@ async function handleShare(req, res, reqId) {
   const languagesPublic = project.visibility?.languages !== "private" && langsAvailable;
 
   const ownerUsername = owner.profile?.username || username || project.ownerUsername || "";
-  const liveUrl = liveSitePublic && project.slug && ownerUsername
+
+  // ✅ The two URLs are independent:
+  //   detailsUrl → two-segment, gated by visibility.profile
+  //   liveUrl    → three-segment, gated by visibility.liveSite
+  const detailsUrl = ownerUsername && project.slug
     ? buildProjectCleanUrl(ownerUsername, project)
-    : (liveSitePublic && project.deployment?.url ? project.deployment.url : null);
+    : null;
+  const liveUrl = liveSitePublic && ownerUsername && project.slug
+    ? buildLiveSiteUrl(ownerUsername, project)
+    : null;
+
   const canCopy = isProfilePublic && isSignedIn && !viewerIsOwner;
 
   const resolvedMeta = await resolveProjectMeta(pid, project);
@@ -3746,8 +3772,8 @@ async function handleShare(req, res, reqId) {
   } else if (canCopy) {
     ctaHtml = `<button class="btn primary" data-action="copy" data-pid="${escapeHtml(pid)}" type="button">${inlineSvg("copy", 14)} Save a copy</button>`;
   } else if (!isSignedIn) {
-    const next = encodeURIComponent("/" + (owner.profile?.username || "") + "/" + (project.slug || ""));
-    ctaHtml = `<a class="btn primary" href="${BASE_URL}/register?next=${next}">Sign in to copy</a>`;
+    const next = encodeURIComponent("/" + (ownerUsername || "") + "/" + (project.slug || ""));
+    ctaHtml = `<a class="btn primary" href="${BASE_URL}/register?next=${next}">${inlineSvg("user", 14)} Sign in to copy</a>`;
   }
 
   const liveButtonHtml = liveUrl
@@ -3759,7 +3785,7 @@ async function handleShare(req, res, reqId) {
     : "";
 
   const projectIconHtml = projectIconHtmlFor(project);
-  const ownerAvatarHtml = avatarHtmlFor(owner.profile, { size: 32, username: owner.profile?.username || username });
+  const ownerAvatarHtml = avatarHtmlFor(owner.profile, { size: 32, username: ownerUsername });
   const updatedAgo = formatTimeAgo(project.updatedAt);
   const createdLabel = formatDate(project.createdAt);
 
@@ -3772,18 +3798,21 @@ async function handleShare(req, res, reqId) {
   const payload = {
     pid, slug: project.slug || "",
     name: project.name || "", description: project.description || "",
-    ownerUsername: ownerUsername,
+    ownerUsername,
     ownerDisplayName,
     ownerUid: project.ownerId || null,
     ownerAvatarUrl,
     ownerProfileUrl,
     contributors,
+    detailsUrl: detailsUrl || null,
     liveUrl: liveUrl || null,
     codePublic, dbPublic, languagesPublic,
     isOwnerViewer: viewerIsOwner, isSignedIn, canCopy,
     viewerUsername,
     fileParam: fileParam || null,
-    canonicalPath: `/${ownerUsername}/${project.slug || ""}`,
+    canonicalPath: ownerUsername && project.slug
+      ? `/${ownerUsername}/${project.slug}`
+      : null,
     languages: languagesPublic ? (project.languages?.breakdown || {}) : {},
     updatedAt: project.updatedAt || null,
     createdAt: project.createdAt || null,
@@ -3868,6 +3897,7 @@ async function handleShare(req, res, reqId) {
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
   return res.status(200).send(html);
 }
+
 async function handleProfilePublic(req, res, reqId) {
   if (!(await enforceRate(req, res, "profilePublic", ipKey(req)))) return;
 
@@ -3941,7 +3971,15 @@ async function handleProfilePublic(req, res, reqId) {
       const t = await db.ref(`projects/${pid}/thumbnail/url`).once("value");
       if (t?.exists() && isValidOgUrl(t.val())) thumbnailUrl = t.val();
     } catch {}
-    const url = p.slug ? `${BASE_URL}/${username}/project/${p.slug}/` : `${BASE_URL}/${username}`;
+
+    // ✅ Two independent URLs:
+    //   url       → two-segment details page (always present in this list)
+    //   liveUrl   → three-segment live site, or null if liveSite !== "public"
+    const url = p.slug ? `${BASE_URL}/${username}/${p.slug}` : `${BASE_URL}/${username}`;
+    const liveUrl = (p.visibility?.liveSite === "public" && p.slug)
+      ? `${BASE_URL}/${username}/project/${p.slug}`
+      : null;
+
     projectList.push({
       pid,
       slug: p.slug || "",
@@ -3952,6 +3990,7 @@ async function handleProfilePublic(req, res, reqId) {
       languages: p.visibility?.languages !== "private" ? (p.languages?.breakdown || {}) : {},
       updatedAt: p.updatedAt || null,
       url,
+      liveUrl,
       deploymentUrl: p.deployment?.url || null,
       viewCount: typeof p.viewCount === "number" ? p.viewCount : 0,
     });
@@ -4265,6 +4304,8 @@ export {
   ensureProjectThumbnail,
   notificationImageUrl,
   buildProjectCleanUrl,
+  buildLiveSiteUrl,
+  buildLiveSiteUrlForPath,
   buildProjectCleanUrlForPath,
   rewriteRelativeUrls,
   rewriteCssUrls,
