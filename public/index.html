@@ -4694,7 +4694,10 @@ async function hostProject() {
 // ═══════════════════════════════════════════════════════════
 
 function navigateToImageGenerator(slot) {
-  if (!S.currentProject) return;
+  if (!S.currentProject || !S.currentProject.pid) {
+    toast('Open a project first', 'warning');
+    return;
+  }
   if (S.isGuest) { toast('Sign in to generate images', 'warning'); return; }
 
   const returnUrl = '/?pid=' + encodeURIComponent(S.currentProject.pid);
@@ -5036,38 +5039,54 @@ if (handleNewProjectImageReturn()) {
 } else {
   // Existing behaviour for return-from-tools when editing an existing project
   const bootParams = new URLSearchParams(location.search);
-  const generatedSlot = bootParams.get('generated');
-  if (generatedSlot) {
-    setTimeout(async () => {
-      toast(`Image updated — ${generatedSlot === 'icon' ? 'icon' : generatedSlot}`, 'success', 3000);
+const generatedSlot = bootParams.get('generated');
+const generatedUrl = bootParams.get('url');
+if (generatedSlot) {
+  setTimeout(async () => {
+    // Strip the return-marker params immediately so a refresh doesn't
+    // re-trigger this handler.
+    const cleanUrl = new URL(location.href);
+    cleanUrl.searchParams.delete('generated');
+    cleanUrl.searchParams.delete('url');
+    try { history.replaceState(null, '', cleanUrl.toString()); } catch {}
 
-      if (S.currentProject) {
-        try {
-          const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
-          if (res.ok && res.data?.success && res.data.project) {
-            const fresh = normalizeServerProject(res.data.project);
-            S.currentProject = { ...S.currentProject, ...fresh };
-            const local = await db.getProject(S.currentProject.pid);
-            if (local) {
-              await db.putProject({
-                ...local,
-                iconUrl: fresh.iconUrl,
-                name: fresh.name,
-                updatedAt: fresh.updatedAt,
-              });
-            }
-            updateBreadcrumb();
-            renderSidebar();
-          }
-        } catch {}
+    toast(`Image updated — ${generatedSlot}`, 'success', 3000);
+
+    // If the project isn't loaded yet (slow network, race), retry a few
+    // times before giving up.
+    let attempts = 0;
+    const refresh = async () => {
+      if (!S.currentProject) {
+        if (attempts < 5) {
+          attempts++;
+          setTimeout(refresh, 400);
+          return;
+        }
+        console.warn('[Handoff] Project never loaded; can\'t refresh icon');
+        return;
       }
-
-      const cleanUrl = new URL(location.href);
-      cleanUrl.searchParams.delete('generated');
-      cleanUrl.searchParams.delete('slot');
-      history.replaceState(null, '', cleanUrl.toString());
-    }, 500);
-  }
+      try {
+        const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
+        if (res.ok && res.data?.success && res.data.project) {
+          const fresh = normalizeServerProject(res.data.project);
+          S.currentProject = { ...S.currentProject, ...fresh };
+          const local = await db.getProject(S.currentProject.pid);
+          if (local) {
+            await db.putProject({
+              ...local,
+              iconUrl: fresh.iconUrl || generatedUrl || local.iconUrl || null,
+              name: fresh.name,
+              updatedAt: fresh.updatedAt,
+            });
+          }
+          updateBreadcrumb();
+          renderSidebar();
+        }
+      } catch {}
+    };
+    refresh();
+  }, 500);
+}
 }
 
   loadPrefs();
