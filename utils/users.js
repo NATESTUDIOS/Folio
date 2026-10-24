@@ -553,3 +553,122 @@ export async function logProjectApiCall(pid, success = true) {
     return c;
   }).catch(() => {});
 }
+
+
+// =========================================================================
+// SHARED HELPERS — used by api/ai.js (and available to host.js)
+// =========================================================================
+
+/**
+ * Read all files for a project as { path: content }.
+ * Mirrors the 6 inline reads currently scattered through host.js.
+ * Returns {} on miss — callers never need to null-check.
+ */
+export async function listProjectFiles(pid) {
+  if (!pid) return {};
+  const snap = await db.ref(`files/${pid}`).once("value").catch(() => null);
+  const files = {};
+  if (snap?.exists()) {
+    snap.forEach(c => {
+      const v = c.val();
+      if (v?.path && typeof v.content === "string") files[v.path] = v.content;
+    });
+  }
+  return files;
+}
+
+/**
+ * Language % breakdown from a { path: content } map.
+ * Mirrors computeLanguageBreakdown in host.js — extracted so both
+ * modules use the same rounding (1 decimal, 0-100).
+ */
+const _LANG_MAP = {
+  html: "HTML", htm: "HTML",
+  css: "CSS", scss: "CSS", less: "CSS",
+  js: "JavaScript", mjs: "JavaScript", cjs: "JavaScript",
+  jsx: "JSX", ts: "TypeScript", tsx: "TSX",
+  json: "JSON", md: "Markdown", py: "Python",
+  svg: "SVG", xml: "XML", yml: "YAML", yaml: "YAML",
+};
+
+export function computeLanguageBreakdown(files) {
+  const byExt = {};
+  let total = 0;
+  for (const [path, content] of Object.entries(files || {})) {
+    const ext = (path.split(".").pop() || "").toLowerCase();
+    const lang = _LANG_MAP[ext];
+    if (!lang || typeof content !== "string") continue;
+    const lines = content.split("\n").length;
+    byExt[lang] = (byExt[lang] || 0) + lines;
+    total += lines;
+  }
+  if (total === 0) return { breakdown: {}, totalLines: 0, computedAt: Date.now() };
+  const breakdown = {};
+  for (const [lang, lines] of Object.entries(byExt)) {
+    breakdown[lang] = Math.round((lines / total) * 1000) / 10;
+  }
+  return { breakdown, totalLines: total, computedAt: Date.now() };
+}
+
+/**
+ * Notify a project owner when a rate-limit action is sustained-abused.
+ * Moved here from host.js so ai.js can call it without a host.js import
+ * (which would create a circular dependency).
+ *
+ * Fires exactly once per hour per (action, identifier) on the 5th hit.
+ * Never throws — notification failures must not break the request.
+ */
+export async function maybeNotifyRateLimitAbuse(action, identifier, rateResult) {
+  const s = String(identifier || "");
+  let pid = null;
+  let directUid = null;
+  if (s.startsWith("pid_")) pid = s.slice(4);
+  else if (s.startsWith("uid_")) directUid = s.slice(4);
+  else return;
+
+  const windowKey = `rl_abuse_${action}_${sanitizeFirebasePath(s)}`;
+  const ref = db.ref(`rate_limit_abuse/${windowKey}`);
+  const now = Date.now();
+  const HOUR = 60 * 60 * 1000;
+  let fired = false;
+  let ownerId = directUid;
+
+  try {
+    await ref.transaction(cur => {
+      const c = cur && (now - (cur.first || 0) < HOUR) ? cur : { count: 0, first: now };
+      c.count += 1;
+      if (c.count === 5 && !c.fired) { c.fired = true; fired = true; }
+      return c;
+    });
+  } catch { return; }
+  if (!fired) return;
+
+  if (!ownerId && pid) {
+    const snap = await db.ref(`projects/${pid}/ownerId`).once("value").catch(() => null);
+    if (snap?.exists()) ownerId = snap.val();
+  }
+  if (!ownerId) return;
+
+  try {
+    await fetch(
+      (process.env.BASE_URL || "https://foliostudios.vercel.app") + "/api/notify?action=create",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": process.env.ADMIN_API_KEY || "",
+        },
+        body: JSON.stringify({
+          type: "security",
+          uid: ownerId,
+          title: "Repeated rate-limit warnings",
+          body: `"${action}" is being rejected repeatedly${pid ? " on one of your projects" : ""}. Possible abuse or a stuck client.`,
+          link: pid
+            ? `${process.env.BASE_URL || "https://foliostudios.vercel.app"}/project?pid=${pid}`
+            : `${process.env.BASE_URL || "https://foliostudios.vercel.app"}/projects`,
+          extra: { action, pid, identifier: s, retryAfter: rateResult?.retryAfter },
+        }),
+      },
+    );
+  } catch {}
+}
