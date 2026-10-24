@@ -12,13 +12,9 @@
 Write, preview, manage, and deploy websites directly from your phone.
 No desktop setup. No build step. No account required to get started.
 
-<br>
-
 [![Open Folio](https://img.shields.io/badge/OPEN-FOLIO-F59E0B?style=for-the-badge&logo=googlechrome&logoColor=white)](https://foliostudios.vercel.app)
 [![Documentation](https://img.shields.io/badge/READ-DOCS-3B82F6?style=for-the-badge)](https://foliostudios.vercel.app/#docs)
 [![Progressive Web App](https://img.shields.io/badge/PWA-INSTALLABLE-10B981?style=for-the-badge)](https://foliostudios.vercel.app)
-
-<br>
 
 [Website](https://foliostudios.vercel.app) · [Documentation](https://foliostudios.vercel.app/#docs) · [Report a bug](https://github.com)
 
@@ -45,6 +41,7 @@ Projects are stored locally first, so you can keep working when your internet co
 | Live preview | See your code run without a build step |
 | One-tap deployment | Publish projects to a live URL |
 | Built-in JSON database | Add simple dynamic data to your projects |
+| AI assistant | Explain, fix, and draft code through staged proposals |
 | Collaboration | Invite people with different project permissions |
 | Version history | Save snapshots and restore earlier work |
 | No-account entry | Start coding before signing in |
@@ -85,9 +82,9 @@ Explore the main parts of the Folio experience.
 
 <img src="https://foliostudios.vercel.app/screenshots/screenshot5.png" alt="Folio JSON database interface" width="300">
 
-### Search
+### AI Lens
 
-<img src="https://foliostudios.vercel.app/screenshots/screenshot6.png" alt="Folio search interface" width="300">
+<img src="https://foliostudios.vercel.app/screenshots/screenshot6.png" alt="Folio AI Lens panel" width="300">
 
 </div>
 
@@ -138,7 +135,22 @@ Give projects a simple hosted data store without building a database backend fro
 
 These limits and access rules are enforced by the backend.
 
-### 05. Sharing and collaboration
+### 05. AI assistant
+
+Folio includes an AI helper that lives in the editor and dashboard — the **Lens** panel.
+
+- **22 tasks** across understanding, fixing, building, documenting, and diagnosing code.
+- **Explain, debug, fix, optimize, refactor, document, audit, translate** — with patch previews you accept or reject.
+- **Diagrams** as Mermaid, mind maps, and flow tables — rendered inline in your notes.
+- **Commit and deploy drafts** — the AI drafts text; you approve before anything is applied.
+- **Offline-safe rendering.** Markdown, diagrams, math, and diffs render locally once the app is cached.
+- **Nothing is auto-applied.** AI drafts live in a staged queue until you accept them.
+
+AI tasks require a connection. Rendering AI output works offline once the necessary assets are cached.
+
+**The AI never writes to your project automatically.** It drafts text and proposed changes. You decide what to apply.
+
+### 06. Sharing and collaboration
 
 Control how your projects are shared.
 
@@ -149,7 +161,7 @@ Control how your projects are shared.
 
   `https://foliostudios.vercel.app/<username>/<slug>`
 
-### 06. Offline-first PWA
+### 07. Offline-first PWA
 
 Folio is designed to remain useful when connectivity is unreliable.
 
@@ -160,7 +172,7 @@ Folio is designed to remain useful when connectivity is unreliable.
 - Prompt users when an updated application version becomes available.
 - Queue supported synchronization operations for later processing.
 
-### 07. Export and portability
+### 08. Export and portability
 
 Your work should not be trapped in one editor.
 
@@ -183,7 +195,7 @@ You can start coding without installing anything.
 3. Enter a project name and choose an icon.
 4. Open the editor and start writing code.
 5. Use the preview control to run your project.
-6. Sign in when you need cloud synchronization, deployment, or collaboration.
+6. Sign in when you need cloud synchronization, deployment, collaboration, or account-dependent AI features.
 
 New projects automatically receive starter files:
 
@@ -228,7 +240,7 @@ Folio uses browser storage for local work and server storage for supported cloud
 
 The browser uses IndexedDB for local project data. Server-side project data is handled by the backend and Firebase Realtime Database.
 
-Offline availability does not mean every cloud feature works offline. Authentication, remote deployment, cloud synchronization, and hosted database operations require connectivity.
+Offline availability does not mean every cloud feature works offline. Authentication, remote deployment, cloud synchronization, hosted database operations, and AI tasks require connectivity.
 
 ### How deployment works
 
@@ -371,6 +383,69 @@ See the [Folio documentation](https://foliostudios.vercel.app/#docs) for additio
 
 ---
 
+## The AI assistant (Lens)
+
+The Lens panel lives in the sidebar of both the editor and the project dashboard.
+
+### How it works
+
+1. Pick a task from the dropdown.
+2. Choose a scope: file or selection.
+3. Click **Run**, or right-click a selection in the editor to run a task directly.
+4. The AI returns Markdown text and typed artifacts, such as findings, diffs, files, diagrams, and drafts.
+5. Write-apply tasks stage their proposals in the pending queue.
+6. Review each patch and accept or reject it.
+7. Before applying a patch, Folio verifies that the original text still matches the expected content.
+
+### What AI can do
+
+| Category | Tasks |
+|---|---|
+| Understand | `explain`, `diagram`, `simulate`, `designExplain` |
+| Fix and improve | `debug`, `codefix`, `optimize`, `suggest`, `audit` |
+| Build and transform | `scaffold`, `translate`, `docstrings` |
+| Content and metadata | `metatags`, `brainstorm`, `commitMsg`, `docs`, `logExplain` |
+| Diagnose | `findFn`, `struggle` |
+| Hosting drafts | `readProject`, `commitDraft`, `deployDraft` |
+
+### Guest vs. signed-in access
+
+| Capability | Guest | Signed in |
+|---|---|---|
+| Available tasks | 5 selected tasks | All 22 tasks |
+| Rate limits | Per-IP limits | Per-user limits |
+| AI changes | Proposals only | Proposals requiring approval |
+
+The exact task availability and limits are determined by the backend configuration.
+
+### The safety rule
+
+**AI proposals require explicit user approval before being applied.**
+
+- `commitDraft` returns text, a message, and a changed-file list; it does not return file contents for automatic writing.
+- `deployDraft` returns text, a summary, and a changed-file list; it does not deploy automatically.
+- Applying a patch writes through the client's IndexedDB, followed by the existing synchronization flow.
+- Committing pre-fills the message in the existing commit dialog.
+- Deploying pre-fills the summary in the existing deployment confirmation.
+
+Everything that touches project files follows the accepted-patch workflow or an existing commit/deploy flow requiring user approval.
+
+### Offline behaviour
+
+AI tasks require a connection. Rendering does not, once the necessary assets are cached.
+
+| Works offline | Requires a connection |
+|---|---|
+| Markdown, tables, and task lists | Running an AI task |
+| Cached Mermaid diagram rendering | Fetching new diagram assets |
+| Cached KaTeX math rendering | Fetching new math assets |
+| Diffs and patch previews | Requesting new AI proposals |
+| Viewing pending proposals | Cloud synchronization when applying changes |
+
+First-time rendering may require internet access to download the relevant assets.
+
+---
+
 ## API reference
 
 The hosting API is available at:
@@ -379,7 +454,7 @@ The hosting API is available at:
 https://foliostudios.vercel.app/api/host
 ```
 
-The following table summarizes the documented actions.
+### Hosting API endpoints
 
 | Action | Method | Authentication | Purpose |
 |---|---|---|---|
@@ -418,6 +493,45 @@ The following table summarizes the documented actions.
 
 Rate-limit information is returned through `X-RateLimit-*` response headers where supported.
 
+### AI endpoint
+
+```http
+POST https://foliostudios.vercel.app/api/ai
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `task` | string | One of the supported AI tasks |
+| `pid` | string, optional | Project ID; required for project-related tasks |
+| `payload` | object | Task-specific input |
+
+Example response:
+
+```json
+{
+  "success": true,
+  "task": "debug",
+  "text": "Found 2 issues...",
+  "artifacts": [],
+  "usage": {
+    "promptTokens": 1840,
+    "completionTokens": 620,
+    "model": "llama-3.3-70b-versatile"
+  },
+  "guest": false,
+  "cached": false,
+  "rateLimit": {
+    "limit": 30,
+    "remaining": 27,
+    "reset": "2026-10-25T04:00:00.000Z"
+  }
+}
+```
+
+The example illustrates the response structure. Actual fields and values depend on the implementation and request.
+
+The AI endpoint returns text and typed artifacts. It does not directly write to project files.
+
 ---
 
 ## Project structure
@@ -426,42 +540,50 @@ The following is the main application layout.
 
 ```text
 .
-├── index.html              # Main editor
-├── project.html            # Project dashboard
-├── projects.html           # Project library
-├── profile.html            # Public profile
-├── register.html           # Sign up and sign in
-├── settings.html           # Account settings
-├── analytics.html          # Usage analytics
-├── tools.html              # Web development utilities
-├── offline.html            # Offline fallback
-├── invite.html             # Invitation acceptance
+├── index.html               # Main editor
+├── project.html             # Project dashboard
+├── projects.html            # Project library
+├── profile.html             # Public profile
+├── register.html            # Sign up and sign in
+├── settings.html            # Account settings
+├── analytics.html           # Usage analytics
+├── tools.html               # Web development utilities
+├── offline.html             # Offline fallback
+├── invite.html              # Invitation acceptance
 │
-├── app.css                 # Editor styles
-├── project.css             # Project dashboard styles
+├── app.css                  # Editor styles
+├── project.css              # Project dashboard styles
 │
-├── manifest.json           # PWA manifest
-├── sw.js                   # Service worker
-├── install.js              # Installation prompt manager
-├── update.js               # Update prompt manager
+├── js/
+│   ├── ai.js                # AI panel and artifact renderers
+│   └── create-project.js    # Shared project creation flow
+│
+├── manifest.json            # PWA manifest
+├── sw.js                    # Service worker
+├── install.js               # Installation prompt manager
+├── update.js                # Update prompt manager
+├── fcm-client.js            # FCM push subscription manager
+├── notifications.js         # Notification panel and prompt
+├── firebase-messaging-sw.js # FCM background handler
 │
 ├── api/
-│   ├── host.js             # Hosting, deployment, database, sharing, logs
-│   ├── auth.js             # Authentication and session endpoints
-│   ├── flier.js            # Image generation and avatar upload
-│   ├── analytics.js        # Usage analytics
-│   └── notify.js           # Notification dispatch
+│   ├── host.js              # Hosting, deployment, database, sharing, logs
+│   ├── auth.js              # Authentication and session endpoints
+│   ├── ai.js                # AI task dispatcher
+│   ├── flier.js             # Image generation and avatar upload
+│   ├── analytics.js         # Usage analytics
+│   └── notify.js            # Notification dispatch
 │
 ├── utils/
-│   ├── firebase.js         # Firebase Admin initialization
-│   ├── users.js            # Authentication, roles, rate limits, logging
-│   └── log.js              # Structured logging
+│   ├── firebase.js          # Firebase Admin initialization
+│   ├── users.js             # Authentication, roles, rate limits, logging
+│   └── log.js               # Structured logging
 │
-├── icons/                  # PWA icons
-├── screenshots/            # Application screenshots
+├── icons/                   # PWA icons
+├── screenshots/             # Application screenshots
 │
-├── home.html               # Landing page
-└── README.md               # Project documentation
+├── home.html                # Landing page
+└── README.md                # Project documentation
 ```
 
 ---
@@ -472,11 +594,14 @@ Folio uses a static frontend and a serverless backend on Vercel.
 
 The frontend has no build step. It uses HTML, CSS, and JavaScript, with CodeMirror loaded through CDN-based ES modules and import maps.
 
+The AI client module is `js/ai.js`. It contains the panel, task dispatcher, Markdown renderer, Mermaid/KaTeX loaders, artifact renderers, pending staging, and inline context menu. It is imported by `index.html` and `project.html`.
+
 ### Requirements
 
 - Git
 - Node.js and npm
 - A Firebase project with the required backend credentials
+- A Groq API key for AI features (optional)
 - Vercel CLI for local serverless development
 
 ### 1. Clone the repository
@@ -511,11 +636,16 @@ FIREBASE_PRIVATE_KEY="your_private_key"
 ADMIN_API_KEY=your_admin_api_key
 BASE_URL=https://foliostudios.vercel.app
 FLIER_INTERNAL_URL=your_internal_flier_url
+
+# AI (optional)
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL_FAST=llama-3.1-8b-instant
 ```
 
 Use the actual environment variable names expected by the backend.
 
-**Security:** Never commit `.env`, Firebase service-account credentials, administrator keys, or private API keys to a public repository. Configure production secrets through Vercel's environment settings.
+**Security:** Never commit `.env`, Firebase service-account credentials, administrator keys, Groq API keys, or other private keys to a public repository. Configure production secrets through Vercel's environment settings.
 
 ### 4. Run locally
 
@@ -523,27 +653,26 @@ Use the actual environment variable names expected by the backend.
 npx vercel dev
 ```
 
-The frontend can be used for local-only projects without a functioning backend. Features such as sign-in, deployment, and cloud synchronization require the backend to be configured.
+The frontend can be used for local-only projects without a functioning backend. Features such as sign-in, deployment, cloud synchronization, and AI tasks require the backend to be configured.
 
-### Testing offline behavior
+### Testing offline behaviour
 
 Service workers require HTTPS or a supported localhost environment.
 
-Use Vercel's local development server or deploy a preview to test installation, caching, offline fallback, and update behavior.
+Use Vercel's local development server or deploy a preview to test installation, caching, offline fallback, and update behaviour.
 
 ### Updating the service worker cache
 
 Edit `CACHE_VERSION` in `sw.js` whenever a deployment requires a new application-shell cache.
 
 ```javascript
-// Example version format
-const CACHE_VERSION = '2026-10-19-1';
+const CACHE_VERSION = '2026-10-24-1';
 ```
 
 For a later release, increment the version:
 
 ```javascript
-const CACHE_VERSION = '2026-10-19-2';
+const CACHE_VERSION = '2026-10-24-2';
 ```
 
 Old caches are cleaned up during service-worker activation according to the cleanup logic. The update manager prompts users to apply available updates.
@@ -553,7 +682,16 @@ Old caches are cleaned up during service-worker activation according to the clea
 1. Add the language package URL to `CACHED_FILES` in `sw.js`, if required.
 2. Add the appropriate language extension to the loader in `index.html`. Search for `getLanguageExtension`.
 3. Update `detectLanguage` if the file extension is not already supported.
-4. Test highlighting, autocomplete, and offline behavior.
+4. Test highlighting, autocomplete, and offline behaviour.
+
+### Adding an AI task
+
+1. Add the task to `TASK_META`, `GUEST_TASKS` if guest-accessible, `TASK_LIMITS`, and `TASK_BUILDERS` in `api/ai.js`.
+2. Add the prompt builder function.
+3. If the task returns an artifact, add a validator to `ARTIFACT_VALIDATORS`.
+4. Add the client-side artifact renderer in `js/ai.js`.
+5. Add the payload builder to `runCurrent` in `js/ai.js`.
+6. Test with authenticated and guest sessions.
 
 ---
 
@@ -568,6 +706,10 @@ Old caches are cleaned up during service-worker activation according to the clea
 | Server database | Firebase Realtime Database |
 | Authentication | Session tokens through `api/auth.js` |
 | Hosting | Vercel serverless functions |
+| AI provider | Groq |
+| AI models | `llama-3.3-70b-versatile`, `llama-3.1-8b-instant` |
+| Diagram rendering | Mermaid |
+| Math rendering | KaTeX |
 | Image generation | Custom Flier integration |
 | Code formatting | Prettier through `esm.sh` |
 | PWA | Custom service worker, installation, and update managers |
@@ -587,6 +729,8 @@ These are planned improvements, not claims about currently available features.
 - [ ] Custom domains
 - [ ] Server-side rendering for public projects
 - [ ] Team workspaces beyond individual project collaborators
+- [ ] AI: fine-grained task permissions per collaborator
+- [ ] AI: shared team-level rate limits
 
 ---
 
@@ -618,6 +762,10 @@ Interactive controls should support keyboard navigation and accessible labels.
 
 Avoid unnecessary tracking and analytics. Review third-party integrations and disclose any data collection that is introduced.
 
+**AI proposes, user confirms**
+
+Every AI write goes through explicit user acceptance. Nothing is auto-applied.
+
 ### Reporting issues
 
 When reporting a bug, include:
@@ -628,6 +776,8 @@ When reporting a bug, include:
 - Your device, browser, and operating system.
 - Steps to reproduce the issue.
 - Relevant error messages or screenshots.
+
+For AI-related issues, include the task name, whether you were signed in, and the exact AI response if any. Redact anything you do not want to share.
 
 ---
 
@@ -645,13 +795,11 @@ If the repository does not yet contain that file, add the correct license before
 
 <img src="https://foliostudios.vercel.app/icons/icon-192.png" alt="Folio" width="56" height="56">
 
-# Build from anywhere.
+## Build from anywhere.
 
-**Made for developers who carry their workspace in their pocket.**
+Made for developers who carry their workspace in their pocket.
 
-Write your code. Test your ideas. Ship your projects.
-
-<br>
+**Write your code. Test your ideas. Ship your projects.**
 
 [Open Folio](https://foliostudios.vercel.app) · [Read the docs](https://foliostudios.vercel.app/#docs) · [Report a bug](https://github.com)
 
