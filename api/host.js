@@ -543,8 +543,8 @@ async function getProjectOwnerUsername(pid, project) {
 function buildProjectCleanUrl(username, project) {
   const slug = project?.slug || "";
   if (!username) return null;
-  if (!slug) return `${BASE_URL}/${username}/project/${encodeURIComponent(shortId(project?.pid || ""))}/`;
-  return `${BASE_URL}/${username}/project/${encodeURIComponent(slug)}/`;
+  if (!slug) return `${BASE_URL}/${username}/${encodeURIComponent(shortId(project?.pid || ""))}`;
+  return `${BASE_URL}/${username}/${encodeURIComponent(slug)}`;
 }
 
 function buildProjectCleanUrlForPath(username, project, relPath) {
@@ -3667,10 +3667,18 @@ async function handleShare(req, res, reqId) {
 
   const { pid, project, owner } = found;
 
+  // Ensure languages are computed
   if (!project.languages?.breakdown || Object.keys(project.languages.breakdown).length === 0) {
     try { project.languages = await ensureProjectLanguages(pid, project, null); } catch (err) {
       log("host.share.languages_failed", { pid, message: err.message });
     }
+  }
+
+  // Guard: if languages still empty, force clean empty shape
+  const langsAvailable = project.languages?.breakdown &&
+                         Object.keys(project.languages.breakdown).length > 0;
+  if (!langsAvailable) {
+    project.languages = { breakdown: {}, totalLines: 0, computedAt: Date.now() };
   }
 
   let projectThumbnailUrl = null;
@@ -3710,7 +3718,7 @@ async function handleShare(req, res, reqId) {
   const liveSitePublic = project.visibility?.liveSite === "public";
   const codePublic = project.visibility?.code === "public";
   const dbPublic = project.visibility?.db === "public";
-  const languagesPublic = project.visibility?.languages !== "private";
+  const languagesPublic = project.visibility?.languages !== "private" && langsAvailable;
 
   const ownerUsername = owner.profile?.username || username || project.ownerUsername || "";
   const liveUrl = liveSitePublic && project.slug && ownerUsername
@@ -3755,12 +3763,10 @@ async function handleShare(req, res, reqId) {
   const updatedAgo = formatTimeAgo(project.updatedAt);
   const createdLabel = formatDate(project.createdAt);
 
-  // Compute owner identity fields with sensible fallbacks
   const ownerAvatarUrl = owner.profile?.avatarUrl || null;
   const ownerProfileUrl = ownerUsername ? `/${ownerUsername}` : `${BASE_URL}`;
   const ownerDisplayName = owner.profile?.displayName || ownerUsername || "Anonymous";
 
-  // Fetch visible contributors (respects privacy rules)
   const contributors = await getVisibleContributors(pid, project, { viewerUid });
 
   const payload = {
@@ -3862,7 +3868,6 @@ async function handleShare(req, res, reqId) {
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
   return res.status(200).send(html);
 }
-
 async function handleProfilePublic(req, res, reqId) {
   if (!(await enforceRate(req, res, "profilePublic", ipKey(req)))) return;
 
