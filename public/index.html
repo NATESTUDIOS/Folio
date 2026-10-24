@@ -4261,15 +4261,42 @@ function generateCommitMessage(changes, totalAdd, totalRem) {
 async function createVersion(message) {
   const files = await db.listFiles(S.currentProject.pid);
   const snapshot = {};
-  for (const f of files) { if (!isSystemFile(f.path)) snapshot[f.path] = f.content; }
+  for (const f of files) {
+    if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
+    snapshot[f.path] = f.content;
+  }
   const vid = `v_${Date.now()}`;
+  const versionData = { message, files: snapshot, createdAt: Date.now() };
+
+  // ✅ Always write locally first — this makes the commit visible in-editor
   await db.putVersion({
-    vid, pid: S.currentProject.pid, message, files: snapshot, createdAt: Date.now(),
+    vid,
+    pid: S.currentProject.pid,
+    ...versionData,
   });
+
   toast(S.isGuest ? 'Committed locally' : 'Version committed', 'success');
   haptic(10);
   renderSidebar();
   refreshInfoIfOpen();
+
+  // ✅ Best-effort server sync so the commit survives across devices
+  if (!S.isGuest && S.online && S.currentProject._server) {
+    try {
+      const res = await apiFetch(API_HOST + '?action=project/sync-back', {
+        method: 'POST',
+        body: JSON.stringify({
+          pid: S.currentProject.pid,
+          versions: { [vid]: versionData },
+        }),
+      });
+      if (!res.ok || !res.data?.success) {
+        console.warn('[Commit] server sync failed:', res.data?.error);
+      }
+    } catch (err) {
+      console.warn('[Commit] server sync error:', err);
+    }
+  }
 }
 
 
@@ -4580,15 +4607,16 @@ async function hostProject() {
   });
   if (!ok) return;
 
-  toast('Preparing deploy…', 'info', 1500);
   const files = await db.listFiles(S.currentProject.pid);
   const fileMap = {};
   for (const f of files) {
     if (f.path === NOTES_PATH) continue;
     if (isPlaceholder(f.path)) continue;
+    if (typeof f.content !== 'string') continue;
     fileMap[f.path] = f.content;
   }
 
+  // Inject meta into index.html if present
   try {
     const meta = (await db.getProjectMeta(S.currentProject.pid)).meta || {};
     if (Object.keys(meta).length > 0 && fileMap['index.html']) {
@@ -4596,45 +4624,45 @@ async function hostProject() {
     }
   } catch {}
 
-  // Step 1: snapshot to a deploy-kind version
-  const vid = `v_deploy_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  toast('Uploading snapshot…', 'info', 1500);
-  try {
-    const snapshotRes = await apiFetch(API_HOST + '?action=project/sync-back', {
-      method: 'POST',
-      body: JSON.stringify({
-        pid: S.currentProject.pid,
-        versions: {
-          [vid]: {
-            message: `Deploy — ${new Date().toLocaleString()}`,
-            files: fileMap,
-            createdAt: Date.now(),
-            kind: 'deploy',
-          },
-        },
-      }),
-    });
-    if (!snapshotRes.ok || !snapshotRes.data?.success) {
-      throw new Error(snapshotRes.data?.error || 'Snapshot failed');
-    }
-  } catch (err) {
-    toast(err.message || 'Could not create deploy snapshot', 'error');
-    return;
-  }
-
-  // Step 2: deploy
   toast('Deploying…', 'info', 1500);
+
+  // ✅ FIX: Single deploy call. No fragile pre-snapshot step.
+  // The server (handleDeploy) creates the deploy-kind version internally.
   const res = await apiFetch(API_HOST + '?action=deploy', {
     method: 'POST',
-    body: JSON.stringify({ pid: S.currentProject.pid, files: fileMap, versionId: vid }),
+    body: JSON.stringify({ pid: S.currentProject.pid, files: fileMap }),
   });
 
   if (!res.ok || !res.data?.success) {
-    toast(res.data?.error || 'Deploy failed', 'error');
+    const msg = res.data?.error
+      || (res.status === 403 ? 'You don\'t have permission to deploy'
+        : res.status === 404 ? 'Project not found on server'
+        : 'Deploy failed');
+    toast(msg, 'error', 5000);
     return;
   }
 
-  // Step 3: poll status once
+  // Update local state immediately from response
+  if (res.data.url) {
+    S.currentProject.deployment = {
+      url: res.data.url,
+      serveUrl: res.data.serveUrl || null,
+      versionId: res.data.versionId || null,
+      deploymentId: res.data.deploymentId,
+      deployedAt: Date.now(),
+      state: 'READY',
+    };
+    const local = await db.getProject(S.currentProject.pid);
+    if (local) {
+      await db.putProject({
+        ...local,
+        deployment: S.currentProject.deployment,
+        updatedAt: Date.now(),
+      });
+    }
+  }
+
+  // Best-effort confirmation poll
   let live = false;
   try {
     const st = await apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.currentProject.pid));
@@ -4646,8 +4674,8 @@ async function hostProject() {
     }
   } catch {}
 
-  if (live) {
-    toast('Deployed · ' + res.data.url, 'success', 4000);
+  if (live || res.data.url) {
+    toast('Deployed · ' + (res.data.url || 'live'), 'success', 4000);
   } else {
     toast('Deploy recorded — propagation delayed', 'warning', 4000);
   }

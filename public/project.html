@@ -759,76 +759,76 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   async function flushSyncQueue() {
-    if (S.syncFlushing || !S.online || !S.session) return;
-    S.syncFlushing = true;
-    try {
-      const queue = await IDB.listSyncQueue();
-      for (const item of queue) {
-        if (item.pid !== S.pid) continue;
-        try {
-          let success = false;
-          if (item.type === 'file-save') {
-            const res = await apiFetch(API_HOST + '?action=project/sync-back', {
-              method: 'POST',
-              body: JSON.stringify({ pid: item.pid, files: { [item.payload.path]: item.payload.content } }),
-            });
-            success = res.ok && res.data?.success;
-          } else if (item.type === 'file-delete') {
-            const res = await apiFetch(API_HOST + '?action=file/delete', {
-              method: 'POST',
-              body: JSON.stringify({ pid: item.pid, path: item.payload.path }),
-            });
-            success = res.ok && res.data?.success;
-          } else if (item.type === 'version-commit') {
-            const res = await apiFetch(API_HOST + '?action=project/sync-back', {
-              method: 'POST',
-              body: JSON.stringify({
-                pid: item.pid,
-                versions: { [item.payload.vid]: item.payload.data },
-              }),
-            });
-            success = res.ok && res.data?.success;
-          } else if (item.type === 'metatags-save') {
-            const res = await apiFetch(API_HOST + '?action=metatags/save', {
-              method: 'POST',
-              body: JSON.stringify({ pid: item.pid, metaTags: item.payload.metaTags }),
-            });
-            success = res.ok && res.data?.success;
-          } else if (item.type === 'project-update') {
-            const res = await apiFetch(API_HOST + '?action=projects/update', {
-              method: 'POST',
-              body: JSON.stringify({ pid: item.pid, ...item.payload }),
-            });
-            success = res.ok && res.data?.success;
-          } else {
-            success = true; // unknown types: discard
-          }
+  if (S.syncFlushing || !S.online || !S.session || S.isLocalOnly) return;
+  S.syncFlushing = true;
+  try {
+    const queue = await IDB.listSyncQueue();
+    for (const item of queue) {
+      if (item.pid !== S.pid) continue;
+      try {
+        let success = false;
+        let body = null;
+        let endpoint = API_HOST;
 
-          if (success) {
+        if (item.type === 'file-save') {
+          endpoint = API_HOST + '?action=project/sync-back';
+          body = { pid: item.pid, files: { [item.payload.path]: item.payload.content } };
+        } else if (item.type === 'file-delete') {
+          endpoint = API_HOST + '?action=file/delete';
+          body = { pid: item.pid, path: item.payload.path };
+        } else if (item.type === 'version-commit') {
+          endpoint = API_HOST + '?action=project/sync-back';
+          // ✅ FIX: correctly pass versions map
+          body = { pid: item.pid, versions: { [item.payload.vid]: item.payload.data } };
+        } else if (item.type === 'metatags-save') {
+          endpoint = API_HOST + '?action=metatags/save';
+          body = { pid: item.pid, metaTags: item.payload.metaTags };
+        } else if (item.type === 'project-update') {
+          endpoint = API_HOST + '?action=projects/update';
+          body = { pid: item.pid, ...item.payload };
+        } else {
+          success = true; // unknown types: discard
+        }
+
+        if (body) {
+          const res = await apiFetch(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(body),
+          });
+          success = res.ok && res.data?.success;
+          // ✅ FIX: if the item is definitively rejected (400/403/404), don't retry forever
+          if (!success && (res.status === 400 || res.status === 403 || res.status === 404)) {
+            console.warn(`[Sync] Dropping ${item.type} — server rejected with ${res.status}:`, res.data?.error);
             await IDB.deleteSyncQueue(item.id);
-          } else {
-            item.attempts = (item.attempts || 0) + 1;
-            if (item.attempts >= SYNC_QUEUE_MAX_ATTEMPTS) {
-              await IDB.deleteSyncQueue(item.id);
-              toast('Some offline changes could not sync', 'warning', 4000);
-            } else {
-              await IDB.updateSyncQueue(item);
-            }
+            continue;
           }
-        } catch (err) {
+        }
+
+        if (success) {
+          await IDB.deleteSyncQueue(item.id);
+        } else {
           item.attempts = (item.attempts || 0) + 1;
           if (item.attempts >= SYNC_QUEUE_MAX_ATTEMPTS) {
             await IDB.deleteSyncQueue(item.id);
+            toast('Some offline changes could not sync', 'warning', 4000);
           } else {
             await IDB.updateSyncQueue(item);
           }
         }
+      } catch (err) {
+        item.attempts = (item.attempts || 0) + 1;
+        if (item.attempts >= SYNC_QUEUE_MAX_ATTEMPTS) {
+          await IDB.deleteSyncQueue(item.id);
+        } else {
+          await IDB.updateSyncQueue(item);
+        }
       }
-    } finally {
-      S.syncFlushing = false;
-      await refreshSyncQueueCount();
     }
+  } finally {
+    S.syncFlushing = false;
+    await refreshSyncQueueCount();
   }
+}
 
   function startSyncFlushLoop() {
     if (S.syncTimer) clearInterval(S.syncTimer);
@@ -1068,66 +1068,75 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   // ═══════════════════════════════════════════════════════════
 
   async function loadProject() {
-    let localProject = null;
-    try { localProject = await IDB.getProject(S.pid); } catch {}
+  let localProject = null;
+  try { localProject = await IDB.getProject(S.pid); } catch {}
 
-    if (/^local_/.test(S.pid)) {
-      if (!localProject) {
-        showEmptyState('notfound', 'Not found', 'This local project no longer exists.', S.pid);
-        return false;
-      }
-      S.project = {
-        ...localProject,
-        myRole: 'owner',
-        visibility: localProject.visibility || { profile: 'private' },
-      };
-      S.isLocalOnly = true;
-      setSyncState('local');
-      applyProjectMeta();
-      return true;
+  // Local-only project
+  if (/^local_/.test(S.pid)) {
+    if (!localProject) {
+      showEmptyState('notfound', 'Not found', 'This local project no longer exists.', S.pid);
+      return false;
     }
+    S.project = {
+      ...localProject,
+      myRole: 'owner',
+      visibility: localProject.visibility || { profile: 'private' },
+    };
+    S.isLocalOnly = true;
+    setSyncState('local');
+    applyProjectMeta();
+    return true;
+  }
 
-    if (S.session && S.online) {
-      let res;
+  if (S.session && S.online) {
+    // ✅ FIX: retry up to 3 times before giving up
+    let res = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
         res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
       } catch (err) {
         res = { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
       }
+      // Stop retrying on definitive answers
+      if (res.ok || res.status === 404 || res.status === 403) break;
+      // Backoff before retry
+      if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+    }
 
-      if (res.ok && res.data?.success) {
-        const norm = normalizeServerProject(res.data.project);
-        try { await IDB.putProject(norm); } catch {}
-        S.project = { ...res.data.project, ...norm };
+    if (res.ok && res.data?.success) {
+      const norm = normalizeServerProject(res.data.project);
+      try { await IDB.putProject(norm); } catch {}
+      S.project = { ...res.data.project, ...norm };
+      S.isLocalOnly = false;
+      setSyncState('synced');
+      cacheProject(S.project);
+      applyProjectMeta();
+      return true;
+    }
+
+    if (res.status === 404 || res.status === 403) {
+      if (localProject) {
+        const inferredRole = localProject.myRole || (localProject._server ? 'viewer' : 'owner');
+        S.project = {
+          ...localProject,
+          myRole: inferredRole,
+          visibility: localProject.visibility || { profile: 'private' },
+        };
         S.isLocalOnly = false;
-        setSyncState('synced');
-        cacheProject(S.project);
+        setSyncState('orphan');
         applyProjectMeta();
         return true;
       }
-
-      if (res.status === 404 || res.status === 403) {
-        if (localProject) {
-          const inferredRole = localProject.myRole || (localProject._server ? 'viewer' : 'owner');
-          S.project = {
-            ...localProject,
-            myRole: inferredRole,
-            visibility: localProject.visibility || { profile: 'private' },
-          };
-          S.isLocalOnly = false;
-          setSyncState('orphan');
-          applyProjectMeta();
-          return true;
-        }
-        if (res.status === 403) {
-          showEmptyState('denied', 'Access denied', "You don't have permission to view this project. Sign in with the right account, or ask the owner.", S.pid);
-        } else {
-          showEmptyState('notfound', 'Project not found', "This project may have been deleted, or the link is broken.", S.pid);
-        }
-        return false;
+      if (res.status === 403) {
+        showEmptyState('denied', 'Access denied', "You don't have permission to view this project. Sign in with the right account, or ask the owner.", S.pid);
+      } else {
+        showEmptyState('notfound', 'Project not found', "This project may have been deleted, or the link is broken.", S.pid);
       }
+      return false;
     }
 
+    // ✅ FIX: network error path — if we have a local copy, stay in cached mode but
+    // DON'T set 'orphan' (that blocks deploy). Just mark cached.
     if (localProject) {
       const inferredRole = localProject.myRole || (localProject._server ? 'viewer' : 'owner');
       S.project = {
@@ -1136,22 +1145,38 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
         visibility: localProject.visibility || { profile: 'private' },
       };
       S.isLocalOnly = false;
+      // ✅ Keep as 'cached' not 'orphan' so deploy stays enabled.
+      // Deploy's own server-side check will fail with the correct error if the project really doesn't exist.
       setSyncState('cached');
       applyProjectMeta();
       return true;
     }
-
-    const cached = readCachedProject();
-    if (cached) {
-      S.project = { ...cached, myRole: cached.myRole || 'viewer' };
-      setSyncState('cached');
-      applyProjectMeta();
-      return true;
-    }
-
-    showEmptyState('notfound', "Couldn't load project", 'Check your connection and try again.', S.pid);
-    return false;
   }
+
+  if (localProject) {
+    const inferredRole = localProject.myRole || (localProject._server ? 'viewer' : 'owner');
+    S.project = {
+      ...localProject,
+      myRole: inferredRole,
+      visibility: localProject.visibility || { profile: 'private' },
+    };
+    S.isLocalOnly = false;
+    setSyncState('cached');
+    applyProjectMeta();
+    return true;
+  }
+
+  const cached = readCachedProject();
+  if (cached) {
+    S.project = { ...cached, myRole: cached.myRole || 'viewer' };
+    setSyncState('cached');
+    applyProjectMeta();
+    return true;
+  }
+
+  showEmptyState('notfound', "Couldn't load project", 'Check your connection and try again.', S.pid);
+  return false;
+}
 
   function applyProjectMeta() {
     S.role = S.project.myRole || (S.isLocalOnly ? 'owner' : 'viewer');
@@ -2041,272 +2066,517 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   // ═══════════════════════════════════════════════════════════
 
   async function openProjectImageModal() {
-    if (!S.isEditor && !S.isLocalOnly) { toast('Read-only', 'warning'); return; }
-    const initial = await getCoverDraft();
-    const currentUrl = getCurrentCoverUrl();
-    let draft = { ...initial };
-    let pendingPreview = null;
-    let pendingUrl = null;
-    let currentTab = 'generate';
-    let generating = false;
-    let saving = false;
+  if (!S.isEditor && !S.isLocalOnly) { toast('Read-only', 'warning'); return; }
+  const initial = await getCoverDraft();
+  let draft = { ...initial };
+  let pendingPreview = null;
+  let pendingUrl = null;
+  let currentTab = 'generate';
+  let generating = false;
+  let saving = false;
+  let selectedTemplate = draft.template || 'browser-frame';
+  let selectedScene = 'auto';
+  let flierVariants = null; // for the icon picker (avatar/preview)
 
-    openModal(`
-      <div class="modal-title">Project image</div>
-      <div class="modal-desc">Used on share cards and the project icon.</div>
-      <div class="cover-tabs">
-        <button class="cover-tab active" data-cover-tab="generate">Generate</button>
-        <button class="cover-tab" data-cover-tab="upload">Upload</button>
-        <button class="cover-tab" data-cover-tab="url">From URL</button>
+  openModal(`
+    <div class="modal-title">Project image</div>
+    <div class="modal-desc">Used on share cards, the project icon, and the deployment preview.</div>
+    <div class="cover-tabs">
+      <button class="cover-tab active" data-cover-tab="generate">Generate</button>
+      <button class="cover-tab" data-cover-tab="upload">Upload</button>
+      <button class="cover-tab" data-cover-tab="url">From URL</button>
+    </div>
+
+    <div data-cover-panel="generate">
+      <div class="cover-preview-live" id="coverPreview">
+        <div class="cover-preview-empty">Pick a template and click Generate</div>
       </div>
-      <div data-cover-panel="generate">
-        <div class="cover-preview-live" id="coverPreview">
-          <div class="cover-preview-empty">Adjust controls, then Generate</div>
-        </div>
-        <div class="cover-controls">
-          <div class="cover-field-row" style="grid-column:1/-1;">
-            <label class="cover-field-label">Template</label>
-            <div class="cover-template-pills" id="coverTemplates">
-              ${COVER_TEMPLATES.map(t => `<button class="filter-pill ${draft.template === t.id ? 'active' : ''}" data-tpl="${t.id}" type="button">${t.label}</button>`).join('')}
-            </div>
-          </div>
-          <div class="cover-field-row">
-            <label class="cover-field-label">Primary</label>
-            <div class="cover-color-row">
-              <div class="cover-swatch" style="background:${draft.primary}"><input type="color" id="coverPrimary" value="${draft.primary}"></div>
-              <input class="input" id="coverPrimaryHex" value="${draft.primary}">
-            </div>
-          </div>
-          <div class="cover-field-row">
-            <label class="cover-field-label">Accent</label>
-            <div class="cover-color-row">
-              <div class="cover-swatch" style="background:${draft.accent}"><input type="color" id="coverAccent" value="${draft.accent}"></div>
-              <input class="input" id="coverAccentHex" value="${draft.accent}">
-            </div>
-          </div>
-          <div class="cover-field-row" style="grid-column:1/-1;">
-            <label class="cover-field-label">Angle — <span id="coverAngleVal">${draft.bgAngle}°</span></label>
-            <input class="cover-slider" type="range" min="0" max="360" id="coverAngle" value="${draft.bgAngle}">
-          </div>
-          <div class="cover-field-row" style="grid-column:1/-1;">
-            <label class="cover-field-label">Headline</label>
-            <input class="input" id="coverHeadline" value="${escapeAttr(draft.headline)}" maxlength="120">
-          </div>
-          <div class="cover-field-row" style="grid-column:1/-1;">
-            <label class="cover-field-label">Subheadline</label>
-            <input class="input" id="coverSub" value="${escapeAttr(draft.subheadline)}" maxlength="120">
+
+      <div class="cover-controls">
+        <div class="cover-field-row" style="grid-column:1/-1;">
+          <label class="cover-field-label">Template</label>
+          <div class="cover-template-pills" id="coverTemplates">
+            ${COVER_TEMPLATES.map(t => `<button class="filter-pill ${draft.template === t.id ? 'active' : ''}" data-tpl="${t.id}" type="button">${t.label}</button>`).join('')}
           </div>
         </div>
-      </div>
-      <div data-cover-panel="upload" style="display:none;">
-        <input type="file" id="coverFile" accept="image/*" style="display:none;">
-        <button class="btn btn-secondary btn-block" id="coverFileBtn" style="margin-bottom:10px;">${svg('upload', 12, 2.2)} Choose image file</button>
-        <div class="field-hint">PNG, JPG, WebP. Max 1 MB.</div>
-        <div id="coverFileStatus" class="upload-url-status"></div>
-      </div>
-      <div data-cover-panel="url" style="display:none;">
-        <div class="upload-url-panel">
-          <div class="cover-field-row">
-            <label class="cover-field-label">Image URL (HTTPS)</label>
-            <div class="upload-url-input">
-              <input class="input mono" id="coverUrlInput" placeholder="https://..." type="url">
-              <button class="btn btn-primary btn-icon" id="coverUrlLoad">${svg('check', 12, 2.4)}</button>
-            </div>
+
+        <div class="cover-field-row">
+          <label class="cover-field-label">Scene</label>
+          <select class="select" id="coverScene">
+            <option value="auto">Auto (from project)</option>
+            <option value="none">None (solid)</option>
+            <optgroup label="Editorial">
+              <option value="paper_stack">Paper Stack</option>
+              <option value="newspaper_fold">Newspaper Fold</option>
+              <option value="type_specimen">Type Specimen</option>
+              <option value="book_spine">Book Spine</option>
+            </optgroup>
+            <optgroup label="Tech">
+              <option value="terminal">Terminal</option>
+              <option value="grid_wave">Grid Wave</option>
+              <option value="circuit">Circuit</option>
+              <option value="skyline">Skyline</option>
+            </optgroup>
+            <optgroup label="Music">
+              <option value="soundwave">Soundwave</option>
+              <option value="vinyl">Vinyl</option>
+              <option value="stage_light">Stage Light</option>
+              <option value="cassette">Cassette</option>
+            </optgroup>
+            <optgroup label="Home">
+              <option value="window_sill">Window Sill</option>
+              <option value="shelf">Shelf</option>
+              <option value="rooftop">Rooftop</option>
+            </optgroup>
+            <optgroup label="Abstract">
+              <option value="ribbon">Ribbon</option>
+              <option value="glass_cards">Glass Cards</option>
+              <option value="halftone">Halftone</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="cover-field-row">
+          <label class="cover-field-label">Scene palette</label>
+          <select class="select" id="coverScenePalette">
+            <option value="auto">Auto (seeded)</option>
+            <option value="warm">Warm</option>
+            <option value="cool">Cool</option>
+            <option value="neon">Neon</option>
+            <option value="earth">Earth</option>
+            <option value="sunset">Sunset</option>
+            <option value="mono">Mono</option>
+          </select>
+        </div>
+
+        <div class="cover-field-row">
+          <label class="cover-field-label">Primary</label>
+          <div class="cover-color-row">
+            <div class="cover-swatch" style="background:${draft.primary}"><input type="color" id="coverPrimary" value="${draft.primary}"></div>
+            <input class="input" id="coverPrimaryHex" value="${draft.primary}">
           </div>
-          <div class="upload-url-preview" id="coverUrlPreview"><div class="placeholder">Paste URL, click Load</div></div>
-          <div class="upload-url-status" id="coverUrlStatus"></div>
+        </div>
+
+        <div class="cover-field-row">
+          <label class="cover-field-label">Accent</label>
+          <div class="cover-color-row">
+            <div class="cover-swatch" style="background:${draft.accent}"><input type="color" id="coverAccent" value="${draft.accent}"></div>
+            <input class="input" id="coverAccentHex" value="${draft.accent}">
+          </div>
+        </div>
+
+        <div class="cover-field-row" style="grid-column:1/-1;">
+          <label class="cover-field-label">Headline</label>
+          <input class="input" id="coverHeadline" value="${escapeAttr(draft.headline)}" maxlength="120">
+        </div>
+
+        <div class="cover-field-row" style="grid-column:1/-1;">
+          <label class="cover-field-label">Subheadline</label>
+          <input class="input" id="coverSub" value="${escapeAttr(draft.subheadline)}" maxlength="180">
         </div>
       </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" id="coverCancel">Cancel</button>
-        <button class="btn btn-primary" id="coverGenerate">Generate</button>
-        <button class="btn btn-primary" id="coverSave" disabled>Save</button>
+    </div>
+
+    <div data-cover-panel="upload" style="display:none;">
+      <input type="file" id="coverFile" accept="image/*" style="display:none;">
+      <button class="btn btn-secondary btn-block" id="coverFileBtn" style="margin-bottom:10px;">${svg('upload', 12, 2.2)} Choose image file</button>
+      <div class="field-hint">PNG, JPG, WebP. Max 1 MB.</div>
+      <div id="coverFileStatus" class="upload-url-status"></div>
+    </div>
+
+    <div data-cover-panel="url" style="display:none;">
+      <div class="upload-url-panel">
+        <div class="cover-field-row">
+          <label class="cover-field-label">Image URL (HTTPS)</label>
+          <div class="upload-url-input">
+            <input class="input mono" id="coverUrlInput" placeholder="https://..." type="url">
+            <button class="btn btn-primary btn-icon" id="coverUrlLoad">${svg('check', 12, 2.4)}</button>
+          </div>
+        </div>
+        <div class="upload-url-preview" id="coverUrlPreview"><div class="placeholder">Paste URL, click Load</div></div>
+        <div class="upload-url-status" id="coverUrlStatus"></div>
       </div>
-    `);
+    </div>
 
-    const preview = $('coverPreview');
-    const saveBtn = $('coverSave');
-    const genBtn = $('coverGenerate');
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="coverCancel">Cancel</button>
+      <button class="btn btn-primary" id="coverGenerate">Generate</button>
+      <button class="btn btn-primary" id="coverSave" disabled>Save</button>
+    </div>
+  `);
 
-    document.querySelectorAll('[data-cover-tab]').forEach(tab => {
-      tab.addEventListener('click', () => {
-        currentTab = tab.dataset.coverTab;
-        document.querySelectorAll('[data-cover-tab]').forEach(t => t.classList.toggle('active', t === tab));
-        document.querySelectorAll('[data-cover-panel]').forEach(p => { p.style.display = p.dataset.coverPanel === currentTab ? '' : 'none'; });
-        genBtn.style.display = currentTab === 'generate' ? '' : 'none';
-        updateSave();
+  const preview = $('coverPreview');
+  const saveBtn = $('coverSave');
+  const genBtn = $('coverGenerate');
+
+  // ── Tab switching ──
+  document.querySelectorAll('[data-cover-tab]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      currentTab = tab.dataset.coverTab;
+      document.querySelectorAll('[data-cover-tab]').forEach(t => t.classList.toggle('active', t === tab));
+      document.querySelectorAll('[data-cover-panel]').forEach(p => {
+        p.style.display = p.dataset.coverPanel === currentTab ? '' : 'none';
       });
-    });
-
-    function renderPrev(url) {
-      if (url) {
-        preview.innerHTML = '';
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = 'Preview';
-        preview.appendChild(img);
-      } else {
-        preview.innerHTML = '<div class="cover-preview-empty">Adjust controls, then Generate</div>';
-      }
-    }
-
-    function updateSave() {
-      const dirty = JSON.stringify(draft) !== JSON.stringify(initial) || pendingPreview || pendingUrl;
-      saveBtn.disabled = generating || saving || !dirty;
-    }
-
-    document.querySelectorAll('#coverTemplates .filter-pill').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#coverTemplates .filter-pill').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        draft.template = btn.dataset.tpl;
-        pendingPreview = null;
-        pendingUrl = null;
-        renderPrev(null);
-        updateSave();
-      });
-    });
-
-    function bindColor(colorId, hexId, key) {
-      const ci = $(colorId);
-      const hi = $(hexId);
-      ci.addEventListener('input', (e) => { draft[key] = e.target.value; hi.value = e.target.value; ci.parentElement.style.background = e.target.value; updateSave(); });
-      hi.addEventListener('input', (e) => {
-        const v = e.target.value.trim();
-        const clamped = clampHex(v);
-        if (clamped) { draft[key] = clamped; ci.value = clamped; ci.parentElement.style.background = clamped; updateSave(); }
-      });
-    }
-    bindColor('coverPrimary', 'coverPrimaryHex', 'primary');
-    bindColor('coverAccent', 'coverAccentHex', 'accent');
-
-    $('coverAngle').addEventListener('input', (e) => {
-      draft.bgAngle = Number(e.target.value);
-      $('coverAngleVal').textContent = draft.bgAngle + '°';
+      genBtn.style.display = currentTab === 'generate' ? '' : 'none';
       updateSave();
     });
-    $('coverHeadline').addEventListener('input', (e) => { draft.headline = e.target.value; updateSave(); });
-    $('coverSub').addEventListener('input', (e) => { draft.subheadline = e.target.value; updateSave(); });
+  });
 
-    genBtn.addEventListener('click', async () => {
-      if (generating) return;
-      generating = true;
-      genBtn.disabled = true;
-      genBtn.textContent = 'Generating…';
-      updateSave();
-      try {
-        await new Promise(r => setTimeout(r, 200));
-        const svgMarkup = buildCoverSvg(draft);
-        pendingPreview = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgMarkup)));
-        pendingUrl = null;
-        renderPrev(pendingPreview);
-      } catch (err) {
-        toast('Generation failed', 'error');
-      } finally {
-        generating = false;
-        genBtn.disabled = false;
-        genBtn.textContent = 'Generate';
-        updateSave();
-      }
-    });
+  function renderPrev(url) {
+    if (url) {
+      preview.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = 'Preview';
+      preview.appendChild(img);
+    } else {
+      preview.innerHTML = '<div class="cover-preview-empty">Pick a template and click Generate</div>';
+    }
+  }
 
-    $('coverFileBtn')?.addEventListener('click', () => $('coverFile')?.click());
-    $('coverFile')?.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-      if (file.size > 1024 * 1024) { toast('Max 1 MB', 'error'); return; }
-      const statusEl = $('coverFileStatus');
-      statusEl.textContent = 'Uploading…';
-      statusEl.className = 'upload-url-status';
-      try {
-        const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
-        await new Promise(r => setTimeout(r, 150));
-        pendingUrl = dataUrl;
-        pendingPreview = null;
-        statusEl.textContent = 'Ready — click Save';
-        statusEl.className = 'upload-url-status success';
-        updateSave();
-      } catch (err) {
-        statusEl.textContent = 'Upload failed';
-        statusEl.className = 'upload-url-status error';
-      }
-    });
+  function updateSave() {
+    const dirty = JSON.stringify(draft) !== JSON.stringify(initial) || pendingPreview || pendingUrl;
+    saveBtn.disabled = generating || saving || !dirty;
+  }
 
-    $('coverUrlLoad')?.addEventListener('click', async () => {
-      const url = $('coverUrlInput').value.trim();
-      const statusEl = $('coverUrlStatus');
-      if (!/^https:\/\//i.test(url)) { statusEl.textContent = 'Must be HTTPS'; statusEl.className = 'upload-url-status error'; return; }
-      statusEl.textContent = 'Loading…';
-      statusEl.className = 'upload-url-status';
-      const img = new Image();
-      const ok = await new Promise(res => { img.onload = () => res(true); img.onerror = () => res(false); img.src = url; setTimeout(() => res(false), 8000); });
-      if (!ok) {
-        statusEl.textContent = 'Failed to load';
-        statusEl.className = 'upload-url-status error';
-        $('coverUrlPreview').innerHTML = '<div class="placeholder">Preview unavailable</div>';
-        return;
-      }
-      const previewBox = $('coverUrlPreview');
-      previewBox.innerHTML = '';
-      const pi = document.createElement('img');
-      pi.src = url;
-      previewBox.appendChild(pi);
-      pendingUrl = url;
+  // ── Template pills ──
+  document.querySelectorAll('#coverTemplates .filter-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#coverTemplates .filter-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedTemplate = btn.dataset.tpl;
+      draft.template = selectedTemplate;
       pendingPreview = null;
+      pendingUrl = null;
+      renderPrev(null);
+      updateSave();
+    });
+  });
+
+  // ── Color binding ──
+  function bindColor(colorId, hexId, key) {
+    const ci = $(colorId);
+    const hi = $(hexId);
+    ci.addEventListener('input', (e) => {
+      draft[key] = e.target.value;
+      hi.value = e.target.value;
+      ci.parentElement.style.background = e.target.value;
+      updateSave();
+    });
+    hi.addEventListener('input', (e) => {
+      const v = e.target.value.trim();
+      const clamped = clampHex(v);
+      if (clamped) {
+        draft[key] = clamped;
+        ci.value = clamped;
+        ci.parentElement.style.background = clamped;
+        updateSave();
+      }
+    });
+  }
+  bindColor('coverPrimary', 'coverPrimaryHex', 'primary');
+  bindColor('coverAccent', 'coverAccentHex', 'accent');
+
+  $('coverHeadline').addEventListener('input', (e) => { draft.headline = e.target.value; updateSave(); });
+  $('coverSub').addEventListener('input', (e) => { draft.subheadline = e.target.value; updateSave(); });
+  $('coverScene').addEventListener('change', (e) => { selectedScene = e.target.value; updateSave(); });
+
+  // ── ✅ FIX: Generate via the Flier API (not client-side SVG) ──
+  genBtn.addEventListener('click', async () => {
+    if (generating) return;
+    generating = true;
+    genBtn.disabled = true;
+    genBtn.textContent = 'Generating…';
+    updateSave();
+
+    try {
+      const apiCoverUrl = await generateCoverViaFlier({
+        template: selectedTemplate,
+        scene: selectedScene,
+        palette: $('coverScenePalette').value,
+        primary: draft.primary,
+        accent: draft.accent,
+        headline: draft.headline,
+        subheadline: draft.subheadline,
+        seed: S.pid,
+        iconUrl: S.project?.iconUrl || null,
+      });
+
+      pendingPreview = null;
+      pendingUrl = apiCoverUrl;
+      renderPrev(apiCoverUrl);
+      toast('Cover generated', 'success');
+    } catch (err) {
+      console.error('[Cover] generate failed:', err);
+      toast(err.message || 'Generation failed', 'error');
+    } finally {
+      generating = false;
+      genBtn.disabled = false;
+      genBtn.textContent = 'Generate';
+      updateSave();
+    }
+  });
+
+  // ── Upload ──
+  $('coverFileBtn')?.addEventListener('click', () => $('coverFile')?.click());
+  $('coverFile')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 1024 * 1024) { toast('Max 1 MB', 'error'); return; }
+    const statusEl = $('coverFileStatus');
+    statusEl.textContent = 'Uploading…';
+    statusEl.className = 'upload-url-status';
+
+    try {
+      // Read as data URL, then upload via Flier upload endpoint
+      const dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+
+      const res = await apiFetch(API_FLIER + '?action=upload', {
+        method: 'POST',
+        body: JSON.stringify({ dataUrl, kind: 'image' }),
+      });
+      if (!res.ok || !res.data?.success || !res.data.url) {
+        throw new Error(res.data?.error || 'Upload failed');
+      }
+
+      pendingUrl = res.data.url;
+      pendingPreview = null;
+      renderPrev(res.data.url);
       statusEl.textContent = 'Ready — click Save';
       statusEl.className = 'upload-url-status success';
       updateSave();
+    } catch (err) {
+      statusEl.textContent = err.message || 'Upload failed';
+      statusEl.className = 'upload-url-status error';
+    }
+  });
+
+  // ── URL loading ──
+  $('coverUrlLoad')?.addEventListener('click', async () => {
+    const url = $('coverUrlInput').value.trim();
+    const statusEl = $('coverUrlStatus');
+    if (!/^https:\/\//i.test(url)) {
+      statusEl.textContent = 'Must be HTTPS';
+      statusEl.className = 'upload-url-status error';
+      return;
+    }
+    statusEl.textContent = 'Loading…';
+    statusEl.className = 'upload-url-status';
+
+    const img = new Image();
+    const ok = await new Promise(res => {
+      img.onload = () => res(true);
+      img.onerror = () => res(false);
+      img.src = url;
+      setTimeout(() => res(false), 8000);
     });
 
-    $('coverCancel')?.addEventListener('click', closeModal);
-    saveBtn.addEventListener('click', async () => {
-      if (!pendingPreview && !pendingUrl) {
-        const svgMarkup = buildCoverSvg(draft);
-        pendingPreview = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgMarkup)));
-      }
+    if (!ok) {
+      statusEl.textContent = 'Failed to load';
+      statusEl.className = 'upload-url-status error';
+      $('coverUrlPreview').innerHTML = '<div class="placeholder">Preview unavailable</div>';
+      return;
+    }
+
+    const previewBox = $('coverUrlPreview');
+    previewBox.innerHTML = '';
+    const pi = document.createElement('img');
+    pi.src = url;
+    previewBox.appendChild(pi);
+
+    pendingUrl = url;
+    pendingPreview = null;
+    statusEl.textContent = 'Ready — click Save';
+    statusEl.className = 'upload-url-status success';
+    updateSave();
+  });
+
+  // ── Save ──
+  $('coverCancel')?.addEventListener('click', closeModal);
+  saveBtn.addEventListener('click', async () => {
+    // ✅ FIX: If nothing pending, generate via Flier first (don't fall back to client-side SVG)
+    if (!pendingPreview && !pendingUrl) {
       saving = true;
-      saveBtn.textContent = 'Saving…';
+      saveBtn.textContent = 'Generating…';
       updateSave();
       try {
-        const finalUrl = pendingUrl || pendingPreview;
-        const metaNext = { ...(S.project.metaTags || {}), ogImage: finalUrl };
-        if (S.session && S.online && !S.isLocalOnly && S.syncState === 'synced') {
-          const res = await apiFetch(API_HOST + '?action=metatags/save', {
-            method: 'POST',
-            body: JSON.stringify({ pid: S.pid, metaTags: metaNext }),
-          });
-          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Save failed');
-          await apiFetch(API_HOST + '?action=project/regenerate-preview', {
-            method: 'POST',
-            body: JSON.stringify({ pid: S.pid }),
-          }).catch(() => {});
-        } else {
-          await enqueueSync('metatags-save', { metaTags: metaNext });
-        }
-        S.project.metaTags = metaNext;
-        S.project.iconUrl = finalUrl;
-        try {
-          await IDB.putProject({ ...(await IDB.getProject(S.pid)), metaTags: metaNext, iconUrl: finalUrl, updatedAt: Date.now() });
-          await IDB.setProjectMeta(S.pid, { coverMeta: draft });
-        } catch {}
-        cacheProject(S.project);
-        closeModal();
-        toast('Cover saved', 'success');
-        updateHeader();
-        updateProjectIcons();
-        renderPanel();
+        pendingUrl = await generateCoverViaFlier({
+          template: selectedTemplate,
+          scene: selectedScene,
+          palette: $('coverScenePalette').value,
+          primary: draft.primary,
+          accent: draft.accent,
+          headline: draft.headline,
+          subheadline: draft.subheadline,
+          seed: S.pid,
+          iconUrl: S.project?.iconUrl || null,
+        });
+        renderPrev(pendingUrl);
       } catch (err) {
-        toast(err.message || 'Save failed', 'error');
-      } finally {
+        toast(err.message || 'Generation failed', 'error');
         saving = false;
+        saveBtn.textContent = 'Save';
         updateSave();
+        return;
       }
-    });
+    }
 
+    saving = true;
+    saveBtn.textContent = 'Saving…';
     updateSave();
+
+    try {
+      const finalUrl = pendingUrl || pendingPreview;
+      const metaNext = { ...(S.project.metaTags || {}), ogImage: finalUrl };
+
+      if (S.session && S.online && !S.isLocalOnly && S.syncState === 'synced') {
+        const res = await apiFetch(API_HOST + '?action=metatags/save', {
+          method: 'POST',
+          body: JSON.stringify({ pid: S.pid, metaTags: metaNext }),
+        });
+        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Save failed');
+
+        await apiFetch(API_HOST + '?action=project/regenerate-preview', {
+          method: 'POST',
+          body: JSON.stringify({ pid: S.pid }),
+        }).catch(() => {});
+      } else {
+        await enqueueSync('metatags-save', { metaTags: metaNext });
+      }
+
+      S.project.metaTags = metaNext;
+      S.project.iconUrl = finalUrl;
+
+      try {
+        await IDB.putProject({
+          ...(await IDB.getProject(S.pid)),
+          metaTags: metaNext,
+          iconUrl: finalUrl,
+          updatedAt: Date.now(),
+        });
+        await IDB.setProjectMeta(S.pid, {
+          coverMeta: {
+            template: selectedTemplate,
+            scene: selectedScene,
+            primary: draft.primary,
+            accent: draft.accent,
+            headline: draft.headline,
+            subheadline: draft.subheadline,
+          },
+        });
+      } catch {}
+
+      cacheProject(S.project);
+      closeModal();
+      toast('Cover saved', 'success');
+      updateHeader();
+      updateProjectIcons();
+      renderPanel();
+    } catch (err) {
+      toast(err.message || 'Save failed', 'error');
+    } finally {
+      saving = false;
+      saveBtn.textContent = 'Save';
+      updateSave();
+    }
+  });
+
+  updateSave();
+}
+// ═══════════════════════════════════════════════════════════
+// COVER GENERATION VIA FLIER API
+// ═══════════════════════════════════════════════════════════
+
+async function generateCoverViaFlier({
+  template = 'browser-frame',
+  scene = 'auto',
+  palette = 'auto',
+  primary = '#F59E0B',
+  accent = '#fbbf24',
+  headline = '',
+  subheadline = '',
+  seed = null,
+  iconUrl = null,
+}) {
+  if (!S.online) throw new Error('Requires internet');
+  if (!S.session) throw new Error('Sign in to generate covers');
+
+  // Map the client template names to Flier template names.
+  // COVER_TEMPLATES = browser-frame, hero-short, poster-centered, scene-poster, quote-card, split-image-side
+  const flierTemplate = {
+    'browser-frame': 'browser-frame',
+    'hero-short': 'hero-short',
+    'poster-centered': 'poster-centered',
+    'scene-poster': 'scene-poster',
+    'scene-card': 'scene-card',
+    'quote-card': 'quote-card',
+    'split-image-side': 'split-image-side',
+    'event-poster': 'event-poster',
+    'stat-hero': 'stat-hero',
+    'newspaper-classic': 'newspaper-classic',
+    'image-shadow-bottom': 'image-shadow-bottom',
+    'image-blur-text': 'image-blur-text',
+    'feature-image-top': 'feature-image-top',
+    'image-badge-overlay': 'image-badge-overlay',
+    'strip-bottom': 'strip-bottom',
+    'product-grid-2': 'product-grid-2',
+    'random-lines-top': 'random-lines-top',
+    'image-card-side-text': 'image-card-side-text',
+  }[template] || 'browser-frame';
+
+  // Build a Flier-compatible payload. mode=upload → server renders PNG and returns URL.
+  const payload = {
+    mode: 'upload',
+    type: 'template',
+    template: flierTemplate,
+    size: '1200x630',
+    seed: seed || S.pid || (S.project?.slug || S.project?.name || 'project'),
+    data: {
+      text: {
+        kicker: S.project?.slug ? `@${S.project.slug}` : '',
+        headline: headline || S.project?.name || 'Untitled project',
+        subheadline: subheadline || (S.project?.description || '').slice(0, 160),
+      },
+      style: {
+        variant: 'dark',
+        // Pass explicit primary + accent so we honor user choices
+        colors: { primary, accent },
+        scene,
+        scenePalette: palette,
+        sceneOpacity: 0.85,
+        watermark: true,
+      },
+      images: iconUrl ? { primary: { url: iconUrl } } : {},
+    },
+    upload: {
+      name: `og_${S.pid}_${Date.now()}`,
+    },
+  };
+
+  const res = await apiFetch(API_FLIER + '?action=generate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok || !res.data?.success) {
+    const err = res.data?.error || `HTTP ${res.status}`;
+    if (res.status === 429) {
+      throw new Error(`Daily limit reached (${err}). Try again tomorrow or use Upload/URL tab.`);
+    }
+    throw new Error(`Image generation failed: ${err}`);
   }
 
+  const url = res.data.url || res.data.display_url;
+  if (!url) throw new Error('No URL returned from generator');
+
+  return url;
+}
   function buildCoverSvg(draft) {
     const W = 1200, H = 630;
     const p = draft.primary, a = draft.accent, angle = draft.bgAngle;
@@ -2368,109 +2638,132 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   // ═══════════════════════════════════════════════════════════
 
   async function openIconPicker(onSelect) {
-    const isAuthed = !!S.session;
-    const currentUrl = S.project?.iconUrl || null;
+  const isAuthed = !!S.session;
+  const currentUrl = S.project?.iconUrl || null;
 
-    openModal(`
-      <div class="icon-picker-modal">
-        <div class="modal-title">Project icon</div>
-        <div class="modal-desc">Pick a preset, customize, or upload.</div>
-        ${currentUrl ? `<div class="icon-picker-current"><div class="project-icon-box icon-picker-current-img"><img src="${escapeAttr(currentUrl)}" alt=""></div><div style="flex:1;font-size:11px;color:var(--theme-text-tertiary);">Current icon</div></div>` : ''}
-        ${isAuthed ? `<div class="icon-tabs"><button class="icon-tab active" data-icon-tab="presets">Presets</button><button class="icon-tab" data-icon-tab="upload">Upload</button></div>` : ''}
-        <div class="icon-mode-panel active" data-icon-panel="presets">
-          <div id="iconPickerGrid" class="icon-picker-grid"></div>
-        </div>
-        ${isAuthed ? `
-          <div class="icon-mode-panel" data-icon-panel="upload">
-            <input type="file" id="iconUploadFile" accept="image/*" style="display:none;">
-            <button class="btn btn-secondary btn-block" id="iconUploadFromFile">${svg('upload', 12, 2.2)} Choose image</button>
-            <div class="field-hint">PNG, JPG, WebP. Max 1 MB.</div>
-            <div id="iconUploadStatus" class="upload-url-status"></div>
-          </div>
-        ` : ''}
-        <div class="icon-picker-footer">
-          <button class="btn btn-secondary" id="iconPickerCancel">Cancel</button>
-          <button class="btn btn-primary" id="iconPickerSave" disabled>${svg('check', 10, 2.4)} Save</button>
-        </div>
+  openModal(`
+    <div class="icon-picker-modal">
+      <div class="modal-title">Project icon</div>
+      <div class="modal-desc">Pick a preset, customize, or upload.</div>
+      ${currentUrl ? `<div class="icon-picker-current"><div class="project-icon-box icon-picker-current-img"><img src="${escapeAttr(currentUrl)}" alt=""></div><div style="flex:1;font-size:11px;color:var(--theme-text-tertiary);">Current icon</div></div>` : ''}
+      ${isAuthed ? `<div class="icon-tabs"><button class="icon-tab active" data-icon-tab="presets">Presets</button><button class="icon-tab" data-icon-tab="upload">Upload</button></div>` : ''}
+      <div class="icon-mode-panel active" data-icon-panel="presets">
+        <div id="iconPickerGrid" class="icon-picker-grid"></div>
       </div>
-    `);
+      ${isAuthed ? `
+        <div class="icon-mode-panel" data-icon-panel="upload">
+          <input type="file" id="iconUploadFile" accept="image/*" style="display:none;">
+          <button class="btn btn-secondary btn-block" id="iconUploadFromFile">${svg('upload', 12, 2.2)} Choose image</button>
+          <div class="field-hint">PNG, JPG, WebP. Max 1 MB.</div>
+          <div id="iconUploadStatus" class="upload-url-status"></div>
+        </div>
+      ` : ''}
+      <div class="icon-picker-footer">
+        <button class="btn btn-secondary" id="iconPickerCancel">Cancel</button>
+        <button class="btn btn-primary" id="iconPickerSave" disabled>${svg('check', 10, 2.4)} Save</button>
+      </div>
+    </div>
+  `);
 
-    let selectedUrl = null;
+  let selectedUrl = null;
 
-    document.querySelectorAll('[data-icon-tab]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-icon-tab]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        document.querySelectorAll('[data-icon-panel]').forEach(p => {
-          p.classList.toggle('active', p.dataset.iconPanel === btn.dataset.iconTab);
-        });
+  document.querySelectorAll('[data-icon-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-icon-tab]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('[data-icon-panel]').forEach(p => {
+        p.classList.toggle('active', p.dataset.iconPanel === btn.dataset.iconTab);
       });
     });
+  });
 
-    const grid = $('iconPickerGrid');
-    grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
+  const grid = $('iconPickerGrid');
+  grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
+
+  try {
+    // ✅ FIX: use apiFetch so Authorization header is attached
+    const res = await apiFetch(API_FLIER + '?action=avatar/preview', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: (S.project.slug || S.pid || 'project').replace(/[^a-z0-9]/gi, '').toLowerCase(),
+        displayName: S.project.name || 'Project',
+      }),
+    });
+
+    grid.innerHTML = '';
+
+    if (res.ok && res.data?.success && Array.isArray(res.data.variants)) {
+      res.data.variants.forEach(v => {
+        const btn = document.createElement('button');
+        btn.className = 'icon-option';
+        btn.type = 'button';
+        btn.innerHTML = `<img src="${escapeAttr(v.dataUrl)}" alt=""><span class="icon-label">${escapeHTML(v.label || v.id)}</span>`;
+        btn.addEventListener('click', () => {
+          selectedUrl = v.dataUrl; // data URL is fine — save endpoint accepts it
+          grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
+          btn.classList.add('selected');
+          $('iconPickerSave').disabled = false;
+        });
+        grid.appendChild(btn);
+      });
+    } else {
+      grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;">Could not load presets</div>';
+    }
+  } catch (err) {
+    console.error('[IconPicker]', err);
+    grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;">Could not load</div>';
+  }
+
+  // Upload tab
+  $('iconUploadFromFile')?.addEventListener('click', () => $('iconUploadFile')?.click());
+  $('iconUploadFile')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 1024 * 1024) { toast('Max 1 MB', 'error'); return; }
+
+    const statusEl = $('iconUploadStatus');
+    statusEl.textContent = 'Uploading…';
+    statusEl.className = 'upload-url-status';
+
     try {
-      const res = await fetch(API_FLIER + '?action=avatar/preview', {
+      const dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+
+      // ✅ FIX: use apiFetch, POST /flier?action=upload
+      const res = await apiFetch(API_FLIER + '?action=upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: (S.project.slug || 'project').replace(/[^a-z0-9]/gi, '').toLowerCase(),
-          displayName: S.project.name || 'Project',
+          dataUrl,
+          kind: 'icon',
         }),
       });
-      const data = await res.json();
-      grid.innerHTML = '';
-      if (data.success && Array.isArray(data.variants)) {
-        data.variants.forEach(v => {
-          const btn = document.createElement('button');
-          btn.className = 'icon-option';
-          btn.type = 'button';
-          btn.innerHTML = `<img src="${escapeAttr(v.dataUrl)}" alt=""><span class="icon-label">${escapeHTML(v.label || v.id)}</span>`;
-          btn.addEventListener('click', () => {
-            selectedUrl = v.dataUrl;
-            grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
-            btn.classList.add('selected');
-            $('iconPickerSave').disabled = false;
-          });
-          grid.appendChild(btn);
-        });
-      } else {
-        grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;">Could not load presets</div>';
+
+      if (!res.ok || !res.data?.success || !res.data.url) {
+        throw new Error(res.data?.error || 'Upload failed');
       }
-    } catch {
-      grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;">Could not load</div>';
+
+      selectedUrl = res.data.url;
+      statusEl.textContent = 'Uploaded — click Save';
+      statusEl.className = 'upload-url-status success';
+      $('iconPickerSave').disabled = false;
+    } catch (err) {
+      statusEl.textContent = err.message || 'Upload failed';
+      statusEl.className = 'upload-url-status error';
     }
+  });
 
-    $('iconUploadFromFile')?.addEventListener('click', () => $('iconUploadFile')?.click());
-    $('iconUploadFile')?.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-      if (file.size > 1024 * 1024) { toast('Max 1 MB', 'error'); return; }
-      try {
-        const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
-        const res = await fetch(API_FLIER + '?action=avatar/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dataUrl, username: S.project.slug || 'project' }),
-        });
-        const data = await res.json();
-        if (!data.success || !data.url) throw new Error(data.error || 'Upload failed');
-        selectedUrl = data.url;
-        $('iconUploadStatus').textContent = 'Uploaded — click Save';
-        $('iconPickerSave').disabled = false;
-      } catch (err) {
-        toast(err.message || 'Upload failed', 'error');
-      }
-    });
-
-    $('iconPickerCancel')?.addEventListener('click', closeModal);
-    $('iconPickerSave')?.addEventListener('click', () => {
-      if (!selectedUrl) return;
-      closeModal();
-      if (typeof onSelect === 'function') onSelect(selectedUrl);
-    });
-  }
+  $('iconPickerCancel')?.addEventListener('click', closeModal);
+  $('iconPickerSave')?.addEventListener('click', () => {
+    if (!selectedUrl) return;
+    closeModal();
+    if (typeof onSelect === 'function') onSelect(selectedUrl);
+  });
+}
 
   // ═══════════════════════════════════════════════════════════
   // FILES PANEL
@@ -2850,56 +3143,71 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   async function deployNow() {
-    if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
-    if (S.syncState !== 'synced') { toast('Push project to server first', 'warning'); return; }
+  if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
+  // ✅ FIX: only block on local-only projects; server does its own auth check.
+  if (S.isLocalOnly) { toast("Local projects can't be deployed — sync to account first", 'warning'); return; }
 
-    let files = [];
-    try { files = await IDB.listFiles(S.pid); } catch {}
-    const fileMap = {};
-    for (const f of files) {
-      if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
-      fileMap[f.path] = f.content || '';
-    }
-    if (Object.keys(fileMap).length === 0) { toast('No files to deploy', 'warning'); return; }
+  let files = [];
+  try { files = await IDB.listFiles(S.pid); } catch {}
+  const fileMap = {};
+  for (const f of files) {
+    if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
+    if (typeof f.content !== 'string') continue;
+    fileMap[f.path] = f.content;
+  }
+  if (Object.keys(fileMap).length === 0) { toast('No files to deploy', 'warning'); return; }
 
-    confirmModal(`Deploy ${Object.keys(fileMap).length} file${Object.keys(fileMap).length === 1 ? '' : 's'}?`, 'This will build and deploy to a live URL.', 'Deploy', false, async () => {
-      showLoading('Preparing deploy', 'Snapshotting files…');
+  confirmModal(
+    `Deploy ${Object.keys(fileMap).length} file${Object.keys(fileMap).length === 1 ? '' : 's'}?`,
+    'This will build and deploy to a live URL.',
+    'Deploy',
+    false,
+    async () => {
+      showLoading('Deploying', 'Uploading files…');
       try {
-        const vid = `v_deploy_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-        const snapshotRes = await apiFetch(API_HOST + '?action=project/sync-back', {
-          method: 'POST',
-          body: JSON.stringify({
-            pid: S.pid,
-            versions: {
-              [vid]: {
-                message: `Deploy — ${new Date().toISOString()}`,
-                files: fileMap,
-                createdAt: Date.now(),
-                kind: 'deploy',
-              },
-            },
-          }),
-        });
-        if (!snapshotRes.ok || !snapshotRes.data?.success) throw new Error(snapshotRes.data?.error || 'Snapshot failed');
-
+        // ✅ FIX: Call deploy directly. The server creates the version snapshot internally
+        // (via ensureDeployVersion in handleDeploy). No fragile pre-step that can 403.
         $('loadingDesc').textContent = 'Deploying…';
         const res = await apiFetch(API_HOST + '?action=deploy', {
           method: 'POST',
-          body: JSON.stringify({ pid: S.pid, files: fileMap, versionId: vid }),
+          body: JSON.stringify({ pid: S.pid, files: fileMap }),
         });
-        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Deploy failed');
+
+        if (!res.ok || !res.data?.success) {
+          const msg = res.data?.error
+            || (res.status === 403 ? 'You don\'t have permission to deploy this project'
+              : res.status === 404 ? 'Project not found on server'
+              : 'Deploy failed');
+          throw new Error(msg);
+        }
+
+        // ✅ Update local state immediately with the response
+        const returnedUrl = res.data.url || null;
+        if (returnedUrl) {
+          const liveDeployment = {
+            url: returnedUrl,
+            serveUrl: res.data.serveUrl || null,
+            versionId: res.data.versionId || null,
+            deploymentId: res.data.deploymentId,
+            deployedAt: Date.now(),
+            state: 'READY',
+          };
+          S.deployState = liveDeployment;
+          S.project.deployment = liveDeployment;
+        }
 
         $('loadingDesc').textContent = 'Confirming…';
+        // Poll for confirmation but don't fail the deploy if polling times out —
+        // the deployment record already exists.
         const live = await pollDeployStatus(S.pid);
-
-        hideLoading();
         if (live) {
           S.deployState = live;
           S.project.deployment = live;
-          toast('Deployed · ' + (res.data.url || 'live'), 'success');
-        } else {
-          toast('Deploy recorded — the live URL isn\'t responding yet. Refresh in a moment.', 'warning', 5000);
         }
+
+        hideLoading();
+        toast('Deployed · ' + (live?.url || returnedUrl || 'live'), 'success');
+
         if (res.data.filesSkipped > 0) {
           toast(`${res.data.filesSkipped} file(s) skipped — usually size or invalid path`, 'warning', 4000);
         }
@@ -2910,13 +3218,14 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
             if (['deployments', 'overview', 'commits'].includes(S.activeTab)) renderPanel();
             updateHeader();
           });
-        }, 1200);
+        }, 600);
       } catch (err) {
         hideLoading();
-        toast(err.message || 'Deploy failed', 'error');
+        toast(err.message || 'Deploy failed', 'error', 5000);
       }
-    });
-  }
+    }
+  );
+}
 
   async function redeployVersion(versionId) {
     if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
@@ -3339,85 +3648,130 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   async function openCommitDialog() {
-    if (!S.isEditor) { toast('Read-only', 'warning'); return; }
-    const files = await IDB.listFiles(S.pid);
-    const versions = await IDB.listVersions(S.pid);
-    const last = versions[0];
+  if (!S.isEditor) { toast('Read-only', 'warning'); return; }
 
-    const changes = [];
-    for (const f of files) {
-      if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
-      const before = last?.files?.[f.path] || '';
-      const after = f.content || '';
-      if (before === after) continue;
-      changes.push({ path: f.path, add: Math.max(0, after.split('\n').length - before.split('\n').length), rem: Math.max(0, before.split('\n').length - after.split('\n').length) });
-    }
+  let files = [], versions = [];
+  try {
+    [files, versions] = await Promise.all([IDB.listFiles(S.pid), IDB.listVersions(S.pid)]);
+  } catch (err) {
+    toast('Could not read project files', 'error');
+    return;
+  }
 
-    if (changes.length === 0) {
-      openModal(`<div class="modal-title">Commit</div><div class="modal-desc">No changes to commit.</div><div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Close</button></div>`);
-      return;
-    }
+  // ✅ FIX: compare against the last *user* commit, not deploy snapshots.
+  // Deploy snapshots have kind === 'deploy' and shouldn't be the diff baseline.
+  const lastUserCommit = versions.find(v => v.kind !== 'deploy') || null;
+  const baselineFiles = lastUserCommit?.files || {};
 
-    const totalAdd = changes.reduce((s, c) => s + c.add, 0);
-    const totalRem = changes.reduce((s, c) => s + c.rem, 0);
-    const autoMsg = changes.length === 1
+  const changes = [];
+  for (const f of files) {
+    if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
+    const before = baselineFiles[f.path] || '';
+    const after = f.content || '';
+    if (before === after) continue;
+    const beforeLines = before.split('\n').length;
+    const afterLines = after.split('\n').length;
+    changes.push({
+      path: f.path,
+      add: Math.max(0, afterLines - beforeLines),
+      rem: Math.max(0, beforeLines - afterLines),
+    });
+  }
+
+  // ✅ FIX: if no changes, still show the dialog with a clear message and
+  // an option to force-commit the current state (useful as a manual checkpoint).
+  const totalAdd = changes.reduce((s, c) => s + c.add, 0);
+  const totalRem = changes.reduce((s, c) => s + c.rem, 0);
+  const autoMsg = changes.length === 0
+    ? `checkpoint: snapshot at ${new Date().toLocaleTimeString()}`
+    : changes.length === 1
       ? `edit: ${changes[0].path.split('/').pop()} (+${changes[0].add}, −${changes[0].rem})`
       : `edit: ${changes.length} files (+${totalAdd}, −${totalRem})`;
 
-    openModal(`
-      <div class="modal-title">Commit ${changes.length} file${changes.length === 1 ? '' : 's'}</div>
-      <div class="modal-desc">Snapshot the current state as a commit.</div>
-      <div class="field">
-        <label class="field-label">Message</label>
-        <input class="input" id="commitMsg" value="${escapeAttr(autoMsg)}" maxlength="200">
-      </div>
-      <div class="field">
-        <label class="field-label">Changes</label>
-        <div class="commit-changes">
-          ${changes.map(c => `<div class="commit-change-row"><span class="icon">${svg(fileIconName(c.path), 10, 2.2)}</span><span class="name">${escapeHTML(c.path)}</span><span class="stat"><span class="add">+${c.add}</span> <span class="rem">−${c.rem}</span></span></div>`).join('')}
-        </div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" id="commitSubmit">${svg('check', 10, 2.4)} Commit</button>
-      </div>
-    `);
+  const changesHtml = changes.length === 0
+    ? `<div style="padding:14px;background:var(--theme-glass-bg);border-radius:8px;font-size:11.5px;color:var(--theme-text-tertiary);text-align:center;">
+        No file changes since last commit.<br>
+        <span style="font-size:10.5px;">You can still commit a checkpoint of the current state.</span>
+      </div>`
+    : `<div class="commit-changes">
+        ${changes.map(c => `
+          <div class="commit-change-row">
+            <span class="icon">${svg(fileIconName(c.path), 10, 2.2)}</span>
+            <span class="name">${escapeHTML(c.path)}</span>
+            <span class="stat">
+              <span class="add">+${c.add}</span> <span class="rem">−${c.rem}</span>
+            </span>
+          </div>
+        `).join('')}
+      </div>`;
 
-    $('commitSubmit').addEventListener('click', async () => {
-      const message = ($('commitMsg').value || autoMsg).trim();
-      const btn = $('commitSubmit');
-      btn.disabled = true;
-      btn.innerHTML = 'Committing…';
-      try {
-        const snapshot = {};
-        for (const f of files) {
-          if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
-          snapshot[f.path] = f.content || '';
-        }
-        const vid = `v_${Date.now()}`;
-        const versionData = { message, files: snapshot, createdAt: Date.now() };
-        await IDB.putVersion({ vid, pid: S.pid, ...versionData });
+  openModal(`
+    <div class="modal-title">Commit ${changes.length === 0 ? 'checkpoint' : `${changes.length} file${changes.length === 1 ? '' : 's'}`}</div>
+    <div class="modal-desc">Snapshot the current state as a commit.</div>
+    <div class="field">
+      <label class="field-label">Message</label>
+      <input class="input" id="commitMsg" value="${escapeAttr(autoMsg)}" maxlength="200">
+    </div>
+    <div class="field">
+      <label class="field-label">${changes.length === 0 ? 'No changes' : 'Changes'}</label>
+      ${changesHtml}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="commitSubmit">${svg('check', 10, 2.4)} Commit</button>
+    </div>
+  `);
 
-        if (S.online && S.session && !S.isLocalOnly && S.syncState === 'synced') {
-          await apiFetch(API_HOST + '?action=project/sync-back', {
+  $('commitSubmit').addEventListener('click', async () => {
+    const message = ($('commitMsg').value || autoMsg).trim();
+    const btn = $('commitSubmit');
+    btn.disabled = true;
+    btn.innerHTML = 'Committing…';
+
+    try {
+      const snapshot = {};
+      for (const f of files) {
+        if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
+        snapshot[f.path] = f.content || '';
+      }
+      const vid = `v_${Date.now()}`;
+      const versionData = { message, files: snapshot, createdAt: Date.now() };
+
+      // ✅ FIX: ALWAYS write locally first. This guarantees the commit appears
+      // in the UI regardless of network/server availability.
+      await IDB.putVersion({ vid, pid: S.pid, ...versionData });
+
+      // ✅ FIX: attempt server sync as a best-effort. If it fails, queue for later.
+      // Never throw after the local write succeeded.
+      let serverSynced = false;
+      if (S.online && S.session && !S.isLocalOnly) {
+        try {
+          const res = await apiFetch(API_HOST + '?action=project/sync-back', {
             method: 'POST',
             body: JSON.stringify({ pid: S.pid, versions: { [vid]: versionData } }),
-          }).catch(() => {});
-        } else {
-          await enqueueSync('version-commit', { vid, data: versionData });
+          });
+          serverSynced = res.ok && res.data?.success;
+        } catch {
+          serverSynced = false;
         }
-
-        closeModal();
-        toast('Committed', 'success');
-        bumpTabCount('commits', versions.length + 1);
-        if (S.activeTab === 'commits') renderPanel();
-      } catch (err) {
-        toast(err.message || 'Commit failed', 'error');
-        btn.disabled = false;
-        btn.innerHTML = `${svg('check', 10, 2.4)} Commit`;
       }
-    });
-  }
+
+      if (!serverSynced) {
+        await enqueueSync('version-commit', { vid, data: versionData });
+      }
+
+      closeModal();
+      toast(serverSynced ? 'Committed' : 'Committed locally — will sync when online', 'success');
+      bumpTabCount('commits', versions.length + 1);
+      if (S.activeTab === 'commits') renderPanel();
+    } catch (err) {
+      console.error('[Commit]', err);
+      toast(err.message || 'Commit failed', 'error');
+      btn.disabled = false;
+      btn.innerHTML = `${svg('check', 10, 2.4)} Commit`;
+    }
+  });
+}
 
   // ═══════════════════════════════════════════════════════════
   // ANALYTICS PANEL
