@@ -1164,7 +1164,54 @@ async function getProjectAudience(pid) {
     return { ownerId: null, uids: [] };
   }
 }
+async function getVisibleContributors(pid, project, { viewerUid = null } = {}) {
+  try {
+    const roles = project.roles || {};
+    const ownerId = project.ownerId;
+    if (!ownerId) return [];
 
+    const uids = Object.keys(roles).filter(uid => uid !== ownerId);
+    if (!uids.length) return [];
+
+    // Privacy gate: only show collaborators when the owner's profile is
+    // public, OR when the viewer is the owner themselves. Mirrors the
+    // rule that governs whether the profile page is visible at all.
+    const isOwnerViewer = viewerUid && viewerUid === ownerId;
+    const profilePublic = project.visibility?.profile === "public";
+    if (!profilePublic && !isOwnerViewer) return [];
+
+    const contributors = await Promise.all(uids.slice(0, 20).map(async (uid) => {
+      try {
+        const user = await getUser(uid);
+        if (!user) return null;
+        const username = user.profile?.username || null;
+        if (!username) return null;
+
+        // Non-owners only see contributors whose own profile is public.
+        // Users can opt out of being listed by setting profileVisibility
+        // to "private". Default (unset) is treated as public.
+        if (!isOwnerViewer && user.settings?.profileVisibility === "private") {
+          return null;
+        }
+
+        return {
+          uid,
+          username,
+          displayName: user.profile?.displayName || username,
+          avatarUrl: user.profile?.avatarUrl || null,
+          role: roles[uid] || "viewer",
+        };
+      } catch {
+        return null;
+      }
+    }));
+
+    return contributors.filter(Boolean);
+  } catch (err) {
+    log("host.contributors_failed", { pid, message: err.message });
+    return [];
+  }
+}
 async function shouldNotifyOnce(uid, key, ttlMs = 24 * 60 * 60 * 1000) {
   if (!uid) return false;
   try {
@@ -3708,20 +3755,47 @@ async function handleShare(req, res, reqId) {
   const updatedAgo = formatTimeAgo(project.updatedAt);
   const createdLabel = formatDate(project.createdAt);
 
+  // Compute owner identity fields with sensible fallbacks
+  const ownerAvatarUrl = owner.profile?.avatarUrl || null;
+  const ownerProfileUrl = ownerUsername ? `/${ownerUsername}` : `${BASE_URL}`;
+  const ownerDisplayName = owner.profile?.displayName || ownerUsername || "Anonymous";
+
+  // Fetch visible contributors (respects privacy rules)
+  const contributors = await getVisibleContributors(pid, project, { viewerUid });
+
   const payload = {
     pid, slug: project.slug || "",
     name: project.name || "", description: project.description || "",
-    ownerUsername: ownerUsername, ownerDisplayName: owner.profile?.displayName || ownerUsername,
-    liveUrl: liveUrl || null, codePublic, dbPublic, languagesPublic,
+    ownerUsername: ownerUsername,
+    ownerDisplayName,
+    ownerUid: project.ownerId || null,
+    ownerAvatarUrl,
+    ownerProfileUrl,
+    contributors,
+    liveUrl: liveUrl || null,
+    codePublic, dbPublic, languagesPublic,
     isOwnerViewer: viewerIsOwner, isSignedIn, canCopy,
-    ownerUid: project.ownerId || null, viewerUsername,
+    viewerUsername,
     fileParam: fileParam || null,
     canonicalPath: `/${ownerUsername}/${project.slug || ""}`,
     languages: languagesPublic ? (project.languages?.breakdown || {}) : {},
-    updatedAt: project.updatedAt || null, createdAt: project.createdAt || null,
-    thumbnailUrl: projectThumbnailUrl || null, ogImageUrl: ogImageUrl || null,
-    scene: project.ogImage?.scene || null, palette: project.ogImage?.palette || null,
-    ogImageTemplate: project.ogImage?.template || null, ogImageGeneratedAt: project.ogImage?.generatedAt || null,
+    updatedAt: project.updatedAt || null,
+    createdAt: project.createdAt || null,
+    deployedAt: project.deployment?.deployedAt || null,
+    viewCount: typeof project.viewCount === "number" ? project.viewCount : 0,
+    visibility: {
+      profile: project.visibility?.profile || "private",
+      liveSite: project.visibility?.liveSite || "private",
+      code: project.visibility?.code || "private",
+      languages: project.visibility?.languages || "private",
+      db: project.visibility?.db || "private",
+    },
+    thumbnailUrl: projectThumbnailUrl || null,
+    ogImageUrl: ogImageUrl || null,
+    scene: project.ogImage?.scene || null,
+    palette: project.ogImage?.palette || null,
+    ogImageTemplate: project.ogImage?.template || null,
+    ogImageGeneratedAt: project.ogImage?.generatedAt || null,
     baseUrl: BASE_URL,
     editorUrl: viewerIsOwner ? `${BASE_URL}/project?pid=${pid}` : null,
   };
@@ -3756,9 +3830,9 @@ async function handleShare(req, res, reqId) {
     LANGUAGES: { raw: langBadges },
     UPDATED_AT: updatedAgo, CREATED_AT: createdLabel,
     OWNER_USERNAME: ownerUsername,
-    OWNER_DISPLAY_NAME: owner.profile?.displayName || ownerUsername,
+    OWNER_DISPLAY_NAME: ownerDisplayName,
     OWNER_AVATAR_HTML: { raw: ownerAvatarHtml },
-    OWNER_PROFILE_URL: ownerUsername ? `${BASE_URL}/${ownerUsername}` : `${BASE_URL}`,
+    OWNER_PROFILE_URL: ownerProfileUrl,
     VIEWER_IS_OWNER: String(viewerIsOwner), IS_SIGNED_IN: String(isSignedIn),
     CAN_COPY: String(canCopy),
     LIVE_SITE_ENABLED: String(!!liveUrl),
@@ -3864,11 +3938,17 @@ async function handleProfilePublic(req, res, reqId) {
     } catch {}
     const url = p.slug ? `${BASE_URL}/${username}/project/${p.slug}/` : `${BASE_URL}/${username}`;
     projectList.push({
-      pid, slug: p.slug || "", name: p.name || "Untitled",
-      description: p.description || "", iconUrl: p.iconUrl || null,
+      pid,
+      slug: p.slug || "",
+      name: p.name || "Untitled",
+      description: p.description || "",
+      iconUrl: p.iconUrl || null,
       thumbnailUrl,
       languages: p.visibility?.languages !== "private" ? (p.languages?.breakdown || {}) : {},
-      updatedAt: p.updatedAt || null, url,
+      updatedAt: p.updatedAt || null,
+      url,
+      deploymentUrl: p.deployment?.url || null,
+      viewCount: typeof p.viewCount === "number" ? p.viewCount : 0,
     });
   }
   projectList.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -3936,16 +4016,25 @@ async function handleProfilePublic(req, res, reqId) {
   const twitterImageMeta = profileOgImage ? `<meta name="twitter:image" content="${escapeHtml(profileOgImage)}">` : "";
 
   const profileJson = {
-    username, displayName: user.profile?.displayName || username,
-    bio: user.profile?.bio || "", avatarUrl: user.profile?.avatarUrl || null,
-    isOwner, isSignedIn, viewerUsername, uid: user.uid,
-    canonicalPath: `/${username}`, projectCount: projectList.length,
-    joinedAt: user.createdAt || null, ogImageUrl: profileOgImage || null,
+    username,
+    displayName: user.profile?.displayName || username,
+    bio: user.profile?.bio || "",
+    avatarUrl: user.profile?.avatarUrl || null,
+    isOwner,
+    isSignedIn,
+    viewerUsername,
+    uid: user.uid,
+    canonicalPath: `/${username}`,
+    projectCount: projectList.length,
+    joinedAt: user.createdAt || null,
+    ogImageUrl: profileOgImage || null,
     scene: user.profile?.ogImage?.scene || null,
     ogImageTemplate: user.profile?.ogImage?.template || null,
     ogImageGeneratedAt: user.profile?.ogImage?.generatedAt || null,
     palette: user.profile?.ogImage?.palette || null,
     baseUrl: BASE_URL,
+    projects: projectList,
+    links: user.profile?.links || {},
   };
   const profileScript = `<script>window.__PROFILE__ = ${JSON.stringify(profileJson).replace(/</g, "\\u003c")};</script>`;
 
