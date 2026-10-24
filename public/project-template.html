@@ -367,6 +367,10 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
 @media (min-width: 1024px) {
   .people-row { gap: 16px; margin-top: 12px; padding-top: 12px; }
 }
+/* When there are no contributors, remove horizontal gap so owner chip doesn't look orphaned */
+.people-row.no-contributors {
+  gap: 0;
+}
 .people-by { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .people-label {
   font-size: 9.5px; font-weight: 800; text-transform: uppercase;
@@ -514,6 +518,13 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
     gap: 24px;
     align-items: start;
   }
+}
+/* Collapse the split-row when both children are empty/hidden */
+.split-row.is-empty {
+  display: none !important;
+  margin-bottom: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
 }
 
 .section-title {
@@ -1217,13 +1228,28 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
   function renderLangBar() {
     var bar = $('langBar');
     if (!bar) return;
+    var section = $('languagesSection');
+    var splitRow = document.querySelector('.split-row');
     var langs = P.languages || {};
     var keys = Object.keys(langs);
+
     if (keys.length === 0) {
-      var section = $('languagesSection');
       if (section) section.style.display = 'none';
+      if (splitRow) {
+        var previewOpen = splitRow.querySelector('.share-preview-panel.open');
+        if (previewOpen) {
+          splitRow.style.gridTemplateColumns = '1fr';
+        } else {
+          splitRow.classList.add('is-empty');
+        }
+      }
       return;
     }
+
+    // Language section has data — make sure split-row is visible
+    if (splitRow) splitRow.classList.remove('is-empty');
+    if (section) section.style.display = '';
+
     var sorted = keys.map(function (k) { return { name: k, pct: langs[k] }; })
       .sort(function (a, b) { return b.pct - a.pct; });
     var html = '';
@@ -1256,13 +1282,19 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     var wrap = $('peopleContributors');
     var stack = $('peopleStack');
     var count = $('peopleCount');
+    var row = $('peopleRow');
     if (!wrap || !stack || !count) return;
 
     if (!contributors.length) {
-      wrap.hidden = true;
+      // Remove the entire contributors block from the DOM so no gap remains
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      // Add a modifier class so CSS can tighten the row
+      if (row) row.classList.add('no-contributors');
       return;
     }
+
     wrap.hidden = false;
+    if (row) row.classList.remove('no-contributors');
 
     var shown = contributors.slice(0, 3);
     stack.innerHTML = shown.map(function (c) {
@@ -1572,6 +1604,38 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
       .catch(function () { toast('Network error', 'error'); });
   }
 
+  // ── Preview toggle ──
+  function renderPreviewToggle() {
+    var btn = document.querySelector('[data-action="toggle-preview"]');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var panel = document.getElementById('ogPreview');
+      if (!panel) return;
+      var splitRow = document.querySelector('.split-row');
+      var isOpen = panel.classList.contains('open') || panel.style.display !== 'none';
+      if (isOpen) {
+        panel.classList.remove('open');
+        panel.style.display = 'none';
+        btn.classList.remove('active');
+        // Re-check if the split-row should be hidden
+        var section = document.getElementById('languagesSection');
+        var langsEmpty = !P.languages || Object.keys(P.languages).length === 0;
+        if (splitRow && langsEmpty && section && section.style.display === 'none') {
+          splitRow.classList.add('is-empty');
+        }
+      } else {
+        panel.style.display = '';
+        requestAnimationFrame(function () { panel.classList.add('open'); });
+        btn.classList.add('active');
+        if (splitRow) {
+          splitRow.classList.remove('is-empty');
+          splitRow.style.gridTemplateColumns = '';
+        }
+        if (window.innerWidth < 1024) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }
+
   // ── Sticky bar ──
   function wireStickyBar() {
     var lastY = 0;
@@ -1649,6 +1713,7 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
   renderFileHint();
   applyCoverFallback();
   wireCopyButtons();
+  renderPreviewToggle();
   wireStickyBar();
 
   hydrateAuth().then(function (viewer) {
