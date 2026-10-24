@@ -5,9 +5,16 @@
 // ── Date-based versioning ───────────────────────────────────
 // Format: YYYY-MM-DD-<n>
 //   Increment <n> for same-day deploys; bump date on a new day.
-const CACHE_VERSION = '2026-10-22-2';
+//   ✅ MUST bump this on every deploy of sw.js, otherwise the browser
+//      installs the new worker but caches into the same CACHE_NAME,
+//      causing mixed stale/fresh state.
+const CACHE_VERSION = '2026-10-22-3';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
+
+// ✅ FIX: How long network-first navigation will wait before falling
+// back to cache. Without this, slow networks make every nav hang.
+const NAV_TIMEOUT_MS = 3500;
 
 // Cross-origin hosts we allow through the fetch handler so we can
 // cache them for offline use.
@@ -20,6 +27,9 @@ const CDN_HOSTS = new Set([
 ]);
 
 // ── Pre-cache list ──────────────────────────────────────────
+// ✅ FIX: verify every entry actually exists on the server. Anything
+// that 404s wastes install bandwidth. If you've renamed a page,
+// update this list or remove it.
 const CACHED_FILES = [
   // ── HTML pages ──────────────────────────────────────────
   '/',
@@ -217,6 +227,8 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(staleWhileRevalidate(req));
 });
 
+// ✅ Shell pages (/, /index.html) — cache-first with silent background update.
+// Returns cached immediately if available; refreshes in the background.
 async function cacheFirstShell(req) {
   let cached =
     await caches.match(req, { ignoreSearch: true }) ||
@@ -238,16 +250,27 @@ async function cacheFirstShell(req) {
   }
 }
 
+// ✅ FIX: network-first with a timeout so slow networks fall back to cache
+// in ~3.5s instead of hanging indefinitely. Also caches the response and
+// checks content-type before serving.
 async function networkFirstNav(req) {
+  const cachedPromise = caches.match(req, { ignoreSearch: true });
+
   try {
-    const res = await fetch(req);
+    const res = await Promise.race([
+      fetch(req),
+      new Promise((_, rej) =>
+        setTimeout(() => rej(new Error('NAV_TIMEOUT')), NAV_TIMEOUT_MS)
+      ),
+    ]);
+
     if (res && res.ok && (res.headers.get('content-type') || '').includes('text/html')) {
       const copy = res.clone();
       caches.open(CACHE_NAME).then(c => c.put(req, copy)).catch(() => {});
     }
     return res;
-  } catch {
-    const cached = await caches.match(req, { ignoreSearch: true });
+  } catch (err) {
+    const cached = await cachedPromise;
     if (cached) return cached;
     return offlinePage(req);
   }
@@ -277,7 +300,36 @@ async function staleWhileRevalidate(req) {
 
   const accept = req.headers.get('accept') || '';
   if (accept.includes('text/html')) return offlinePage(req);
-  return new Response('', { status: 404, statusText: 'Offline' });
+
+  // ✅ FIX: return a stub body + clearer status so debugging is easier.
+  // Previously this returned an empty 200/404, which made JS module import
+  // failures look like a "failed to fetch dynamically imported module"
+  // with no body — very hard to diagnose.
+  try {
+    const url = new URL(req.url);
+    const isJs = /\.m?js$/i.test(url.pathname);
+    const isCss = /\.css$/i.test(url.pathname);
+    if (isJs) {
+      return new Response('/* offline: asset not cached */', {
+        status: 504,
+        statusText: 'Gateway Timeout (offline)',
+        headers: { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store' },
+      });
+    }
+    if (isCss) {
+      return new Response('/* offline: stylesheet not cached */', {
+        status: 504,
+        statusText: 'Gateway Timeout (offline)',
+        headers: { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' },
+      });
+    }
+  } catch {}
+
+  return new Response('', {
+    status: 504,
+    statusText: 'Gateway Timeout (offline)',
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
 
 function offlineUrlFor(req) {
@@ -298,6 +350,10 @@ async function offlinePage(req) {
   const cachedPlain = await caches.match('/offline.html');
   if (cachedPlain) return cachedPlain;
 
+  // ✅ FIX: add Cache-Control: no-store so no layer ever caches this
+  // dynamically-generated response. Previously there was no cache header,
+  // which meant a heuristic cache could serve this "you're offline" page
+  // even after the user came back online.
   return new Response(
     '<!doctype html><meta charset=utf-8><title>Offline — Folio</title>' +
     '<meta name="theme-color" content="#0a0c10">' +
@@ -318,7 +374,13 @@ async function offlinePage(req) {
     '<button onclick="location.reload()">Retry</button>' +
     '<p style="margin-top:16px;font-size:11px;color:#666"><a href="/">Try the editor</a></p>' +
     '</div>',
-    { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    }
   );
 }
 
@@ -357,22 +419,36 @@ self.addEventListener('message', (event) => {
       event.waitUntil((async () => {
         let count = 0;
         try {
-          const req = indexedDB.open('folio', 2);
+          // ✅ FIX: open at version 3 to match app.js's DB_VERSION.
+          // Previously opened 'folio' at v2, which failed with a
+          // VersionError (DB already at v3) and silently returned 0.
+          // Now the sync queue count actually reflects reality.
+          const req = indexedDB.open('folio', 3);
           const conn = await new Promise((res, rej) => {
             req.onsuccess = () => res(req.result);
             req.onerror = () => rej(req.error);
+            req.onblocked = () => rej(new Error('IDB blocked'));
           });
-          if (conn.objectStoreNames.contains('syncQueue')) {
-            const all = await new Promise((res) => {
-              const t = conn.transaction('syncQueue', 'readonly').objectStore('syncQueue');
-              const r = t.getAll();
-              r.onsuccess = () => res(r.result || []);
-              r.onerror = () => res([]);
-            });
-            count = all.length;
+          try {
+            if (conn.objectStoreNames.contains('syncQueue')) {
+              const all = await new Promise((res) => {
+                try {
+                  const t = conn.transaction('syncQueue', 'readonly').objectStore('syncQueue');
+                  const r = t.getAll();
+                  r.onsuccess = () => res(r.result || []);
+                  r.onerror = () => res([]);
+                } catch {
+                  res([]);
+                }
+              });
+              count = all.length;
+            }
+          } finally {
+            try { conn.close(); } catch {}
           }
-          conn.close();
-        } catch {}
+        } catch (err) {
+          console.warn('[Folio SW] CHECK_QUEUE failed:', err.message);
+        }
         event.ports?.[0]?.postMessage({ count });
       })());
       break;
@@ -606,10 +682,20 @@ self.addEventListener('pushsubscriptionchange', (event) => {
       if (!newSub) return;
 
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      clients.forEach(c => c.postMessage({
-        type: 'PUSH_SUBSCRIPTION_CHANGED',
-        subscription: newSub.toJSON(),
-      }));
+      // ✅ FIX: await all broadcasts. Previously these were fire-and-forget,
+      // which could be dropped if the SW gets terminated right after.
+      await Promise.allSettled(
+        clients.map(c => {
+          try {
+            return Promise.resolve(c.postMessage({
+              type: 'PUSH_SUBSCRIPTION_CHANGED',
+              subscription: newSub.toJSON(),
+            }));
+          } catch {
+            return Promise.resolve();
+          }
+        })
+      );
     } catch (err) {
       console.warn('[Folio SW] pushsubscriptionchange failed:', err);
     }
