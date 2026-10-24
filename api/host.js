@@ -4310,4 +4310,5 @@ export {
   rewriteRelativeUrls,
   rewriteCssUrls,
   injectMetaIntoHtml,
+  getProjectCached, 
 };
