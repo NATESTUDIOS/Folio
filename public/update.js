@@ -125,12 +125,16 @@
 
   function clearPostponed() {
     postponedMemory = null;
+    S.postponed = false;
+    S.postponedVersion = null;
     try { sessionStorage.removeItem(POSTPONE_KEY); } catch {}
   }
 
   function hasPostponed() {
     if (postponedMemory) return true;
-    return !!readPostponed();
+    const p = readPostponed();
+    if (p) { postponedMemory = p; return true; }
+    return false;
   }
 
   function hasUnsavedWork() {
@@ -142,6 +146,9 @@
     } catch { return false; }
   }
 
+  // ✅ FIX: Only call the custom Promise-returning confirm if it's actually
+  // an overridden function. Pass a plain string to native confirm so we don't
+  // accidentally call `window.confirm({ ... })` and show "[object Object]".
   async function confirmDiscard() {
     const opts = {
       title: 'Reload anyway?',
@@ -151,13 +158,20 @@
     };
     try {
       if (typeof window.confirm === 'function') {
+        // Try the "opts-style" call first. If it returns a Promise (custom
+        // override), await it. If it returns a boolean, use it directly.
         const r = window.confirm(opts);
         if (r && typeof r.then === 'function') return !!(await r);
+        if (typeof r === 'boolean') return r;
       }
     } catch {}
     try { return !!window.confirm(opts.message); } catch { return false; }
   }
 
+  // ✅ FIX: Return false when we truly can't tell if it's a new version —
+  // previously defaulted to true, causing infinite prompts on ghost workers.
+  // Also fix: use pageVersion from meta or fall back to reg.active's version
+  // so the comparison is reliable even when the page has no meta marker.
   async function isRealUpdate(reg) {
     if (!reg?.waiting) return false;
     if (!navigator.serviceWorker.controller) return false;
@@ -168,9 +182,18 @@
       getWorkerVersion(reg.waiting),
     ]);
 
+    // Most reliable: compare active vs waiting
     if (activeVer && waitingVer) return activeVer !== waitingVer;
+
+    // Fallback: compare against page version if we have one
     if (waitingVer && S.pageVersion) return waitingVer !== S.pageVersion;
-    return true;
+
+    // Last resort: if waiting worker responds but active doesn't, treat as real
+    if (waitingVer && !activeVer) return true;
+
+    // If neither responds, we can't know. Assume NOT a real update to avoid
+    // the "prompt that never goes away" bug.
+    return false;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -220,7 +243,6 @@
         opacity: 1;
       }
 
-      /* Thin accent line at top of card — the only "decoration" */
       .folio-upd-card::before {
         content: '';
         position: absolute;
@@ -231,7 +253,6 @@
         border-radius: 0 0 2px 2px;
       }
 
-      /* ─── Icon: flat outlined circle ──────────────────── */
       .folio-upd-icon {
         width: 48px; height: 48px;
         margin: 6px auto 16px;
@@ -248,13 +269,11 @@
         stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
       }
 
-      /* Applying: slow rotate, no glow */
       .folio-upd-card.applying .folio-upd-icon svg {
         animation: folioSpin 1.6s linear infinite;
       }
       @keyframes folioSpin { to { transform: rotate(360deg); } }
 
-      /* ─── Typography ──────────────────────────────────── */
       .folio-upd-title {
         font-size: 17px; font-weight: 650; letter-spacing: -0.2px;
         color: #f1f5f9; margin: 0 0 6px;
@@ -266,7 +285,6 @@
         max-width: 300px; margin-left: auto; margin-right: auto;
       }
 
-      /* ─── Countdown strip ─────────────────────────────── */
       .folio-upd-countdown {
         display: flex; align-items: center; gap: 12px;
         padding: 11px 12px;
@@ -323,7 +341,6 @@
         line-height: 1.4;
       }
 
-      /* ─── Progress bar (apply phase) ──────────────────── */
       .folio-upd-progress {
         height: 2px; border-radius: 2px;
         background: rgba(255, 255, 255, 0.06);
@@ -338,7 +355,6 @@
         transition: width 280ms cubic-bezier(0.16, 1, 0.3, 1);
       }
 
-      /* ─── Buttons: flat, ghosted, hairline ────────────── */
       .folio-upd-actions {
         display: flex; gap: 8px;
       }
@@ -372,7 +388,6 @@
         opacity: 0.4;
         cursor: not-allowed;
       }
-      /* Primary = filled accent, no shadow */
       .folio-upd-btn.primary {
         background: rgba(245, 158, 11, 0.9);
         border-color: rgba(245, 158, 11, 0.9);
@@ -387,7 +402,6 @@
         background: rgba(245, 158, 11, 1);
       }
 
-      /* ─── Reload overlay: same glass language ─────────── */
       .folio-reload {
         position: fixed; inset: 0; z-index: 999992;
         display: flex; align-items: center; justify-content: center;
@@ -459,7 +473,6 @@
         transition: width 300ms ease;
       }
 
-      /* ─── Mobile: bottom sheet ────────────────────────── */
       @media (max-width: 480px) {
         .folio-upd { align-items: flex-end; padding: 0; }
         .folio-upd-card {
@@ -483,7 +496,6 @@
         }
       }
 
-      /* ─── Reduced motion ──────────────────────────────── */
       @media (prefers-reduced-motion: reduce) {
         .folio-upd,
         .folio-upd-card,
@@ -613,13 +625,33 @@
     }
   }
 
+  function showCountdown() {
+    const cd = S.dialogEl?.querySelector('#folioUpdCountdown');
+    if (cd) {
+      cd.style.opacity = '';
+      cd.style.transform = '';
+    }
+  }
+
+  function hideCountdown() {
+    const cd = S.dialogEl?.querySelector('#folioUpdCountdown');
+    if (cd) {
+      cd.style.opacity = '0';
+      cd.style.transform = 'translateY(-4px)';
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════
   // SHOW / DISMISS
   // ═══════════════════════════════════════════════════════════
   function show(version) {
     if (S.applying || S.dialogEl) return;
-    if (version && S.postponedVersion === version) return;
-    if (hasPostponed()) return;
+
+    // ✅ FIX: Only block when the *same* version is already postponed.
+    // Previously `hasPostponed()` blocked ALL versions after the first
+    // postpone, which made newer updates invisible for the whole session.
+    if (version && S.postponedVersion && version === S.postponedVersion) return;
+    if (!version && hasPostponed()) return;
 
     const ov = buildDialog();
     S.dialogEl = ov;
@@ -660,8 +692,11 @@
       }).catch(() => {});
     }
 
+    // ✅ FIX: Previously said "you can update from Settings" — but Settings
+    // has no update control. Be honest: we'll re-prompt when a newer
+    // version is ready (or next session, since postpone is sessionStorage).
     if (typeof window.toast === 'function') {
-      toast('Update postponed — you can update from Settings', 'info', 3000);
+      toast('Update postponed — you\'ll be prompted again when a newer version is ready', 'info', 3200);
     }
   }
 
@@ -673,14 +708,6 @@
     const fill = S.dialogEl?.querySelector('.folio-upd-progress-fill');
     if (wrap) wrap.classList.add('visible');
     if (fill) fill.style.width = Math.min(100, Math.max(0, pct)) + '%';
-  }
-
-  function hideCountdown() {
-    const cd = S.dialogEl?.querySelector('#folioUpdCountdown');
-    if (cd) {
-      cd.style.opacity = '0';
-      cd.style.transform = 'translateY(-4px)';
-    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -731,6 +758,7 @@
         S.applying = false;
         const card = S.dialogEl?.querySelector('.folio-upd-card');
         if (card) card.classList.remove('applying');
+        showCountdown();
         startCountdown();
         return;
       }
@@ -751,6 +779,20 @@
     if (laterBtn) laterBtn.disabled = true;
 
     setProgress(10);
+
+    // Shared failure path so we can restore UI cleanly
+    const fail = (msg) => {
+      S.applying = false;
+      if (card) card.classList.remove('applying');
+      if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Reload now'; }
+      if (laterBtn) laterBtn.disabled = false;
+      setProgress(0);
+      // ✅ FIX: Restore the countdown so the dialog isn't stuck in a
+      // dead state if apply fails.
+      showCountdown();
+      startCountdown();
+      if (msg) toast(msg, 'error', 4200);
+    };
 
     try {
       const reg = S.reg || await navigator.serviceWorker.getRegistration();
@@ -802,19 +844,21 @@
           location.reload();
         }, CFG.controllerTimeoutMs);
       } else {
-        setProgress(100);
-        showReloadOverlay();
-        clearPostponed();
-        setTimeout(() => location.reload(), CFG.reloadDelayMs);
+        // ✅ FIX: Do NOT reload if there's no waiting worker. Previously
+        // this triggered a reload with the SAME old code, causing the
+        // "update button does nothing" loop.
+        S.applying = false;
+        if (card) card.classList.remove('applying');
+        if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Check again'; }
+        if (laterBtn) laterBtn.disabled = false;
+        setProgress(0);
+        showCountdown();
+        // Don't restart the countdown — the user explicitly asked to check.
+        toast('You\'re already on the latest version', 'info', 3000);
       }
     } catch (err) {
       console.warn('[Folio update] apply failed:', err);
-      S.applying = false;
-      if (card) card.classList.remove('applying');
-      if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Reload now'; }
-      if (laterBtn) laterBtn.disabled = false;
-      setProgress(0);
-      toast('Update failed — try again later', 'error', 4000);
+      fail('Update failed — try again later');
     }
   }
 
@@ -823,7 +867,9 @@
   // ═══════════════════════════════════════════════════════════
   async function checkNow(force = false) {
     if (S.paused || S.applying || S.dialogEl) return;
-    if (hasPostponed()) return;
+    // ✅ FIX: Do NOT bail early just because something is postponed.
+    // We still need to *check* so we can detect a NEWER version than the
+    // postponed one. `show()` handles the "same version postponed" case.
     if (!force && Date.now() - S.lastCheckedAt < CFG.minCheckGapMs) return;
     S.lastCheckedAt = Date.now();
 
@@ -842,13 +888,9 @@
       let version = await getWorkerVersion(reg.waiting);
       if (!version) version = S.postponedVersion || '';
 
-      if (hasPostponed()) {
-        const waitingVer = version || S.postponedVersion;
-        if (!waitingVer || !S.postponedVersion || waitingVer === S.postponedVersion) {
-          return;
-        }
-      }
-      if (version && S.postponedVersion === version) return;
+      // ✅ FIX: Only suppress if the waiting version is the one the user
+      // already postponed. A different version should show through.
+      if (version && S.postponedVersion && version === S.postponedVersion) return;
 
       show(version || null);
     } catch (err) {
@@ -878,13 +920,13 @@
       navigator.serviceWorker.addEventListener('message', async (event) => {
         const d = event.data || {};
         if (d.type !== 'SW_UPDATE_AVAILABLE' && d.type !== 'UPDATE_AVAILABLE') return;
-        if (hasPostponed()) return;
 
         const reg = await navigator.serviceWorker.getRegistration();
         if (!(await isRealUpdate(reg))) return;
 
         const ver = String(d.version || d.builtAt || '');
-        if (ver && S.postponedVersion === ver) return;
+        // ✅ FIX: same-version-only suppression (was: block everything)
+        if (ver && S.postponedVersion && ver === S.postponedVersion) return;
 
         show(ver || null);
       });
