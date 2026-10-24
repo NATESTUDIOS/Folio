@@ -2191,8 +2191,19 @@ async function handleProjectsUpdate(req, res, reqId) {
     patch.description = description.trim();
   }
   if (iconUrl !== undefined) {
-    if (iconUrl !== null && (typeof iconUrl !== "string" || iconUrl.length > 500)) {
-      return res.status(400).json({ success: false, error: "iconUrl must be a string ≤500 chars or null" });
+    if (iconUrl !== null) {
+      if (typeof iconUrl !== "string" || iconUrl.length > 500) {
+        return res.status(400).json({ success: false, error: "iconUrl must be a string ≤500 chars or null" });
+      }
+      // Only HTTPS URLs are accepted. Data URIs must be uploaded via
+      // /api/flier?action=upload first — this keeps the project record small
+      // and avoids serving megabytes of base64 on every list request.
+      if (!iconUrl.startsWith("https://")) {
+        return res.status(400).json({
+          success: false,
+          error: "iconUrl must be an HTTPS URL — upload the image first",
+        });
+      }
     }
     patch.iconUrl = iconUrl;
   }
@@ -2237,6 +2248,19 @@ async function handleProjectsUpdate(req, res, reqId) {
 
   if (patch.name !== undefined || patch.description !== undefined || patch.iconUrl !== undefined) {
     await invalidateProjectOgImage(pid);
+    // Thumbnail shows the old identity — wipe it so the next read regenerates.
+    await db.ref(`projects/${pid}/thumbnail`).remove().catch(() => {});
+    // Per-deployment thumbnails also bake in the old icon.
+    try {
+      const dSnap = await db.ref(`projects/${pid}/deployments`).once("value");
+      if (dSnap.exists()) {
+        const updates = {};
+        dSnap.forEach(child => {
+          updates[`projects/${pid}/deployments/${child.key}/thumbnail`] = null;
+        });
+        if (Object.keys(updates).length) await db.ref().update(updates);
+      }
+    } catch {}
   }
 
   try {
@@ -2261,6 +2285,10 @@ async function handleProjectsUpdate(req, res, reqId) {
           body: `Someone updated ${touched.join(", ")} on a project you collaborate on.`,
           imageUrl, link,
           extra: { pid, fields: touched },
+          // Unique per-project key so updates to different projects aren't
+          // collapsed by notify.js's 60-second dedupe window.
+          dedupeKey: `project_update_${pid}_${touched.join("_")}`,
+          dedupeTtlMs: 60 * 1000,
         });
       }
     }

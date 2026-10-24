@@ -136,7 +136,7 @@ const SCENE_CACHE_TTL = 30 * 60 * 1000;
 
 const UPLOAD_MAX_BYTES = 1 * 1024 * 1024;
 const UPLOAD_MAX_EDGE = 4096;
-
+const UPLOAD_MAX_ICON_EDGE = 512; 
 // ═══════════════════════════════════════════════════════════════════
 //  PALETTE SEEDS — 12 curated quadruples
 //  Each entry: { primary, accent, from, to }
@@ -2961,8 +2961,17 @@ function validateUpload(dataUrl, kind) {
     }
   } else {
     const dims = getImageDimensions(buf, sniffed);
-    if (dims && (dims.width > UPLOAD_MAX_EDGE || dims.height > UPLOAD_MAX_EDGE)) {
-      return { ok: false, status: 413, error: `Image exceeds ${UPLOAD_MAX_EDGE}×${UPLOAD_MAX_EDGE}` };
+    if (dims) {
+      // Icons are capped tighter than general images because they're
+      // stored in the project record and served on every project list view.
+      const edgeLimit = kind === "icon" ? UPLOAD_MAX_ICON_EDGE : UPLOAD_MAX_EDGE;
+      if (dims.width > edgeLimit || dims.height > edgeLimit) {
+        return {
+          ok: false,
+          status: 413,
+          error: `Image exceeds ${edgeLimit}×${edgeLimit}`,
+        };
+      }
     }
   }
 
