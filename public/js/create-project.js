@@ -14,9 +14,6 @@
 //                         // optional — fallbacks provided:
 //                         API_FLIER: '…/api/flier',
 //                         getUid: () => S.user?.uid || null })
-//
-//   Mini-tools (icon + cover) inject their own CSS on first use.
-//   No changes needed in app.css / project.css.
 // ═══════════════════════════════════════════════════════════
 
 let deps = null;
@@ -46,7 +43,7 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-// ─── Runtime CSS injection ─────────────────────────────────
+// ─── Runtime CSS injection (one-shot) ──────────────────────
 
 let cssInjected = false;
 
@@ -105,7 +102,7 @@ function ensureMiniToolCSS() {
       border-radius: 8px;
     }
     .folio-cp-tool-tab {
-      flex: 1; padding: 6px; border-radius: 6px;
+      flex: 1; padding: 7px; border-radius: 6px;
       font-size: 11px; font-weight: 700;
       color: var(--theme-text-tertiary, rgba(232,236,241,0.44));
       font-family: inherit; border: none; cursor: pointer; background: transparent;
@@ -131,6 +128,20 @@ function ensureMiniToolCSS() {
       color: var(--theme-text-tertiary, rgba(232,236,241,0.44));
       font-size: 11px; text-align: center; padding: 14px;
     }
+    .folio-cp-preview-spinner {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(2px);
+    }
+    .folio-cp-preview-spinner::after {
+      content: '';
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: var(--theme-primary, #F59E0B);
+      animation: folio-cp-spin 0.8s linear infinite;
+    }
+    @keyframes folio-cp-spin { to { transform: rotate(360deg); } }
     .folio-cp-presets-grid {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
     }
@@ -172,7 +183,7 @@ function ensureMiniToolCSS() {
       width: 100%; accent-color: var(--theme-primary, #F59E0B);
     }
     .folio-cp-field {
-      display: flex; flex-direction: column; gap: 4px;
+      display: flex; flex-direction: column; gap: 5px;
     }
     .folio-cp-field-label {
       font-size: 10px; font-weight: 700;
@@ -182,12 +193,18 @@ function ensureMiniToolCSS() {
     .folio-cp-row {
       display: flex; align-items: center; gap: 6px;
     }
+    .folio-cp-pills {
+      display: flex; flex-wrap: wrap; gap: 4px;
+    }
+    .folio-cp-pills .filter-pill {
+      padding: 5px 10px; font-size: 10.5px;
+    }
   `;
   document.head.appendChild(style);
   cssInjected = true;
 }
 
-// ─── Flier helpers ─────────────────────────────────────────
+// ─── Palette helpers ────────────────────────────────────────
 
 const PALETTE_SEEDS = [
   { primary: '#F59E0B', accent: '#fbbf24', from: '#F59E0B', to: '#f97316' },
@@ -218,6 +235,8 @@ function clampHex(v) {
   return null;
 }
 
+// ─── Flier helpers ──────────────────────────────────────────
+
 function flierBase() {
   if (!deps) return '/api/flier';
   if (deps.API_FLIER) return deps.API_FLIER;
@@ -234,91 +253,75 @@ function authHeaders() {
   return headers;
 }
 
-async function flierAvatarPreview({ username, displayName }) {
+async function flierFetch(action, payload) {
   try {
-    const res = await fetch(flierBase() + '?action=avatar/preview', {
+    const res = await fetch(flierBase() + '?action=' + action, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ username, displayName }),
+      body: JSON.stringify(payload),
     });
+    let data = {};
+    try { data = await res.json(); } catch {}
     if (res.status === 429) {
-      const data = await res.json().catch(() => ({}));
-      return { error: 'RATE_LIMITED', retryAfter: data.retryAfter || 3600 };
+      return { error: 'RATE_LIMITED', retryAfter: data.retryAfter || 3600, scope: data.scope };
     }
-    const data = await res.json();
-    if (!data.success || !Array.isArray(data.variants)) return { error: data.error || 'No variants' };
-    return { variants: data.variants };
-  } catch (err) { return { error: err.message }; }
+    if (res.status === 401) return { error: 'AUTH_REQUIRED' };
+    if (!res.ok || !data.success) return { error: data.error || `HTTP ${res.status}` };
+    return { data };
+  } catch (err) {
+    return { error: err.message || 'Network error' };
+  }
+}
+
+async function flierAvatarPreview({ username, displayName }) {
+  const r = await flierFetch('avatar/preview', { username, displayName });
+  if (r.error) return r;
+  if (!Array.isArray(r.data.variants)) return { error: 'No variants' };
+  return { variants: r.data.variants };
 }
 
 async function flierCustomPreview(payload) {
-  try {
-    const res = await fetch(flierBase() + '?action=avatar/custom', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ ...payload, mode: 'preview' }),
-    });
-    if (res.status === 429) {
-      const data = await res.json().catch(() => ({}));
-      return { error: 'RATE_LIMITED', retryAfter: data.retryAfter || 60 };
-    }
-    if (res.status === 401) return { error: 'AUTH_REQUIRED' };
-    const data = await res.json();
-    if (!data.success || !data.preview) return { error: data.error || 'Generation failed' };
-    return { preview: data.preview };
-  } catch (err) { return { error: err.message }; }
+  const r = await flierFetch('avatar/custom', { ...payload, mode: 'preview' });
+  if (r.error) return r;
+  if (!r.data.preview) return { error: 'No preview' };
+  return { preview: r.data.preview };
 }
 
 async function flierGenerateUpload(payload) {
-  try {
-    const res = await fetch(flierBase() + '?action=generate', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ ...payload, mode: 'upload' }),
-    });
-    if (res.status === 429) {
-      const data = await res.json().catch(() => ({}));
-      return { error: 'RATE_LIMITED', retryAfter: data.retryAfter || 3600 };
-    }
-    const data = await res.json();
-    if (!data.success || !data.url) return { error: data.error || 'Upload failed' };
-    return { url: data.url };
-  } catch (err) { return { error: err.message }; }
+  const r = await flierFetch('generate', { ...payload, mode: 'upload' });
+  if (r.error) return r;
+  const url = r.data.url || r.data.display_url;
+  if (!url) return { error: 'No URL in response' };
+  return { url };
 }
 
-async function flierUploadDataUrl(dataUrl, username) {
-  try {
-    const res = await fetch(flierBase() + '?action=avatar/upload', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ dataUrl, username }),
-    });
-    const data = await res.json();
-    if (!data.success || !data.url) return { error: data.error || 'Upload failed' };
-    return { url: data.url };
-  } catch (err) { return { error: err.message }; }
+async function flierUploadDataUrl(dataUrl, username, kind = 'icon') {
+  const r = await flierFetch('upload', { dataUrl, kind, username });
+  if (r.error) return r;
+  const url = r.data.url || r.data.display_url;
+  if (!url) return { error: 'No URL in response' };
+  return { url };
 }
 
-// 600 ms debounce, 1.2 s min gap between fired requests.
-function makeThrottler(fn, { debounceMs = 600, minGapMs = 1200 } = {}) {
+// Debounced, in-flight-safe preview generator.
+function makePreviewScheduler(fn, { debounceMs = 500, minGapMs = 900 } = {}) {
   let timer = null;
   let lastFireAt = 0;
-  let inflight = false;
-  return function throttled(...args) {
+  let inflight = null;
+  return function schedule(...args) {
     if (timer) clearTimeout(timer);
     timer = setTimeout(async () => {
-      if (inflight) return;
-      const now = Date.now();
-      const wait = Math.max(0, minGapMs - (now - lastFireAt));
+      if (inflight) { try { await inflight; } catch {} }
+      const wait = Math.max(0, minGapMs - (Date.now() - lastFireAt));
       if (wait > 0) await new Promise(r => setTimeout(r, wait));
-      inflight = true;
       lastFireAt = Date.now();
-      try { await fn(...args); } finally { inflight = false; }
+      inflight = Promise.resolve(fn(...args)).catch(() => {});
+      try { await inflight; } finally { inflight = null; }
     }, debounceMs);
   };
 }
 
-// ─── Public API ──────────────────────────────────────────────
+// ─── Public API ────────────────────────────────────────────
 
 export async function createNewProject() {
   if (!deps) throw new Error('initCreateProject() not called');
@@ -336,9 +339,11 @@ export async function createNewProject() {
   const cleaned = name.trim();
   if (!cleaned) return;
 
-  const { apiFetch, db, workspace, setPidInUrl, renderSidebar,
-          renderEmptyRecent, DEFAULT_PROJECT_STORAGE_LIMIT,
-          API_HOST, getUsername } = deps;
+  const {
+    apiFetch, db, workspace, setPidInUrl, renderSidebar,
+    renderEmptyRecent, DEFAULT_PROJECT_STORAGE_LIMIT,
+    API_HOST, getUsername,
+  } = deps;
 
   let pid, slug, createdAt = Date.now();
 
@@ -365,7 +370,6 @@ export async function createNewProject() {
           : new Date(serverProject.createdAt).getTime())
       : Date.now();
 
-    // Push the chosen icon to the server (previously stored only locally).
     if (iconUrl) {
       await apiFetch(API_HOST + '?action=projects/update', {
         method: 'POST',
@@ -375,10 +379,7 @@ export async function createNewProject() {
   }
 
   const project = {
-    pid,
-    name: cleaned,
-    slug,
-    description,
+    pid, name: cleaned, slug, description,
     iconUrl: iconUrl || null,
     createdAt,
     updatedAt: Date.now(),
@@ -458,14 +459,13 @@ export async function createNewProject() {
   }
 }
 
-// ─── Return-trip handler (call from boot) ────────────────────
+// ─── Return-trip handler (call from boot) ──────────────────
 
 export function handleNewProjectImageReturn() {
   if (!deps) return false;
   try {
     const params = new URLSearchParams(location.search);
     if (params.get('tmp') !== '1') return false;
-
     const genType = params.get('generated');
     const genUrl = params.get('url');
     if (!genType || !genUrl) return false;
@@ -487,13 +487,11 @@ export function handleNewProjectImageReturn() {
   }
 }
 
-// ─── The form ────────────────────────────────────────────────
+// ─── The form ──────────────────────────────────────────────
 
 function newProjectForm() {
   return new Promise((resolve) => {
     const { getAvatarColor, getInitials, isGuest, toast, getUsername } = deps;
-
-    // Ensure the shared mini-tool CSS is ready before any tool opens.
     ensureMiniToolCSS();
 
     const overlay = el('div', {
@@ -511,7 +509,6 @@ function newProjectForm() {
       overlay.style.padding = '20px';
     }
 
-    // ── Form card (default view) ──
     const formCard = el('div', {
       style: {
         background: 'var(--theme-surface-card-solid, #151922)',
@@ -523,7 +520,7 @@ function newProjectForm() {
         maxHeight: '92vh',
         overflowY: 'auto',
         boxShadow: '0 20px 60px rgba(0,0,0,0.45)',
-        paddingBottom: 'calc(20px + var(--safe-bottom, 0px))',
+        paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
         display: 'flex',
         flexDirection: 'column',
         gap: '12px',
@@ -531,16 +528,12 @@ function newProjectForm() {
       },
     });
 
-    // ── Tool card (replaced content for mini-tools) ──
-    const toolCard = el('div', {
-      class: 'folio-cp-tool-card',
-      style: { display: 'none' },
-    });
+    const toolCard = el('div', { class: 'folio-cp-tool-card', style: { display: 'none' } });
 
     overlay.appendChild(formCard);
     overlay.appendChild(toolCard);
 
-    // ── Fields ──
+    // ── Inputs ──
     const nameInput = el('input', {
       class: 'input',
       placeholder: 'My awesome project',
@@ -555,6 +548,7 @@ function newProjectForm() {
       style: { width: '100%', minHeight: '60px', resize: 'vertical' },
     });
 
+    // ── Icon preview ──
     const iconPreview = el('div', {
       class: 'project-icon-box',
       style: {
@@ -573,6 +567,7 @@ function newProjectForm() {
       style: { marginTop: '4px' },
     }, 'Choose icon');
 
+    // ── Cover preview ──
     const coverPreview = el('div', {
       style: {
         width: '100%', aspectRatio: '1200/630',
@@ -635,7 +630,7 @@ function newProjectForm() {
       if (!chosenIconUrl) updateIconPreview(null, nameInput.value);
     });
 
-    // ── Mini-tool switcher ──
+    // ── Tool switcher ──
     function showForm() {
       toolCard.style.display = 'none';
       toolCard.innerHTML = '';
@@ -645,12 +640,11 @@ function newProjectForm() {
       formCard.style.display = 'none';
       toolCard.innerHTML = '';
       toolCard.style.display = 'flex';
-      if (content && content instanceof Node) toolCard.appendChild(content);
+      if (content instanceof Node) toolCard.appendChild(content);
     }
 
-    // ── Icon mini-tool ──
+    // ── Icon tool ──
     iconBtn.addEventListener('click', () => {
-      ensureMiniToolCSS();
       const username = (getUsername && getUsername()) || 'new-project';
       const displayName = nameInput.value.trim() || 'New project';
       const content = buildIconTool({
@@ -669,13 +663,12 @@ function newProjectForm() {
       showTool(content);
     });
 
-    // ── Cover mini-tool ──
+    // ── Cover tool ──
     coverBtn.addEventListener('click', () => {
       if (isGuest()) {
         toast('Sign in to generate covers', 'warning');
         return;
       }
-      ensureMiniToolCSS();
       const username = (getUsername && getUsername()) || 'new-project';
       const content = buildCoverTool({
         username,
@@ -699,7 +692,7 @@ function newProjectForm() {
       coverBtn.style.opacity = '0.5';
     }
 
-    // Pick up pending images from legacy /tools round-trip
+    // Legacy round-trip pickup
     try {
       const sIcon = sessionStorage.getItem('folio.newProject.pending.icon');
       const sCover = sessionStorage.getItem('folio.newProject.pending.cover');
@@ -715,6 +708,7 @@ function newProjectForm() {
       sessionStorage.removeItem('folio.newProject.pending.cover');
     } catch {}
 
+    // ── Actions ──
     const createBtn = el('button', {
       class: 'btn btn-primary',
       type: 'button',
@@ -733,9 +727,7 @@ function newProjectForm() {
       createBtn.disabled = !nameInput.value.trim();
     });
 
-    function cleanup() {
-      try { overlay.remove(); } catch {}
-    }
+    function cleanup() { try { overlay.remove(); } catch {} }
 
     function submit() {
       const name = nameInput.value.trim();
@@ -755,13 +747,11 @@ function newProjectForm() {
       if (e.key === 'Escape') { e.preventDefault(); cleanup(); resolve(null); }
     });
 
-    // ── Assemble form ──
+    // ── Assemble ──
     formCard.appendChild(el('div', {
-      style: {
-        fontSize: '17px', fontWeight: '800',
-        color: 'var(--theme-text, #e8ecf1)', marginBottom: '4px',
-      },
+      style: { fontSize: '17px', fontWeight: '800', color: 'var(--theme-text, #e8ecf1)', marginBottom: '4px' },
     }, 'New project'));
+
     formCard.appendChild(el('div', {
       style: {
         fontSize: '11.5px', color: 'var(--theme-text-tertiary, rgba(232,236,241,0.44))',
@@ -805,8 +795,7 @@ function newProjectForm() {
     formCard.appendChild(el('div', {
       style: {
         display: 'flex', gap: '8px',
-        marginTop: '8px',
-        paddingTop: '16px',
+        marginTop: '8px', paddingTop: '16px',
         borderTop: '1px solid var(--theme-divider, rgba(255,255,255,0.08))',
       },
     }, cancelBtn, createBtn));
@@ -832,10 +821,7 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
   // Header
   const header = el('div', { class: 'folio-cp-tool-header' });
   const backBtn = el('button', {
-    class: 'folio-cp-tool-back',
-    type: 'button',
-    'aria-label': 'Back',
-    onclick: onCancel,
+    class: 'folio-cp-tool-back', type: 'button', 'aria-label': 'Back', onclick: onCancel,
   });
   backBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
   header.appendChild(backBtn);
@@ -865,11 +851,10 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
   container.appendChild(presetsPanel);
   container.appendChild(customPanel);
 
-  // ── Presets panel ──
+  // ── Presets ──
   const presetGrid = el('div', { class: 'folio-cp-presets-grid' });
   const shuffleBtn = el('button', {
-    class: 'btn btn-secondary btn-sm',
-    type: 'button',
+    class: 'btn btn-secondary btn-sm', type: 'button',
     style: { alignSelf: 'flex-start' },
   }, 'Shuffle');
   presetsPanel.appendChild(presetGrid);
@@ -892,15 +877,23 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
     });
     presetGrid.innerHTML = '';
     if (res.error) {
+      const msg = res.error === 'RATE_LIMITED'
+        ? 'Rate limited — try again later.'
+        : res.error === 'AUTH_REQUIRED'
+          ? 'Sign in required.'
+          : 'Could not load presets.';
       presetGrid.appendChild(el('div', {
-        style: { gridColumn: '1 / -1', fontSize: '11px', color: 'var(--theme-text-tertiary, rgba(232,236,241,0.44))', textAlign: 'center', padding: '12px' },
-      }, res.error === 'RATE_LIMITED' ? 'Rate limited — try again later.' : 'Could not load presets.'));
+        style: {
+          gridColumn: '1 / -1', fontSize: '11px',
+          color: 'var(--theme-text-tertiary, rgba(232,236,241,0.44))',
+          textAlign: 'center', padding: '12px',
+        },
+      }, msg));
       return;
     }
     res.variants.forEach((v, i) => {
       const btn = el('button', {
-        class: 'folio-cp-preset',
-        type: 'button',
+        class: 'folio-cp-preset', type: 'button',
         'aria-label': v.label || ('Variant ' + (i + 1)),
         onclick: () => {
           presetSelection = i;
@@ -921,7 +914,7 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
 
   shuffleBtn.addEventListener('click', () => loadPresets(true));
 
-  // ── Custom panel ──
+  // ── Custom ──
   const palette = pickDefaultPalette(displayName);
   const state = {
     headline: (displayName || 'P').slice(0, 40),
@@ -938,43 +931,24 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
     oninput: (e) => { state.headline = e.target.value; schedulePreview(); },
   });
 
-  const primaryColorInput = el('input', { type: 'color', value: state.primary });
-  const primaryHexInput = el('input', {
-    class: 'input',
-    maxlength: '7',
-    value: state.primary,
-    style: { flex: '1', minWidth: '0', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' },
-  });
-  primaryColorInput.addEventListener('input', (e) => {
-    state.primary = e.target.value;
-    primaryHexInput.value = e.target.value;
-    schedulePreview();
-  });
-  primaryHexInput.addEventListener('input', (e) => {
-    const v = clampHex(e.target.value);
-    if (v) { state.primary = v; primaryColorInput.value = v; schedulePreview(); }
-  });
-
-  const accentColorInput = el('input', { type: 'color', value: state.accent });
-  const accentHexInput = el('input', {
-    class: 'input',
-    maxlength: '7',
-    value: state.accent,
-    style: { flex: '1', minWidth: '0', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' },
-  });
-  accentColorInput.addEventListener('input', (e) => {
-    state.accent = e.target.value;
-    accentHexInput.value = e.target.value;
-    schedulePreview();
-  });
-  accentHexInput.addEventListener('input', (e) => {
-    const v = clampHex(e.target.value);
-    if (v) { state.accent = v; accentColorInput.value = v; schedulePreview(); }
-  });
-
-  function colorRow(label, colorInput, hexInput) {
+  function colorRow(label, initialHex, onChange) {
+    const colorInput = el('input', { type: 'color', value: initialHex });
+    const hexInput = el('input', {
+      class: 'input',
+      maxlength: '7',
+      value: initialHex,
+      style: { flex: '1', minWidth: '0', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' },
+    });
     const swatch = el('div', { class: 'folio-cp-color-swatch' });
     swatch.appendChild(colorInput);
+    colorInput.addEventListener('input', (e) => {
+      hexInput.value = e.target.value;
+      onChange(e.target.value);
+    });
+    hexInput.addEventListener('input', (e) => {
+      const v = clampHex(e.target.value);
+      if (v) { colorInput.value = v; onChange(v); }
+    });
     return el('div', { class: 'folio-cp-field' },
       el('label', { class: 'folio-cp-field-label' }, label),
       el('div', { class: 'folio-cp-row' }, swatch, hexInput),
@@ -985,11 +959,11 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
     el('label', { class: 'folio-cp-field-label' }, 'Headline'),
     headlineInput,
   ));
-  customPanel.appendChild(colorRow('Primary', primaryColorInput, primaryHexInput));
-  customPanel.appendChild(colorRow('Accent', accentColorInput, accentHexInput));
+  customPanel.appendChild(colorRow('Primary', state.primary, (v) => { state.primary = v; schedulePreview(); }));
+  customPanel.appendChild(colorRow('Accent', state.accent, (v) => { state.accent = v; schedulePreview(); }));
 
   // Style pills
-  const stylePills = el('div', { class: 'filter-pills' });
+  const stylePills = el('div', { class: 'folio-cp-pills' });
   ['gradient', 'solid', 'pattern'].forEach((v) => {
     const pill = el('button', {
       class: 'filter-pill' + (state.bgType === v ? ' active' : ''),
@@ -1022,39 +996,50 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
 
   if (initialUrl) setPreview(initialUrl);
 
-  const schedulePreview = makeThrottler(async () => {
+  // ✅ Live preview: debounced, in-flight-safe
+  const schedulePreview = makePreviewScheduler(async () => {
     if (!state.headline.trim()) return;
-    const payload = {
-      type: 'template',
-      template: 'hero-short',
-      size: '512x512',
-      seed: displayName,
-      data: {
-        text: { headline: state.headline },
-        style: {
-          variant: 'dark',
-          colors: { primary: state.primary, accent: state.accent },
-          background: {
-            type: state.bgType === 'solid' ? 'solid' : 'gradient',
-            from: state.primary,
-            to: state.accent,
-            angle: 135,
+    if (preview.querySelector('.folio-cp-preview-spinner')) return;
+
+    // Show spinner overlay while we wait
+    const spinner = el('div', { class: 'folio-cp-preview-spinner' });
+    preview.appendChild(spinner);
+
+    try {
+      const payload = {
+        type: 'template',
+        template: 'hero-short',
+        size: '512x512',
+        seed: displayName,
+        data: {
+          text: { headline: state.headline },
+          style: {
+            variant: 'dark',
+            colors: { primary: state.primary, accent: state.accent },
+            background: {
+              type: state.bgType === 'solid' ? 'solid' : 'gradient',
+              from: state.primary,
+              to: state.accent,
+              angle: 135,
+            },
+            pattern: state.bgType === 'pattern' ? 'dots' : 'none',
           },
-          pattern: state.bgType === 'pattern' ? 'dots' : 'none',
+          images: {},
         },
-        images: {},
-      },
-    };
-    const res = await flierCustomPreview(payload);
-    if (res.error) {
-      if (res.error === 'RATE_LIMITED') toast('Rate limited — try again in a moment', 'warning', 2500);
-      return;
+      };
+      const res = await flierCustomPreview(payload);
+      if (res.error) {
+        if (res.error === 'RATE_LIMITED') toast('Rate limited — try again in a moment', 'warning', 2500);
+        return;
+      }
+      setPreview(res.preview);
+      updateSaveButton();
+    } finally {
+      try { spinner.remove(); } catch {}
     }
-    setPreview(res.preview);
-    updateSaveButton();
   });
 
-  // ── Tab switching ──
+  // Tabs
   presetTab.addEventListener('click', () => {
     presetTab.classList.add('active');
     customTab.classList.remove('active');
@@ -1074,22 +1059,16 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
 
   // ── Footer ──
   const saveBtn = el('button', {
-    class: 'btn btn-primary',
-    type: 'button',
-    style: { flex: '1' },
+    class: 'btn btn-primary', type: 'button', style: { flex: '1' },
   }, 'Use this icon');
   const cancelBtn = el('button', {
-    class: 'btn btn-secondary',
-    type: 'button',
-    style: { flex: '1' },
-    onclick: onCancel,
+    class: 'btn btn-secondary', type: 'button', style: { flex: '1' }, onclick: onCancel,
   }, 'Cancel');
-  const footer = el('div', { class: 'folio-cp-tool-footer' }, cancelBtn, saveBtn);
-  container.appendChild(footer);
+  container.appendChild(el('div', { class: 'folio-cp-tool-footer' }, cancelBtn, saveBtn));
 
   function updateSaveButton() {
     const presetOk = presetSelection >= 0 && selectedPresetUrl;
-    const customOk = customTab.classList.contains('active') && preview.querySelector('img');
+    const customOk = customTab.classList.contains('active') && !!preview.querySelector('img');
     saveBtn.disabled = !(presetOk || customOk);
   }
   updateSaveButton();
@@ -1102,8 +1081,8 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
 
     try {
       if (presetTab.classList.contains('active') && selectedPresetUrl) {
-        const res = await flierUploadDataUrl(selectedPresetUrl, username);
-        if (res.error) throw new Error(res.error);
+        const res = await flierUploadDataUrl(selectedPresetUrl, username, 'icon');
+        if (res.error) throw new Error(res.error === 'RATE_LIMITED' ? 'Rate limited — try again later' : res.error);
         onSave(res.url);
         return;
       }
@@ -1131,7 +1110,7 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
           upload: { name: `icon_${username}_${Date.now()}` },
         };
         const res = await flierGenerateUpload(payload);
-        if (res.error) throw new Error(res.error);
+        if (res.error) throw new Error(res.error === 'RATE_LIMITED' ? 'Rate limited — try again later' : res.error);
         onSave(res.url);
         return;
       }
@@ -1143,7 +1122,6 @@ function buildIconTool({ username, displayName, isGuest, initialUrl, onSave, onC
   });
 
   loadPresets(false);
-
   return container;
 }
 
@@ -1158,6 +1136,33 @@ const COVER_TEMPLATES = [
   { id: 'scene-poster', label: 'Scene' },
   { id: 'quote-card', label: 'Quote' },
   { id: 'split-image-side', label: 'Split' },
+  { id: 'event-poster', label: 'Event' },
+  { id: 'stat-hero', label: 'Stat' },
+];
+
+const COVER_SCENES = [
+  { id: 'auto', label: 'Auto' },
+  { id: 'none', label: 'None' },
+  { id: 'ribbon', label: 'Ribbon' },
+  { id: 'grid_wave', label: 'Grid' },
+  { id: 'halftone', label: 'Halftone' },
+  { id: 'skyline', label: 'Skyline' },
+  { id: 'terminal', label: 'Terminal' },
+  { id: 'vinyl', label: 'Vinyl' },
+  { id: 'shelf', label: 'Shelf' },
+  { id: 'window_sill', label: 'Window' },
+  { id: 'glass_cards', label: 'Glass' },
+  { id: 'paper_stack', label: 'Paper' },
+];
+
+const COVER_PALETTES = [
+  { id: 'auto', label: 'Auto' },
+  { id: 'warm', label: 'Warm' },
+  { id: 'cool', label: 'Cool' },
+  { id: 'neon', label: 'Neon' },
+  { id: 'earth', label: 'Earth' },
+  { id: 'sunset', label: 'Sunset' },
+  { id: 'mono', label: 'Mono' },
 ];
 
 function buildCoverTool({ username, projectName, projectDescription, initialUrl, onSave, onCancel, toast }) {
@@ -1166,10 +1171,7 @@ function buildCoverTool({ username, projectName, projectDescription, initialUrl,
 
   const header = el('div', { class: 'folio-cp-tool-header' });
   const backBtn = el('button', {
-    class: 'folio-cp-tool-back',
-    type: 'button',
-    'aria-label': 'Back',
-    onclick: onCancel,
+    class: 'folio-cp-tool-back', type: 'button', 'aria-label': 'Back', onclick: onCancel,
   });
   backBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
   header.appendChild(backBtn);
@@ -1182,13 +1184,15 @@ function buildCoverTool({ username, projectName, projectDescription, initialUrl,
   const palette = pickDefaultPalette(projectName || 'project');
   const state = {
     template: 'browser-frame',
+    scene: 'auto',
+    scenePalette: 'auto',
     primary: palette.primary,
     accent: palette.accent,
     bgFrom: palette.primary,
     bgTo: palette.accent,
     bgAngle: 135,
     headline: (projectName || 'Untitled').slice(0, 120),
-    subheadline: (projectDescription || '').slice(0, 120),
+    subheadline: (projectDescription || '').slice(0, 160),
   };
 
   // Preview
@@ -1203,8 +1207,8 @@ function buildCoverTool({ username, projectName, projectDescription, initialUrl,
   }
   container.appendChild(preview);
 
-  // Template picker
-  const tplPills = el('div', { class: 'filter-pills' });
+  // ── Template pills ──
+  const tplPills = el('div', { class: 'folio-cp-pills' });
   COVER_TEMPLATES.forEach((t, i) => {
     const pill = el('button', {
       class: 'filter-pill' + (i === 0 ? ' active' : ''),
@@ -1223,17 +1227,53 @@ function buildCoverTool({ username, projectName, projectDescription, initialUrl,
     tplPills,
   ));
 
-  // Headline / subheadline
+  // ── Scene pills ──
+  const scenePills = el('div', { class: 'folio-cp-pills' });
+  COVER_SCENES.forEach((s, i) => {
+    const pill = el('button', {
+      class: 'filter-pill' + (i === 0 ? ' active' : ''),
+      type: 'button',
+      onclick: () => {
+        state.scene = s.id;
+        scenePills.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        schedulePreview();
+      },
+    }, s.label);
+    scenePills.appendChild(pill);
+  });
+  container.appendChild(el('div', { class: 'folio-cp-field' },
+    el('label', { class: 'folio-cp-field-label' }, 'Scene'),
+    scenePills,
+  ));
+
+  // ── Palette pills ──
+  const palettePills = el('div', { class: 'folio-cp-pills' });
+  COVER_PALETTES.forEach((p, i) => {
+    const pill = el('button', {
+      class: 'filter-pill' + (i === 0 ? ' active' : ''),
+      type: 'button',
+      onclick: () => {
+        state.scenePalette = p.id;
+        palettePills.querySelectorAll('.filter-pill').forEach(x => x.classList.remove('active'));
+        pill.classList.add('active');
+        schedulePreview();
+      },
+    }, p.label);
+    palettePills.appendChild(pill);
+  });
+  container.appendChild(el('div', { class: 'folio-cp-field' },
+    el('label', { class: 'folio-cp-field-label' }, 'Scene palette'),
+    palettePills,
+  ));
+
+  // ── Headline / Subheadline ──
   const headlineInput = el('input', {
-    class: 'input',
-    maxlength: '120',
-    value: state.headline,
+    class: 'input', maxlength: '120', value: state.headline,
     oninput: (e) => { state.headline = e.target.value; schedulePreview(); },
   });
   const subheadlineInput = el('input', {
-    class: 'input',
-    maxlength: '120',
-    value: state.subheadline,
+    class: 'input', maxlength: '160', value: state.subheadline,
     oninput: (e) => { state.subheadline = e.target.value; schedulePreview(); },
   });
 
@@ -1246,21 +1286,16 @@ function buildCoverTool({ username, projectName, projectDescription, initialUrl,
     subheadlineInput,
   ));
 
-  // Colors
-  function colorRow(label, initial, onChange) {
-    const colorInput = el('input', { type: 'color', value: initial });
+  // ── Colors ──
+  function colorRow(label, initialHex, onChange) {
+    const colorInput = el('input', { type: 'color', value: initialHex });
     const hexInput = el('input', {
-      class: 'input',
-      maxlength: '7',
-      value: initial,
+      class: 'input', maxlength: '7', value: initialHex,
       style: { flex: '1', minWidth: '0', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' },
     });
     const swatch = el('div', { class: 'folio-cp-color-swatch' });
     swatch.appendChild(colorInput);
-    colorInput.addEventListener('input', (e) => {
-      hexInput.value = e.target.value;
-      onChange(e.target.value);
-    });
+    colorInput.addEventListener('input', (e) => { hexInput.value = e.target.value; onChange(e.target.value); });
     hexInput.addEventListener('input', (e) => {
       const v = clampHex(e.target.value);
       if (v) { colorInput.value = v; onChange(v); }
@@ -1272,46 +1307,40 @@ function buildCoverTool({ username, projectName, projectDescription, initialUrl,
   }
 
   container.appendChild(colorRow('Primary', state.primary, (v) => {
-    state.primary = v;
-    state.bgFrom = v;
-    schedulePreview();
+    state.primary = v; state.bgFrom = v; schedulePreview();
   }));
   container.appendChild(colorRow('Accent', state.accent, (v) => {
-    state.accent = v;
-    state.bgTo = v;
-    schedulePreview();
+    state.accent = v; state.bgTo = v; schedulePreview();
   }));
 
-  // Angle slider
+  // ── Angle slider ──
+  const angleLabel = el('span', { style: { fontSize: '10px', color: 'var(--theme-text-tertiary)' } }, state.bgAngle + '°');
   const angleInput = el('input', {
-    type: 'range',
-    min: '0',
-    max: '360',
-    value: String(state.bgAngle),
-    class: 'folio-cp-slider',
-    oninput: (e) => { state.bgAngle = Number(e.target.value); schedulePreview(); },
+    type: 'range', min: '0', max: '360', value: String(state.bgAngle), class: 'folio-cp-slider',
+    oninput: (e) => {
+      state.bgAngle = Number(e.target.value);
+      angleLabel.textContent = state.bgAngle + '°';
+      schedulePreview();
+    },
   });
   container.appendChild(el('div', { class: 'folio-cp-field' },
-    el('label', { class: 'folio-cp-field-label' }, 'Gradient angle'),
+    el('label', { class: 'folio-cp-field-label', style: { display: 'flex', justifyContent: 'space-between' } },
+      el('span', {}, 'Gradient angle'),
+      angleLabel,
+    ),
     angleInput,
   ));
 
-  // Footer
+  // ── Footer ──
   const saveBtn = el('button', {
-    class: 'btn btn-primary',
-    type: 'button',
-    style: { flex: '1' },
+    class: 'btn btn-primary', type: 'button', style: { flex: '1' },
   }, 'Use this cover');
   const cancelBtn = el('button', {
-    class: 'btn btn-secondary',
-    type: 'button',
-    style: { flex: '1' },
-    onclick: onCancel,
+    class: 'btn btn-secondary', type: 'button', style: { flex: '1' }, onclick: onCancel,
   }, 'Cancel');
   container.appendChild(el('div', { class: 'folio-cp-tool-footer' }, cancelBtn, saveBtn));
 
   let pendingPreview = null;
-  let generating = false;
 
   function setPreview(url) {
     preview.innerHTML = '';
@@ -1346,6 +1375,9 @@ function buildCoverTool({ username, projectName, projectDescription, initialUrl,
             to: state.bgTo,
             angle: state.bgAngle,
           },
+          scene: state.scene,
+          scenePalette: state.scenePalette,
+          sceneOpacity: 0.85,
         },
         images: {},
       },
@@ -1353,9 +1385,12 @@ function buildCoverTool({ username, projectName, projectDescription, initialUrl,
     };
   }
 
-  const schedulePreview = makeThrottler(async () => {
-    if (generating) return;
-    generating = true;
+  // ✅ Live preview: debounced
+  const schedulePreview = makePreviewScheduler(async () => {
+    if (preview.querySelector('.folio-cp-preview-spinner')) return;
+    const spinner = el('div', { class: 'folio-cp-preview-spinner' });
+    preview.appendChild(spinner);
+
     try {
       const res = await flierCustomPreview(buildPayload('preview'));
       if (res.error) {
@@ -1366,17 +1401,18 @@ function buildCoverTool({ username, projectName, projectDescription, initialUrl,
       setPreview(res.preview);
       saveBtn.disabled = false;
     } finally {
-      generating = false;
+      try { spinner.remove(); } catch {}
     }
   });
 
+  // Save
   saveBtn.addEventListener('click', async () => {
     saveBtn.disabled = true;
     const prev = saveBtn.textContent;
     saveBtn.textContent = 'Saving…';
     try {
       const res = await flierGenerateUpload(buildPayload('upload'));
-      if (res.error) throw new Error(res.error);
+      if (res.error) throw new Error(res.error === 'RATE_LIMITED' ? 'Rate limited — try again later' : res.error);
       onSave(res.url);
     } catch (err) {
       toast(err.message || 'Could not save cover', 'error');
@@ -1385,6 +1421,7 @@ function buildCoverTool({ username, projectName, projectDescription, initialUrl,
     }
   });
 
+  // Initial preview
   schedulePreview();
 
   return container;
