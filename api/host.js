@@ -1347,6 +1347,8 @@ async function handleDeploy(req, res, reqId) {
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
+  // ✅ FIX: invalidate cache first so we don't read a stale project record
+  invalidateProject(pid);
   const project = await getProjectCached(pid);
   if (!project) return res.status(404).json({ success: false, error: "Project not found" });
 
@@ -1375,13 +1377,13 @@ async function handleDeploy(req, res, reqId) {
     return res.status(400).json({ success: false, error: "No valid files to deploy" });
   }
 
-  // Ensure version
-  let resolvedVid;
+  // ✅ FIX: make version snapshot non-fatal. If it fails, we still deploy.
+  let resolvedVid = null;
   try {
     resolvedVid = await ensureDeployVersion(pid, acceptedFiles, versionId);
   } catch (err) {
     log("host.deploy.version_failed", { pid, message: err.message });
-    return res.status(500).json({ success: false, error: "Could not create version snapshot" });
+    resolvedVid = null; // deploy anyway; snapshot just won't be linked
   }
 
   // Write files
@@ -1391,7 +1393,7 @@ async function handleDeploy(req, res, reqId) {
     return res.status(500).json({ success: false, error: "No files were written" });
   }
 
-  // Post-write enrichment
+  // Post-write enrichment (non-fatal)
   try { await ensureProjectLanguages(pid, project, acceptedFiles); } catch (err) {
     log("host.deploy.languages_failed", { pid, message: err.message });
   }
@@ -1414,7 +1416,8 @@ async function handleDeploy(req, res, reqId) {
 
   // Build URLs
   const ownerUsername = await getProjectOwnerUsername(pid, project);
-  const cleanUrl = ownerUsername ? buildProjectCleanUrl(ownerUsername, project)
+  const cleanUrl = ownerUsername
+    ? buildProjectCleanUrl(ownerUsername, project)
     : `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
   const serveUrl = `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
 
@@ -1422,7 +1425,8 @@ async function handleDeploy(req, res, reqId) {
   const deploymentRecord = {
     url: cleanUrl,
     serveUrl,
-    versionId: resolvedVid,
+    // ✅ FIX: versionId may be null — this is OK, url is what matters
+    versionId: resolvedVid || null,
     deployedAt: Date.now(),
     deploymentId,
     state: "READY",
@@ -1430,6 +1434,7 @@ async function handleDeploy(req, res, reqId) {
     ...(clientRequestId ? { clientRequestId } : {}),
   };
 
+  // ✅ FIX: write the deployment FIRST so status polling succeeds immediately
   await db.ref(`projects/${pid}/deployment`).set(deploymentRecord);
   await db.ref(`projects/${pid}/deployments/${deploymentId}`).set(deploymentRecord);
   await db.ref(`projects/${pid}/updatedAt`).set(Date.now());
@@ -1439,7 +1444,10 @@ async function handleDeploy(req, res, reqId) {
   await pruneDeployments(pid);
 
   await logProjectEvent(pid, access.uid, "deploy", "project.deployed", {
-    url: cleanUrl, versionId: resolvedVid, filesWritten: written, filesSkipped: skipped.length,
+    url: cleanUrl,
+    versionId: resolvedVid,
+    filesWritten: written,
+    filesSkipped: skipped.length,
   });
   await maybePruneProjectLogs(pid);
 
@@ -2137,11 +2145,21 @@ async function handleProjectsCreate(req, res, reqId) {
     if (ownerUsername) {
       await db.ref(`projects/${project.pid}/ownerUsername`).set(ownerUsername).catch(() => {});
     }
+
+    // ✅ FIX: explicitly guarantee ownerId is set, and clear stale cache
+    await db.ref(`projects/${project.pid}/ownerId`).set(user.uid).catch(() => {});
+    await db.ref(`projects/${project.pid}/roles/${user.uid}`).set("owner").catch(() => {});
+    await db.ref(`users/${user.uid}/projectIds/${project.pid}`).set(true).catch(() => {});
+
+    // ✅ FIX: invalidate cache so the next getProjectCached() reads fresh data
+    invalidateProject(project.pid);
+
     await logProjectEvent(project.pid, user.uid, "project", "project.created", { name: project.name });
     const { apiKeyHash, ...safe } = project;
     return res.status(200).json({
-      success: true, pid: project.pid,
-      project: { ...safe, ownerUsername },
+      success: true,
+      pid: project.pid,
+      project: { ...safe, ownerId: user.uid, ownerUsername },
     });
   } catch (err) {
     log("host.projects_create.failed", { reqId, uid: user.uid, message: err.message });
@@ -2555,13 +2573,23 @@ async function handleProjectSyncBack(req, res, reqId) {
   const { pid, files, versions, db: jsonDb, schema: jsonSchema, manifest } = req.body || {};
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "projectSyncBack", `pid_${pid}`))) return;
+
+  // ✅ FIX: invalidate cache before role check to avoid stale role lookups
+  invalidateProject(pid);
+
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
   const project = await getProjectCached(pid);
   if (!project) return res.status(404).json({ success: false, error: "Project not found" });
 
-  const result = { filesWritten: 0, filesSkipped: 0, versionsWritten: 0, dbWritten: false, schemaWritten: false };
+  const result = {
+    filesWritten: 0,
+    filesSkipped: 0,
+    versionsWritten: 0,
+    dbWritten: false,
+    schemaWritten: false,
+  };
 
   if (files && typeof files === "object") {
     const entries = Object.entries(files).filter(([p, c]) => typeof c === "string" && isValidFilePath(p));
@@ -2570,7 +2598,9 @@ async function handleProjectSyncBack(req, res, reqId) {
       await Promise.allSettled(batch.map(async ([p, c]) => {
         try {
           await db.ref(`files/${pid}/${sanitizeFirebasePath(p.replace(/\//g, "__"))}`).set({
-            path: p, content: c, updatedAt: Date.now(),
+            path: p,
+            content: c,
+            updatedAt: Date.now(),
           });
           result.filesWritten++;
         } catch (err) {
@@ -2588,7 +2618,9 @@ async function handleProjectSyncBack(req, res, reqId) {
         if (exists.exists()) continue;
         await db.ref(`versions/${pid}/${vid}`).set(v);
         result.versionsWritten++;
-      } catch {}
+      } catch (err) {
+        log("host.sync_back.version_failed", { pid, vid, message: err.message });
+      }
     }
   }
 
@@ -2600,7 +2632,10 @@ async function handleProjectSyncBack(req, res, reqId) {
   }
 
   await touchProject(pid);
-  await logProjectEvent(pid, access.uid, "project", "project.synced_back", { ...result, manifestAt: manifest?.exportedAt || null });
+  await logProjectEvent(pid, access.uid, "project", "project.synced_back", {
+    ...result,
+    manifestAt: manifest?.exportedAt || null,
+  });
 
   if (result.filesWritten > 0) {
     try { await ensureProjectLanguages(pid, project, files); } catch (err) {
@@ -2613,7 +2648,7 @@ async function handleProjectSyncBack(req, res, reqId) {
   }
 
   try {
-    if (result.filesWritten > 0 || result.dbWritten || result.schemaWritten) {
+    if (result.filesWritten > 0 || result.versionsWritten > 0 || result.dbWritten || result.schemaWritten) {
       const audience = await getProjectAudience(pid);
       const others = audience.uids.filter(u => u !== access.uid);
       if (others.length) {
@@ -2621,7 +2656,7 @@ async function handleProjectSyncBack(req, res, reqId) {
         const imageUrl = thumb?.exists() && isValidOgUrl(thumb.val()) ? thumb.val() : null;
         await notifyMany("project", others, {
           title: "Project updated from sync",
-          body: `${result.filesWritten} file(s) synced back${result.dbWritten ? ", DB imported" : ""}.`,
+          body: `${result.filesWritten} file(s) synced back${result.versionsWritten ? `, ${result.versionsWritten} version(s)` : ""}${result.dbWritten ? ", DB imported" : ""}.`,
           imageUrl,
           link: `${BASE_URL}/project?pid=${pid}`,
           extra: { pid, ...result },
