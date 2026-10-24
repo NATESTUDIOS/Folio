@@ -2681,7 +2681,6 @@ async function generateCoverViaFlier({
   grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
 
   try {
-    // ✅ FIX: use apiFetch so Authorization header is attached
     const res = await apiFetch(API_FLIER + '?action=avatar/preview', {
       method: 'POST',
       body: JSON.stringify({
@@ -2698,11 +2697,28 @@ async function generateCoverViaFlier({
         btn.className = 'icon-option';
         btn.type = 'button';
         btn.innerHTML = `<img src="${escapeAttr(v.dataUrl)}" alt=""><span class="icon-label">${escapeHTML(v.label || v.id)}</span>`;
-        btn.addEventListener('click', () => {
-          selectedUrl = v.dataUrl; // data URL is fine — save endpoint accepts it
-          grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
-          btn.classList.add('selected');
-          $('iconPickerSave').disabled = false;
+        btn.addEventListener('click', async () => {
+          // Upload immediately so we store an HTTPS URL, not a data URI.
+          // Data URIs inflate the project record and get served on every
+          // projects/list response — this keeps the record ~200 bytes.
+          btn.disabled = true;
+          try {
+            const up = await apiFetch(API_FLIER + '?action=upload', {
+              method: 'POST',
+              body: JSON.stringify({ dataUrl: v.dataUrl, kind: 'icon' }),
+            });
+            if (!up.ok || !up.data?.success || !up.data.url) {
+              throw new Error(up.data?.error || 'Upload failed');
+            }
+            selectedUrl = up.data.url;
+            grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
+            btn.classList.add('selected');
+            $('iconPickerSave').disabled = false;
+          } catch (err) {
+            toast(err.message || 'Upload failed', 'error');
+          } finally {
+            btn.disabled = false;
+          }
         });
         grid.appendChild(btn);
       });
@@ -2734,13 +2750,9 @@ async function generateCoverViaFlier({
         r.readAsDataURL(file);
       });
 
-      // ✅ FIX: use apiFetch, POST /flier?action=upload
       const res = await apiFetch(API_FLIER + '?action=upload', {
         method: 'POST',
-        body: JSON.stringify({
-          dataUrl,
-          kind: 'icon',
-        }),
+        body: JSON.stringify({ dataUrl, kind: 'icon' }),
       });
 
       if (!res.ok || !res.data?.success || !res.data.url) {
@@ -5446,9 +5458,34 @@ fetch('${API_HOST}?action=db/set', {
     renderPanel();
     wireGlobal();
 
-    loadNotificationStats().catch(() => {});
+        loadNotificationStats().catch(() => {});
     refreshSyncQueueCount().catch(() => {});
     if (S.online && S.syncQueueCount > 0) flushSyncQueue();
+
+    // ─── OFFLINE-FIRST: auto-promote local projects ─────────────
+    // When the dashboard is opened while signed in and online, promote
+    // any local_* projects so their "not synced" badge disappears without
+    // the user having to visit the editor first.
+    if (S.session && S.online && !S.isLocalOnly) {
+      import('/js/create-project.js').then(mod => {
+        if (typeof mod.promoteQueuedLocalProjects === 'function') {
+          mod.promoteQueuedLocalProjects().catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
+    // Also promote when the network comes back online mid-session.
+    // Register once at boot so we don't stack listeners on re-renders.
+    window.addEventListener('online', () => {
+      if (S.session && !S.isLocalOnly) {
+        import('/js/create-project.js').then(mod => {
+          if (typeof mod.promoteQueuedLocalProjects === 'function') {
+            mod.promoteQueuedLocalProjects().catch(() => {});
+          }
+        }).catch(() => {});
+      }
+    });
+    // ─── END offline-first promotion ────────────────────────────
   }
 
   document.addEventListener('DOMContentLoaded', boot);

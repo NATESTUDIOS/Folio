@@ -5037,56 +5037,56 @@ async function boot() {
 if (handleNewProjectImageReturn()) {
   // Returned true — form will reopen, skip the "image updated" toast
 } else {
-  // Existing behaviour for return-from-tools when editing an existing project
+  // Handle return-from-tools when editing an existing project.
   const bootParams = new URLSearchParams(location.search);
-const generatedSlot = bootParams.get('generated');
-const generatedUrl = bootParams.get('url');
-if (generatedSlot) {
-  setTimeout(async () => {
-    // Strip the return-marker params immediately so a refresh doesn't
-    // re-trigger this handler.
+  const generatedSlot = bootParams.get('generated');
+  const generatedUrl = bootParams.get('url');
+
+  if (generatedSlot) {
+    // Strip the return markers immediately so a refresh doesn't re-trigger.
     const cleanUrl = new URL(location.href);
     cleanUrl.searchParams.delete('generated');
     cleanUrl.searchParams.delete('url');
     try { history.replaceState(null, '', cleanUrl.toString()); } catch {}
 
-    toast(`Image updated — ${generatedSlot}`, 'success', 3000);
+    setTimeout(async () => {
+      toast(`Image updated — ${generatedSlot}`, 'success', 3000);
 
-    // If the project isn't loaded yet (slow network, race), retry a few
-    // times before giving up.
-    let attempts = 0;
-    const refresh = async () => {
-      if (!S.currentProject) {
-        if (attempts < 5) {
-          attempts++;
-          setTimeout(refresh, 400);
+      // If the project hasn't loaded yet (slow network, race), retry for
+      // up to ~2 seconds before giving up.
+      let attempts = 0;
+      const refresh = async () => {
+        if (!S.currentProject) {
+          if (attempts < 5) {
+            attempts++;
+            setTimeout(refresh, 400);
+            return;
+          }
+          console.warn('[Handoff] Project never loaded; cannot refresh icon');
           return;
         }
-        console.warn('[Handoff] Project never loaded; can\'t refresh icon');
-        return;
-      }
-      try {
-        const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
-        if (res.ok && res.data?.success && res.data.project) {
-          const fresh = normalizeServerProject(res.data.project);
-          S.currentProject = { ...S.currentProject, ...fresh };
-          const local = await db.getProject(S.currentProject.pid);
-          if (local) {
-            await db.putProject({
-              ...local,
-              iconUrl: fresh.iconUrl || generatedUrl || local.iconUrl || null,
-              name: fresh.name,
-              updatedAt: fresh.updatedAt,
-            });
+        try {
+          const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
+          if (res.ok && res.data?.success && res.data.project) {
+            const fresh = normalizeServerProject(res.data.project);
+            S.currentProject = { ...S.currentProject, ...fresh };
+            const local = await db.getProject(S.currentProject.pid);
+            if (local) {
+              await db.putProject({
+                ...local,
+                iconUrl: fresh.iconUrl || generatedUrl || local.iconUrl || null,
+                name: fresh.name,
+                updatedAt: fresh.updatedAt,
+              });
+            }
+            updateBreadcrumb();
+            renderSidebar();
           }
-          updateBreadcrumb();
-          renderSidebar();
-        }
-      } catch {}
-    };
-    refresh();
-  }, 500);
-}
+        } catch {}
+      };
+      refresh();
+    }, 500);
+  }
 }
 
   loadPrefs();
@@ -5136,7 +5136,7 @@ if (generatedSlot) {
     }).catch(() => {});
   }
 
-  setTimeout(() => {
+    setTimeout(() => {
     try {
       const raw = localStorage.getItem(STORAGE.pendingInsert);
       if (raw) {
@@ -5151,6 +5151,37 @@ if (generatedSlot) {
       }
     } catch {}
   }, 800);
+
+  // ─── OFFLINE-FIRST: auto-promote local projects ───────────────
+  // When the user opens the editor while signed in and online, any
+  // projects that were created offline (or as a guest, then signed in)
+  // get promoted to server projects in the background.
+  if (!S.isGuest && S.online) {
+    import('/js/create-project.js').then(mod => {
+      if (typeof mod.promoteQueuedLocalProjects === 'function') {
+        mod.promoteQueuedLocalProjects().then(result => {
+          if (result && result.promoted > 0) {
+            // Reload the recent-projects list so the sidebar reflects
+            // the new server pids instead of the old local_ ones.
+            renderEmptyRecent().catch(() => {});
+          }
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+  }
+
+  // Also promote when the network comes back online mid-session.
+  // This fires after `boot()` returns, so we register it once at boot.
+  window.addEventListener('online', () => {
+    if (!S.isGuest) {
+      import('/js/create-project.js').then(mod => {
+        if (typeof mod.promoteQueuedLocalProjects === 'function') {
+          mod.promoteQueuedLocalProjects().catch(() => {});
+        }
+      }).catch(() => {});
+    }
+  });
+  // ─── END offline-first promotion ──────────────────────────────
 }
 
 boot().catch(err => {
