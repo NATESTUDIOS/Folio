@@ -44,6 +44,8 @@
   } catch (e) {}
 })();
 </script>
+<script src="/install.js" defer></script>
+<script src="/update.js" defer></script>
 <script src="/fcm-client.js" defer></script>
 
 <style>
@@ -2691,7 +2693,6 @@ svg { display: block; }
   async function loadDatabaseInfo() {
     const info = { actual: null, code: DB_VERSION, stores: {} };
 
-    // Actual version
     try {
       if (indexedDB.databases) {
         const dbs = await indexedDB.databases();
@@ -2714,7 +2715,6 @@ svg { display: block; }
       }
     } catch { info.actual = null; }
 
-    // Store counts
     try {
       const conn = await new Promise((resolve, reject) => {
         const req = indexedDB.open(DB_NAME);
@@ -2755,21 +2755,10 @@ svg { display: block; }
     const canInstall = !!S.installPrompt && !isStandalone;
     const browserStorageUsed = formatBytes(S.storageEstimate?.usage || 0);
     const swVersion = S.swVersion || '—';
-    const hasUpdate = !!S.swRegistration?.waiting;
 
     return `
       <section class="settings-section" id="section-pwa">
         <h2 class="section-heading">${svg('download', 17, 2.2)} PWA & install</h2>
-
-        ${hasUpdate ? `
-          <div class="card" style="border-color:var(--theme-primary-glow);">
-            <div class="card-body" style="display:flex;align-items:center;gap:10px;">
-              <div style="color:var(--theme-primary);">${svg('refresh', 18, 2.2)}</div>
-              <div style="flex:1;font-size:11.5px;color:var(--theme-text-secondary);">A new version of Folio is available.</div>
-              <button class="btn btn-sm btn-primary" id="updateNowBtn">Update now</button>
-            </div>
-          </div>
-        ` : ''}
 
         <div class="card">
           <div class="card-header"><div class="card-title">${svg('download', 15, 2.2)} Install</div></div>
@@ -3085,7 +3074,6 @@ svg { display: block; }
     $('installAppBtn')?.addEventListener('click', triggerInstall);
     $('checkUpdatesBtn')?.addEventListener('click', checkForUpdates);
     $('clearCacheBtn')?.addEventListener('click', confirmClearCache);
-    $('updateNowBtn')?.addEventListener('click', applyUpdateNow);
 
     // Data
     $('exportSettingsBtn')?.addEventListener('click', exportSettings);
@@ -3624,26 +3612,15 @@ svg { display: block; }
   }
 
   async function checkForUpdates() {
-    if (!S.swRegistration) { toast('Service worker not registered', 'warning'); return; }
+    if (!window.FOLIO?.update) {
+      toast('Update system unavailable', 'warning');
+      return;
+    }
     try {
-      await S.swRegistration.update();
-      if (S.swRegistration.waiting) {
-        toast('Update available — reload to apply', 'info', 4000);
-        renderSection('pwa');
-      } else {
-        toast('You\'re up to date', 'success');
-      }
-    } catch { toast('Update check failed', 'error'); }
-  }
-
-  function applyUpdateNow() {
-    const reg = S.swRegistration;
-    if (!reg?.waiting) return;
-    try {
-      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-      window.location.reload();
+      await window.FOLIO.update.check();
+      // update.js shows its own dialog if there's a waiting worker
     } catch {
-      window.location.reload();
+      toast('Update check failed', 'error');
     }
   }
 
