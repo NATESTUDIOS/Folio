@@ -1,943 +1,744 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0a0c10">
-<title>Notification Test Console — Folio</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Folio AI — API Test Console</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  :root{
-    color-scheme:dark;
-    --bg:#0a0c10;
-    --card:#151922;
-    --border:rgba(255,255,255,0.09);
-    --text:#e8ecf1;
-    --muted:rgba(232,236,241,0.62);
-    --amber:#F59E0B;
-    --amber-bright:#fbbf24;
-    --green:#22c55e;
-    --red:#ef4444;
-    --blue:#3b82f6;
+  :root {
+    --bg: #0e0f12;
+    --surface: #16181d;
+    --surface-2: #1e2128;
+    --border: #2a2e37;
+    --text: #e6e8ee;
+    --text-dim: #8b909c;
+    --accent: #6ea8ff;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
-  body{
-    background:var(--bg);
-    background-image:radial-gradient(circle at 50% -10%,rgba(245,158,11,0.14) 0%,transparent 60%);
-    color:var(--text);
-    font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-    min-height:100vh;
-    padding:24px;
-    line-height:1.5;
-    font-size:14px;
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 20px;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, sans-serif;
   }
-  .wrap{max-width:1200px;margin:0 auto}
-  h1{font-size:22px;font-weight:800;letter-spacing:-0.4px;margin-bottom:4px}
-  .subtitle{color:var(--muted);font-size:13px;margin-bottom:20px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  @media (max-width:900px){.grid{grid-template-columns:1fr}}
-
-  .card{
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:14px;
-    padding:16px;
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
   }
-  .card h2{
-    font-size:14px;
-    font-weight:800;
-    text-transform:uppercase;
-    letter-spacing:0.5px;
-    margin-bottom:12px;
-    color:var(--amber);
-    display:flex;
-    align-items:center;
-    gap:8px;
+  .sub {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-bottom: 20px;
   }
-  .card h2 .badge{
-    font-size:10px;
-    background:rgba(245,158,11,0.15);
-    color:var(--amber);
-    padding:2px 8px;
-    border-radius:999px;
-    font-weight:700;
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
   }
-
-  label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600}
-  input,select,textarea{
-    width:100%;
-    background:rgba(255,255,255,0.04);
-    border:1px solid var(--border);
-    border-radius:8px;
-    padding:9px 12px;
-    color:var(--text);
-    font-family:inherit;
-    font-size:13px;
-    margin-bottom:10px;
-    transition:border-color 0.15s;
+  @media (max-width: 800px) {
+    .grid { grid-template-columns: 1fr; }
   }
-  input:focus,select:focus,textarea:focus{
-    outline:none;
-    border-color:var(--amber);
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
   }
-  textarea{min-height:80px;resize:vertical;font-family:ui-monospace,Menlo,monospace;font-size:12px}
-
-  button{
-    background:var(--amber);
-    color:var(--bg);
-    border:none;
-    padding:10px 16px;
-    border-radius:8px;
-    font-weight:800;
-    font-size:13px;
-    cursor:pointer;
-    transition:background 0.15s, transform 0.05s;
+  .card h2 {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin: 0 0 12px;
   }
-  button:hover{background:var(--amber-bright)}
-  button:active{transform:scale(0.98)}
-  button:disabled{opacity:0.5;cursor:not-allowed}
-  button.ghost{
-    background:transparent;
-    color:var(--text);
-    border:1px solid var(--border);
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    margin-top: 10px;
   }
-  button.ghost:hover{background:rgba(255,255,255,0.05)}
-  button.danger{background:var(--red);color:#fff}
-  button.danger:hover{background:#f87171}
-
-  .btn-row{display:flex;gap:8px;flex-wrap:wrap}
-
-  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .field-row.full{grid-template-columns:1fr}
-
-  pre.log{
-    background:#000;
-    border:1px solid var(--border);
-    border-radius:8px;
-    padding:10px;
-    font-family:ui-monospace,Menlo,monospace;
-    font-size:11px;
-    color:#9ca3af;
-    max-height:340px;
-    overflow:auto;
-    white-space:pre-wrap;
-    word-break:break-all;
-    margin-top:8px;
+  input, select, textarea {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
   }
-  pre.log .ok{color:var(--green)}
-  pre.log .err{color:var(--red)}
-  pre.log .info{color:var(--blue)}
-  pre.log .warn{color:var(--amber)}
-
-  .event-list{display:flex;flex-direction:column;gap:6px}
-  .event-btn{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    width:100%;
-    padding:9px 12px;
-    background:rgba(255,255,255,0.03);
-    border:1px solid var(--border);
-    border-radius:8px;
-    color:var(--text);
-    font-size:12px;
-    font-weight:600;
-    cursor:pointer;
-    text-align:left;
-    transition:all 0.15s;
-    margin:0;
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
   }
-  .event-btn:hover{
-    background:rgba(245,158,11,0.08);
-    border-color:rgba(245,158,11,0.4);
+  textarea {
+    font-family: var(--mono);
+    font-size: 12px;
+    resize: vertical;
+    min-height: 100px;
   }
-  .event-btn:active{transform:scale(0.995)}
-  .event-btn .tag{
-    font-size:10px;
-    padding:2px 6px;
-    border-radius:4px;
-    font-weight:800;
-    letter-spacing:0.3px;
-    text-transform:uppercase;
+  .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
   }
-  .tag.project{background:rgba(59,130,246,0.2);color:#93c5fd}
-  .tag.invite{background:rgba(168,85,247,0.2);color:#c4b5fd}
-  .tag.storage{background:rgba(234,88,12,0.2);color:#fdba74}
-  .tag.security{background:rgba(239,68,68,0.2);color:#fca5a5}
-  .tag.analytics{background:rgba(34,197,94,0.2);color:#86efac}
-  .tag.system{background:rgba(148,163,184,0.2);color:#cbd5e1}
-  .tag.admin{background:rgba(245,158,11,0.2);color:#fcd34d}
-
-  .status-pill{
-    display:inline-flex;
-    align-items:center;
-    gap:6px;
-    padding:4px 10px;
-    border-radius:999px;
-    font-size:11px;
-    font-weight:700;
+  .row > * { flex: 1; }
+  .row > button { flex: 0 0 auto; }
+  button {
+    background: var(--accent);
+    color: #0e0f12;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s;
   }
-  .status-pill.ok{background:rgba(34,197,94,0.15);color:#86efac}
-  .status-pill.err{background:rgba(239,68,68,0.15);color:#fca5a5}
-  .status-pill.idle{background:rgba(148,163,184,0.15);color:#cbd5e1}
-  .status-pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
-
-  .divider{height:1px;background:var(--border);margin:14px 0}
-  .hint{font-size:11px;color:var(--muted);margin-top:4px}
-  details summary{
-    cursor:pointer;
-    color:var(--muted);
-    font-size:12px;
-    padding:6px 0;
+  button:hover:not(:disabled) { filter: brightness(1.1); }
+  button:disabled {
+    background: var(--surface-2);
+    color: var(--text-dim);
+    cursor: not-allowed;
   }
-  details summary:hover{color:var(--text)}
-  details[open] summary{margin-bottom:8px}
-
-  .tabs{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap}
-  .tab{
-    padding:6px 12px;
-    border-radius:6px;
-    background:rgba(255,255,255,0.04);
-    border:1px solid transparent;
-    color:var(--muted);
-    font-size:12px;
-    font-weight:600;
-    cursor:pointer;
+  button.ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 400;
   }
-  .tab.active{
-    background:rgba(245,158,11,0.15);
-    color:var(--amber);
-    border-color:rgba(245,158,11,0.3);
+  button.ghost:hover:not(:disabled) {
+    background: var(--surface-2);
+    filter: none;
   }
+  .actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .actions button { flex: 1; }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+  }
+  .status::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+  .status.ok::before { background: var(--green); }
+  .status.err::before { background: var(--red); }
+  .status.busy::before { background: var(--yellow); animation: pulse 1s infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .kv {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    font-size: 12px;
+    margin-top: 10px;
+  }
+  .kv dt { color: var(--text-dim); }
+  .kv dd { margin: 0; font-family: var(--mono); }
+  .out {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 400px;
+    overflow: auto;
+    line-height: 1.45;
+  }
+  .out.empty { color: var(--text-dim); font-style: italic; }
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    margin-right: 6px;
+  }
+  .badge.green { color: var(--green); border-color: rgba(74,222,128,0.3); }
+  .badge.red { color: var(--red); border-color: rgba(248,113,113,0.3); }
+  .badge.yellow { color: var(--yellow); border-color: rgba(251,191,36,0.3); }
+  .badge.accent { color: var(--accent); border-color: rgba(110,168,255,0.3); }
+  .artifacts {
+    margin-top: 10px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .artifact {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow: auto;
+  }
+  .hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    line-height: 1.4;
+  }
+  code {
+    font-family: var(--mono);
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  .full { grid-column: 1 / -1; }
 </style>
 </head>
 <body>
 <div class="wrap">
-
-  <h1>🧪 Notification Test Console</h1>
-  <p class="subtitle">Fire every event in the system. See logs, requests, and responses in real time.</p>
-
-  <!-- ═══════════════════════════════════════════════════════
-       CONFIG
-       ═══════════════════════════════════════════════════════ -->
-  <div class="card" style="margin-bottom:16px">
-    <h2>⚙️ Configuration <span class="badge">required</span></h2>
-    <div class="field-row">
-      <div>
-        <label>Base URL</label>
-        <input id="cfgBaseUrl" placeholder="https://foliostudios.vercel.app" value="https://foliostudios.vercel.app">
-      </div>
-      <div>
-        <label>Admin API Key</label>
-        <input id="cfgAdminKey" type="password" placeholder="x-api-key value">
-      </div>
-    </div>
-    <div class="field-row">
-      <div>
-        <label>Your Session Token (Bearer)</label>
-        <input id="cfgSession" type="password" placeholder="JWT from localStorage">
-      </div>
-      <div>
-        <label>Your UID</label>
-        <input id="cfgUid" placeholder="your_firebase_uid">
-      </div>
-    </div>
-    <div class="field-row">
-      <div>
-        <label>Project ID (pid)</label>
-        <input id="cfgPid" placeholder="p_1234567890_abc123">
-      </div>
-      <div>
-        <label>Other user's UID (for invite tests)</label>
-        <input id="cfgOtherUid" placeholder="other_user_uid">
-      </div>
-    </div>
-    <div class="btn-row" style="margin-top:6px">
-      <button onclick="saveConfig()">💾 Save Config</button>
-      <button class="ghost" onclick="loadConfig()">🔄 Reload</button>
-      <button class="ghost" onclick="checkHealth()">💚 Health Check</button>
-      <button class="ghost" onclick="checkTopicInfo()">📊 Topic Info</button>
-      <button class="ghost" onclick="checkHistory()">🔔 Fetch History</button>
-      <span id="healthStatus" class="status-pill idle" style="margin-left:auto">
-        <span class="dot"></span><span>Not checked</span>
-      </span>
-    </div>
-    <p class="hint">Your UID must be the account that will receive the test notifications. The session token is only needed for actions that require auth (which call the real APIs).</p>
-  </div>
+  <h1>Folio AI — API Test Console</h1>
+  <div class="sub">Test your <code>/api/ai</code> endpoint directly from the browser.</div>
 
   <div class="grid">
+    <!-- LEFT: Request -->
+    <div class="card">
+      <h2>Request</h2>
 
-    <!-- ═══════════════════════════════════════════════════════
-         LEFT COLUMN — Fire events
-         ═══════════════════════════════════════════════════════ -->
-    <div>
+      <label>Base URL</label>
+      <input id="baseUrl" value="https://foliostudios.vercel.app/api/ai" placeholder="https://foliostudios.vercel.app" />
 
-      <div class="card" style="margin-bottom:16px">
-        <h2>🎯 Fire Notification Events <span class="badge">admin</span></h2>
-        <p class="hint" style="margin-bottom:12px">Direct calls to <code>/api/notify?action=create</code>. These bypass <code>host.js</code> and just fire the notification — perfect for testing.</p>
+      <label>Task</label>
+      <select id="task">
+        <option value="explain">explain</option>
+        <option value="debug">debug</option>
+        <option value="codefix">codefix</option>
+        <option value="optimize">optimize</option>
+        <option value="suggest">suggest</option>
+        <option value="brainstorm">brainstorm</option>
+        <option value="metatags">metatags</option>
+        <option value="scaffold">scaffold</option>
+        <option value="docs">docs</option>
+        <option value="findFn">findFn</option>
+        <option value="commitMsg">commitMsg</option>
+        <option value="logExplain">logExplain</option>
+        <option value="diagram">diagram</option>
+        <option value="simulate">simulate</option>
+        <option value="designExplain">designExplain</option>
+        <option value="translate">translate</option>
+        <option value="docstrings">docstrings</option>
+        <option value="struggle">struggle</option>
+        <option value="audit">audit</option>
+        <option value="readProject">readProject</option>
+        <option value="commitChanges">commitChanges</option>
+        <option value="writeDeploy">writeDeploy</option>
+      </select>
 
-        <div class="tabs">
-          <div class="tab active" onclick="filterEvents('all')">All</div>
-          <div class="tab" onclick="filterEvents('project')">Project</div>
-          <div class="tab" onclick="filterEvents('invite')">Invite</div>
-          <div class="tab" onclick="filterEvents('storage')">Storage</div>
-          <div class="tab" onclick="filterEvents('security')">Security</div>
-          <div class="tab" onclick="filterEvents('analytics')">Analytics</div>
-        </div>
+      <label>Session token (optional — for authed tasks)</label>
+      <input id="token" type="password" placeholder="Bearer token (leave blank for guest)" />
 
-        <div id="eventList" class="event-list">
-          <!-- Filled by JS -->
-        </div>
+      <label>Project ID (optional — for host tasks)</label>
+      <input id="pid" placeholder="pid (leave blank if not needed)" />
+
+      <label>Payload (JSON)</label>
+      <textarea id="payload" spellcheck="false"></textarea>
+
+      <div class="hint">
+        Presets load a sample payload for the chosen task. Edit freely.
       </div>
 
-      <div class="card">
-        <h2>📣 Broadcast <span class="badge">admin</span></h2>
-        <p class="hint" style="margin-bottom:12px">Send to ALL users via <code>folio-general</code> FCM topic.</p>
-
-        <label>Title</label>
-        <input id="bcTitle" placeholder="Broadcast title" value="Test broadcast">
-
-        <label>Body</label>
-        <input id="bcBody" placeholder="Broadcast body" value="If you see this, broadcasts work.">
-
-        <div class="field-row">
-          <div>
-            <label>Type</label>
-            <select id="bcType">
-              <option value="system">system</option>
-              <option value="project">project</option>
-              <option value="invite">invite</option>
-              <option value="storage">storage</option>
-              <option value="security">security</option>
-              <option value="analytics">analytics</option>
-            </select>
-          </div>
-          <div>
-            <label>Link (optional)</label>
-            <input id="bcLink" placeholder="https://...">
-          </div>
-        </div>
-
-        <label>
-          <input type="checkbox" id="bcStoreHistory" style="width:auto;margin-right:6px;vertical-align:middle">
-          <span style="font-size:12px">Also write to bell panel (storeInHistory)</span>
-        </label>
-
-        <div class="btn-row" style="margin-top:12px">
-          <button onclick="sendBroadcast()">📣 Send Broadcast</button>
-        </div>
+      <div class="actions">
+        <button class="ghost" id="loadPreset">Load preset</button>
+        <button id="send">Send →</button>
       </div>
-
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════
-         RIGHT COLUMN — Custom + Log
-         ═══════════════════════════════════════════════════════ -->
-    <div>
+    <!-- RIGHT: Response -->
+    <div class="card">
+      <h2>
+        Response
+        <span id="status" class="status" style="float:right;">idle</span>
+      </h2>
 
-      <div class="card" style="margin-bottom:16px">
-        <h2>✏️ Custom Notification</h2>
-        <label>Type</label>
-        <select id="customType">
-          <option value="system">system</option>
-          <option value="project">project</option>
-          <option value="invite">invite</option>
-          <option value="storage">storage</option>
-          <option value="security">security</option>
-          <option value="analytics">analytics</option>
-        </select>
+      <dl class="kv" id="meta">
+        <dt>status</dt><dd>—</dd>
+        <dt>time</dt><dd>—</dd>
+        <dt>cached</dt><dd>—</dd>
+        <dt>guest</dt><dd>—</dd>
+        <dt>words</dt><dd>—</dd>
+        <dt>credits</dt><dd>—</dd>
+        <dt>tokens</dt><dd>—</dd>
+      </dl>
 
-        <label>Title</label>
-        <input id="customTitle" placeholder="Custom title" value="Custom test notification">
+      <div class="out empty" id="out">Send a request to see the response.</div>
+      <div class="artifacts" id="artifacts"></div>
 
-        <label>Body</label>
-        <input id="customBody" placeholder="Custom body" value="Testing custom notification">
-
-        <label>Link (optional)</label>
-        <input id="customLink" placeholder="https://foliostudios.vercel.app/projects">
-
-        <label>Dedupe key (optional)</label>
-        <input id="customDedupe" placeholder="leave empty for none">
-
-        <details>
-          <summary>Advanced (action, payload, priority)</summary>
-          <div class="field-row">
-            <div>
-              <label>Priority</label>
-              <select id="customPriority">
-                <option value="normal">normal</option>
-                <option value="high">high</option>
-                <option value="urgent">urgent</option>
-              </select>
-            </div>
-            <div>
-              <label>Action type</label>
-              <select id="customActionType">
-                <option value="">(none)</option>
-                <option value="navigate">navigate</option>
-                <option value="modal">modal</option>
-                <option value="external">external</option>
-                <option value="deep_link">deep_link</option>
-              </select>
-            </div>
-          </div>
-          <label>Action URL</label>
-          <input id="customActionUrl" placeholder="folio://route or https://...">
-          <label>Action payload (JSON)</label>
-          <textarea id="customActionPayload" placeholder='{"screen":"home"}'></textarea>
-        </details>
-
-        <div class="btn-row" style="margin-top:12px">
-          <button onclick="sendCustom()">✉️ Send Custom</button>
-        </div>
+      <div class="actions">
+        <button class="ghost" id="copy">Copy JSON</button>
+        <button class="ghost" id="clear">Clear</button>
       </div>
-
-      <div class="card">
-        <h2>📜 Request Log</h2>
-        <div class="btn-row" style="margin-bottom:8px">
-          <button class="ghost" onclick="clearLog()">🗑 Clear</button>
-          <button class="ghost" onclick="copyLog()">📋 Copy</button>
-          <span class="status-pill idle" style="margin-left:auto" id="logCount">
-            <span class="dot"></span><span>0 entries</span>
-          </span>
-        </div>
-        <pre class="log" id="logOutput">Waiting for actions...</pre>
-      </div>
-
     </div>
 
+    <!-- BOTTOM: Raw request -->
+    <div class="card full">
+      <h2>Raw request (curl)</h2>
+      <div class="out" id="curl" style="margin-top:0;">—</div>
+    </div>
   </div>
-
 </div>
 
 <script>
-// ═════════════════════════════════════════════════════════════════
-// CONFIG
-// ═════════════════════════════════════════════════════════════════
-const CONFIG_KEY = "folio_notif_test_config";
-
-function saveConfig() {
-  const cfg = {
-    baseUrl: document.getElementById("cfgBaseUrl").value.trim(),
-    adminKey: document.getElementById("cfgAdminKey").value.trim(),
-    session: document.getElementById("cfgSession").value.trim(),
-    uid: document.getElementById("cfgUid").value.trim(),
-    pid: document.getElementById("cfgPid").value.trim(),
-    otherUid: document.getElementById("cfgOtherUid").value.trim(),
-  };
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
-  addLog("info", "Config saved to localStorage.");
+// ── Presets ───────────────────────────────────────────────────────────
+const PRESETS = {
+  explain: {
+    payload: {
+      file: "index.html",
+      content: `<!DOCTYPE html>
+<html>
+<head><title>Hello</title></head>
+<body>
+  <script>
+    function greet(name) {
+      return "Hello, " + name + "!";
+    }
+    console.log(greet("World"));
+  <\/script>
+</body>
+</html>`
+    }
+  },
+  debug: {
+    payload: {
+      file: "main.js",
+      content: `function sum(arr) {
+  let total = 0;
+  for (let i = 0; i <= arr.length; i++) {
+    total += arr[i];
+  }
+  return total;
 }
-
-function loadConfig() {
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return;
-    const cfg = JSON.parse(raw);
-    document.getElementById("cfgBaseUrl").value = cfg.baseUrl || "";
-    document.getElementById("cfgAdminKey").value = cfg.adminKey || "";
-    document.getElementById("cfgSession").value = cfg.session || "";
-    document.getElementById("cfgUid").value = cfg.uid || "";
-    document.getElementById("cfgPid").value = cfg.pid || "";
-    document.getElementById("cfgOtherUid").value = cfg.otherUid || "";
-  } catch {}
+console.log(sum([1,2,3]));`
+    }
+  },
+  codefix: {
+    payload: {
+      file: "main.js",
+      content: `function divide(a, b) {
+  return a / b;
 }
-
-function getConfig() {
-  return {
-    baseUrl: document.getElementById("cfgBaseUrl").value.trim().replace(/\/$/, ""),
-    adminKey: document.getElementById("cfgAdminKey").value.trim(),
-    session: document.getElementById("cfgSession").value.trim(),
-    uid: document.getElementById("cfgUid").value.trim(),
-    pid: document.getElementById("cfgPid").value.trim(),
-    otherUid: document.getElementById("cfgOtherUid").value.trim(),
-  };
-}
-
-function requireConfig(fields = ["baseUrl", "adminKey", "uid"]) {
-  const cfg = getConfig();
-  for (const f of fields) {
-    if (!cfg[f]) {
-      addLog("err", `Missing config: ${f}. Fill it in at the top and click Save Config.`);
-      alert(`Missing config: ${f}`);
-      return false;
+console.log(divide(10, 0));`,
+      hint: "handle division by zero"
+    }
+  },
+  optimize: {
+    payload: {
+      file: "main.js",
+      content: `function findDuplicates(arr) {
+  const out = [];
+  for (let i = 0; i < arr.length; i++) {
+    for (let j = 0; j < arr.length; j++) {
+      if (i !== j && arr[i] === arr[j] && !out.includes(arr[i])) {
+        out.push(arr[i]);
+      }
     }
   }
-  return cfg;
+  return out;
+}`
+    }
+  },
+  suggest: {
+    payload: {
+      file: "main.js",
+      content: "const items = [1,2,3];\nitems.",
+      cursorLine: "items."
+    }
+  },
+  brainstorm: {
+    payload: {
+      name: "Habit tracker",
+      description: "A minimal daily habit tracker PWA.",
+      fileList: ["index.html", "app.js", "styles.css", "manifest.json"]
+    }
+  },
+  metatags: {
+    payload: {
+      name: "Portfolio",
+      description: "A personal portfolio site for a frontend developer.",
+      indexExcerpt: `<head>
+  <title>Portfolio</title>
+</head>`
+    }
+  },
+  scaffold: {
+    payload: {
+      name: "Todo App",
+      description: "A tiny todo list with local storage.",
+      concept: "Single-page, dark mode, no build step.",
+      stack: "html+css+js"
+    }
+  },
+  docs: {
+    payload: {
+      name: "Calculator",
+      description: "A basic calculator in vanilla JS.",
+      files: {
+        "index.html": "<div id='app'></div>",
+        "app.js": "console.log('calc');"
+      }
+    }
+  },
+  findFn: {
+    payload: {
+      fnName: "greet",
+      files: {
+        "main.js": "function greet(n){return 'hi '+n}\ngreet('a');",
+        "util.js": "export const greet = n => 'hi ' + n;"
+      }
+    }
+  },
+  commitMsg: {
+    payload: {
+      diff: `diff --git a/main.js b/main.js
++function greet(name) {
++  return "hi " + name;
++}
+-console.log("x");`
+    }
+  },
+  logExplain: {
+    payload: {
+      log: "TypeError: Cannot read properties of undefined (reading 'id') at main.js:42"
+    }
+  },
+  diagram: {
+    payload: {
+      kind: "flow",
+      file: "checkout.js",
+      content: "function checkout(cart) { if (!cart.items.length) throw Error('empty'); return pay(cart.total); }"
+    }
+  },
+  simulate: {
+    payload: {
+      file: "swap.js",
+      content: "function swap(a,b){const t=a;a=b;b=t;return [a,b];}",
+      inputs: { a: 1, b: 2 }
+    }
+  },
+  designExplain: {
+    payload: {
+      files: {
+        "index.html": "<div id='root'></div>",
+        "app.js": "render();",
+        "state.js": "export const state = { count: 0 };"
+      }
+    }
+  },
+  translate: {
+    payload: {
+      from: "javascript",
+      to: "python",
+      code: "const add = (a, b) => a + b;"
+    }
+  },
+  docstrings: {
+    payload: {
+      file: "main.js",
+      content: "function add(a, b) { return a + b; }"
+    }
+  },
+  struggle: {
+    payload: {
+      files: {
+        "main.js": "function big() {\n  // TODO: refactor\n  return 1;\n}"
+      }
+    }
+  },
+  audit: {
+    payload: {
+      file: "index.html",
+      content: "<div onclick='go()'>Click</div><img src='x.png'>"
+    }
+  },
+  readProject: { payload: {} },
+  commitChanges: { payload: {} },
+  writeDeploy: { payload: {} }
+};
+
+// ── Elements ──────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const baseUrlEl = $("baseUrl");
+const taskEl = $("task");
+const tokenEl = $("token");
+const pidEl = $("pid");
+const payloadEl = $("payload");
+const sendBtn = $("send");
+const loadPresetBtn = $("loadPreset");
+const statusEl = $("status");
+const metaEl = $("meta");
+const outEl = $("out");
+const artifactsEl = $("artifacts");
+const curlEl = $("curl");
+const copyBtn = $("copy");
+const clearBtn = $("clear");
+
+// ── State ─────────────────────────────────────────────────────────────
+let lastResponse = null;
+
+// ── Presets ───────────────────────────────────────────────────────────
+function loadPreset() {
+  const task = taskEl.value;
+  const preset = PRESETS[task];
+  payloadEl.value = preset
+    ? JSON.stringify(preset.payload, null, 2)
+    : "{}";
 }
 
-// ═════════════════════════════════════════════════════════════════
-// LOG
-// ═════════════════════════════════════════════════════════════════
-const logEntries = [];
-
-function addLog(kind, text) {
-  const ts = new Date().toISOString().slice(11, 23);
-  logEntries.push({ ts, kind, text });
-  renderLog();
+// ── Status ────────────────────────────────────────────────────────────
+function setStatus(kind, text) {
+  statusEl.className = "status " + kind;
+  statusEl.textContent = text;
 }
 
-function renderLog() {
-  const el = document.getElementById("logOutput");
-  const last = logEntries.slice(-200);
-  el.innerHTML = last.map(e => {
-    const cls = e.kind === "ok" ? "ok" : e.kind === "err" ? "err" : e.kind === "warn" ? "warn" : "info";
-    return `<span class="${cls}">[${e.ts}] [${e.kind}]</span> ${escapeHtml(e.text)}`;
-  }).join("\n");
-  el.scrollTop = el.scrollHeight;
-
-  const count = document.getElementById("logCount");
-  count.querySelector("span:last-child").textContent = `${logEntries.length} entries`;
+// ── Meta display ──────────────────────────────────────────────────────
+function setMeta(rows) {
+  metaEl.innerHTML = "";
+  for (const [k, v] of rows) {
+    const dt = document.createElement("dt");
+    dt.textContent = k;
+    const dd = document.createElement("dd");
+    dd.textContent = v;
+    metaEl.append(dt, dd);
+  }
 }
 
-function clearLog() {
-  logEntries.length = 0;
-  renderLog();
-  addLog("info", "Log cleared.");
+// ── Curl preview ──────────────────────────────────────────────────────
+function updateCurl() {
+  const url = baseUrlEl.value.replace(/\/$/, "") + "/api/ai";
+  let body;
+  try {
+    body = JSON.parse(payloadEl.value || "{}");
+  } catch {
+    body = {};
+  }
+  const full = {
+    task: taskEl.value,
+    ...(pidEl.value ? { pid: pidEl.value } : {}),
+    payload: body
+  };
+  const headers = ["-H 'Content-Type: application/json'"];
+  if (tokenEl.value) headers.push(`-H 'Authorization: Bearer ${tokenEl.value}'`);
+  curlEl.textContent = `curl -X POST '${url}' \\\n  ${headers.join(" \\\n  ")} \\\n  -d '${JSON.stringify(full, null, 2)}'`;
 }
 
-function copyLog() {
-  const text = logEntries.map(e => `[${e.ts}] [${e.kind}] ${e.text}`).join("\n");
-  navigator.clipboard.writeText(text).then(() => addLog("ok", "Log copied to clipboard."));
+// ── Artifacts rendering ───────────────────────────────────────────────
+function renderArtifacts(artifacts) {
+  artifactsEl.innerHTML = "";
+  if (!Array.isArray(artifacts) || artifacts.length === 0) return;
+
+  const header = document.createElement("div");
+  header.innerHTML = `<span class="badge accent">${artifacts.length}</span> artifact${artifacts.length === 1 ? "" : "s"}`;
+  header.style.marginBottom = "8px";
+  header.style.color = "var(--text-dim)";
+  header.style.fontSize = "12px";
+  artifactsEl.appendChild(header);
+
+  artifacts.forEach((a, i) => {
+    const div = document.createElement("div");
+    div.className = "artifact";
+
+    const kind = a.type || "unknown";
+    let preview;
+    try {
+      preview = JSON.stringify(a, null, 2);
+    } catch {
+      preview = String(a);
+    }
+    if (preview.length > 600) preview = preview.slice(0, 600) + "\n…";
+
+    div.innerHTML = `<span class="badge">#${i}</span><span class="badge green">${kind}</span>\n${escapeHtml(preview)}`;
+    artifactsEl.appendChild(div);
+  });
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
-// ═════════════════════════════════════════════════════════════════
-// HTTP HELPER
-// ═════════════════════════════════════════════════════════════════
-async function apiRequest(method, url, { headers = {}, body = null } = {}) {
-  addLog("info", `→ ${method} ${url}`);
-  if (body) addLog("info", `  body: ${JSON.stringify(body).slice(0, 300)}`);
+// ── Send ──────────────────────────────────────────────────────────────
+async function send() {
+  const baseUrl = baseUrlEl.value.replace(/\/$/, "");
+  const task = taskEl.value;
 
-  const started = performance.now();
+  let payload;
   try {
-    const opts = { method, headers: { ...headers } };
-    if (body !== null) {
-      opts.headers["Content-Type"] = "application/json";
-      opts.body = JSON.stringify(body);
+    payload = JSON.parse(payloadEl.value || "{}");
+  } catch (e) {
+    setStatus("err", "bad JSON");
+    outEl.className = "out";
+    outEl.textContent = "Payload is not valid JSON:\n" + e.message;
+    return;
+  }
+
+  const body = { task, payload };
+  if (pidEl.value) body.pid = pidEl.value;
+
+  const headers = { "Content-Type": "application/json" };
+  if (tokenEl.value) headers["Authorization"] = "Bearer " + tokenEl.value;
+
+  sendBtn.disabled = true;
+  setStatus("busy", "sending…");
+  outEl.className = "out empty";
+  outEl.textContent = "…";
+  artifactsEl.innerHTML = "";
+  const t0 = performance.now();
+
+  try {
+    const res = await fetch(baseUrl + "/api/ai", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body)
+    });
+    const ms = Math.round(performance.now() - t0);
+    const json = await res.json().catch(() => ({}));
+
+    lastResponse = json;
+
+    setStatus(res.ok ? "ok" : "err", `${res.status} ${res.statusText || ""}`.trim());
+
+    const usage = json.usage || {};
+    const quota = json.quota || {};
+    setMeta([
+      ["status", String(res.status)],
+      ["time", `${ms}ms`],
+      ["cached", String(!!json.cached)],
+      ["guest", String(!!json.guest)],
+      ["words", usage.totalWords != null ? String(usage.totalWords) : "—"],
+      ["credits", quota.creditsUsed != null ? `${quota.creditsUsed}/${quota.creditsLimit}` : "—"],
+      ["tokens", usage.totalTokens != null ? String(usage.totalTokens) : "—"]
+    ]);
+
+    outEl.className = "out";
+    if (json.success) {
+      outEl.textContent = json.text || "(no explanation)";
+    } else {
+      outEl.textContent = "ERROR: " + (json.error || "unknown");
     }
 
-    const res = await fetch(url, opts);
-    const elapsed = Math.round(performance.now() - started);
-    const text = await res.text();
-
-    let json = null;
-    try { json = JSON.parse(text); } catch {}
-
-    const kind = res.ok ? "ok" : "err";
-    addLog(kind, `← ${res.status} ${res.statusText} (${elapsed}ms)`);
-    addLog(kind, `  response: ${text.slice(0, 800)}`);
-
-    return { ok: res.ok, status: res.status, json, text, elapsed };
+    renderArtifacts(json.artifacts || []);
   } catch (err) {
-    addLog("err", `← NETWORK ERROR: ${err.message}`);
-    return { ok: false, status: 0, json: null, text: err.message, elapsed: 0, error: err };
+    setStatus("err", "network");
+    setMeta([
+      ["status", "—"],
+      ["time", "—"],
+      ["cached", "—"],
+      ["guest", "—"],
+      ["words", "—"],
+      ["credits", "—"],
+      ["tokens", "—"]
+    ]);
+    outEl.className = "out";
+    outEl.textContent = "Network error: " + err.message + "\n\nCheck the Base URL and CORS configuration.";
+    artifactsEl.innerHTML = "";
+  } finally {
+    sendBtn.disabled = false;
+    updateCurl();
   }
 }
 
-// ═════════════════════════════════════════════════════════════════
-// EVENT DEFINITIONS
-// ═════════════════════════════════════════════════════════════════
-// Each event defines: label, type, title, body, link, extra fields
-// All are sent to ?action=create with { uid, type, title, body, ... }
+// ── Copy / clear ──────────────────────────────────────────────────────
+copyBtn.addEventListener("click", async () => {
+  if (!lastResponse) return;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(lastResponse, null, 2));
+    copyBtn.textContent = "Copied!";
+    setTimeout(() => (copyBtn.textContent = "Copy JSON"), 1200);
+  } catch {}
+});
 
-const EVENTS = [
-  // ── Project events ──
-  {
-    id: "deploy_success",
-    tag: "project",
-    label: "Deployment complete",
-    body: { type: "project", title: "Deployment complete", body: "Project \"My Site\" is live.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "deploy_failed",
-    tag: "project",
-    label: "Deployment failed",
-    body: { type: "project", title: "Deployment failed", body: "Deploy to \"My Site\" failed: payload exceeds size limit", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "deploy_offline",
-    tag: "project",
-    label: "Deployment taken offline",
-    body: { type: "project", title: "Deployment taken offline", body: "\"My Site\" was taken offline.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "deploy_deleted",
-    tag: "project",
-    label: "Deployment removed",
-    body: { type: "project", title: "Deployment removed", body: "A deployment record was deleted.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "project_updated",
-    tag: "project",
-    label: "Project details updated",
-    body: { type: "project", title: "Project details updated", body: "Someone updated name, description on a project you collaborate on.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "project_deleted",
-    tag: "project",
-    label: "Project deleted",
-    body: { type: "project", title: "Project deleted", body: "\"My Site\" was deleted by its owner.", link: "/projects" },
-  },
-  {
-    id: "project_copied",
-    tag: "project",
-    label: "Someone copied your project",
-    body: { type: "project", title: "Someone copied your project", body: "@alice saved a copy of \"My Site\".", link: "/projects" },
-  },
-  {
-    id: "project_exported",
-    tag: "project",
-    label: "Someone downloaded your project",
-    body: { type: "project", title: "Someone downloaded your project", body: "@bob exported a copy of \"My Site\".", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "apikey_generated",
-    tag: "project",
-    label: "New API key generated",
-    body: { type: "project", title: "New API key generated", body: "A new API key was created for \"My Site\". If this wasn't you, revoke it now.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "visibility_public",
-    tag: "project",
-    label: "Project went public",
-    body: { type: "project", title: "Project went public", body: "profile, liveSite visibility changed.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "visibility_private",
-    tag: "project",
-    label: "Project made private",
-    body: { type: "project", title: "Project made private", body: "profile, liveSite visibility changed.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "collab_removed",
-    tag: "project",
-    label: "Removed from project",
-    body: { type: "project", title: "Removed from project", body: "You no longer have access to \"My Site\".", link: "/projects" },
-  },
-  {
-    id: "synced_back",
-    tag: "project",
-    label: "Project synced back",
-    body: { type: "project", title: "Project updated from sync", body: "3 files synced back, DB imported.", link: "/project.html?pid={PID}" },
-  },
+clearBtn.addEventListener("click", () => {
+  outEl.className = "out empty";
+  outEl.textContent = "Send a request to see the response.";
+  artifactsEl.innerHTML = "";
+  setStatus("", "idle");
+  setMeta([
+    ["status", "—"],
+    ["time", "—"],
+    ["cached", "—"],
+    ["guest", "—"],
+    ["words", "—"],
+    ["credits", "—"],
+    ["tokens", "—"]
+  ]);
+  lastResponse = null;
+});
 
-  // ── Invite events ──
-  {
-    id: "invite_sent",
-    tag: "invite",
-    label: "Project invitation",
-    body: { type: "invite", title: "Project invitation", body: "You've been invited to join \"My Site\" as editor.", link: "/invite.html?token=TEST_TOKEN" },
-  },
-  {
-    id: "invite_accepted",
-    tag: "invite",
-    label: "Invitation accepted",
-    body: { type: "invite", title: "Invitation accepted", body: "@alice joined \"My Site\" as editor.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "invite_cancelled",
-    tag: "invite",
-    label: "Invitation cancelled",
-    body: { type: "invite", title: "Invitation cancelled", body: "Your invitation to \"My Site\" was cancelled.", link: "/projects" },
-  },
+// ── Wiring ────────────────────────────────────────────────────────────
+taskEl.addEventListener("change", () => {
+  loadPreset();
+  updateCurl();
+});
+payloadEl.addEventListener("input", updateCurl);
+baseUrlEl.addEventListener("input", updateCurl);
+tokenEl.addEventListener("input", updateCurl);
+pidEl.addEventListener("input", updateCurl);
 
-  // ── Storage events ──
-  {
-    id: "storage_nearly_full",
-    tag: "storage",
-    label: "Database nearly full (80%)",
-    body: { type: "storage", title: "Database nearly full", body: "Database is 84% full (12.6 MB of 15 MB).", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "storage_full",
-    tag: "storage",
-    label: "Database limit reached (100%)",
-    body: { type: "storage", title: "Database limit reached", body: "Writes to this project are being rejected — 100% full.", link: "/project.html?pid={PID}" },
-  },
+loadPresetBtn.addEventListener("click", () => {
+  loadPreset();
+  updateCurl();
+});
+sendBtn.addEventListener("click", send);
 
-  // ── Security events ──
-  {
-    id: "ratelimit_abuse",
-    tag: "security",
-    label: "Repeated rate-limit warnings",
-    body: { type: "security", title: "Repeated rate-limit warnings", body: "\"dbSet\" is being rejected repeatedly. Possible abuse or a stuck client.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "referrer_flood",
-    tag: "security",
-    label: "Unusual traffic source",
-    body: { type: "security", title: "Unusual traffic source", body: "A single referrer has sent 500+ hits this hour.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "bot_flood",
-    tag: "security",
-    label: "Bot activity detected",
-    body: { type: "security", title: "Bot activity detected", body: "200+ bot requests in the last 10 minutes.", link: "/project.html?pid={PID}" },
-  },
-
-  // ── Analytics events ──
-  {
-    id: "traffic_spike",
-    tag: "analytics",
-    label: "Traffic spike detected",
-    body: { type: "analytics", title: "Traffic spike detected", body: "Today's traffic (250 hits) is 4.2× your 7-day average.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "viral_10k",
-    tag: "analytics",
-    label: "🎉 10,000 visits today",
-    body: { type: "analytics", title: "🎉 10,000 visits today", body: "Your project just crossed 10k visits in a single day.", link: "/project.html?pid={PID}" },
-  },
-  {
-    id: "first_hit",
-    tag: "analytics",
-    label: "First visit after deploy",
-    body: { type: "analytics", title: "First visit after deploy", body: "\"My Site\" received its first visitor since going live.", link: "/project.html?pid={PID}" },
-  },
-];
-
-let currentFilter = "all";
-
-function renderEvents() {
-  const list = document.getElementById("eventList");
-  const filtered = currentFilter === "all"
-    ? EVENTS
-    : EVENTS.filter(e => e.tag === currentFilter);
-
-  list.innerHTML = filtered.map(e => `
-    <button class="event-btn" onclick="fireEvent('${e.id}')">
-      <span>${escapeHtml(e.label)}</span>
-      <span class="tag ${e.tag}">${e.tag}</span>
-    </button>
-  `).join("");
-}
-
-function filterEvents(tag) {
-  currentFilter = tag;
-  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  event.target.classList.add("active");
-  renderEvents();
-}
-
-// ═════════════════════════════════════════════════════════════════
-// FIRE EVENT
-// ═════════════════════════════════════════════════════════════════
-async function fireEvent(id) {
-  const cfg = requireConfig(["baseUrl", "adminKey", "uid"]);
-  if (!cfg) return;
-
-  const evt = EVENTS.find(e => e.id === id);
-  if (!evt) return;
-
-  // Substitute {PID} in link
-  const body = { ...evt.body };
-  if (body.link) {
-    body.link = body.link.replace("{PID}", cfg.pid || "TEST_PID");
-    if (body.link.startsWith("/")) body.link = cfg.baseUrl + body.link;
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    e.preventDefault();
+    send();
   }
+});
 
-  addLog("info", `═══ Firing event: ${evt.label} ═══`);
-
-  const url = `${cfg.baseUrl}/api/notify?action=create`;
-  const res = await apiRequest("POST", url, {
-    headers: { "x-api-key": cfg.adminKey },
-    body: { uid: cfg.uid, ...body },
-  });
-
-  if (res.ok && res.json?.success) {
-    if (res.json.deduped) {
-      addLog("warn", `⚠️ DEDUPED — a similar notification was sent recently. To retry, wait or clear notify_dedupe/${cfg.uid}/ in Firebase.`);
-    } else {
-      addLog("ok", `✅ Notification created: ${res.json.notificationId || "(no id)"}`);
-      if (res.json.pushSent) {
-        addLog("ok", `📱 Push delivered to ${res.json.pushResult?.tokensDelivered || 0} device(s)`);
-      } else {
-        addLog("warn", `🔕 Push not sent: ${res.json.pushResult?.reason || "unknown reason"}`);
-      }
-    }
-  } else if (res.status === 401 || res.status === 403) {
-    addLog("err", `❌ AUTH FAILED — your admin key is wrong or requireAdmin is rejecting.`);
-  } else if (res.status === 429) {
-    addLog("err", `❌ RATE LIMITED — wait ${res.json?.retryAfter}s`);
-  } else if (res.status === 400) {
-    addLog("err", `❌ BAD REQUEST — ${res.json?.error}`);
-  } else {
-    addLog("err", `❌ Unexpected status ${res.status}`);
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════
-// BROADCAST
-// ═════════════════════════════════════════════════════════════════
-async function sendBroadcast() {
-  const cfg = requireConfig(["baseUrl", "adminKey"]);
-  if (!cfg) return;
-
-  const title = document.getElementById("bcTitle").value.trim();
-  const body = document.getElementById("bcBody").value.trim();
-  const type = document.getElementById("bcType").value;
-  const link = document.getElementById("bcLink").value.trim();
-  const storeInHistory = document.getElementById("bcStoreHistory").checked;
-
-  if (!title || !body) {
-    alert("Title and body are required.");
-    return;
-  }
-
-  addLog("info", "═══ Sending broadcast ═══");
-  const url = `${cfg.baseUrl}/api/notify?action=broadcast`;
-  const payload = { title, body, type, storeInHistory };
-  if (link) payload.link = link;
-
-  const res = await apiRequest("POST", url, {
-    headers: { "x-api-key": cfg.adminKey },
-    body: payload,
-  });
-
-  if (res.ok && res.json?.success) {
-    addLog("ok", `✅ Broadcast sent to topic "${res.json.topic}"`);
-    if (res.json.fcm?.success) addLog("ok", `📱 FCM delivery OK (msg: ${res.json.fcm.messageId || "n/a"})`);
-    if (res.json.history?.written > 0) addLog("ok", `🔔 Written to ${res.json.history.written} user(s) bell panel`);
-  } else {
-    addLog("err", `❌ Broadcast failed: ${res.json?.error || res.status}`);
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════
-// CUSTOM NOTIFICATION
-// ═════════════════════════════════════════════════════════════════
-async function sendCustom() {
-  const cfg = requireConfig(["baseUrl", "adminKey", "uid"]);
-  if (!cfg) return;
-
-  const type = document.getElementById("customType").value;
-  const title = document.getElementById("customTitle").value.trim();
-  const body = document.getElementById("customBody").value.trim();
-  const link = document.getElementById("customLink").value.trim();
-  const dedupe = document.getElementById("customDedupe").value.trim();
-  const priority = document.getElementById("customPriority").value;
-  const actionType = document.getElementById("customActionType").value;
-  const actionUrl = document.getElementById("customActionUrl").value.trim();
-  const actionPayloadRaw = document.getElementById("customActionPayload").value.trim();
-
-  if (!title || !body) {
-    alert("Title and body are required.");
-    return;
-  }
-
-  const payload = { uid: cfg.uid, type, title, body, priority };
-  if (link) payload.link = link;
-  if (dedupe) payload.dedupeKey = dedupe;
-  if (actionType) {
-    payload.actionType = actionType;
-    if (actionUrl) payload.actionUrl = actionUrl;
-    if (actionPayloadRaw) {
-      try {
-        payload.actionPayload = JSON.parse(actionPayloadRaw);
-      } catch {
-        addLog("err", "actionPayload is not valid JSON");
-        return;
-      }
-    }
-  }
-
-  addLog("info", "═══ Sending custom notification ═══");
-  const res = await apiRequest("POST", `${cfg.baseUrl}/api/notify?action=create`, {
-    headers: { "x-api-key": cfg.adminKey },
-    body: payload,
-  });
-
-  if (res.ok && res.json?.success) {
-    if (res.json.deduped) {
-      addLog("warn", `⚠️ DEDUPED`);
-    } else {
-      addLog("ok", `✅ Notification created: ${res.json.notificationId}`);
-    }
-  } else {
-    addLog("err", `❌ Failed: ${res.json?.error || res.status}`);
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════
-// DIAGNOSTIC CHECKS
-// ═════════════════════════════════════════════════════════════════
-async function checkHealth() {
-  const cfg = getConfig();
-  if (!cfg.baseUrl) { alert("Missing base URL"); return; }
-
-  addLog("info", "═══ Health check ═══");
-  const res = await apiRequest("GET", `${cfg.baseUrl}/api/notify?action=health`);
-  const el = document.getElementById("healthStatus");
-
-  if (res.ok && res.json?.success) {
-    const fcmOk = res.json.fcm === true;
-    el.className = `status-pill ${fcmOk ? "ok" : "err"}`;
-    el.querySelector("span:last-child").textContent = fcmOk ? "FCM OK" : "FCM disabled";
-    if (fcmOk) addLog("ok", `✅ Backend healthy. Types: ${res.json.types?.join(", ")}`);
-    else addLog("err", `❌ FCM not initialized — notifications will fail`);
-  } else {
-    el.className = "status-pill err";
-    el.querySelector("span:last-child").textContent = "Unhealthy";
-    addLog("err", `❌ Health check failed (${res.status})`);
-  }
-}
-
-async function checkTopicInfo() {
-  const cfg = requireConfig(["baseUrl", "adminKey"]);
-  if (!cfg) return;
-
-  addLog("info", "═══ Topic info ═══");
-  const res = await apiRequest("GET", `${cfg.baseUrl}/api/notify?action=topic-info&topic=folio-general`, {
-    headers: { "x-api-key": cfg.adminKey },
-  });
-
-  if (res.ok && res.json?.success) {
-    addLog("ok", `📊 ${res.json.usersSubscribed} user(s), ${res.json.devicesSubscribed} device(s) subscribed to "${res.json.topic}"`);
-    if (res.json.usersSubscribed === 0) {
-      addLog("warn", `⚠️ NO subscribers — broadcasts will go nowhere until a device subscribes.`);
-    }
-  } else {
-    addLog("err", `❌ Topic info failed: ${res.json?.error || res.status}`);
-  }
-}
-
-async function checkHistory() {
-  const cfg = requireConfig(["baseUrl", "session"]);
-  if (!cfg) return;
-
-  addLog("info", "═══ Fetching notification history ═══");
-  const res = await apiRequest("GET", `${cfg.baseUrl}/api/notify?action=list&limit=20`, {
-    headers: { Authorization: `Bearer ${cfg.session}` },
-  });
-
-  if (res.ok && res.json?.success) {
-    addLog("ok", `🔔 ${res.json.notifications?.length || 0} notifications in your bell panel (total: ${res.json.total})`);
-    if (res.json.notifications?.length === 0) {
-      addLog("warn", `⚠️ EMPTY — no notifications have been written to your history yet.`);
-      addLog("warn", `   If you just fired one, check Vercel logs for host.notify_failed.`);
-    } else {
-      res.json.notifications.slice(0, 5).forEach(n => {
-        addLog("info", `   • [${n.type}] ${n.title} — ${n.body.slice(0, 60)}`);
-      });
-    }
-  } else {
-    addLog("err", `❌ History fetch failed: ${res.json?.error || res.status}`);
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════
-// INIT
-// ═════════════════════════════════════════════════════════════════
-loadConfig();
-renderEvents();
-addLog("info", "Console ready. Fill in config at the top, then fire any event.");
-addLog("info", "Tip: click 'Health Check' first to verify backend is up.");
+// ── Init ──────────────────────────────────────────────────────────────
+loadPreset();
+updateCurl();
+setMeta([
+  ["status", "—"],
+  ["time", "—"],
+  ["cached", "—"],
+  ["guest", "—"],
+  ["words", "—"],
+  ["credits", "—"],
+  ["tokens", "—"]
+]);
 </script>
-
 </body>
 </html>
