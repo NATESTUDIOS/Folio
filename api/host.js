@@ -5,15 +5,26 @@ import crypto from "node:crypto";
 import { db } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import {
-  requireAuth, requireProjectRole,
-  canAccessProject, canEditProject, hasVisibility,
-  verifyProjectKey, generateApiKey,
+  requireAuth,
+  requireProjectRole,
+  canAccessProject,
+  canEditProject,
+  hasVisibility,
+  verifyProjectKey,
+  generateApiKey,
   generateInviteToken,
-  getUserByUsername, getUser,
+  getUserByUsername,
+  getUser,
   cleanUsername,
-  getClientIp, hashIp, sanitizeFirebasePath,
-  logUserEvent, logProjectEvent, logProjectApiCall,
-  listUserProjects, createProjectRecord, deleteProjectRecord,
+  getClientIp,
+  hashIp,
+  sanitizeFirebasePath,
+  logUserEvent,
+  logProjectEvent,
+  logProjectApiCall,
+  listUserProjects,
+  createProjectRecord,
+  deleteProjectRecord,
   verifySession,
 } from "../utils/users.js";
 
@@ -47,13 +58,31 @@ const TOUCH_MIN_INTERVAL = 30_000;
 const CLIENT_ERROR_RATE_LIMIT = 10;
 const CLIENT_ERROR_RATE_WINDOW_MS = 60_000;
 
-const BOT_UA_RE = /bot|crawler|spider|preview|curl|wget|python-requests|httpclient/i;
+const BOT_UA_RE =
+  /bot|crawler|spider|preview|curl|wget|python-requests|httpclient/i;
 
 const RESERVED_USERNAMES = new Set([
-  "api", "p", "register", "profile", "project", "tools", "settings",
-  "analytics", "offline", "invite", "notifications", "icons", "js", "css",
-  "_next", "manifest.json", "sitemap.xml", "robots.txt", "favicon.ico",
-  "sw.js", "firebase-messaging-sw.js",
+  "api",
+  "p",
+  "register",
+  "profile",
+  "project",
+  "tools",
+  "settings",
+  "analytics",
+  "offline",
+  "invite",
+  "notifications",
+  "icons",
+  "js",
+  "css",
+  "_next",
+  "manifest.json",
+  "sitemap.xml",
+  "robots.txt",
+  "favicon.ico",
+  "sw.js",
+  "firebase-messaging-sw.js",
 ]);
 
 // =========================================================================
@@ -61,43 +90,44 @@ const RESERVED_USERNAMES = new Set([
 // =========================================================================
 
 const RATE_LIMITS = {
-  deploy:             { max: 10,   window: 60 * 60 * 1000 },
-  redeploy:           { max: 10,   window: 60 * 60 * 1000 },
-  status:             { max: 120,  window: 60 * 60 * 1000 },
-  dbSet:              { max: 100,  window: 60 * 1000 },
-  dbGet:              { max: 300,  window: 60 * 1000 },
-  dbSchema:           { max: 10,   window: 60 * 60 * 1000 },
-  apikeyGenerate:     { max: 5,    window: 60 * 60 * 1000 },
-  visibility:         { max: 20,   window: 60 * 60 * 1000 },
-  fileVisibility:     { max: 100,  window: 60 * 60 * 1000 },
-  inviteCreate:       { max: 20,   window: 60 * 60 * 1000 },
-  inviteList:         { max: 60,   window: 60 * 60 * 1000 },
-  inviteAccept:       { max: 10,   window: 60 * 60 * 1000 },
-  inviteCancel:       { max: 20,   window: 60 * 60 * 1000 },
-  collaboratorRemove: { max: 20,   window: 60 * 60 * 1000 },
-  metatagsSave:       { max: 20,   window: 60 * 60 * 1000 },
-  share:              { max: 60,   window: 60 * 1000 },
-  profilePublic:      { max: 60,   window: 60 * 1000 },
-  view:               { max: 10,   window: 60 * 1000 },
-  logs:               { max: 60,   window: 60 * 60 * 1000 },
-  projectsList:       { max: 60,   window: 60 * 60 * 1000 },
-  projectsGet:        { max: 120,  window: 60 * 60 * 1000 },
-  projectsCreate:     { max: 20,   window: 60 * 60 * 1000 },
-  projectsDelete:     { max: 10,   window: 60 * 60 * 1000 },
-  projectsUpdate:     { max: 60,   window: 60 * 60 * 1000 },
-  deploymentHistory:  { max: 120,  window: 60 * 60 * 1000 },
-  deploymentOffline:  { max: 10,   window: 60 * 60 * 1000 },
-  deploymentDelete:   { max: 20,   window: 60 * 60 * 1000 },
-  versionsClear:      { max: 5,    window: 60 * 60 * 1000 },
-  cacheClear:         { max: 10,   window: 60 * 60 * 1000 },
-  projectExport:      { max: 30,   window: 60 * 60 * 1000 },
-  projectSyncBack:    { max: 60,   window: 60 * 60 * 1000 },
-  projectCopy:        { max: 20,   window: 60 * 60 * 1000 },
-  fileGet:            { max: 120,  window: 60 * 60 * 1000 },
-  fileList:           { max: 120,  window: 60 * 60 * 1000 },
-  fileDelete:         { max: 60,   window: 60 * 60 * 1000 },
-  serve:              { max: 1200, window: 60 * 1000 },
-  clientError:        { max: 20,   window: 60 * 1000 },
+  deploy: { max: 10, window: 60 * 60 * 1000 },
+  redeploy: { max: 10, window: 60 * 60 * 1000 },
+  status: { max: 120, window: 60 * 60 * 1000 },
+  dbSet: { max: 100, window: 60 * 1000 },
+  dbGet: { max: 300, window: 60 * 1000 },
+  dbSchema: { max: 10, window: 60 * 60 * 1000 },
+  apikeyGenerate: { max: 5, window: 60 * 60 * 1000 },
+  visibility: { max: 20, window: 60 * 60 * 1000 },
+  fileVisibility: { max: 100, window: 60 * 60 * 1000 },
+  inviteCreate: { max: 20, window: 60 * 60 * 1000 },
+  inviteList: { max: 60, window: 60 * 60 * 1000 },
+  inviteAccept: { max: 10, window: 60 * 60 * 1000 },
+  inviteCancel: { max: 20, window: 60 * 60 * 1000 },
+  collaboratorRemove: { max: 20, window: 60 * 60 * 1000 },
+  metatagsSave: { max: 20, window: 60 * 60 * 1000 },
+  share: { max: 60, window: 60 * 1000 },
+  profilePublic: { max: 60, window: 60 * 1000 },
+  view: { max: 10, window: 60 * 1000 },
+  logs: { max: 60, window: 60 * 60 * 1000 },
+  projectsList: { max: 60, window: 60 * 60 * 1000 },
+  projectsGet: { max: 120, window: 60 * 60 * 1000 },
+  projectsCreate: { max: 20, window: 60 * 60 * 1000 },
+  projectsDelete: { max: 10, window: 60 * 60 * 1000 },
+  projectsUpdate: { max: 60, window: 60 * 60 * 1000 },
+  deploymentHistory: { max: 120, window: 60 * 60 * 1000 },
+  deploymentOffline: { max: 10, window: 60 * 60 * 1000 },
+  deploymentDelete: { max: 20, window: 60 * 60 * 1000 },
+  versionsClear: { max: 5, window: 60 * 60 * 1000 },
+  cacheClear: { max: 10, window: 60 * 60 * 1000 },
+  projectExport: { max: 30, window: 60 * 60 * 1000 },
+  projectSyncBack: { max: 60, window: 60 * 60 * 1000 },
+  projectCopy: { max: 20, window: 60 * 60 * 1000 },
+  fileGet: { max: 120, window: 60 * 60 * 1000 },
+  fileList: { max: 120, window: 60 * 60 * 1000 },
+  fileDelete: { max: 60, window: 60 * 60 * 1000 },
+  projectHydrate: { max: 60, window: 60 * 60 * 1000 },
+  serve: { max: 1200, window: 60 * 1000 },
+  clientError: { max: 20, window: 60 * 1000 },
 };
 
 async function checkRateLimit(identifier, action) {
@@ -110,30 +140,48 @@ async function checkRateLimit(identifier, action) {
 
   if (!snap.exists()) {
     await ref.set({ count: 1, first_request: now, last_request: now });
-    return { allowed: true, remaining: config.max - 1, limit: config.max,
-             reset: new Date(now + config.window).toISOString() };
+    return {
+      allowed: true,
+      remaining: config.max - 1,
+      limit: config.max,
+      reset: new Date(now + config.window).toISOString(),
+    };
   }
   const d = snap.val();
   const resetAt = (d.first_request || now) + config.window;
   if (now > resetAt) {
     await ref.set({ count: 1, first_request: now, last_request: now });
-    return { allowed: true, remaining: config.max - 1, limit: config.max,
-             reset: new Date(now + config.window).toISOString() };
+    return {
+      allowed: true,
+      remaining: config.max - 1,
+      limit: config.max,
+      reset: new Date(now + config.window).toISOString(),
+    };
   }
   if ((d.count || 0) >= config.max) {
-    return { allowed: false, remaining: 0, limit: config.max,
-             reset: new Date(resetAt).toISOString(),
-             retryAfter: Math.ceil((resetAt - now) / 1000) };
+    return {
+      allowed: false,
+      remaining: 0,
+      limit: config.max,
+      reset: new Date(resetAt).toISOString(),
+      retryAfter: Math.ceil((resetAt - now) / 1000),
+    };
   }
   await ref.update({ count: (d.count || 0) + 1, last_request: now });
-  return { allowed: true, remaining: config.max - (d.count || 0) - 1,
-           limit: config.max, reset: new Date(resetAt).toISOString() };
+  return {
+    allowed: true,
+    remaining: config.max - (d.count || 0) - 1,
+    limit: config.max,
+    reset: new Date(resetAt).toISOString(),
+  };
 }
 
 function setRateHeaders(res, r) {
   if (!r) return;
-  if (Number.isFinite(r.limit)) res.setHeader("X-RateLimit-Limit", String(r.limit));
-  if (Number.isFinite(r.remaining)) res.setHeader("X-RateLimit-Remaining", String(r.remaining));
+  if (Number.isFinite(r.limit))
+    res.setHeader("X-RateLimit-Limit", String(r.limit));
+  if (Number.isFinite(r.remaining))
+    res.setHeader("X-RateLimit-Remaining", String(r.remaining));
   if (r.reset) res.setHeader("X-RateLimit-Reset", r.reset);
 }
 
@@ -147,7 +195,9 @@ async function enforceRate(req, res, action, identifier) {
       retryAfter: r.retryAfter,
       reset: r.reset,
     });
-    try { await maybeNotifyRateLimitAbuse(action, identifier, r).catch(() => {}); } catch {}
+    try {
+      await maybeNotifyRateLimitAbuse(action, identifier, r).catch(() => {});
+    } catch {}
     return false;
   }
   return true;
@@ -161,10 +211,10 @@ function ipKey(req) {
 // IN-PROCESS CACHES
 // =========================================================================
 
-const PROJECT_CACHE = new Map();   // pid -> { project, at }
-const META_CACHE = new Map();      // pid -> { meta, at }
-const RATE_CACHE = new Map();      // "action:key" -> { value, at }
-const TOUCH_CACHE = new Map();     // pid -> last touched ms
+const PROJECT_CACHE = new Map(); // pid -> { project, at }
+const META_CACHE = new Map(); // pid -> { meta, at }
+const RATE_CACHE = new Map(); // "action:key" -> { value, at }
+const TOUCH_CACHE = new Map(); // pid -> last touched ms
 const LOG_WRITE_COUNTER = new Map(); // pid -> count
 
 function invalidateProject(pid) {
@@ -185,7 +235,10 @@ async function touchProject(pid, minInterval = TOUCH_MIN_INTERVAL) {
   const last = TOUCH_CACHE.get(pid) || 0;
   if (Date.now() - last < minInterval) return;
   TOUCH_CACHE.set(pid, Date.now());
-  await db.ref(`projects/${pid}/updatedAt`).set(Date.now()).catch(() => {});
+  await db
+    .ref(`projects/${pid}/updatedAt`)
+    .set(Date.now())
+    .catch(() => {});
   invalidateProject(pid);
 }
 
@@ -197,10 +250,13 @@ async function maybePruneProjectLogs(pid) {
     const snap = await db.ref(`logs/project/${pid}`).once("value");
     if (!snap.exists()) return;
     const entries = [];
-    snap.forEach(c => entries.push({ id: c.key, ts: c.val()?.ts || 0 }));
+    snap.forEach((c) => entries.push({ id: c.key, ts: c.val()?.ts || 0 }));
     if (entries.length <= MAX_LOG_ENTRIES_PER_PROJECT) return;
     entries.sort((a, b) => a.ts - b.ts);
-    const toDelete = entries.slice(0, entries.length - MAX_LOG_ENTRIES_PER_PROJECT);
+    const toDelete = entries.slice(
+      0,
+      entries.length - MAX_LOG_ENTRIES_PER_PROJECT,
+    );
     const updates = {};
     for (const e of toDelete) updates[`logs/project/${pid}/${e.id}`] = null;
     if (Object.keys(updates).length) await db.ref().update(updates);
@@ -224,12 +280,22 @@ const THUMBNAIL_SIZE = "512x512";
 const OG_SIZE = "1200x630";
 
 const PROJECT_SCENES = [
-  "skyline", "ribbon", "terminal", "vinyl",
-  "shelf", "halftone", "grid_wave", "window_sill",
+  "skyline",
+  "ribbon",
+  "terminal",
+  "vinyl",
+  "shelf",
+  "halftone",
+  "grid_wave",
+  "window_sill",
 ];
 const PROFILE_SCENES = [
-  "ribbon", "halftone", "glass_cards",
-  "book_spine", "rooftop", "cassette",
+  "ribbon",
+  "halftone",
+  "glass_cards",
+  "book_spine",
+  "rooftop",
+  "cassette",
 ];
 const PALETTES = ["warm", "cool", "neon", "earth", "sunset", "mono"];
 
@@ -238,9 +304,15 @@ function isBot(req) {
   return BOT_UA_RE.test(ua);
 }
 
-function dayString(d = new Date()) { return d.toISOString().slice(0, 10); }
-function shortId(pid) { return pid.replace(/[^a-z0-9]/gi, "").slice(-8); }
-function nowIso() { return new Date().toISOString(); }
+function dayString(d = new Date()) {
+  return d.toISOString().slice(0, 10);
+}
+function shortId(pid) {
+  return pid.replace(/[^a-z0-9]/gi, "").slice(-8);
+}
+function nowIso() {
+  return new Date().toISOString();
+}
 
 function formatTimeAgo(ts) {
   if (!ts) return "—";
@@ -255,29 +327,46 @@ function formatTimeAgo(ts) {
   const d = Math.floor(h / 24);
   if (d < 30) return `${d}d ago`;
   if (d < 365) return `${Math.floor(d / 30)}mo ago`;
-  return new Date(n).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  return new Date(n).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function formatDate(ts, { withDay = false } = {}) {
   if (!ts) return "—";
   const n = typeof ts === "number" ? ts : new Date(ts).getTime();
   if (!Number.isFinite(n)) return "—";
-  return new Date(n).toLocaleDateString("en-US", withDay
-    ? { month: "short", day: "numeric", year: "numeric" }
-    : { month: "short", year: "numeric" });
+  return new Date(n).toLocaleDateString(
+    "en-US",
+    withDay
+      ? { month: "short", day: "numeric", year: "numeric" }
+      : { month: "short", year: "numeric" },
+  );
 }
 
 function initialsOf(name) {
   const s = String(name || "").trim();
   if (!s) return "?";
   const parts = s.split(/\s+/).slice(0, 2);
-  return parts.map(p => p[0]).join("").toUpperCase();
+  return parts
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase();
 }
 
 function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
+  return String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[c],
+  );
 }
 
 function avatarHtmlFor(profile, { size = 40, username = "" } = {}) {
@@ -300,12 +389,15 @@ function projectIconHtmlFor(project) {
 
 function inlineSvg(name, size = 16) {
   const icons = {
-    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    folder:
+      '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
     lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
-    external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
-    alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    external:
+      '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+    alert:
+      '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
     copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     check: '<polyline points="20 6 9 17 4 12"/>',
     star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
@@ -329,9 +421,17 @@ function applyTemplate(template, vars) {
     if (!(key in vars)) return "";
     const v = vars[key];
     if (v && typeof v === "object" && v.raw !== undefined) return String(v.raw);
-    return String(v ?? "").replace(/[&<>"']/g, c => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-    }[c]));
+    return String(v ?? "").replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c],
+    );
   });
 }
 
@@ -361,7 +461,20 @@ a.btn.ghost:hover{background:rgba(255,255,255,0.05);color:#e8ecf1}
 .file-list .meta{margin-left:auto;font-size:10px;color:rgba(232,236,241,0.4)}
 `;
 
-function sendHtmlPage(res, { title, heading, message, signinUrl, browseUrl = BASE_URL, icon = "alert", status = 200, extraHtml = "", robotsNoIndex = true }) {
+function sendHtmlPage(
+  res,
+  {
+    title,
+    heading,
+    message,
+    signinUrl,
+    browseUrl = BASE_URL,
+    icon = "alert",
+    status = 200,
+    extraHtml = "",
+    robotsNoIndex = true,
+  },
+) {
   const html = `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -393,12 +506,25 @@ ${robotsNoIndex ? '<meta name="robots" content="noindex,nofollow">' : ""}
 // =========================================================================
 
 const META_KEYS_BY_NAME = new Set([
-  "description", "keywords", "author", "robots", "theme-color",
-  "twitter:card", "twitter:title", "twitter:description", "twitter:image",
+  "description",
+  "keywords",
+  "author",
+  "robots",
+  "theme-color",
+  "twitter:card",
+  "twitter:title",
+  "twitter:description",
+  "twitter:image",
   "generator",
 ]);
 const META_KEYS_BY_PROP = new Set([
-  "og:title", "og:description", "og:image", "og:type", "og:url", "og:site_name", "og:locale",
+  "og:title",
+  "og:description",
+  "og:image",
+  "og:type",
+  "og:url",
+  "og:site_name",
+  "og:locale",
 ]);
 
 function buildMetaLines({ project, meta, canonicalUrl, robotsNoIndex }) {
@@ -407,31 +533,55 @@ function buildMetaLines({ project, meta, canonicalUrl, robotsNoIndex }) {
   const description = meta?.description || project?.description || "";
   const ogImage = meta?.ogImage || "";
   const ogType = meta?.ogType || "website";
-  const twitterCard = meta?.twitterCard || (ogImage ? "summary_large_image" : "summary");
+  const twitterCard =
+    meta?.twitterCard || (ogImage ? "summary_large_image" : "summary");
 
   if (title) lines.push(`<title>${escapeHtml(title)}</title>`);
-  if (description) lines.push(`<meta name="description" content="${escapeHtml(description)}">`);
-  lines.push(`<meta name="viewport" content="width=device-width, initial-scale=1.0">`);
+  if (description)
+    lines.push(
+      `<meta name="description" content="${escapeHtml(description)}">`,
+    );
+  lines.push(
+    `<meta name="viewport" content="width=device-width, initial-scale=1.0">`,
+  );
   lines.push(`<meta name="generator" content="Folio">`);
-  lines.push(`<meta name="theme-color" content="${escapeHtml(meta?.themeColor || "#0a0c10")}">`);
-  if (robotsNoIndex) lines.push(`<meta name="robots" content="noindex,nofollow">`);
+  lines.push(
+    `<meta name="theme-color" content="${escapeHtml(meta?.themeColor || "#0a0c10")}">`,
+  );
+  if (robotsNoIndex)
+    lines.push(`<meta name="robots" content="noindex,nofollow">`);
 
-  if (canonicalUrl) lines.push(`<link rel="canonical" href="${escapeHtml(canonicalUrl)}">`);
+  if (canonicalUrl)
+    lines.push(`<link rel="canonical" href="${escapeHtml(canonicalUrl)}">`);
 
   lines.push(`<meta property="og:type" content="${escapeHtml(ogType)}">`);
-  if (title) lines.push(`<meta property="og:title" content="${escapeHtml(title)}">`);
-  if (description) lines.push(`<meta property="og:description" content="${escapeHtml(description)}">`);
-  if (canonicalUrl) lines.push(`<meta property="og:url" content="${escapeHtml(canonicalUrl)}">`);
+  if (title)
+    lines.push(`<meta property="og:title" content="${escapeHtml(title)}">`);
+  if (description)
+    lines.push(
+      `<meta property="og:description" content="${escapeHtml(description)}">`,
+    );
+  if (canonicalUrl)
+    lines.push(
+      `<meta property="og:url" content="${escapeHtml(canonicalUrl)}">`,
+    );
   lines.push(`<meta property="og:site_name" content="Folio">`);
   lines.push(`<meta property="og:locale" content="en_US">`);
-  if (ogImage) lines.push(`<meta property="og:image" content="${escapeHtml(ogImage)}">`);
+  if (ogImage)
+    lines.push(`<meta property="og:image" content="${escapeHtml(ogImage)}">`);
 
   lines.push(`<meta name="twitter:card" content="${escapeHtml(twitterCard)}">`);
-  if (title) lines.push(`<meta name="twitter:title" content="${escapeHtml(title)}">`);
-  if (description) lines.push(`<meta name="twitter:description" content="${escapeHtml(description)}">`);
-  if (ogImage) lines.push(`<meta name="twitter:image" content="${escapeHtml(ogImage)}">`);
+  if (title)
+    lines.push(`<meta name="twitter:title" content="${escapeHtml(title)}">`);
+  if (description)
+    lines.push(
+      `<meta name="twitter:description" content="${escapeHtml(description)}">`,
+    );
+  if (ogImage)
+    lines.push(`<meta name="twitter:image" content="${escapeHtml(ogImage)}">`);
 
-  if (project?.iconUrl) lines.push(`<link rel="icon" href="${escapeHtml(project.iconUrl)}">`);
+  if (project?.iconUrl)
+    lines.push(`<link rel="icon" href="${escapeHtml(project.iconUrl)}">`);
 
   return lines;
 }
@@ -439,15 +589,22 @@ function buildMetaLines({ project, meta, canonicalUrl, robotsNoIndex }) {
 function stripEquivalentTags(html) {
   let cleaned = String(html);
   cleaned = cleaned.replace(/<title>[\s\S]*?<\/title>/i, "");
-  cleaned = cleaned.replace(/<meta\s+name=["']([^"']+)["'][^>]*>/gi, (m, name) =>
-    META_KEYS_BY_NAME.has(name.toLowerCase()) ? "" : m);
-  cleaned = cleaned.replace(/<meta\s+property=["']([^"']+)["'][^>]*>/gi, (m, prop) =>
-    META_KEYS_BY_PROP.has(prop.toLowerCase()) ? "" : m);
+  cleaned = cleaned.replace(
+    /<meta\s+name=["']([^"']+)["'][^>]*>/gi,
+    (m, name) => (META_KEYS_BY_NAME.has(name.toLowerCase()) ? "" : m),
+  );
+  cleaned = cleaned.replace(
+    /<meta\s+property=["']([^"']+)["'][^>]*>/gi,
+    (m, prop) => (META_KEYS_BY_PROP.has(prop.toLowerCase()) ? "" : m),
+  );
   cleaned = cleaned.replace(/<link\s+rel=["']canonical["'][^>]*>/gi, "");
   cleaned = cleaned.replace(/<meta\s+name=["']viewport["'][^>]*>/gi, "");
   cleaned = cleaned.replace(/<meta\s+name=["']generator["'][^>]*>/gi, "");
   cleaned = cleaned.replace(/<meta\s+name=["']theme-color["'][^>]*>/gi, "");
-  cleaned = cleaned.replace(/<link\s+rel=["'](?:shortcut\s+)?icon["'][^>]*>/gi, "");
+  cleaned = cleaned.replace(
+    /<link\s+rel=["'](?:shortcut\s+)?icon["'][^>]*>/gi,
+    "",
+  );
   return cleaned;
 }
 
@@ -497,10 +654,14 @@ function isValidRoutePath(p) {
 async function findProjectBySlug(username, slug) {
   const owner = await getUserByUsername(username);
   if (!owner) return null;
-  const snap = await db.ref("projects").orderByChild("ownerId").equalTo(owner.uid).once("value");
+  const snap = await db
+    .ref("projects")
+    .orderByChild("ownerId")
+    .equalTo(owner.uid)
+    .once("value");
   if (!snap.exists()) return null;
   let found = null;
-  snap.forEach(child => {
+  snap.forEach((child) => {
     const p = child.val();
     if (p.slug === slug) found = { pid: child.key, project: p, owner };
   });
@@ -531,7 +692,10 @@ async function getProjectOwnerUsername(pid, project) {
     const owner = await getUser(ownerId);
     const username = owner?.profile?.username || null;
     if (username) {
-      await db.ref(`projects/${pid}/ownerUsername`).set(username).catch(() => {});
+      await db
+        .ref(`projects/${pid}/ownerUsername`)
+        .set(username)
+        .catch(() => {});
       invalidateProject(pid);
     }
     return username;
@@ -543,7 +707,8 @@ async function getProjectOwnerUsername(pid, project) {
 function buildProjectCleanUrl(username, project) {
   const slug = project?.slug || "";
   if (!username) return null;
-  if (!slug) return `${BASE_URL}/${username}/${encodeURIComponent(shortId(project?.pid || ""))}`;
+  if (!slug)
+    return `${BASE_URL}/${username}/${encodeURIComponent(shortId(project?.pid || ""))}`;
   return `${BASE_URL}/${username}/${encodeURIComponent(slug)}`;
 }
 function buildLiveSiteUrl(username, project) {
@@ -572,36 +737,36 @@ function buildProjectCleanUrlForPath(username, project, relPath) {
 // =========================================================================
 
 const MIME_TYPES = {
-  html:  "text/html; charset=utf-8",
-  htm:   "text/html; charset=utf-8",
-  css:   "text/css; charset=utf-8",
-  js:    "application/javascript; charset=utf-8",
-  mjs:   "application/javascript; charset=utf-8",
-  cjs:   "application/javascript; charset=utf-8",
-  json:  "application/json; charset=utf-8",
-  md:    "text/markdown; charset=utf-8",
-  txt:   "text/plain; charset=utf-8",
-  svg:   "image/svg+xml",
-  xml:   "application/xml; charset=utf-8",
-  yml:   "text/yaml; charset=utf-8",
-  yaml:  "text/yaml; charset=utf-8",
-  png:   "image/png",
-  jpg:   "image/jpeg",
-  jpeg:  "image/jpeg",
-  gif:   "image/gif",
-  webp:  "image/webp",
-  ico:   "image/x-icon",
-  woff:  "font/woff",
+  html: "text/html; charset=utf-8",
+  htm: "text/html; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  js: "application/javascript; charset=utf-8",
+  mjs: "application/javascript; charset=utf-8",
+  cjs: "application/javascript; charset=utf-8",
+  json: "application/json; charset=utf-8",
+  md: "text/markdown; charset=utf-8",
+  txt: "text/plain; charset=utf-8",
+  svg: "image/svg+xml",
+  xml: "application/xml; charset=utf-8",
+  yml: "text/yaml; charset=utf-8",
+  yaml: "text/yaml; charset=utf-8",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  ico: "image/x-icon",
+  woff: "font/woff",
   woff2: "font/woff2",
-  ttf:   "font/ttf",
-  otf:   "font/otf",
-  pdf:   "application/pdf",
-  mp4:   "video/mp4",
-  webm:  "video/webm",
-  mp3:   "audio/mpeg",
-  wav:   "audio/wav",
-  ogg:   "audio/ogg",
-  zip:   "application/zip",
+  ttf: "font/ttf",
+  otf: "font/otf",
+  pdf: "application/pdf",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  zip: "application/zip",
 };
 
 function mimeFor(p) {
@@ -610,18 +775,40 @@ function mimeFor(p) {
 }
 
 function isBinaryMime(mime) {
-  return mime && !/^text\/|^application\/(javascript|json|xml)|^image\/svg/i.test(mime);
+  return (
+    mime &&
+    !/^text\/|^application\/(javascript|json|xml)|^image\/svg/i.test(mime)
+  );
 }
 
 const LANG_MAP = {
-  html: "HTML", htm: "HTML",
-  css: "CSS", scss: "CSS", sass: "CSS", less: "CSS",
-  js: "JavaScript", mjs: "JavaScript", cjs: "JavaScript",
-  jsx: "JSX", ts: "TypeScript", tsx: "TSX",
-  json: "JSON", md: "Markdown", markdown: "Markdown",
-  svg: "SVG", xml: "XML", yml: "YAML", yaml: "YAML",
-  py: "Python", rb: "Ruby", go: "Go", rs: "Rust",
-  php: "PHP", java: "Java", kt: "Kotlin", swift: "Swift",
+  html: "HTML",
+  htm: "HTML",
+  css: "CSS",
+  scss: "CSS",
+  sass: "CSS",
+  less: "CSS",
+  js: "JavaScript",
+  mjs: "JavaScript",
+  cjs: "JavaScript",
+  jsx: "JSX",
+  ts: "TypeScript",
+  tsx: "TSX",
+  json: "JSON",
+  md: "Markdown",
+  markdown: "Markdown",
+  svg: "SVG",
+  xml: "XML",
+  yml: "YAML",
+  yaml: "YAML",
+  py: "Python",
+  rb: "Ruby",
+  go: "Go",
+  rs: "Rust",
+  php: "PHP",
+  java: "Java",
+  kt: "Kotlin",
+  swift: "Swift",
 };
 
 function computeLanguageBreakdown(files) {
@@ -636,7 +823,8 @@ function computeLanguageBreakdown(files) {
     byExt[lang] = (byExt[lang] || 0) + lines;
     total += lines;
   }
-  if (total === 0) return { breakdown: {}, totalLines: 0, computedAt: Date.now() };
+  if (total === 0)
+    return { breakdown: {}, totalLines: 0, computedAt: Date.now() };
   const breakdown = {};
   for (const [lang, lines] of Object.entries(byExt)) {
     breakdown[lang] = Math.round((lines / total) * 1000) / 10;
@@ -648,10 +836,11 @@ function computeLanguageBreakdown(files) {
 // FLIER + OG + THUMBNAIL
 // =========================================================================
 
-const FLIER_INTERNAL_URL = process.env.FLIER_INTERNAL_URL || `${BASE_URL}/api/flier`;
+const FLIER_INTERNAL_URL =
+  process.env.FLIER_INTERNAL_URL || `${BASE_URL}/api/flier`;
 
 function ogSignature(...parts) {
-  const raw = parts.map(p => String(p ?? "")).join("|");
+  const raw = parts.map((p) => String(p ?? "")).join("|");
   return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16);
 }
 
@@ -664,16 +853,25 @@ function isValidOgUrl(url) {
     const ext = u.pathname.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
     if (ext && !OG_IMAGE_EXTENSIONS.includes(ext)) return false;
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 function flierCacheKey(payload) {
-  return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 32);
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(payload))
+    .digest("hex")
+    .slice(0, 32);
 }
 function flierCacheGet(key) {
   const c = FLIER_MEM_CACHE.get(key);
   if (!c) return null;
-  if (Date.now() - c.at > FLIER_MEM_TTL) { FLIER_MEM_CACHE.delete(key); return null; }
+  if (Date.now() - c.at > FLIER_MEM_TTL) {
+    FLIER_MEM_CACHE.delete(key);
+    return null;
+  }
   return c.url;
 }
 function flierCacheSet(key, url) {
@@ -702,26 +900,42 @@ async function callFlier(payload, { retries = 1 } = {}) {
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        log("og_image.flier_http", { status: res.status, attempt, body: text.slice(0, 200) });
-        if (attempt < retries) { await new Promise(r => setTimeout(r, 400 + attempt * 600)); continue; }
+        log("og_image.flier_http", {
+          status: res.status,
+          attempt,
+          body: text.slice(0, 200),
+        });
+        if (attempt < retries) {
+          await new Promise((r) => setTimeout(r, 400 + attempt * 600));
+          continue;
+        }
         return null;
       }
       const json = await res.json();
       if (!json.success || !json.url) {
         log("og_image.flier_no_url", { attempt, response: json });
-        if (attempt < retries) { await new Promise(r => setTimeout(r, 400 + attempt * 600)); continue; }
+        if (attempt < retries) {
+          await new Promise((r) => setTimeout(r, 400 + attempt * 600));
+          continue;
+        }
         return null;
       }
       if (!isValidOgUrl(json.url)) {
         log("og_image.flier_bad_url", { attempt, url: json.url });
-        if (attempt < retries) { await new Promise(r => setTimeout(r, 400 + attempt * 600)); continue; }
+        if (attempt < retries) {
+          await new Promise((r) => setTimeout(r, 400 + attempt * 600));
+          continue;
+        }
         return null;
       }
       flierCacheSet(cacheKey, json.url);
       return json.url;
     } catch (err) {
       log("og_image.flier_error", { attempt, message: err.message });
-      if (attempt < retries) { await new Promise(r => setTimeout(r, 400 + attempt * 600)); continue; }
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 400 + attempt * 600));
+        continue;
+      }
     }
   }
   return null;
@@ -729,57 +943,97 @@ async function callFlier(payload, { retries = 1 } = {}) {
 
 async function getFallbackOg(kind) {
   if (FALLBACK_OG[kind]) return FALLBACK_OG[kind];
-  const cached = await db.ref(`og_defaults/${kind}/url`).once("value").catch(() => null);
+  const cached = await db
+    .ref(`og_defaults/${kind}/url`)
+    .once("value")
+    .catch(() => null);
   if (cached?.exists() && isValidOgUrl(cached.val())) {
     FALLBACK_OG[kind] = cached.val();
     return cached.val();
   }
   const payload = {
-    mode: "upload", type: "template", template: "hero-short", size: OG_SIZE,
+    mode: "upload",
+    type: "template",
+    template: "hero-short",
+    size: OG_SIZE,
     data: {
-      text: { kicker: "FOLIO", headline: kind === "project" ? "A project on Folio" : "A creator on Folio" },
-      style: { variant: "dark", scene: kind === "project" ? "skyline" : "ribbon", scenePalette: "warm", colors: { primary: "#F59E0B", accent: "#fbbf24" } },
+      text: {
+        kicker: "FOLIO",
+        headline:
+          kind === "project" ? "A project on Folio" : "A creator on Folio",
+      },
+      style: {
+        variant: "dark",
+        scene: kind === "project" ? "skyline" : "ribbon",
+        scenePalette: "warm",
+        colors: { primary: "#F59E0B", accent: "#fbbf24" },
+      },
     },
     upload: { name: `og_default_${kind}` },
   };
   const url = await callFlier(payload, { retries: 2 });
-  if (!url) { log("og_image.fallback_failed", { kind }); return null; }
-  await db.ref(`og_defaults/${kind}`).set({ url, generatedAt: Date.now() }).catch(() => {});
+  if (!url) {
+    log("og_image.fallback_failed", { kind });
+    return null;
+  }
+  await db
+    .ref(`og_defaults/${kind}`)
+    .set({ url, generatedAt: Date.now() })
+    .catch(() => {});
   FALLBACK_OG[kind] = url;
   return url;
 }
 
 function pickSceneForProject(project) {
-  const hash = crypto.createHash("sha256").update(String(project.name || project.pid || "")).digest();
+  const hash = crypto
+    .createHash("sha256")
+    .update(String(project.name || project.pid || ""))
+    .digest();
   return PROJECT_SCENES[hash[0] % PROJECT_SCENES.length];
 }
 function pickPaletteForProject(project) {
-  const hash = crypto.createHash("sha256").update(String(project.name || project.pid || "")).digest();
+  const hash = crypto
+    .createHash("sha256")
+    .update(String(project.name || project.pid || ""))
+    .digest();
   return PALETTES[hash[1] % PALETTES.length];
 }
 function pickSceneForProfile(user, username) {
-  const hash = crypto.createHash("sha256").update(String(user.profile?.displayName || username || "")).digest();
+  const hash = crypto
+    .createHash("sha256")
+    .update(String(user.profile?.displayName || username || ""))
+    .digest();
   return PROFILE_SCENES[hash[0] % PROFILE_SCENES.length];
 }
 function pickPaletteForProfile(user, username) {
-  const hash = crypto.createHash("sha256").update(String(user.profile?.displayName || username || "")).digest();
+  const hash = crypto
+    .createHash("sha256")
+    .update(String(user.profile?.displayName || username || ""))
+    .digest();
   return PALETTES[hash[1] % PALETTES.length];
 }
 
 function deriveProjectDescription(project, files) {
-  if (project.description?.trim()) return project.description.trim().slice(0, 160);
+  if (project.description?.trim())
+    return project.description.trim().slice(0, 160);
   if (files) {
-    const htmlFile = files["index.html"] || files["index.htm"] ||
-                     Object.entries(files).find(([p]) => /\.html?$/i.test(p))?.[1];
+    const htmlFile =
+      files["index.html"] ||
+      files["index.htm"] ||
+      Object.entries(files).find(([p]) => /\.html?$/i.test(p))?.[1];
     if (htmlFile) {
       const h1 = String(htmlFile).match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-      const p  = String(htmlFile).match(/<p[^>]*>([\s\S]*?)<\/p>/i);
-      const raw = (h1?.[1] || p?.[1] || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const p = String(htmlFile).match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+      const raw = (h1?.[1] || p?.[1] || "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
       if (raw.length > 15) return raw.slice(0, 160);
     }
   }
   const langs = Object.keys(project.languages?.breakdown || {});
-  if (langs.length > 0) return `${langs.slice(0, 3).join(", ")} project on Folio`;
+  if (langs.length > 0)
+    return `${langs.slice(0, 3).join(", ")} project on Folio`;
   return `${project.name || "A Folio project"} — built with Folio.`;
 }
 
@@ -812,15 +1066,24 @@ async function ensureProjectOgImage({ pid, project, files }) {
   const langs = Object.entries(project.languages?.breakdown || {})
     .sort(([, a], [, b]) => b - a)
     .map(([lang]) => lang);
-  const sig = ogSignature(project.name, derivedDesc, project.iconUrl, langs.slice(0, 4).join(","));
+  const sig = ogSignature(
+    project.name,
+    derivedDesc,
+    project.iconUrl,
+    langs.slice(0, 4).join(","),
+  );
   const cached = project.ogImage;
-  if (cached?.url && cached.signature === sig && isValidOgUrl(cached.url)) return cached.url;
+  if (cached?.url && cached.signature === sig && isValidOgUrl(cached.url))
+    return cached.url;
 
   const template = pickProjectTemplate(project, derivedDesc, langs);
   const scene = pickSceneForProject(project);
   const palette = pickPaletteForProject(project);
   const payload = {
-    mode: "upload", type: "template", template, size: OG_SIZE,
+    mode: "upload",
+    type: "template",
+    template,
+    size: OG_SIZE,
     // Seed the accent from pid so every project gets a distinct tint
     // while primary stays branded amber. resolveTheme() reads this seed.
     seed: pid,
@@ -851,9 +1114,17 @@ async function ensureProjectOgImage({ pid, project, files }) {
     log("og_image.project_fallback", { pid, template, scene, palette });
     return await getFallbackOg("project");
   }
-  await db.ref(`projects/${pid}/ogImage`).set({
-    url, signature: sig, template, scene, palette, generatedAt: Date.now(),
-  }).catch(() => {});
+  await db
+    .ref(`projects/${pid}/ogImage`)
+    .set({
+      url,
+      signature: sig,
+      template,
+      scene,
+      palette,
+      generatedAt: Date.now(),
+    })
+    .catch(() => {});
   invalidateProject(pid);
   return url;
 }
@@ -863,17 +1134,25 @@ async function ensureProfileOgImage({ user, username }) {
   const derivedBio = (user.profile?.bio || "").trim().slice(0, 160);
   const sig = ogSignature(displayName, derivedBio, user.profile?.avatarUrl);
   const cached = user.profile?.ogImage;
-  if (cached?.url && cached.signature === sig && isValidOgUrl(cached.url)) return cached.url;
+  if (cached?.url && cached.signature === sig && isValidOgUrl(cached.url))
+    return cached.url;
 
   const template = pickProfileTemplate(user, derivedBio);
   const scene = pickSceneForProfile(user, username);
   const palette = pickPaletteForProfile(user, username);
   const payload = {
-    mode: "upload", type: "template", template, size: OG_SIZE,
+    mode: "upload",
+    type: "template",
+    template,
+    size: OG_SIZE,
     // Seed from username so every profile gets a distinct accent.
     seed: username,
     data: {
-      text: { kicker: `@${username}`, headline: displayName, subheadline: derivedBio },
+      text: {
+        kicker: `@${username}`,
+        headline: displayName,
+        subheadline: derivedBio,
+      },
       style: {
         variant: "dark",
         align: template === "hero-short" ? "center" : "left",
@@ -882,7 +1161,9 @@ async function ensureProfileOgImage({ user, username }) {
         scene,
         scenePalette: palette,
       },
-      images: user.profile?.avatarUrl ? { primary: { url: user.profile.avatarUrl } } : {},
+      images: user.profile?.avatarUrl
+        ? { primary: { url: user.profile.avatarUrl } }
+        : {},
     },
     upload: { name: `og_profile_${username}_${sig}` },
   };
@@ -891,20 +1172,37 @@ async function ensureProfileOgImage({ user, username }) {
     log("og_image.profile_fallback", { username, template });
     return await getFallbackOg("profile");
   }
-  await db.ref(`users/${user.uid}/profile/ogImage`).set({
-    url, signature: sig, template, scene, palette, generatedAt: Date.now(),
-  }).catch(() => {});
+  await db
+    .ref(`users/${user.uid}/profile/ogImage`)
+    .set({
+      url,
+      signature: sig,
+      template,
+      scene,
+      palette,
+      generatedAt: Date.now(),
+    })
+    .catch(() => {});
   return url;
 }
 
 async function invalidateProjectOgImage(pid) {
-  await db.ref(`projects/${pid}/ogImage`).remove().catch(() => {});
+  await db
+    .ref(`projects/${pid}/ogImage`)
+    .remove()
+    .catch(() => {});
   invalidateProject(pid);
 }
 
 async function invalidateProfileOgImage(uid) {
-  await db.ref(`users/${uid}/profile/ogImage`).remove().catch(() => {});
-  await db.ref(`users/${uid}/profile/ogImageUrl`).remove().catch(() => {});
+  await db
+    .ref(`users/${uid}/profile/ogImage`)
+    .remove()
+    .catch(() => {});
+  await db
+    .ref(`users/${uid}/profile/ogImageUrl`)
+    .remove()
+    .catch(() => {});
 }
 
 async function resolveProjectMeta(pid, project) {
@@ -916,10 +1214,13 @@ async function resolveProjectMeta(pid, project) {
   if (!meta.ogImage || !isValidOgUrl(meta.ogImage)) {
     let files = null;
     if (!project.description?.trim()) {
-      const snap = await db.ref(`files/${pid}`).once("value").catch(() => null);
+      const snap = await db
+        .ref(`files/${pid}`)
+        .once("value")
+        .catch(() => null);
       files = {};
       if (snap?.exists()) {
-        snap.forEach(c => {
+        snap.forEach((c) => {
           const v = c.val();
           if (v?.path) files[v.path] = v.content || "";
         });
@@ -928,7 +1229,8 @@ async function resolveProjectMeta(pid, project) {
     const gen = await ensureProjectOgImage({ pid, project, files });
     if (gen) meta.ogImage = gen;
   }
-  if (!meta.description) meta.description = deriveProjectDescription(project, null);
+  if (!meta.description)
+    meta.description = deriveProjectDescription(project, null);
 
   META_CACHE.set(pid, { meta, at: Date.now() });
   return meta;
@@ -936,21 +1238,32 @@ async function resolveProjectMeta(pid, project) {
 
 async function ensureProjectLanguages(pid, project, files) {
   const cached = project.languages;
-  if (cached?.breakdown && Object.keys(cached.breakdown).length > 0 &&
-      cached.computedAt && Date.now() - cached.computedAt < LANGUAGES_CACHE_TTL) {
+  if (
+    cached?.breakdown &&
+    Object.keys(cached.breakdown).length > 0 &&
+    cached.computedAt &&
+    Date.now() - cached.computedAt < LANGUAGES_CACHE_TTL
+  ) {
     return cached;
   }
   if (!files) {
-    const snap = await db.ref(`files/${pid}`).once("value").catch(() => null);
-    if (!snap?.exists()) return { breakdown: {}, totalLines: 0, computedAt: Date.now() };
+    const snap = await db
+      .ref(`files/${pid}`)
+      .once("value")
+      .catch(() => null);
+    if (!snap?.exists())
+      return { breakdown: {}, totalLines: 0, computedAt: Date.now() };
     files = {};
-    snap.forEach(c => {
+    snap.forEach((c) => {
       const v = c.val();
       if (v?.path) files[v.path] = v.content || "";
     });
   }
   const record = computeLanguageBreakdown(files);
-  await db.ref(`projects/${pid}/languages`).set(record).catch(() => {});
+  await db
+    .ref(`projects/${pid}/languages`)
+    .set(record)
+    .catch(() => {});
   invalidateProject(pid);
   return record;
 }
@@ -973,10 +1286,13 @@ function hasDetailedIndex(files) {
 
 async function ensureProjectThumbnail(pid, files) {
   if (!files) {
-    const snap = await db.ref(`files/${pid}`).once("value").catch(() => null);
+    const snap = await db
+      .ref(`files/${pid}`)
+      .once("value")
+      .catch(() => null);
     if (!snap?.exists()) return null;
     files = {};
-    snap.forEach(c => {
+    snap.forEach((c) => {
       const v = c.val();
       if (v?.path) files[v.path] = v.content || "";
     });
@@ -985,18 +1301,24 @@ async function ensureProjectThumbnail(pid, files) {
   const detailed = hasDetailedIndex(files);
   const renderMode = detailed ? "browser-frame" : "html";
 
-  const indexHtml = files["index.html"] || files["index.htm"] ||
+  const indexHtml =
+    files["index.html"] ||
+    files["index.htm"] ||
     Object.entries(files).find(([p]) => /\.html?$/i.test(p))?.[1];
   if (!indexHtml) return null;
 
   // Signature includes renderMode so switching a project from html→browser-frame
   // (e.g. after adding an h1) triggers regeneration on next read.
-  const sig = crypto.createHash("sha256")
+  const sig = crypto
+    .createHash("sha256")
     .update(`${renderMode}:${indexHtml.slice(0, 5000)}`)
     .digest("hex")
     .slice(0, 16);
 
-  const existing = await db.ref(`projects/${pid}/thumbnail`).once("value").catch(() => null);
+  const existing = await db
+    .ref(`projects/${pid}/thumbnail`)
+    .once("value")
+    .catch(() => null);
   if (existing?.exists()) {
     const t = existing.val();
     if (t.signature === sig && isValidOgUrl(t.url)) return t.url;
@@ -1005,7 +1327,10 @@ async function ensureProjectThumbnail(pid, files) {
   let payload;
   if (detailed) {
     // Browser-frame path: use project identity + icon + derived description.
-    const projectSnap = await db.ref(`projects/${pid}`).once("value").catch(() => null);
+    const projectSnap = await db
+      .ref(`projects/${pid}`)
+      .once("value")
+      .catch(() => null);
     const project = projectSnap?.exists() ? projectSnap.val() : {};
     const derivedDesc = deriveProjectDescription(project, files);
     payload = {
@@ -1045,44 +1370,78 @@ async function ensureProjectThumbnail(pid, files) {
 
   const url = await callFlier(payload);
   if (!url) return null;
-  await db.ref(`projects/${pid}/thumbnail`).set({
-    url, signature: sig, renderMode, generatedAt: Date.now(),
-  }).catch(() => {});
+  await db
+    .ref(`projects/${pid}/thumbnail`)
+    .set({
+      url,
+      signature: sig,
+      renderMode,
+      generatedAt: Date.now(),
+    })
+    .catch(() => {});
   invalidateProject(pid);
   return url;
 }
 
 async function ensureDeploymentThumbnail(pid, deploymentId, files) {
   if (!files) return null;
-  const indexHtml = files["index.html"] || files["index.htm"] ||
+  const indexHtml =
+    files["index.html"] ||
+    files["index.htm"] ||
     Object.entries(files).find(([p]) => /\.html?$/i.test(p))?.[1];
   if (!indexHtml) return null;
-  const sig = crypto.createHash("sha256").update(indexHtml.slice(0, 5000)).digest("hex").slice(0, 16);
-  const existing = await db.ref(`projects/${pid}/deployments/${deploymentId}/thumbnail`).once("value").catch(() => null);
+  const sig = crypto
+    .createHash("sha256")
+    .update(indexHtml.slice(0, 5000))
+    .digest("hex")
+    .slice(0, 16);
+  const existing = await db
+    .ref(`projects/${pid}/deployments/${deploymentId}/thumbnail`)
+    .once("value")
+    .catch(() => null);
   if (existing?.exists()) {
     const t = existing.val();
     if (t.signature === sig && isValidOgUrl(t.url)) return t.url;
   }
-  const proj = await db.ref(`projects/${pid}/thumbnail`).once("value").catch(() => null);
-  if (proj?.exists() && proj.val().signature === sig && isValidOgUrl(proj.val().url)) {
+  const proj = await db
+    .ref(`projects/${pid}/thumbnail`)
+    .once("value")
+    .catch(() => null);
+  if (
+    proj?.exists() &&
+    proj.val().signature === sig &&
+    isValidOgUrl(proj.val().url)
+  ) {
     const record = proj.val();
-    await db.ref(`projects/${pid}/deployments/${deploymentId}/thumbnail`).set(record).catch(() => {});
+    await db
+      .ref(`projects/${pid}/deployments/${deploymentId}/thumbnail`)
+      .set(record)
+      .catch(() => {});
     return record.url;
   }
   const payload = {
-    mode: "upload", type: "html", html: indexHtml.slice(0, 200_000),
-    size: THUMBNAIL_SIZE, upload: { name: `thumb_${pid}_${deploymentId}` },
+    mode: "upload",
+    type: "html",
+    html: indexHtml.slice(0, 200_000),
+    size: THUMBNAIL_SIZE,
+    upload: { name: `thumb_${pid}_${deploymentId}` },
   };
   const url = await callFlier(payload);
   if (!url) return null;
   const record = { url, signature: sig, generatedAt: Date.now() };
-  await db.ref(`projects/${pid}/deployments/${deploymentId}/thumbnail`).set(record).catch(() => {});
+  await db
+    .ref(`projects/${pid}/deployments/${deploymentId}/thumbnail`)
+    .set(record)
+    .catch(() => {});
   return url;
 }
 
 async function ensureUserAvatar(uid, displayName, username) {
   if (!uid || !username) return null;
-  const existing = await db.ref(`users/${uid}/profile/avatarUrl`).once("value").catch(() => null);
+  const existing = await db
+    .ref(`users/${uid}/profile/avatarUrl`)
+    .once("value")
+    .catch(() => null);
   if (existing?.exists() && existing.val()) return existing.val();
   try {
     const res = await fetch(`${BASE_URL}/api/flier?action=avatar/preview`, {
@@ -1093,7 +1452,12 @@ async function ensureUserAvatar(uid, displayName, username) {
     });
     if (!res.ok) return null;
     const json = await res.json();
-    if (!json.success || !Array.isArray(json.variants) || json.variants.length === 0) return null;
+    if (
+      !json.success ||
+      !Array.isArray(json.variants) ||
+      json.variants.length === 0
+    )
+      return null;
     const chosen = json.variants[0];
     if (!chosen?.dataUrl) return null;
     const upRes = await fetch(`${BASE_URL}/api/flier?action=avatar/upload`, {
@@ -1104,8 +1468,12 @@ async function ensureUserAvatar(uid, displayName, username) {
     });
     if (!upRes.ok) return null;
     const upJson = await upRes.json();
-    if (!upJson.success || !upJson.url || !isValidOgUrl(upJson.url)) return null;
-    await db.ref(`users/${uid}/profile/avatarUrl`).set(upJson.url).catch(() => {});
+    if (!upJson.success || !upJson.url || !isValidOgUrl(upJson.url))
+      return null;
+    await db
+      .ref(`users/${uid}/profile/avatarUrl`)
+      .set(upJson.url)
+      .catch(() => {});
     return upJson.url;
   } catch (err) {
     log("host.avatar_generate_failed", { uid, username, message: err.message });
@@ -1124,7 +1492,10 @@ async function notificationImageUrl({
 } = {}) {
   if (!title) return null;
   const payload = {
-    mode: "upload", type: "template", template, size,
+    mode: "upload",
+    type: "template",
+    template,
+    size,
     // Notifications are brand surfaces — primary stays amber, accent varies.
     seed: seed || `${title}:${subtitle}`,
     data: {
@@ -1150,7 +1521,10 @@ async function callNotify(type, uid, payload) {
   try {
     const res = await fetch(`${BASE_URL}/api/notify?action=create`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": process.env.ADMIN_API_KEY || "" },
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ADMIN_API_KEY || "",
+      },
       body: JSON.stringify({ type, uid, ...payload }),
     });
     if (!res.ok) log("host.notify_failed", { type, uid, status: res.status });
@@ -1161,7 +1535,7 @@ async function callNotify(type, uid, payload) {
 
 async function notifyMany(type, uids, payload) {
   const unique = [...new Set((uids || []).filter(Boolean))];
-  await Promise.allSettled(unique.map(uid => callNotify(type, uid, payload)));
+  await Promise.allSettled(unique.map((uid) => callNotify(type, uid, payload)));
 }
 
 async function getProjectAudience(pid) {
@@ -1183,7 +1557,7 @@ async function getVisibleContributors(pid, project, { viewerUid = null } = {}) {
     const ownerId = project.ownerId;
     if (!ownerId) return [];
 
-    const uids = Object.keys(roles).filter(uid => uid !== ownerId);
+    const uids = Object.keys(roles).filter((uid) => uid !== ownerId);
     if (!uids.length) return [];
 
     // Privacy gate: only show collaborators when the owner's profile is
@@ -1193,31 +1567,36 @@ async function getVisibleContributors(pid, project, { viewerUid = null } = {}) {
     const profilePublic = project.visibility?.profile === "public";
     if (!profilePublic && !isOwnerViewer) return [];
 
-    const contributors = await Promise.all(uids.slice(0, 20).map(async (uid) => {
-      try {
-        const user = await getUser(uid);
-        if (!user) return null;
-        const username = user.profile?.username || null;
-        if (!username) return null;
+    const contributors = await Promise.all(
+      uids.slice(0, 20).map(async (uid) => {
+        try {
+          const user = await getUser(uid);
+          if (!user) return null;
+          const username = user.profile?.username || null;
+          if (!username) return null;
 
-        // Non-owners only see contributors whose own profile is public.
-        // Users can opt out of being listed by setting profileVisibility
-        // to "private". Default (unset) is treated as public.
-        if (!isOwnerViewer && user.settings?.profileVisibility === "private") {
+          // Non-owners only see contributors whose own profile is public.
+          // Users can opt out of being listed by setting profileVisibility
+          // to "private". Default (unset) is treated as public.
+          if (
+            !isOwnerViewer &&
+            user.settings?.profileVisibility === "private"
+          ) {
+            return null;
+          }
+
+          return {
+            uid,
+            username,
+            displayName: user.profile?.displayName || username,
+            avatarUrl: user.profile?.avatarUrl || null,
+            role: roles[uid] || "viewer",
+          };
+        } catch {
           return null;
         }
-
-        return {
-          uid,
-          username,
-          displayName: user.profile?.displayName || username,
-          avatarUrl: user.profile?.avatarUrl || null,
-          role: roles[uid] || "viewer",
-        };
-      } catch {
-        return null;
-      }
-    }));
+      }),
+    );
 
     return contributors.filter(Boolean);
   } catch (err) {
@@ -1234,7 +1613,9 @@ async function shouldNotifyOnce(uid, key, ttlMs = 24 * 60 * 60 * 1000) {
     if (snap.exists() && now - (snap.val()?.ts || 0) < ttlMs) return false;
     await ref.set({ ts: now }).catch(() => {});
     return true;
-  } catch { return true; }
+  } catch {
+    return true;
+  }
 }
 
 async function notifyDeployFailed(access, pid, projectName, reason, status) {
@@ -1242,10 +1623,15 @@ async function notifyDeployFailed(access, pid, projectName, reason, status) {
   let imageUrl = null;
   try {
     imageUrl = await notificationImageUrl({
-      title: "Deployment failed", subtitle: reason,
-      template: "stat-hero", scene: "grid_wave", palette: "sunset",
+      title: "Deployment failed",
+      subtitle: reason,
+      template: "stat-hero",
+      scene: "grid_wave",
+      palette: "sunset",
     });
-  } catch (err) { log("host.notify_deploy_failed.image_error", { message: err.message }); }
+  } catch (err) {
+    log("host.notify_deploy_failed.image_error", { message: err.message });
+  }
   await callNotify("project", access.uid, {
     title: "Deployment failed",
     body: `Deploy to "${projectName || "project"}" failed: ${reason}`,
@@ -1255,7 +1641,14 @@ async function notifyDeployFailed(access, pid, projectName, reason, status) {
   });
 }
 
-async function notifyStorageWarning(pid, ownerId, finalSize, LIMIT, percentUsed, kind = "nearly_full") {
+async function notifyStorageWarning(
+  pid,
+  ownerId,
+  finalSize,
+  LIMIT,
+  percentUsed,
+  kind = "nearly_full",
+) {
   if (!ownerId) return;
   const key = `storage_${kind}_${pid}`;
   const ttl = kind === "full" ? 6 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
@@ -1265,15 +1658,19 @@ async function notifyStorageWarning(pid, ownerId, finalSize, LIMIT, percentUsed,
     imageUrl = await notificationImageUrl({
       title: kind === "full" ? "100% full" : `${percentUsed}% full`,
       subtitle: `${Math.round(finalSize / 1024 / 1024)} MB of ${Math.round(LIMIT / 1024 / 1024)} MB used`,
-      template: "stat-hero", scene: "grid_wave",
+      template: "stat-hero",
+      scene: "grid_wave",
       palette: kind === "full" ? "sunset" : "warm",
     });
-  } catch (err) { log("host.notify_storage.image_error", { message: err.message }); }
+  } catch (err) {
+    log("host.notify_storage.image_error", { message: err.message });
+  }
   await callNotify("storage", ownerId, {
     title: kind === "full" ? "Database limit reached" : "Database nearly full",
-    body: kind === "full"
-      ? `Writes to this project are being rejected — ${percentUsed}% full.`
-      : `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of ${Math.round(LIMIT / 1024 / 1024)} MB).`,
+    body:
+      kind === "full"
+        ? `Writes to this project are being rejected — ${percentUsed}% full.`
+        : `Database is ${percentUsed}% full (${Math.round(finalSize / 1024 / 1024)} MB of ${Math.round(LIMIT / 1024 / 1024)} MB).`,
     imageUrl,
     link: `${BASE_URL}/project?pid=${pid}`,
     extra: { pid, size: finalSize, limit: LIMIT, percentUsed, kind },
@@ -1295,16 +1692,25 @@ async function maybeNotifyRateLimitAbuse(action, identifier, rateResult) {
   let fired = false;
   let ownerId = directUid;
   try {
-    await ref.transaction(cur => {
-      const c = cur && (now - (cur.first || 0) < HOUR) ? cur : { count: 0, first: now };
+    await ref.transaction((cur) => {
+      const c =
+        cur && now - (cur.first || 0) < HOUR ? cur : { count: 0, first: now };
       c.count += 1;
-      if (c.count === 5 && !c.fired) { c.fired = true; fired = true; }
+      if (c.count === 5 && !c.fired) {
+        c.fired = true;
+        fired = true;
+      }
       return c;
     });
-  } catch { return; }
+  } catch {
+    return;
+  }
   if (!fired) return;
   if (!ownerId && pid) {
-    const snap = await db.ref(`projects/${pid}/ownerId`).once("value").catch(() => null);
+    const snap = await db
+      .ref(`projects/${pid}/ownerId`)
+      .once("value")
+      .catch(() => null);
     if (snap?.exists()) ownerId = snap.val();
   }
   if (!ownerId) return;
@@ -1322,7 +1728,10 @@ async function maybeNotifyRateLimitAbuse(action, identifier, rateResult) {
 
 async function ensureDeployVersion(pid, files, versionId) {
   if (versionId) {
-    const snap = await db.ref(`versions/${pid}/${versionId}`).once("value").catch(() => null);
+    const snap = await db
+      .ref(`versions/${pid}/${versionId}`)
+      .once("value")
+      .catch(() => null);
     if (snap?.exists()) return versionId;
   }
   const vid = `v_deploy_${Date.now()}_${crypto.randomBytes(2).toString("hex")}`;
@@ -1343,9 +1752,13 @@ async function pruneDeployments(pid) {
   const dSnap = await db.ref(`projects/${pid}/deployments`).once("value");
   if (!dSnap.exists()) return;
   const entries = [];
-  dSnap.forEach(c => {
+  dSnap.forEach((c) => {
     const v = c.val() || {};
-    entries.push({ id: c.key, at: v.deployedAt || 0, vid: v.versionId || null });
+    entries.push({
+      id: c.key,
+      at: v.deployedAt || 0,
+      vid: v.versionId || null,
+    });
   });
   if (entries.length <= MAX_DEPLOYMENTS_PER_PROJECT) return;
 
@@ -1356,17 +1769,26 @@ async function pruneDeployments(pid) {
     updates[`projects/${pid}/deployments/${d.id}`] = null;
     if (d.vid) updates[`versions/${pid}/${d.vid}`] = null;
   }
-  try { await db.ref().update(updates); } catch (err) {
+  try {
+    await db.ref().update(updates);
+  } catch (err) {
     log("host.deploy.prune_failed", { pid, message: err.message });
   }
 
-  const currentSnap = await db.ref(`projects/${pid}/deployment/deploymentId`).once("value");
+  const currentSnap = await db
+    .ref(`projects/${pid}/deployment/deploymentId`)
+    .once("value");
   const currentId = currentSnap.exists() ? currentSnap.val() : null;
-  if (currentId && toDelete.some(d => d.id === currentId)) {
-    const next = entries.find(e => e.id !== currentId && !toDelete.some(d => d.id === e.id));
+  if (currentId && toDelete.some((d) => d.id === currentId)) {
+    const next = entries.find(
+      (e) => e.id !== currentId && !toDelete.some((d) => d.id === e.id),
+    );
     if (next) {
-      const recSnap = await db.ref(`projects/${pid}/deployments/${next.id}`).once("value");
-      if (recSnap.exists()) await db.ref(`projects/${pid}/deployment`).set(recSnap.val());
+      const recSnap = await db
+        .ref(`projects/${pid}/deployments/${next.id}`)
+        .once("value");
+      if (recSnap.exists())
+        await db.ref(`projects/${pid}/deployment`).set(recSnap.val());
       else await db.ref(`projects/${pid}/deployment`).remove();
     } else {
       await db.ref(`projects/${pid}/deployment`).remove();
@@ -1380,19 +1802,36 @@ async function writeFilesInBatches(pid, fileMap, reqId) {
   const skipped = [];
   for (let i = 0; i < entries.length; i += DEPLOY_PARALLEL_WRITES) {
     const batch = entries.slice(i, i + DEPLOY_PARALLEL_WRITES);
-    await Promise.allSettled(batch.map(async ([p, c]) => {
-      if (typeof c !== "string") { skipped.push(p); return; }
-      if (!isValidFilePath(p)) { skipped.push(p); return; }
-      try {
-        await db.ref(`files/${pid}/${sanitizeFirebasePath(p.replace(/\//g, "__"))}`).set({
-          path: p, content: c, updatedAt: Date.now(),
-        });
-        written++;
-      } catch (err) {
-        log("host.deploy.file_failed", { reqId, pid, filePath: p, message: err.message });
-        skipped.push(p);
-      }
-    }));
+    await Promise.allSettled(
+      batch.map(async ([p, c]) => {
+        if (typeof c !== "string") {
+          skipped.push(p);
+          return;
+        }
+        if (!isValidFilePath(p)) {
+          skipped.push(p);
+          return;
+        }
+        try {
+          await db
+            .ref(`files/${pid}/${sanitizeFirebasePath(p.replace(/\//g, "__"))}`)
+            .set({
+              path: p,
+              content: c,
+              updatedAt: Date.now(),
+            });
+          written++;
+        } catch (err) {
+          log("host.deploy.file_failed", {
+            reqId,
+            pid,
+            filePath: p,
+            message: err.message,
+          });
+          skipped.push(p);
+        }
+      }),
+    );
   }
   return { written, skipped };
 }
@@ -1400,7 +1839,9 @@ async function writeFilesInBatches(pid, fileMap, reqId) {
 async function handleDeploy(req, res, reqId) {
   const { pid, files, versionId, clientRequestId } = req.body || {};
   if (!pid || !files || typeof files !== "object") {
-    return res.status(400).json({ success: false, error: "Missing pid or files" });
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid or files" });
   }
   if (!(await enforceRate(req, res, "deploy", `pid_${pid}`))) return;
 
@@ -1410,7 +1851,8 @@ async function handleDeploy(req, res, reqId) {
   // ✅ FIX: invalidate cache first so we don't read a stale project record
   invalidateProject(pid);
   const project = await getProjectCached(pid);
-  if (!project) return res.status(404).json({ success: false, error: "Project not found" });
+  if (!project)
+    return res.status(404).json({ success: false, error: "Project not found" });
 
   // Validate total payload
   let totalBytes = 0;
@@ -1421,7 +1863,15 @@ async function handleDeploy(req, res, reqId) {
     if (!isValidFilePath(p)) continue;
     totalBytes += c.length;
     if (totalBytes > DEPLOY_MAX_TOTAL_BYTES) {
-      try { await notifyDeployFailed(access, pid, project.name, "payload exceeds size limit", 413); } catch {}
+      try {
+        await notifyDeployFailed(
+          access,
+          pid,
+          project.name,
+          "payload exceeds size limit",
+          413,
+        );
+      } catch {}
       return res.status(413).json({
         success: false,
         error: "Project too large to deploy",
@@ -1433,8 +1883,18 @@ async function handleDeploy(req, res, reqId) {
   }
 
   if (Object.keys(acceptedFiles).length === 0) {
-    try { await notifyDeployFailed(access, pid, project.name, "no valid files in payload", 400); } catch {}
-    return res.status(400).json({ success: false, error: "No valid files to deploy" });
+    try {
+      await notifyDeployFailed(
+        access,
+        pid,
+        project.name,
+        "no valid files in payload",
+        400,
+      );
+    } catch {}
+    return res
+      .status(400)
+      .json({ success: false, error: "No valid files to deploy" });
   }
 
   // ✅ FIX: make version snapshot non-fatal. If it fails, we still deploy.
@@ -1447,17 +1907,35 @@ async function handleDeploy(req, res, reqId) {
   }
 
   // Write files
-  const { written, skipped } = await writeFilesInBatches(pid, acceptedFiles, reqId);
+  const { written, skipped } = await writeFilesInBatches(
+    pid,
+    acceptedFiles,
+    reqId,
+  );
   if (written === 0) {
-    try { await notifyDeployFailed(access, pid, project.name, "no files written", 500); } catch {}
-    return res.status(500).json({ success: false, error: "No files were written" });
+    try {
+      await notifyDeployFailed(
+        access,
+        pid,
+        project.name,
+        "no files written",
+        500,
+      );
+    } catch {}
+    return res
+      .status(500)
+      .json({ success: false, error: "No files were written" });
   }
 
   // Post-write enrichment (non-fatal)
-  try { await ensureProjectLanguages(pid, project, acceptedFiles); } catch (err) {
+  try {
+    await ensureProjectLanguages(pid, project, acceptedFiles);
+  } catch (err) {
     log("host.deploy.languages_failed", { pid, message: err.message });
   }
-  try { await ensureProjectThumbnail(pid, acceptedFiles); } catch (err) {
+  try {
+    await ensureProjectThumbnail(pid, acceptedFiles);
+  } catch (err) {
     log("host.deploy.thumbnail_failed", { pid, message: err.message });
   }
   await invalidateProjectOgImage(pid).catch(() => {});
@@ -1467,9 +1945,10 @@ async function handleDeploy(req, res, reqId) {
   try {
     const fSnap = await db.ref(`files/${pid}`).once("value");
     if (fSnap.exists()) {
-      fSnap.forEach(c => {
+      fSnap.forEach((c) => {
         const v = c.val();
-        if (v?.content && typeof v.content === "string") storageUsed += v.content.length;
+        if (v?.content && typeof v.content === "string")
+          storageUsed += v.content.length;
       });
     }
   } catch {}
@@ -1496,9 +1975,14 @@ async function handleDeploy(req, res, reqId) {
 
   // ✅ FIX: write the deployment FIRST so status polling succeeds immediately
   await db.ref(`projects/${pid}/deployment`).set(deploymentRecord);
-  await db.ref(`projects/${pid}/deployments/${deploymentId}`).set(deploymentRecord);
+  await db
+    .ref(`projects/${pid}/deployments/${deploymentId}`)
+    .set(deploymentRecord);
   await db.ref(`projects/${pid}/updatedAt`).set(Date.now());
-  await db.ref(`projects/${pid}/storageUsed`).set(storageUsed).catch(() => {});
+  await db
+    .ref(`projects/${pid}/storageUsed`)
+    .set(storageUsed)
+    .catch(() => {});
   invalidateProject(pid);
 
   await pruneDeployments(pid);
@@ -1514,15 +1998,23 @@ async function handleDeploy(req, res, reqId) {
   try {
     await ensureDeploymentThumbnail(pid, deploymentId, acceptedFiles);
   } catch (err) {
-    log("host.deploy.deployment_thumb_failed", { pid, deploymentId, message: err.message });
+    log("host.deploy.deployment_thumb_failed", {
+      pid,
+      deploymentId,
+      message: err.message,
+    });
   }
 
   try {
     const audience = await getProjectAudience(pid);
-    const others = audience.uids.filter(u => u !== access.uid);
+    const others = audience.uids.filter((u) => u !== access.uid);
     if (others.length) {
-      const thumb = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
-      const imageUrl = thumb?.exists() && isValidOgUrl(thumb.val()) ? thumb.val() : null;
+      const thumb = await db
+        .ref(`projects/${pid}/thumbnail/url`)
+        .once("value")
+        .catch(() => null);
+      const imageUrl =
+        thumb?.exists() && isValidOgUrl(thumb.val()) ? thumb.val() : null;
       await notifyMany("project", others, {
         title: "Deployment complete",
         body: `Project "${project.name}" is live.`,
@@ -1547,19 +2039,26 @@ async function handleDeploy(req, res, reqId) {
 async function handleRedeploy(req, res, reqId) {
   const { pid, versionId } = req.body || {};
   if (!pid || !versionId) {
-    return res.status(400).json({ success: false, error: "Missing pid or versionId" });
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid or versionId" });
   }
   if (!(await enforceRate(req, res, "redeploy", `pid_${pid}`))) return;
 
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
-  const versionSnap = await db.ref(`versions/${pid}/${versionId}`).once("value");
-  if (!versionSnap.exists()) return res.status(404).json({ success: false, error: "Version not found" });
+  const versionSnap = await db
+    .ref(`versions/${pid}/${versionId}`)
+    .once("value");
+  if (!versionSnap.exists())
+    return res.status(404).json({ success: false, error: "Version not found" });
   const version = versionSnap.val();
   const files = version.files;
   if (!files || typeof files !== "object") {
-    return res.status(400).json({ success: false, error: "Version has no files" });
+    return res
+      .status(400)
+      .json({ success: false, error: "Version has no files" });
   }
 
   return handleDeploy({ ...req, body: { pid, files, versionId } }, res, reqId);
@@ -1567,7 +2066,8 @@ async function handleRedeploy(req, res, reqId) {
 
 async function handleStatus(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "status", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "viewer");
   if (!access) return;
@@ -1578,26 +2078,34 @@ async function handleStatus(req, res, reqId) {
 
 async function handleDeploymentHistory(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "deploymentHistory", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "viewer");
   if (!access) return;
 
-  const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 30, 1), 100);
+  const limit = Math.min(
+    Math.max(parseInt(req.query?.limit, 10) || 30, 1),
+    100,
+  );
   const offset = Math.max(parseInt(req.query?.offset, 10) || 0, 0);
 
   const [snap, versionsSnap, currentSnap] = await Promise.all([
     db.ref(`projects/${pid}/deployments`).once("value"),
-    db.ref(`versions/${pid}`).once("value").catch(() => null),
+    db
+      .ref(`versions/${pid}`)
+      .once("value")
+      .catch(() => null),
     db.ref(`projects/${pid}/deployment/deploymentId`).once("value"),
   ]);
 
   const existingVersions = new Set();
-  if (versionsSnap?.exists()) versionsSnap.forEach(c => existingVersions.add(c.key));
+  if (versionsSnap?.exists())
+    versionsSnap.forEach((c) => existingVersions.add(c.key));
 
   const deployments = [];
   if (snap.exists()) {
-    snap.forEach(child => {
+    snap.forEach((child) => {
       const v = child.val() || {};
       deployments.push({
         id: child.key,
@@ -1609,12 +2117,16 @@ async function handleDeploymentHistory(req, res, reqId) {
   deployments.sort((a, b) => (b.deployedAt || 0) - (a.deployedAt || 0));
   const slice = deployments.slice(offset, offset + limit);
 
-  await Promise.all(slice.map(async d => {
-    try {
-      const t = await db.ref(`projects/${pid}/deployments/${d.id}/thumbnail/url`).once("value");
-      if (t?.exists() && isValidOgUrl(t.val())) d.thumbnailUrl = t.val();
-    } catch {}
-  }));
+  await Promise.all(
+    slice.map(async (d) => {
+      try {
+        const t = await db
+          .ref(`projects/${pid}/deployments/${d.id}/thumbnail/url`)
+          .once("value");
+        if (t?.exists() && isValidOgUrl(t.val())) d.thumbnailUrl = t.val();
+      } catch {}
+    }),
+  );
 
   const currentId = currentSnap.exists() ? currentSnap.val() : null;
 
@@ -1630,18 +2142,27 @@ async function handleDeploymentHistory(req, res, reqId) {
 
 async function handleDeploymentOffline(req, res, reqId) {
   const { pid } = req.body || {};
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "deploymentOffline", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
-  const deploymentSnap = await db.ref(`projects/${pid}/deployment`).once("value");
-  if (!deploymentSnap.exists()) return res.status(400).json({ success: false, error: "No active deployment" });
+  const deploymentSnap = await db
+    .ref(`projects/${pid}/deployment`)
+    .once("value");
+  if (!deploymentSnap.exists())
+    return res
+      .status(400)
+      .json({ success: false, error: "No active deployment" });
   const current = deploymentSnap.val();
 
   await db.ref(`projects/${pid}/deployment`).update({
-    state: "OFFLINE", offlineAt: Date.now(), offlineBy: access.uid,
-    previousUrl: current.url || null, url: null,
+    state: "OFFLINE",
+    offlineAt: Date.now(),
+    offlineBy: access.uid,
+    previousUrl: current.url || null,
+    url: null,
   });
   invalidateProject(pid);
 
@@ -1649,13 +2170,16 @@ async function handleDeploymentOffline(req, res, reqId) {
 
   try {
     const audience = await getProjectAudience(pid);
-    const others = audience.uids.filter(u => u !== access.uid);
+    const others = audience.uids.filter((u) => u !== access.uid);
     if (others.length) {
       const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
       const pname = nameSnap.exists() ? nameSnap.val() : "a project";
       let imageUrl = null;
       try {
-        const t = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
+        const t = await db
+          .ref(`projects/${pid}/thumbnail/url`)
+          .once("value")
+          .catch(() => null);
         if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
       } catch {}
       await notifyMany("project", others, {
@@ -1674,7 +2198,9 @@ async function handleDeploymentOffline(req, res, reqId) {
 async function handleDeploymentDelete(req, res, reqId) {
   const { pid, deploymentId } = req.body || {};
   if (!pid || !deploymentId) {
-    return res.status(400).json({ success: false, error: "Missing pid or deploymentId" });
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid or deploymentId" });
   }
   if (!(await enforceRate(req, res, "deploymentDelete", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "owner");
@@ -1685,7 +2211,9 @@ async function handleDeploymentDelete(req, res, reqId) {
     db.ref(`projects/${pid}/deployments/${deploymentId}`).once("value"),
   ]);
   const isCurrent = currentSnap.exists() && currentSnap.val() === deploymentId;
-  const pairedVersionId = targetSnap.exists() ? (targetSnap.val()?.versionId || null) : null;
+  const pairedVersionId = targetSnap.exists()
+    ? targetSnap.val()?.versionId || null
+    : null;
 
   const updates = {};
   updates[`projects/${pid}/deployments/${deploymentId}`] = null;
@@ -1694,11 +2222,14 @@ async function handleDeploymentDelete(req, res, reqId) {
   await db.ref().update(updates);
   invalidateProject(pid);
 
-  await logProjectEvent(pid, access.uid, "deploy", "deployment.deleted", { deploymentId, pairedVersionId });
+  await logProjectEvent(pid, access.uid, "deploy", "deployment.deleted", {
+    deploymentId,
+    pairedVersionId,
+  });
 
   try {
     const audience = await getProjectAudience(pid);
-    const others = audience.uids.filter(u => u !== access.uid);
+    const others = audience.uids.filter((u) => u !== access.uid);
     if (others.length) {
       await notifyMany("project", others, {
         title: "Deployment removed",
@@ -1709,7 +2240,9 @@ async function handleDeploymentDelete(req, res, reqId) {
     }
   } catch {}
 
-  return res.status(200).json({ success: true, pairedVersionDeleted: !!pairedVersionId });
+  return res
+    .status(200)
+    .json({ success: true, pairedVersionDeleted: !!pairedVersionId });
 }
 
 // =========================================================================
@@ -1723,9 +2256,10 @@ function rewriteRelativeUrls(html, ctx) {
     : "";
   const buildUrl = (target) => {
     const rel = target.startsWith("/") ? target.slice(1) : baseDir + target;
-    const cleanBase = username && slug
-      ? `${BASE_URL}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/`
-      : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=`;
+    const cleanBase =
+      username && slug
+        ? `${BASE_URL}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/`
+        : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=`;
     const encoded = rel.split("/").map(encodeURIComponent).join("/");
     const params = new URLSearchParams();
     if (cacheKey) params.set("v", cacheKey);
@@ -1747,9 +2281,10 @@ function rewriteCssUrls(css, ctx) {
     : "";
   const buildUrl = (ref) => {
     const rel = ref.startsWith("/") ? ref.slice(1) : baseDir + ref;
-    const cleanBase = username && slug
-      ? `${BASE_URL}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/`
-      : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=`;
+    const cleanBase =
+      username && slug
+        ? `${BASE_URL}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/`
+        : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=`;
     const encoded = rel.split("/").map(encodeURIComponent).join("/");
     const params = new URLSearchParams();
     if (cacheKey) params.set("v", cacheKey);
@@ -1766,13 +2301,31 @@ function rewriteCssUrls(css, ctx) {
 
 function injectTracker(html, pid) {
   const snippet = `<script>(function(){try{var p=location.pathname,r=document.referrer||"";fetch(${JSON.stringify(BASE_URL)}+"/api/analytics?action=hit",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({projectId:${JSON.stringify(pid)},path:p,referrer:r}),keepalive:true}).catch(function(){})}catch(e){}})();</script>`;
-  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, snippet + "\n</body>");
+  if (/<\/body>/i.test(html))
+    return html.replace(/<\/body>/i, snippet + "\n</body>");
   return html + "\n" + snippet;
 }
 
 function isTextExt(p) {
   const ext = (p.split(".").pop() || "").toLowerCase();
-  return ["html","htm","css","js","mjs","cjs","json","md","txt","svg","xml","yml","yaml","ts","tsx","jsx"].includes(ext);
+  return [
+    "html",
+    "htm",
+    "css",
+    "js",
+    "mjs",
+    "cjs",
+    "json",
+    "md",
+    "txt",
+    "svg",
+    "xml",
+    "yml",
+    "yaml",
+    "ts",
+    "tsx",
+    "jsx",
+  ].includes(ext);
 }
 
 async function readFileFromSource(pid, path, contentMap) {
@@ -1791,12 +2344,15 @@ async function readFileFromSource(pid, path, contentMap) {
 
 async function listFilesFromSource(pid, contentMap) {
   if (contentMap) {
-    return Object.entries(contentMap).map(([p, c]) => ({ path: p, content: String(c ?? "") }));
+    return Object.entries(contentMap).map(([p, c]) => ({
+      path: p,
+      content: String(c ?? ""),
+    }));
   }
   const snap = await db.ref(`files/${pid}`).once("value");
   const out = [];
   if (snap.exists()) {
-    snap.forEach(c => {
+    snap.forEach((c) => {
       const v = c.val();
       if (v?.path) out.push({ path: v.path, content: String(v.content ?? "") });
     });
@@ -1805,10 +2361,13 @@ async function listFilesFromSource(pid, contentMap) {
 }
 
 async function resolveRequestPath(pid, wantPath, contentMap) {
-  const cleaned = String(wantPath || "").replace(/^\/+/, "").replace(/\/+$/, "");
+  const cleaned = String(wantPath || "")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
   if (!cleaned) {
-    const idx = await readFileFromSource(pid, "index.html", contentMap)
-      || await readFileFromSource(pid, "index.htm", contentMap);
+    const idx =
+      (await readFileFromSource(pid, "index.html", contentMap)) ||
+      (await readFileFromSource(pid, "index.htm", contentMap));
     if (idx) return { kind: "file", path: idx.path, content: idx.content };
     return { kind: "folder", path: "" };
   }
@@ -1816,12 +2375,14 @@ async function resolveRequestPath(pid, wantPath, contentMap) {
   const hasExt = /\.[a-zA-Z0-9]+$/.test(cleaned.split("/").pop() || "");
 
   if (!hasExt) {
-    const idx = await readFileFromSource(pid, `${cleaned}/index.html`, contentMap)
-      || await readFileFromSource(pid, `${cleaned}/index.htm`, contentMap);
+    const idx =
+      (await readFileFromSource(pid, `${cleaned}/index.html`, contentMap)) ||
+      (await readFileFromSource(pid, `${cleaned}/index.htm`, contentMap));
     if (idx) return { kind: "file", path: idx.path, content: idx.content };
 
-    const html = await readFileFromSource(pid, `${cleaned}.html`, contentMap)
-      || await readFileFromSource(pid, `${cleaned}.htm`, contentMap);
+    const html =
+      (await readFileFromSource(pid, `${cleaned}.html`, contentMap)) ||
+      (await readFileFromSource(pid, `${cleaned}.htm`, contentMap));
     if (html) return { kind: "file", path: html.path, content: html.content };
 
     return { kind: "folder", path: cleaned };
@@ -1832,7 +2393,20 @@ async function resolveRequestPath(pid, wantPath, contentMap) {
   return { kind: "notfound", path: cleaned };
 }
 
-async function renderFolderListing(res, { pid, project, folderPath, contentMap, username, slug, cacheKey, fromId, canAccessPrivate }) {
+async function renderFolderListing(
+  res,
+  {
+    pid,
+    project,
+    folderPath,
+    contentMap,
+    username,
+    slug,
+    cacheKey,
+    fromId,
+    canAccessPrivate,
+  },
+) {
   if (!canAccessPrivate && project.visibility?.liveSite !== "public") {
     return sendHtmlPage(res, {
       title: "Private folder",
@@ -1852,7 +2426,8 @@ async function renderFolderListing(res, { pid, project, folderPath, contentMap, 
     const rest = f.path.slice(prefix.length);
     if (!rest) continue;
     const slash = rest.indexOf("/");
-    if (slash < 0) direct.push({ name: rest, path: f.path, size: f.content.length });
+    if (slash < 0)
+      direct.push({ name: rest, path: f.path, size: f.content.length });
     else subFolders.add(rest.slice(0, slash));
   }
   direct.sort((a, b) => a.name.localeCompare(b.name));
@@ -1861,9 +2436,10 @@ async function renderFolderListing(res, { pid, project, folderPath, contentMap, 
   // ✅ FIX: three-segment base for live-site folder browsing
   const buildHref = (rel) => {
     const relPath = folderPath ? `${folderPath}/${rel}` : rel;
-    const base = username && slug
-      ? `${BASE_URL}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/${relPath.split("/").map(encodeURIComponent).join("/")}`
-      : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=${encodeURIComponent(relPath)}`;
+    const base =
+      username && slug
+        ? `${BASE_URL}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/${relPath.split("/").map(encodeURIComponent).join("/")}`
+        : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=${encodeURIComponent(relPath)}`;
     const params = new URLSearchParams();
     if (cacheKey) params.set("v", cacheKey);
     if (fromId) params.set("from", fromId);
@@ -1874,14 +2450,20 @@ async function renderFolderListing(res, { pid, project, folderPath, contentMap, 
 
   const rows = [];
   for (const f of foldersArr) {
-    rows.push(`<li><a href="${escapeHtml(buildHref(f + "/"))}"><span class="dir">${inlineSvg("folder", 13)}</span> ${escapeHtml(f)}/</a></li>`);
+    rows.push(
+      `<li><a href="${escapeHtml(buildHref(f + "/"))}"><span class="dir">${inlineSvg("folder", 13)}</span> ${escapeHtml(f)}/</a></li>`,
+    );
   }
   for (const f of direct) {
     const icon = isTextExt(f.name) ? "code" : "file";
-    rows.push(`<li><a href="${escapeHtml(buildHref(f.name))}"><span>${inlineSvg(icon, 13)}</span> ${escapeHtml(f.name)}<span class="meta">${Math.round(f.size / 1024)} KB</span></a></li>`);
+    rows.push(
+      `<li><a href="${escapeHtml(buildHref(f.name))}"><span>${inlineSvg(icon, 13)}</span> ${escapeHtml(f.name)}<span class="meta">${Math.round(f.size / 1024)} KB</span></a></li>`,
+    );
   }
 
-  const titlePath = folderPath ? `${project.name || "Project"} / ${folderPath}` : (project.name || "Project");
+  const titlePath = folderPath
+    ? `${project.name || "Project"} / ${folderPath}`
+    : project.name || "Project";
   const parentLink = folderPath
     ? `<a class="btn ghost" href="${escapeHtml(buildHref("../"))}" style="margin-bottom:8px;">← Up</a>`
     : "";
@@ -1907,7 +2489,9 @@ async function handleServe(req, res, reqId) {
     return res.send(body);
   };
 
-  let username = String(req.query?.username || "").trim().toLowerCase();
+  let username = String(req.query?.username || "")
+    .trim()
+    .toLowerCase();
   let projectSlug = String(req.query?.project || "").trim();
   let pid = String(req.query?.pid || "").trim();
 
@@ -1916,7 +2500,8 @@ async function handleServe(req, res, reqId) {
     try {
       const prev = await db.ref(`previousUsernames/${username}`).once("value");
       if (prev.exists() && prev.val() && prev.val() !== username) {
-        const target = `/` + prev.val() + `/project/` + encodeURIComponent(projectSlug);
+        const target =
+          `/` + prev.val() + `/project/` + encodeURIComponent(projectSlug);
         return res.redirect(301, `${BASE_URL}${target}`);
       }
     } catch {}
@@ -1933,28 +2518,38 @@ async function handleServe(req, res, reqId) {
         if (ps.exists()) {
           const map = ps.val() || {};
           if (map[projectSlug]) {
-            return res.redirect(301, `${BASE_URL}/${username}/project/${map[projectSlug]}`);
+            return res.redirect(
+              301,
+              `${BASE_URL}/${username}/project/${map[projectSlug]}`,
+            );
           }
         }
       } catch {}
     } else {
       return sendHtmlPage(res, {
-        title: "Project not found", heading: "Project not found",
-        message: "The link you followed may be broken, or the project may have been deleted.",
-        icon: "alert", status: 404,
+        title: "Project not found",
+        heading: "Project not found",
+        message:
+          "The link you followed may be broken, or the project may have been deleted.",
+        icon: "alert",
+        status: 404,
       });
     }
   }
 
-  if (!pid && !username) return sendText(400, "Missing pid or username/project");
+  if (!pid && !username)
+    return sendText(400, "Missing pid or username/project");
 
   if (!pid && username && projectSlug) {
     const found = await findProjectBySlug(username, projectSlug);
     if (!found) {
       return sendHtmlPage(res, {
-        title: "Project not found", heading: "Project not found",
-        message: "The link you followed may be broken, or the project may have been deleted.",
-        icon: "alert", status: 404,
+        title: "Project not found",
+        heading: "Project not found",
+        message:
+          "The link you followed may be broken, or the project may have been deleted.",
+        icon: "alert",
+        status: 404,
       });
     }
     pid = found.pid;
@@ -1965,34 +2560,44 @@ async function handleServe(req, res, reqId) {
   const project = await getProjectCached(pid);
   if (!project) {
     return sendHtmlPage(res, {
-      title: "Not found", heading: "Project not found",
+      title: "Not found",
+      heading: "Project not found",
       message: "This project does not exist or has been deleted.",
-      icon: "alert", status: 404,
+      icon: "alert",
+      status: 404,
     });
   }
 
   // ── Viewer identity ──
   const signedIn = await canAccessProjectFromReq(req);
-  const canAccessPrivate = signedIn && (signedIn.role === "owner" || signedIn.role === "editor");
+  const canAccessPrivate =
+    signedIn && (signedIn.role === "owner" || signedIn.role === "editor");
 
   // ── GATE: live site only exists if visibility.liveSite === "public" ──
   const liveSitePublic = project.visibility?.liveSite === "public";
   const isHistoricPreview = !!String(req.query?.from || "").length;
 
   if (!liveSitePublic && !canAccessPrivate) {
-    const ownerUsername = username
-      || project.ownerUsername
-      || (await getProjectOwnerUsername(pid, project))
-      || "";
+    const ownerUsername =
+      username ||
+      project.ownerUsername ||
+      (await getProjectOwnerUsername(pid, project)) ||
+      "";
     // If the details page IS public, send visitors there so they can see
     // why the live URL isn't available (e.g., "not deployed" state).
-    if (ownerUsername && project.slug && project.visibility?.profile === "public") {
+    if (
+      ownerUsername &&
+      project.slug &&
+      project.visibility?.profile === "public"
+    ) {
       return res.redirect(301, `${BASE_URL}/${ownerUsername}/${project.slug}`);
     }
     return sendHtmlPage(res, {
-      title: "Not found", heading: "This site is not live",
+      title: "Not found",
+      heading: "This site is not live",
       message: "The owner hasn't published this project's live site publicly.",
-      icon: "lock", status: 404,
+      icon: "lock",
+      status: 404,
     });
   }
 
@@ -2002,7 +2607,8 @@ async function handleServe(req, res, reqId) {
       title: "Preview restricted",
       heading: "This preview is for the owner",
       message: "Sign in as the owner to preview historical deployments.",
-      icon: "lock", status: 403,
+      icon: "lock",
+      status: 403,
     });
   }
 
@@ -2010,27 +2616,36 @@ async function handleServe(req, res, reqId) {
   const fromId = String(req.query?.from || "").trim();
   let contentMap = null;
   if (fromId) {
-    const dSnap = await db.ref(`projects/${pid}/deployments/${fromId}`).once("value");
+    const dSnap = await db
+      .ref(`projects/${pid}/deployments/${fromId}`)
+      .once("value");
     if (!dSnap.exists()) {
       return sendHtmlPage(res, {
-        title: "Deployment not found", heading: "Deployment not found",
-        message: "This deployment no longer exists.", icon: "alert", status: 404,
+        title: "Deployment not found",
+        heading: "Deployment not found",
+        message: "This deployment no longer exists.",
+        icon: "alert",
+        status: 404,
       });
     }
     const vid = dSnap.val()?.versionId;
     if (!vid) {
       return sendHtmlPage(res, {
-        title: "Snapshot unavailable", heading: "Snapshot unavailable",
+        title: "Snapshot unavailable",
+        heading: "Snapshot unavailable",
         message: "This deployment was created before snapshots were supported.",
-        icon: "alert", status: 404,
+        icon: "alert",
+        status: 404,
       });
     }
     const vSnap = await db.ref(`versions/${pid}/${vid}`).once("value");
     if (!vSnap.exists()) {
       return sendHtmlPage(res, {
-        title: "Snapshot unavailable", heading: "Snapshot unavailable",
+        title: "Snapshot unavailable",
+        heading: "Snapshot unavailable",
         message: "The snapshot for this deployment has been deleted.",
-        icon: "alert", status: 404,
+        icon: "alert",
+        status: 404,
       });
     }
     contentMap = vSnap.val()?.files || {};
@@ -2048,24 +2663,33 @@ async function handleServe(req, res, reqId) {
 
   // ── Folder listing ──
   if (resolved.kind === "folder") {
-    const ownerUsername = username
-      || project.ownerUsername
-      || (await getProjectOwnerUsername(pid, project))
-      || "";
+    const ownerUsername =
+      username ||
+      project.ownerUsername ||
+      (await getProjectOwnerUsername(pid, project)) ||
+      "";
     const cacheKey = fromId || project.deployment?.deploymentId || "dev";
     return renderFolderListing(res, {
-      pid, project, folderPath: resolved.path, contentMap,
-      username: ownerUsername, slug: project.slug,
-      cacheKey, fromId, canAccessPrivate,
+      pid,
+      project,
+      folderPath: resolved.path,
+      contentMap,
+      username: ownerUsername,
+      slug: project.slug,
+      cacheKey,
+      fromId,
+      canAccessPrivate,
     });
   }
 
   // ── 404 ──
   if (resolved.kind === "notfound" || !resolved.content) {
     return sendHtmlPage(res, {
-      title: "Not found", heading: "Not found",
+      title: "Not found",
+      heading: "Not found",
       message: "The page you requested doesn't exist.",
-      icon: "alert", status: 404,
+      icon: "alert",
+      status: 404,
     });
   }
 
@@ -2076,10 +2700,11 @@ async function handleServe(req, res, reqId) {
     return sendText(413, "File too large to serve");
   }
 
-  const ownerUsername = username
-    || project.ownerUsername
-    || (await getProjectOwnerUsername(pid, project))
-    || "";
+  const ownerUsername =
+    username ||
+    project.ownerUsername ||
+    (await getProjectOwnerUsername(pid, project)) ||
+    "";
   const cacheKey = fromId || project.deployment?.deploymentId || "dev";
   const mime = mimeFor(relPath);
 
@@ -2094,12 +2719,17 @@ async function handleServe(req, res, reqId) {
     let html = content;
     try {
       const meta = await resolveProjectMeta(pid, project);
-      const canonicalPath = (relPath === "index.html" || relPath === "index.htm")
-        ? ""
-        : relPath;
-      const canonicalUrl = buildLiveSiteUrlForPath(ownerUsername, project, canonicalPath);
+      const canonicalPath =
+        relPath === "index.html" || relPath === "index.htm" ? "" : relPath;
+      const canonicalUrl = buildLiveSiteUrlForPath(
+        ownerUsername,
+        project,
+        canonicalPath,
+      );
       html = injectMetaIntoHtml(html, {
-        project, meta, canonicalUrl,
+        project,
+        meta,
+        canonicalUrl,
         robotsNoIndex: !!fromId || !liveSitePublic,
       });
     } catch (err) {
@@ -2107,8 +2737,12 @@ async function handleServe(req, res, reqId) {
     }
     html = injectTracker(html, pid);
     html = rewriteRelativeUrls(html, {
-      pid, username: ownerUsername, slug: project.slug,
-      currentPath: relPath, cacheKey, fromId,
+      pid,
+      username: ownerUsername,
+      slug: project.slug,
+      currentPath: relPath,
+      cacheKey,
+      fromId,
     });
     res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
     return res.status(200).send(html);
@@ -2117,8 +2751,12 @@ async function handleServe(req, res, reqId) {
   // ── CSS ──
   if (/\.css$/i.test(relPath)) {
     const rewritten = rewriteCssUrls(content, {
-      pid, username: ownerUsername, slug: project.slug,
-      currentPath: relPath, cacheKey, fromId,
+      pid,
+      username: ownerUsername,
+      slug: project.slug,
+      currentPath: relPath,
+      cacheKey,
+      fromId,
     });
     res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300");
     return res.status(200).send(rewritten);
@@ -2129,7 +2767,10 @@ async function handleServe(req, res, reqId) {
   if (isBinaryMime(mime)) {
     if (req.query?.download === "1") {
       const fname = relPath.split("/").pop() || "file";
-      res.setHeader("Content-Disposition", `attachment; filename="${fname.replace(/"/g, "")}"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fname.replace(/"/g, "")}"`,
+      );
     }
     res.setHeader("Accept-Ranges", "none");
   }
@@ -2147,54 +2788,99 @@ async function handleProjectsList(req, res, reqId) {
 
   const projects = await listUserProjects(user.uid);
 
-  const enriched = await Promise.all(projects.map(async (p) => {
-    if (!p || !p.pid) return p;
-    try {
-      const full = await getProjectCached(p.pid);
-      if (!full) return p;
-      const thumbnail = full.thumbnail?.url && isValidOgUrl(full.thumbnail.url)
-        ? { url: full.thumbnail.url, generatedAt: full.thumbnail.generatedAt || null }
-        : null;
-      const ogImage = full.ogImage?.url && isValidOgUrl(full.ogImage.url)
-        ? { url: full.ogImage.url, template: full.ogImage.template || null, scene: full.ogImage.scene || null, palette: full.ogImage.palette || null, generatedAt: full.ogImage.generatedAt || null }
-        : null;
-      const languages = full.languages?.breakdown && Object.keys(full.languages.breakdown).length > 0
-        ? { breakdown: full.languages.breakdown, totalLines: full.languages.totalLines || 0, computedAt: full.languages.computedAt || null }
-        : null;
-      const storageUsed = full.storageUsed || 0;
-      return { ...p, thumbnail, ogImage, languages, storageUsed };
-    } catch {
-      return p;
-    }
-  }));
+  const enriched = await Promise.all(
+    projects.map(async (p) => {
+      if (!p || !p.pid) return p;
+      try {
+        const full = await getProjectCached(p.pid);
+        if (!full) return p;
+        const thumbnail =
+          full.thumbnail?.url && isValidOgUrl(full.thumbnail.url)
+            ? {
+                url: full.thumbnail.url,
+                generatedAt: full.thumbnail.generatedAt || null,
+              }
+            : null;
+        const ogImage =
+          full.ogImage?.url && isValidOgUrl(full.ogImage.url)
+            ? {
+                url: full.ogImage.url,
+                template: full.ogImage.template || null,
+                scene: full.ogImage.scene || null,
+                palette: full.ogImage.palette || null,
+                generatedAt: full.ogImage.generatedAt || null,
+              }
+            : null;
+        const languages =
+          full.languages?.breakdown &&
+          Object.keys(full.languages.breakdown).length > 0
+            ? {
+                breakdown: full.languages.breakdown,
+                totalLines: full.languages.totalLines || 0,
+                computedAt: full.languages.computedAt || null,
+              }
+            : null;
+        const storageUsed = full.storageUsed || 0;
+        return { ...p, thumbnail, ogImage, languages, storageUsed };
+      } catch {
+        return p;
+      }
+    }),
+  );
 
   return res.status(200).json({ success: true, projects: enriched });
 }
 
 async function handleProjectsGet(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "projectsGet", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "viewer");
   if (!access) return;
 
   const p = await getProjectCached(pid);
   if (!p) return res.status(404).json({ success: false, error: "Not found" });
+
+  // fileCount is cheap here (numChildren on a shallow read) and lets the
+  // client decide whether to prompt for a pull on a device with no IDB data.
+  let fileCount = 0;
+  try {
+    const filesSnap = await db.ref(`files/${pid}`).once("value");
+    if (filesSnap.exists()) fileCount = filesSnap.numChildren();
+  } catch {}
+
   const { apiKeyHash, ...safe } = p;
-  return res.status(200).json({ success: true, project: { pid, ...safe, myRole: access.role } });
+  return res.status(200).json({
+    success: true,
+    project: { pid, ...safe, fileCount, myRole: access.role },
+  });
 }
 
 async function handleProjectsCreate(req, res, reqId) {
   const user = await requireAuth(req, res);
   if (!user) return;
-  if (!(await enforceRate(req, res, "projectsCreate", `uid_${user.uid}`))) return;
+  if (!(await enforceRate(req, res, "projectsCreate", `uid_${user.uid}`)))
+    return;
 
   const { name, description } = req.body || {};
-  if (!name || typeof name !== "string" || name.length < 1 || name.length > 100) {
-    return res.status(400).json({ success: false, error: "name must be 1–100 chars" });
+  if (
+    !name ||
+    typeof name !== "string" ||
+    name.length < 1 ||
+    name.length > 100
+  ) {
+    return res
+      .status(400)
+      .json({ success: false, error: "name must be 1–100 chars" });
   }
-  if (description !== undefined && (typeof description !== "string" || description.length > 500)) {
-    return res.status(400).json({ success: false, error: "description must be ≤500 chars" });
+  if (
+    description !== undefined &&
+    (typeof description !== "string" || description.length > 500)
+  ) {
+    return res
+      .status(400)
+      .json({ success: false, error: "description must be ≤500 chars" });
   }
 
   try {
@@ -2205,18 +2891,32 @@ async function handleProjectsCreate(req, res, reqId) {
     });
     const ownerUsername = user.profile?.username || null;
     if (ownerUsername) {
-      await db.ref(`projects/${project.pid}/ownerUsername`).set(ownerUsername).catch(() => {});
+      await db
+        .ref(`projects/${project.pid}/ownerUsername`)
+        .set(ownerUsername)
+        .catch(() => {});
     }
 
     // ✅ FIX: explicitly guarantee ownerId is set, and clear stale cache
-    await db.ref(`projects/${project.pid}/ownerId`).set(user.uid).catch(() => {});
-    await db.ref(`projects/${project.pid}/roles/${user.uid}`).set("owner").catch(() => {});
-    await db.ref(`users/${user.uid}/projectIds/${project.pid}`).set(true).catch(() => {});
+    await db
+      .ref(`projects/${project.pid}/ownerId`)
+      .set(user.uid)
+      .catch(() => {});
+    await db
+      .ref(`projects/${project.pid}/roles/${user.uid}`)
+      .set("owner")
+      .catch(() => {});
+    await db
+      .ref(`users/${user.uid}/projectIds/${project.pid}`)
+      .set(true)
+      .catch(() => {});
 
     // ✅ FIX: invalidate cache so the next getProjectCached() reads fresh data
     invalidateProject(project.pid);
 
-    await logProjectEvent(project.pid, user.uid, "project", "project.created", { name: project.name });
+    await logProjectEvent(project.pid, user.uid, "project", "project.created", {
+      name: project.name,
+    });
     const { apiKeyHash, ...safe } = project;
     return res.status(200).json({
       success: true,
@@ -2224,38 +2924,55 @@ async function handleProjectsCreate(req, res, reqId) {
       project: { ...safe, ownerId: user.uid, ownerUsername },
     });
   } catch (err) {
-    log("host.projects_create.failed", { reqId, uid: user.uid, message: err.message });
-    return res.status(500).json({ success: false, error: "Could not create project" });
+    log("host.projects_create.failed", {
+      reqId,
+      uid: user.uid,
+      message: err.message,
+    });
+    return res
+      .status(500)
+      .json({ success: false, error: "Could not create project" });
   }
 }
 
 async function handleProjectsUpdate(req, res, reqId) {
   const { pid, name, description, iconUrl } = req.body || {};
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "projectsUpdate", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
   const existing = await getProjectCached(pid);
-  if (!existing) return res.status(404).json({ success: false, error: "Project not found" });
+  if (!existing)
+    return res.status(404).json({ success: false, error: "Project not found" });
 
   const patch = {};
   if (name !== undefined) {
     if (typeof name !== "string" || name.length < 1 || name.length > 100) {
-      return res.status(400).json({ success: false, error: "name must be 1–100 chars" });
+      return res
+        .status(400)
+        .json({ success: false, error: "name must be 1–100 chars" });
     }
     patch.name = name.trim();
   }
   if (description !== undefined) {
     if (typeof description !== "string" || description.length > 500) {
-      return res.status(400).json({ success: false, error: "description must be ≤500 chars" });
+      return res
+        .status(400)
+        .json({ success: false, error: "description must be ≤500 chars" });
     }
     patch.description = description.trim();
   }
   if (iconUrl !== undefined) {
     if (iconUrl !== null) {
       if (typeof iconUrl !== "string" || iconUrl.length > 500) {
-        return res.status(400).json({ success: false, error: "iconUrl must be a string ≤500 chars or null" });
+        return res
+          .status(400)
+          .json({
+            success: false,
+            error: "iconUrl must be a string ≤500 chars or null",
+          });
       }
       // Only HTTPS URLs are accepted. Data URIs must be uploaded via
       // /api/flier?action=upload first — this keeps the project record small
@@ -2270,22 +2987,29 @@ async function handleProjectsUpdate(req, res, reqId) {
     patch.iconUrl = iconUrl;
   }
   if (Object.keys(patch).length === 0) {
-    return res.status(400).json({ success: false, error: "No fields to update" });
+    return res
+      .status(400)
+      .json({ success: false, error: "No fields to update" });
   }
 
   // Slug change on rename
   if (patch.name && patch.name !== existing.name) {
-    const newSlug = patch.name
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 60) || existing.slug;
+    const newSlug =
+      patch.name
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 60) || existing.slug;
     if (newSlug && newSlug !== existing.slug) {
       try {
-        const collisions = await db.ref("projects").orderByChild("ownerId").equalTo(existing.ownerId).once("value");
+        const collisions = await db
+          .ref("projects")
+          .orderByChild("ownerId")
+          .equalTo(existing.ownerId)
+          .once("value");
         let conflict = false;
         if (collisions.exists()) {
-          collisions.forEach(child => {
+          collisions.forEach((child) => {
             const v = child.val() || {};
             if (child.key !== pid && v.slug === newSlug) conflict = true;
           });
@@ -2293,8 +3017,13 @@ async function handleProjectsUpdate(req, res, reqId) {
         if (!conflict) {
           patch.slug = newSlug;
           const updates = {};
-          if (existing.slug) updates[`previousSlugs/${pid}/${existing.slug}`] = newSlug;
-          if (Object.keys(updates).length) await db.ref().update(updates).catch(() => {});
+          if (existing.slug)
+            updates[`previousSlugs/${pid}/${existing.slug}`] = newSlug;
+          if (Object.keys(updates).length)
+            await db
+              .ref()
+              .update(updates)
+              .catch(() => {});
         }
       } catch {}
     }
@@ -2305,19 +3034,26 @@ async function handleProjectsUpdate(req, res, reqId) {
   invalidateProject(pid);
 
   await logProjectEvent(pid, access.uid, "project", "project.updated", {
-    fields: Object.keys(patch).filter(k => k !== "updatedAt"),
+    fields: Object.keys(patch).filter((k) => k !== "updatedAt"),
   });
 
-  if (patch.name !== undefined || patch.description !== undefined || patch.iconUrl !== undefined) {
+  if (
+    patch.name !== undefined ||
+    patch.description !== undefined ||
+    patch.iconUrl !== undefined
+  ) {
     await invalidateProjectOgImage(pid);
     // Thumbnail shows the old identity — wipe it so the next read regenerates.
-    await db.ref(`projects/${pid}/thumbnail`).remove().catch(() => {});
+    await db
+      .ref(`projects/${pid}/thumbnail`)
+      .remove()
+      .catch(() => {});
     // Per-deployment thumbnails also bake in the old icon.
     try {
       const dSnap = await db.ref(`projects/${pid}/deployments`).once("value");
       if (dSnap.exists()) {
         const updates = {};
-        dSnap.forEach(child => {
+        dSnap.forEach((child) => {
           updates[`projects/${pid}/deployments/${child.key}/thumbnail`] = null;
         });
         if (Object.keys(updates).length) await db.ref().update(updates);
@@ -2327,25 +3063,32 @@ async function handleProjectsUpdate(req, res, reqId) {
 
   try {
     const audience = await getProjectAudience(pid);
-    const others = audience.uids.filter(u => u !== access.uid);
+    const others = audience.uids.filter((u) => u !== access.uid);
     if (others.length) {
-      const touched = Object.keys(patch).filter(k => ["name", "description", "iconUrl"].includes(k));
+      const touched = Object.keys(patch).filter((k) =>
+        ["name", "description", "iconUrl"].includes(k),
+      );
       if (touched.length) {
         let imageUrl = null;
         try {
-          const t = await db.ref(`projects/${pid}/ogImage/url`).once("value").catch(() => null);
+          const t = await db
+            .ref(`projects/${pid}/ogImage/url`)
+            .once("value")
+            .catch(() => null);
           if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
         } catch {}
         const ownerUsername = patch.slug
           ? await getProjectOwnerUsername(pid, { ...existing, ...patch })
           : null;
-        const link = ownerUsername && (patch.slug || existing.slug)
-          ? buildProjectCleanUrl(ownerUsername, { ...existing, ...patch })
-          : `${BASE_URL}/project?pid=${pid}`;
+        const link =
+          ownerUsername && (patch.slug || existing.slug)
+            ? buildProjectCleanUrl(ownerUsername, { ...existing, ...patch })
+            : `${BASE_URL}/project?pid=${pid}`;
         await notifyMany("project", others, {
           title: "Project details updated",
           body: `Someone updated ${touched.join(", ")} on a project you collaborate on.`,
-          imageUrl, link,
+          imageUrl,
+          link,
           extra: { pid, fields: touched },
           // Unique per-project key so updates to different projects aren't
           // collapsed by notify.js's 60-second dedupe window.
@@ -2363,20 +3106,22 @@ async function handleProjectsUpdate(req, res, reqId) {
 
 async function handleRegeneratePreview(req, res, reqId) {
   const { pid } = req.body || {};
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "projectsUpdate", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
   const project = await getProjectCached(pid);
-  if (!project) return res.status(404).json({ success: false, error: "Project not found" });
+  if (!project)
+    return res.status(404).json({ success: false, error: "Project not found" });
 
   let files = null;
   try {
     const filesSnap = await db.ref(`files/${pid}`).once("value");
     files = {};
     if (filesSnap.exists()) {
-      filesSnap.forEach(c => {
+      filesSnap.forEach((c) => {
         const v = c.val();
         if (v?.path) files[v.path] = v.content || "";
       });
@@ -2387,16 +3132,26 @@ async function handleRegeneratePreview(req, res, reqId) {
     const languages = await ensureProjectLanguages(pid, project, files);
     const thumbnailUrl = await ensureProjectThumbnail(pid, files);
     await invalidateProjectOgImage(pid).catch(() => {});
-    return res.status(200).json({ success: true, languages, thumbnailUrl: thumbnailUrl || null, regeneratedAt: Date.now() });
+    return res
+      .status(200)
+      .json({
+        success: true,
+        languages,
+        thumbnailUrl: thumbnailUrl || null,
+        regeneratedAt: Date.now(),
+      });
   } catch (err) {
     log("host.regenerate_preview.failed", { pid, message: err.message });
-    return res.status(500).json({ success: false, error: err.message || "Regenerate failed" });
+    return res
+      .status(500)
+      .json({ success: false, error: err.message || "Regenerate failed" });
   }
 }
 
 async function handleProjectsDelete(req, res, reqId) {
   const { pid } = req.body || {};
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "projectsDelete", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "owner");
   if (!access) return;
@@ -2405,7 +3160,7 @@ async function handleProjectsDelete(req, res, reqId) {
   let collaborators = [];
   try {
     const audience = await getProjectAudience(pid);
-    collaborators = audience.uids.filter(u => u !== access.uid);
+    collaborators = audience.uids.filter((u) => u !== access.uid);
     const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
     projectName = nameSnap.exists() ? nameSnap.val() : "";
   } catch {}
@@ -2424,7 +3179,9 @@ async function handleProjectsDelete(req, res, reqId) {
     return res.status(200).json({ success: true });
   } catch (err) {
     log("host.projects_delete.failed", { reqId, pid, message: err.message });
-    return res.status(500).json({ success: false, error: "Could not delete project" });
+    return res
+      .status(500)
+      .json({ success: false, error: "Could not delete project" });
   }
 }
 
@@ -2434,7 +3191,8 @@ async function handleProjectsDelete(req, res, reqId) {
 
 async function handleVersionsClear(req, res, reqId) {
   const { pid } = req.body || {};
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "versionsClear", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "owner");
   if (!access) return;
@@ -2444,27 +3202,39 @@ async function handleVersionsClear(req, res, reqId) {
   let preservedDeploy = 0;
   if (snap.exists()) {
     const updates = {};
-    snap.forEach(child => {
+    snap.forEach((child) => {
       const v = child.val() || {};
-      if (v.kind === "deploy") { preservedDeploy++; return; }
+      if (v.kind === "deploy") {
+        preservedDeploy++;
+        return;
+      }
       updates[child.key] = null;
       cleared++;
     });
     if (cleared > 0) await db.ref(`versions/${pid}`).update(updates);
   }
 
-  await logProjectEvent(pid, access.uid, "version", "versions.cleared", { count: cleared, preservedDeploy });
+  await logProjectEvent(pid, access.uid, "version", "versions.cleared", {
+    count: cleared,
+    preservedDeploy,
+  });
   return res.status(200).json({ success: true, cleared, preservedDeploy });
 }
 
 async function handleCacheClear(req, res, reqId) {
   const { pid } = req.body || {};
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "cacheClear", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "owner");
   if (!access) return;
   await logProjectEvent(pid, access.uid, "project", "cache.cleared", {});
-  return res.status(200).json({ success: true, message: "Client cache is clearable via project.html" });
+  return res
+    .status(200)
+    .json({
+      success: true,
+      message: "Client cache is clearable via project.html",
+    });
 }
 
 // =========================================================================
@@ -2475,21 +3245,28 @@ const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
     let c = i;
-    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
     table[i] = c >>> 0;
   }
   return table;
 })();
 
 function crc32(buf) {
-  let crc = 0xFFFFFFFF;
-  for (let i = 0; i < buf.length; i++) crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buf[i]) & 0xFF];
-  return (crc ^ 0xFFFFFFFF) >>> 0;
+  let crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i++)
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buf[i]) & 0xff];
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 function dosDateTime(date = new Date()) {
-  const time = ((date.getHours() & 0x1F) << 11) | ((date.getMinutes() & 0x3F) << 5) | ((Math.floor(date.getSeconds() / 2)) & 0x1F);
-  const dt = (((date.getFullYear() - 1980) & 0x7F) << 9) | (((date.getMonth() + 1) & 0x0F) << 5) | (date.getDate() & 0x1F);
+  const time =
+    ((date.getHours() & 0x1f) << 11) |
+    ((date.getMinutes() & 0x3f) << 5) |
+    (Math.floor(date.getSeconds() / 2) & 0x1f);
+  const dt =
+    (((date.getFullYear() - 1980) & 0x7f) << 9) |
+    (((date.getMonth() + 1) & 0x0f) << 5) |
+    (date.getDate() & 0x1f);
   return { time, date: dt };
 }
 
@@ -2558,8 +3335,12 @@ async function handleProjectExport(req, res, reqId) {
   const format = String(req.query?.format || "folio").toLowerCase();
   const versionId = String(req.query?.versionId || "").trim();
   const publicOnly = String(req.query?.publicOnly || "false") === "true";
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
-  if (!["folio", "zip"].includes(format)) return res.status(400).json({ success: false, error: "format must be folio or zip" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!["folio", "zip"].includes(format))
+    return res
+      .status(400)
+      .json({ success: false, error: "format must be folio or zip" });
   if (!(await enforceRate(req, res, "projectExport", `pid_${pid}`))) return;
 
   let access = null;
@@ -2568,9 +3349,13 @@ async function handleProjectExport(req, res, reqId) {
     if (!user) return;
     access = await canAccessProject(user.uid, pid);
     if (!access) {
-      const visSnap = await db.ref(`projects/${pid}/visibility/profile`).once("value");
+      const visSnap = await db
+        .ref(`projects/${pid}/visibility/profile`)
+        .once("value");
       if (!visSnap.exists() || visSnap.val() !== "public") {
-        return res.status(403).json({ success: false, error: "Project is not public" });
+        return res
+          .status(403)
+          .json({ success: false, error: "Project is not public" });
       }
       access = { uid: null, role: "viewer" };
     }
@@ -2581,18 +3366,24 @@ async function handleProjectExport(req, res, reqId) {
   }
 
   const project = await getProjectCached(pid);
-  if (!project) return res.status(404).json({ success: false, error: "Project not found" });
+  if (!project)
+    return res.status(404).json({ success: false, error: "Project not found" });
   const { apiKeyHash, roles, ...safeProject } = project;
 
   let filesObj = {};
   if (versionId) {
     const vSnap = await db.ref(`versions/${pid}/${versionId}`).once("value");
-    if (!vSnap.exists()) return res.status(404).json({ success: false, error: "Version not found" });
+    if (!vSnap.exists())
+      return res
+        .status(404)
+        .json({ success: false, error: "Version not found" });
     filesObj = vSnap.val().files || {};
   } else {
     const filesSnap = await db.ref(`files/${pid}`).once("value");
     if (filesSnap.exists()) {
-      filesSnap.forEach(child => { filesObj[child.key] = child.val()?.content || ""; });
+      filesSnap.forEach((child) => {
+        filesObj[child.key] = child.val()?.content || "";
+      });
     }
   }
 
@@ -2609,7 +3400,10 @@ async function handleProjectExport(req, res, reqId) {
   let versionsObj = {};
   if (format === "folio" && !publicOnly) {
     const vSnap = await db.ref(`versions/${pid}`).once("value");
-    if (vSnap.exists()) vSnap.forEach(child => { versionsObj[child.key] = child.val(); });
+    if (vSnap.exists())
+      vSnap.forEach((child) => {
+        versionsObj[child.key] = child.val();
+      });
   }
 
   let jsonDb = null;
@@ -2623,45 +3417,78 @@ async function handleProjectExport(req, res, reqId) {
 
   const entries = [];
   const manifest = {
-    folioVersion: 1, exportedAt: nowIso(), exportedBy: access.uid || null,
-    pid, name: safeProject.name || "", slug: safeProject.slug || "",
+    folioVersion: 1,
+    exportedAt: nowIso(),
+    exportedBy: access.uid || null,
+    pid,
+    name: safeProject.name || "",
+    slug: safeProject.slug || "",
     description: safeProject.description || "",
     language: safeProject.languages?.breakdown || {},
     project: safeProject,
     versions: format === "folio" ? Object.keys(versionsObj) : [],
-    hasJsonDb: !!jsonDb, hasSchema: !!jsonDbSchema, publicOnly,
+    hasJsonDb: !!jsonDb,
+    hasSchema: !!jsonDbSchema,
+    publicOnly,
   };
-  entries.push({ name: "manifest.json", data: Buffer.from(JSON.stringify(manifest, null, 2), "utf8") });
+  entries.push({
+    name: "manifest.json",
+    data: Buffer.from(JSON.stringify(manifest, null, 2), "utf8"),
+  });
 
   for (const [filePath, content] of Object.entries(filesObj)) {
-    const buf = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(String(content));
+    const buf =
+      typeof content === "string"
+        ? Buffer.from(content, "utf8")
+        : Buffer.from(String(content));
     entries.push({ name: `files/${filePath}`, data: buf });
   }
 
   if (format === "folio" && !publicOnly) {
     for (const [vid, v] of Object.entries(versionsObj)) {
-      entries.push({ name: `versions/${vid}.json`, data: Buffer.from(JSON.stringify(v, null, 2), "utf8") });
+      entries.push({
+        name: `versions/${vid}.json`,
+        data: Buffer.from(JSON.stringify(v, null, 2), "utf8"),
+      });
     }
-    if (jsonDb) entries.push({ name: "db.json", data: Buffer.from(JSON.stringify(jsonDb, null, 2), "utf8") });
-    if (jsonDbSchema) entries.push({ name: "schema.json", data: Buffer.from(JSON.stringify(jsonDbSchema, null, 2), "utf8") });
+    if (jsonDb)
+      entries.push({
+        name: "db.json",
+        data: Buffer.from(JSON.stringify(jsonDb, null, 2), "utf8"),
+      });
+    if (jsonDbSchema)
+      entries.push({
+        name: "schema.json",
+        data: Buffer.from(JSON.stringify(jsonDbSchema, null, 2), "utf8"),
+      });
   }
 
   const zipBuffer = buildZip(entries);
-  const filename = `${(safeProject.slug || "project")}-${pid.slice(-6)}.${format === "folio" ? "folio" : "zip"}`;
+  const filename = `${safeProject.slug || "project"}-${pid.slice(-6)}.${format === "folio" ? "folio" : "zip"}`;
   res.setHeader("Content-Type", "application/octet-stream");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.setHeader("X-Project-Pid", pid);
   res.setHeader("X-Project-Format", format);
   res.setHeader("X-Project-Files", String(Object.keys(filesObj).length));
   await logProjectEvent(pid, access.uid, "project", "project.exported", {
-    format, fileCount: Object.keys(filesObj).length, publicOnly,
+    format,
+    fileCount: Object.keys(filesObj).length,
+    publicOnly,
   });
   return res.status(200).send(zipBuffer);
 }
 
 async function handleProjectSyncBack(req, res, reqId) {
-  const { pid, files, versions, db: jsonDb, schema: jsonSchema, manifest } = req.body || {};
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  const {
+    pid,
+    files,
+    versions,
+    db: jsonDb,
+    schema: jsonSchema,
+    manifest,
+  } = req.body || {};
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "projectSyncBack", `pid_${pid}`))) return;
 
   // ✅ FIX: invalidate cache before role check to avoid stale role lookups
@@ -2671,7 +3498,8 @@ async function handleProjectSyncBack(req, res, reqId) {
   if (!access) return;
 
   const project = await getProjectCached(pid);
-  if (!project) return res.status(404).json({ success: false, error: "Project not found" });
+  if (!project)
+    return res.status(404).json({ success: false, error: "Project not found" });
 
   const result = {
     filesWritten: 0,
@@ -2682,22 +3510,34 @@ async function handleProjectSyncBack(req, res, reqId) {
   };
 
   if (files && typeof files === "object") {
-    const entries = Object.entries(files).filter(([p, c]) => typeof c === "string" && isValidFilePath(p));
+    const entries = Object.entries(files).filter(
+      ([p, c]) => typeof c === "string" && isValidFilePath(p),
+    );
     for (let i = 0; i < entries.length; i += DEPLOY_PARALLEL_WRITES) {
       const batch = entries.slice(i, i + DEPLOY_PARALLEL_WRITES);
-      await Promise.allSettled(batch.map(async ([p, c]) => {
-        try {
-          await db.ref(`files/${pid}/${sanitizeFirebasePath(p.replace(/\//g, "__"))}`).set({
-            path: p,
-            content: c,
-            updatedAt: Date.now(),
-          });
-          result.filesWritten++;
-        } catch (err) {
-          log("host.sync_back.file_failed", { pid, path: p, message: err.message });
-          result.filesSkipped++;
-        }
-      }));
+      await Promise.allSettled(
+        batch.map(async ([p, c]) => {
+          try {
+            await db
+              .ref(
+                `files/${pid}/${sanitizeFirebasePath(p.replace(/\//g, "__"))}`,
+              )
+              .set({
+                path: p,
+                content: c,
+                updatedAt: Date.now(),
+              });
+            result.filesWritten++;
+          } catch (err) {
+            log("host.sync_back.file_failed", {
+              pid,
+              path: p,
+              message: err.message,
+            });
+            result.filesSkipped++;
+          }
+        }),
+      );
     }
   }
 
@@ -2709,16 +3549,26 @@ async function handleProjectSyncBack(req, res, reqId) {
         await db.ref(`versions/${pid}/${vid}`).set(v);
         result.versionsWritten++;
       } catch (err) {
-        log("host.sync_back.version_failed", { pid, vid, message: err.message });
+        log("host.sync_back.version_failed", {
+          pid,
+          vid,
+          message: err.message,
+        });
       }
     }
   }
 
   if (jsonDb !== undefined && jsonDb !== null) {
-    try { await db.ref(`projectData/${pid}`).set(jsonDb); result.dbWritten = true; } catch {}
+    try {
+      await db.ref(`projectData/${pid}`).set(jsonDb);
+      result.dbWritten = true;
+    } catch {}
   }
   if (jsonSchema !== undefined && jsonSchema !== null) {
-    try { await db.ref(`projectSchemas/${pid}`).set(jsonSchema); result.schemaWritten = true; } catch {}
+    try {
+      await db.ref(`projectSchemas/${pid}`).set(jsonSchema);
+      result.schemaWritten = true;
+    } catch {}
   }
 
   await touchProject(pid);
@@ -2728,22 +3578,35 @@ async function handleProjectSyncBack(req, res, reqId) {
   });
 
   if (result.filesWritten > 0) {
-    try { await ensureProjectLanguages(pid, project, files); } catch (err) {
+    try {
+      await ensureProjectLanguages(pid, project, files);
+    } catch (err) {
       log("host.sync_back.languages_failed", { pid, message: err.message });
     }
-    try { await ensureProjectThumbnail(pid, files); } catch (err) {
+    try {
+      await ensureProjectThumbnail(pid, files);
+    } catch (err) {
       log("host.sync_back.thumbnail_failed", { pid, message: err.message });
     }
     await invalidateProjectOgImage(pid).catch(() => {});
   }
 
   try {
-    if (result.filesWritten > 0 || result.versionsWritten > 0 || result.dbWritten || result.schemaWritten) {
+    if (
+      result.filesWritten > 0 ||
+      result.versionsWritten > 0 ||
+      result.dbWritten ||
+      result.schemaWritten
+    ) {
       const audience = await getProjectAudience(pid);
-      const others = audience.uids.filter(u => u !== access.uid);
+      const others = audience.uids.filter((u) => u !== access.uid);
       if (others.length) {
-        const thumb = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
-        const imageUrl = thumb?.exists() && isValidOgUrl(thumb.val()) ? thumb.val() : null;
+        const thumb = await db
+          .ref(`projects/${pid}/thumbnail/url`)
+          .once("value")
+          .catch(() => null);
+        const imageUrl =
+          thumb?.exists() && isValidOgUrl(thumb.val()) ? thumb.val() : null;
         await notifyMany("project", others, {
           title: "Project updated from sync",
           body: `${result.filesWritten} file(s) synced back${result.versionsWritten ? `, ${result.versionsWritten} version(s)` : ""}${result.dbWritten ? ", DB imported" : ""}.`,
@@ -2775,7 +3638,8 @@ async function canAccessProjectFromReq(req) {
 
 async function handleFileList(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "fileList", `pid_${pid}`))) return;
 
   let role = null;
@@ -2784,14 +3648,18 @@ async function handleFileList(req, res, reqId) {
 
   let isCodePublic = false;
   try {
-    const visSnap = await db.ref(`projects/${pid}/visibility/code`).once("value");
+    const visSnap = await db
+      .ref(`projects/${pid}/visibility/code`)
+      .once("value");
     isCodePublic = visSnap.exists() && visSnap.val() === "public";
   } catch {}
 
-  if (!role && !isCodePublic) return res.status(403).json({ success: false, error: "Access denied" });
+  if (!role && !isCodePublic)
+    return res.status(403).json({ success: false, error: "Access denied" });
 
   const project = await getProjectCached(pid);
-  if (!project) return res.status(404).json({ success: false, error: "Project not found" });
+  if (!project)
+    return res.status(404).json({ success: false, error: "Project not found" });
 
   const publicFiles = project.publicFiles || {};
   const hasPublicFilesList = Object.keys(publicFiles).length > 0;
@@ -2800,35 +3668,51 @@ async function handleFileList(req, res, reqId) {
   const filesSnap = await db.ref(`files/${pid}`).once("value");
   const files = [];
   if (filesSnap.exists()) {
-    filesSnap.forEach(child => {
+    filesSnap.forEach((child) => {
       const v = child.val() || {};
       const p = v.path || child.key.replace(/__/g, "/");
       if (enforceFileList) {
         const safePath = sanitizeFirebasePath(p.replace(/\//g, "__"));
         if (!publicFiles[safePath]) return;
       }
-      files.push({ path: p, size: (v.content || "").length, updatedAt: v.updatedAt || null });
+      files.push({
+        path: p,
+        size: (v.content || "").length,
+        updatedAt: v.updatedAt || null,
+      });
     });
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
 
   let thumbnailUrl = null;
   try {
-    const thumbSnap = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
-    if (thumbSnap?.exists() && isValidOgUrl(thumbSnap.val())) thumbnailUrl = thumbSnap.val();
+    const thumbSnap = await db
+      .ref(`projects/${pid}/thumbnail/url`)
+      .once("value")
+      .catch(() => null);
+    if (thumbSnap?.exists() && isValidOgUrl(thumbSnap.val()))
+      thumbnailUrl = thumbSnap.val();
   } catch {}
 
   return res.status(200).json({
-    success: true, files, total: files.length, isCodePublic,
-    isEditor: role === "owner" || role === "editor", thumbnailUrl,
+    success: true,
+    files,
+    total: files.length,
+    isCodePublic,
+    isEditor: role === "owner" || role === "editor",
+    thumbnailUrl,
   });
 }
 
 async function handleFileGet(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
   const filePath = String(req.query?.path || "").trim();
-  if (!pid || !filePath) return res.status(400).json({ success: false, error: "Missing pid or path" });
-  if (!isValidFilePath(filePath)) return res.status(400).json({ success: false, error: "Invalid path" });
+  if (!pid || !filePath)
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid or path" });
+  if (!isValidFilePath(filePath))
+    return res.status(400).json({ success: false, error: "Invalid path" });
   if (!(await enforceRate(req, res, "fileGet", `pid_${pid}`))) return;
 
   let role = null;
@@ -2837,39 +3721,55 @@ async function handleFileGet(req, res, reqId) {
 
   let isCodePublic = false;
   try {
-    const visSnap = await db.ref(`projects/${pid}/visibility/code`).once("value");
+    const visSnap = await db
+      .ref(`projects/${pid}/visibility/code`)
+      .once("value");
     isCodePublic = visSnap.exists() && visSnap.val() === "public";
   } catch {}
 
-  if (!role && !isCodePublic) return res.status(403).json({ success: false, error: "Access denied" });
+  if (!role && !isCodePublic)
+    return res.status(403).json({ success: false, error: "Access denied" });
 
   if (!role) {
-    const publicSnap = await db.ref(`projects/${pid}/publicFiles`).once("value");
+    const publicSnap = await db
+      .ref(`projects/${pid}/publicFiles`)
+      .once("value");
     const publicFiles = publicSnap.exists() ? publicSnap.val() : {};
     if (Object.keys(publicFiles).length > 0) {
       const safePath = sanitizeFirebasePath(filePath.replace(/\//g, "__"));
-      if (!publicFiles[safePath]) return res.status(403).json({ success: false, error: "File not public" });
+      if (!publicFiles[safePath])
+        return res
+          .status(403)
+          .json({ success: false, error: "File not public" });
     }
   }
 
   const safePath = sanitizeFirebasePath(filePath.replace(/\//g, "__"));
   const snap = await db.ref(`files/${pid}/${safePath}`).once("value");
-  if (!snap.exists()) return res.status(404).json({ success: false, error: "File not found" });
+  if (!snap.exists())
+    return res.status(404).json({ success: false, error: "File not found" });
   const file = snap.val() || {};
   const MAX_RETURN = 2 * 1024 * 1024;
   const raw = String(file.content || "");
   const truncated = raw.length > MAX_RETURN;
   return res.status(200).json({
-    success: true, path: file.path || filePath,
+    success: true,
+    path: file.path || filePath,
     content: truncated ? raw.slice(0, MAX_RETURN) : raw,
-    truncated, bytes: raw.length, updatedAt: file.updatedAt || null,
+    truncated,
+    bytes: raw.length,
+    updatedAt: file.updatedAt || null,
   });
 }
 
 async function handleFileDelete(req, res, reqId) {
   const { pid, path: filePath } = req.body || {};
-  if (!pid || !filePath) return res.status(400).json({ success: false, error: "Missing pid or path" });
-  if (!isValidFilePath(filePath)) return res.status(400).json({ success: false, error: "Invalid path" });
+  if (!pid || !filePath)
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid or path" });
+  if (!isValidFilePath(filePath))
+    return res.status(400).json({ success: false, error: "Invalid path" });
   if (!(await enforceRate(req, res, "fileDelete", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
@@ -2877,9 +3777,66 @@ async function handleFileDelete(req, res, reqId) {
   const safePath = sanitizeFirebasePath(filePath.replace(/\//g, "__"));
   await db.ref(`files/${pid}/${safePath}`).remove();
   await touchProject(pid);
-  await logProjectEvent(pid, access.uid, "file", "file.deleted", { path: filePath });
+  await logProjectEvent(pid, access.uid, "file", "file.deleted", {
+    path: filePath,
+  });
   invalidateProject(pid);
   return res.status(200).json({ success: true });
+}
+// =========================================================================
+// PROJECT HYDRATE — one-shot file+version pull for offline-first clients
+// =========================================================================
+
+async function handleProjectHydrate(req, res, reqId) {
+  const pid = String(req.query?.pid || "").trim();
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "projectHydrate", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "viewer");
+  if (!access) return;
+
+  const project = await getProjectCached(pid);
+  if (!project)
+    return res.status(404).json({ success: false, error: "Project not found" });
+
+  // Files: all of them, as a flat { path: content } map.
+  const filesSnap = await db.ref(`files/${pid}`).once("value");
+  const files = {};
+  if (filesSnap.exists()) {
+    filesSnap.forEach((child) => {
+      const v = child.val() || {};
+      if (v.path && typeof v.content === "string") files[v.path] = v.content;
+    });
+  }
+
+  // Versions: newest 30, matching the client's IDB capacity expectations.
+  // Deploy snapshots are included because redeploy + historic preview need
+  // them; manually committed versions are included so the Commits tab works.
+  const versionsSnap = await db
+    .ref(`versions/${pid}`)
+    .once("value")
+    .catch(() => null);
+  const versions = {};
+  if (versionsSnap?.exists()) {
+    const entries = [];
+    versionsSnap.forEach((child) => {
+      const v = child.val() || {};
+      entries.push({ vid: child.key, data: v });
+    });
+    entries.sort((a, b) => (b.data.createdAt || 0) - (a.data.createdAt || 0));
+    for (const { vid, data } of entries.slice(0, 30)) versions[vid] = data;
+  }
+
+  return res.status(200).json({
+    success: true,
+    pid,
+    files,
+    versions,
+    fileCount: Object.keys(files).length,
+    versionCount: Object.keys(versions).length,
+    hydratedAt: Date.now(),
+  });
 }
 
 // =========================================================================
@@ -2890,16 +3847,23 @@ async function handleProjectCopy(req, res, reqId) {
   const user = await requireAuth(req, res);
   if (!user) return;
   const { pid: sourcePid, newName } = req.body || {};
-  if (!sourcePid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!sourcePid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "projectCopy", `uid_${user.uid}`))) return;
 
   const source = await getProjectCached(sourcePid);
-  if (!source) return res.status(404).json({ success: false, error: "Source project not found" });
+  if (!source)
+    return res
+      .status(404)
+      .json({ success: false, error: "Source project not found" });
 
   const role = await canAccessProject(user.uid, sourcePid);
   const canFullCopy = role === "owner" || role === "editor";
   const isPublic = source.visibility?.profile === "public";
-  if (!canFullCopy && !isPublic) return res.status(403).json({ success: false, error: "Cannot copy this project" });
+  if (!canFullCopy && !isPublic)
+    return res
+      .status(403)
+      .json({ success: false, error: "Cannot copy this project" });
 
   let newProject;
   try {
@@ -2909,10 +3873,20 @@ async function handleProjectCopy(req, res, reqId) {
       storageLimit: user.settings?.globalLimit || 10 * 1024 * 1024,
     });
     const ownerUsername = user.profile?.username;
-    if (ownerUsername) await db.ref(`projects/${newProject.pid}/ownerUsername`).set(ownerUsername).catch(() => {});
+    if (ownerUsername)
+      await db
+        .ref(`projects/${newProject.pid}/ownerUsername`)
+        .set(ownerUsername)
+        .catch(() => {});
   } catch (err) {
-    log("host.project_copy.create_failed", { reqId, uid: user.uid, message: err.message });
-    return res.status(500).json({ success: false, error: "Could not create project" });
+    log("host.project_copy.create_failed", {
+      reqId,
+      uid: user.uid,
+      message: err.message,
+    });
+    return res
+      .status(500)
+      .json({ success: false, error: "Could not create project" });
   }
 
   const filesSnap = await db.ref(`files/${sourcePid}`).once("value");
@@ -2920,7 +3894,7 @@ async function handleProjectCopy(req, res, reqId) {
   if (filesSnap.exists()) {
     const publicFiles = source.publicFiles || {};
     const filesToCopy = [];
-    filesSnap.forEach(child => {
+    filesSnap.forEach((child) => {
       const v = child.val() || {};
       const p = v.path;
       const content = v.content || "";
@@ -2933,41 +3907,68 @@ async function handleProjectCopy(req, res, reqId) {
     });
     for (let i = 0; i < filesToCopy.length; i += DEPLOY_PARALLEL_WRITES) {
       const batch = filesToCopy.slice(i, i + DEPLOY_PARALLEL_WRITES);
-      await Promise.allSettled(batch.map(async ([p, c]) => {
-        try {
-          await db.ref(`files/${newProject.pid}/${sanitizeFirebasePath(p.replace(/\//g, "__"))}`).set({
-            path: p, content: c, updatedAt: Date.now(),
-          });
-          copiedFiles++;
-        } catch {}
-      }));
+      await Promise.allSettled(
+        batch.map(async ([p, c]) => {
+          try {
+            await db
+              .ref(
+                `files/${newProject.pid}/${sanitizeFirebasePath(p.replace(/\//g, "__"))}`,
+              )
+              .set({
+                path: p,
+                content: c,
+                updatedAt: Date.now(),
+              });
+            copiedFiles++;
+          } catch {}
+        }),
+      );
     }
   }
 
   if (canFullCopy) {
     try {
       const dbSnap = await db.ref(`projectData/${sourcePid}`).once("value");
-      if (dbSnap.exists()) await db.ref(`projectData/${newProject.pid}`).set(dbSnap.val());
-      const schemaSnap = await db.ref(`projectSchemas/${sourcePid}`).once("value");
-      if (schemaSnap.exists()) await db.ref(`projectSchemas/${newProject.pid}`).set(schemaSnap.val());
+      if (dbSnap.exists())
+        await db.ref(`projectData/${newProject.pid}`).set(dbSnap.val());
+      const schemaSnap = await db
+        .ref(`projectSchemas/${sourcePid}`)
+        .once("value");
+      if (schemaSnap.exists())
+        await db.ref(`projectSchemas/${newProject.pid}`).set(schemaSnap.val());
     } catch {}
   }
 
   await db.ref(`projects/${newProject.pid}`).update({
-    forkedFrom: sourcePid, forkedAt: Date.now(), forkedBy: user.uid,
+    forkedFrom: sourcePid,
+    forkedAt: Date.now(),
+    forkedBy: user.uid,
   });
   await logProjectEvent(newProject.pid, user.uid, "project", "project.copied", {
-    sourcePid, copiedFiles, fullCopy: canFullCopy,
+    sourcePid,
+    copiedFiles,
+    fullCopy: canFullCopy,
   });
 
   try {
     if (source.ownerId && source.ownerId !== user.uid) {
-      if (await shouldNotifyOnce(source.ownerId, `fork_${sourcePid}_${user.uid}`, 24 * 60 * 60 * 1000)) {
+      if (
+        await shouldNotifyOnce(
+          source.ownerId,
+          `fork_${sourcePid}_${user.uid}`,
+          24 * 60 * 60 * 1000,
+        )
+      ) {
         const forker = await getUser(user.uid);
-        const who = forker?.profile?.username ? `@${forker.profile.username}` : "someone";
+        const who = forker?.profile?.username
+          ? `@${forker.profile.username}`
+          : "someone";
         let imageUrl = null;
         try {
-          const t = await db.ref(`projects/${sourcePid}/ogImage/url`).once("value").catch(() => null);
+          const t = await db
+            .ref(`projects/${sourcePid}/ogImage/url`)
+            .once("value")
+            .catch(() => null);
           if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
         } catch {}
         await callNotify("project", source.ownerId, {
@@ -2983,8 +3984,11 @@ async function handleProjectCopy(req, res, reqId) {
 
   const { apiKeyHash, ...safeNew } = newProject;
   return res.status(200).json({
-    success: true, pid: newProject.pid, project: safeNew,
-    copiedFiles, fullCopy: canFullCopy,
+    success: true,
+    pid: newProject.pid,
+    project: safeNew,
+    copiedFiles,
+    fullCopy: canFullCopy,
   });
 }
 
@@ -3003,18 +4007,25 @@ async function checkProjectKeyOrRole(req, res, pid, minRole) {
 
 async function handleDbSet(req, res, reqId) {
   const { pid, key, value, data, mode } = req.body || {};
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
 
   const rl = await checkRateLimit(`pid_${pid}`, "dbSet");
   setRateHeaders(res, rl);
   if (!rl.allowed) {
     return res.status(429).json({
-      success: false, error: "Rate limit exceeded",
-      retryAfter: rl.retryAfter, reset: rl.reset,
+      success: false,
+      error: "Rate limit exceeded",
+      retryAfter: rl.retryAfter,
+      reset: rl.reset,
       rateLimit: { limit: rl.limit, remaining: rl.remaining, reset: rl.reset },
     });
   }
-  const rateLimitMeta = { limit: rl.limit, remaining: rl.remaining, reset: rl.reset };
+  const rateLimitMeta = {
+    limit: rl.limit,
+    remaining: rl.remaining,
+    reset: rl.reset,
+  };
 
   const access = await checkProjectKeyOrRole(req, res, pid, "editor");
   if (!access) return;
@@ -3031,20 +4042,27 @@ async function handleDbSet(req, res, reqId) {
       finalSize = JSON.stringify(s.val() || {}).length;
     } catch {}
     const spaceRemaining = Math.max(0, LIMIT - finalSize);
-    const percentUsed = LIMIT > 0 ? Math.min(100, Math.round((finalSize / LIMIT) * 1000) / 10) : 0;
+    const percentUsed =
+      LIMIT > 0
+        ? Math.min(100, Math.round((finalSize / LIMIT) * 1000) / 10)
+        : 0;
 
-    await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
-      const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
-      c.writes = (c.writes || 0) + 1;
-      c.bytesIn = (c.bytesIn || 0) + serialized.length;
-      return c;
-    }).catch(() => {});
+    await db
+      .ref(`analytics/${pid}/db/${today}`)
+      .transaction((cur) => {
+        const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
+        c.writes = (c.writes || 0) + 1;
+        c.bytesIn = (c.bytesIn || 0) + serialized.length;
+        return c;
+      })
+      .catch(() => {});
 
-    let totalWrites = 0, todayWrites = 0;
+    let totalWrites = 0,
+      todayWrites = 0;
     try {
       const a = await db.ref(`analytics/${pid}/db`).once("value");
       if (a.exists()) {
-        a.forEach(d => {
+        a.forEach((d) => {
           const v = d.val() || {};
           const w = typeof v.writes === "number" ? v.writes : 0;
           totalWrites += w;
@@ -3057,7 +4075,14 @@ async function handleDbSet(req, res, reqId) {
       try {
         const ownerSnap = await db.ref(`projects/${pid}/ownerId`).once("value");
         if (ownerSnap.exists()) {
-          await notifyStorageWarning(pid, ownerSnap.val(), finalSize, LIMIT, percentUsed, finalSize >= LIMIT ? "full" : "nearly_full");
+          await notifyStorageWarning(
+            pid,
+            ownerSnap.val(),
+            finalSize,
+            LIMIT,
+            percentUsed,
+            finalSize >= LIMIT ? "full" : "nearly_full",
+          );
         }
       } catch {}
     }
@@ -3069,43 +4094,101 @@ async function handleDbSet(req, res, reqId) {
   }
 
   if (key !== undefined) {
-    if (data !== undefined) return res.status(400).json({ success: false, error: "Send either `key` or `data`, not both", rateLimit: rateLimitMeta });
+    if (data !== undefined)
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "Send either `key` or `data`, not both",
+          rateLimit: rateLimitMeta,
+        });
     const parts = String(key).split("/").filter(Boolean);
-    if (parts.length === 0) return res.status(400).json({ success: false, error: "Invalid key path", rateLimit: rateLimitMeta });
+    if (parts.length === 0)
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "Invalid key path",
+          rateLimit: rateLimitMeta,
+        });
 
     const safeParts = [];
     for (const seg of parts) {
       const safe = sanitizeFirebasePath(seg);
-      if (!safe) return res.status(400).json({ success: false, error: `Invalid path segment: "${seg}"`, rateLimit: rateLimitMeta });
+      if (!safe)
+        return res
+          .status(400)
+          .json({
+            success: false,
+            error: `Invalid path segment: "${seg}"`,
+            rateLimit: rateLimitMeta,
+          });
       safeParts.push(safe);
     }
     let nested = value === undefined ? null : value;
-    for (let i = safeParts.length - 1; i >= 0; i--) nested = { [safeParts[i]]: nested };
+    for (let i = safeParts.length - 1; i >= 0; i--)
+      nested = { [safeParts[i]]: nested };
 
     const serialized = JSON.stringify(value === undefined ? null : value);
     if (serialized.length > LIMIT) {
       return res.status(413).json({
-        success: false, error: "Payload too large (15 MB max)",
-        size: serialized.length, limit: LIMIT, rateLimit: rateLimitMeta,
-      });
-    }
-    try { await dbRef.update(nested); } catch (err) {
-      log("host.dbSet.path_write_failed", { reqId, pid, key, message: err.message });
-      return res.status(500).json({ success: false, error: "Write failed", rateLimit: rateLimitMeta });
-    }
-    const { finalSize, spaceRemaining, percentUsed, totalWrites, todayWrites } = await finalize(serialized);
-    if (finalSize > LIMIT) {
-      return res.status(413).json({
-        success: false, error: "Database exceeds 15 MB limit after write",
-        size: finalSize, limit: LIMIT,
-        space: { used: finalSize, remaining: 0, limit: LIMIT, percentUsed: 100 },
+        success: false,
+        error: "Payload too large (15 MB max)",
+        size: serialized.length,
+        limit: LIMIT,
         rateLimit: rateLimitMeta,
       });
     }
-    await logProjectEvent(pid, uidForLog, "db", "db.written", { key, mode: "path", bytes: serialized.length, viaApiKey: access.uid === "api" });
+    try {
+      await dbRef.update(nested);
+    } catch (err) {
+      log("host.dbSet.path_write_failed", {
+        reqId,
+        pid,
+        key,
+        message: err.message,
+      });
+      return res
+        .status(500)
+        .json({
+          success: false,
+          error: "Write failed",
+          rateLimit: rateLimitMeta,
+        });
+    }
+    const { finalSize, spaceRemaining, percentUsed, totalWrites, todayWrites } =
+      await finalize(serialized);
+    if (finalSize > LIMIT) {
+      return res.status(413).json({
+        success: false,
+        error: "Database exceeds 15 MB limit after write",
+        size: finalSize,
+        limit: LIMIT,
+        space: {
+          used: finalSize,
+          remaining: 0,
+          limit: LIMIT,
+          percentUsed: 100,
+        },
+        rateLimit: rateLimitMeta,
+      });
+    }
+    await logProjectEvent(pid, uidForLog, "db", "db.written", {
+      key,
+      mode: "path",
+      bytes: serialized.length,
+      viaApiKey: access.uid === "api",
+    });
     return res.status(200).json({
-      success: true, mode: "path", key,
-      space: { used: finalSize, remaining: spaceRemaining, limit: LIMIT, percentUsed },
+      success: true,
+      mode: "path",
+      key,
+      space: {
+        used: finalSize,
+        remaining: spaceRemaining,
+        limit: LIMIT,
+        percentUsed,
+      },
       rateLimit: rateLimitMeta,
       calls: { total: totalWrites, today: todayWrites },
     });
@@ -3113,32 +4196,80 @@ async function handleDbSet(req, res, reqId) {
 
   if (data !== undefined && mode === "merge") {
     if (!data || typeof data !== "object" || Array.isArray(data)) {
-      return res.status(400).json({ success: false, error: "Merge data must be a plain object", rateLimit: rateLimitMeta });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "Merge data must be a plain object",
+          rateLimit: rateLimitMeta,
+        });
     }
     if (Object.keys(data).length === 0) {
-      return res.status(400).json({ success: false, error: "Nothing to merge", rateLimit: rateLimitMeta });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "Nothing to merge",
+          rateLimit: rateLimitMeta,
+        });
     }
     const serialized = JSON.stringify(data);
     if (serialized.length > LIMIT) {
-      return res.status(413).json({ success: false, error: "Payload too large (15 MB max)", size: serialized.length, limit: LIMIT, rateLimit: rateLimitMeta });
+      return res
+        .status(413)
+        .json({
+          success: false,
+          error: "Payload too large (15 MB max)",
+          size: serialized.length,
+          limit: LIMIT,
+          rateLimit: rateLimitMeta,
+        });
     }
-    try { await dbRef.update(data); } catch (err) {
+    try {
+      await dbRef.update(data);
+    } catch (err) {
       log("host.dbSet.merge_failed", { reqId, pid, message: err.message });
-      return res.status(500).json({ success: false, error: "Write failed", rateLimit: rateLimitMeta });
+      return res
+        .status(500)
+        .json({
+          success: false,
+          error: "Write failed",
+          rateLimit: rateLimitMeta,
+        });
     }
-    const { finalSize, spaceRemaining, percentUsed, totalWrites, todayWrites } = await finalize(serialized);
+    const { finalSize, spaceRemaining, percentUsed, totalWrites, todayWrites } =
+      await finalize(serialized);
     if (finalSize > LIMIT) {
       return res.status(413).json({
-        success: false, error: "Database exceeds 15 MB limit after write",
-        size: finalSize, limit: LIMIT,
-        space: { used: finalSize, remaining: 0, limit: LIMIT, percentUsed: 100 },
+        success: false,
+        error: "Database exceeds 15 MB limit after write",
+        size: finalSize,
+        limit: LIMIT,
+        space: {
+          used: finalSize,
+          remaining: 0,
+          limit: LIMIT,
+          percentUsed: 100,
+        },
         rateLimit: rateLimitMeta,
       });
     }
-    await logProjectEvent(pid, uidForLog, "db", "db.written", { mode: "merge", keys: Object.keys(data), bytes: serialized.length, viaApiKey: access.uid === "api" });
+    await logProjectEvent(pid, uidForLog, "db", "db.written", {
+      mode: "merge",
+      keys: Object.keys(data),
+      bytes: serialized.length,
+      viaApiKey: access.uid === "api",
+    });
     return res.status(200).json({
-      success: true, mode: "merge", keys: Object.keys(data),
-      space: { used: finalSize, remaining: spaceRemaining, limit: LIMIT, percentUsed },
+      success: true,
+      mode: "merge",
+      keys: Object.keys(data),
+      space: {
+        used: finalSize,
+        remaining: spaceRemaining,
+        limit: LIMIT,
+        percentUsed,
+      },
       rateLimit: rateLimitMeta,
       calls: { total: totalWrites, today: todayWrites },
     });
@@ -3147,28 +4278,62 @@ async function handleDbSet(req, res, reqId) {
   if (data !== undefined) {
     const serialized = JSON.stringify(data ?? null);
     if (serialized.length > LIMIT) {
-      return res.status(413).json({ success: false, error: "Payload too large (15 MB max)", size: serialized.length, limit: LIMIT, rateLimit: rateLimitMeta });
+      return res
+        .status(413)
+        .json({
+          success: false,
+          error: "Payload too large (15 MB max)",
+          size: serialized.length,
+          limit: LIMIT,
+          rateLimit: rateLimitMeta,
+        });
     }
-    try { await dbRef.set(data); } catch (err) {
+    try {
+      await dbRef.set(data);
+    } catch (err) {
       log("host.dbSet.replace_failed", { reqId, pid, message: err.message });
-      return res.status(500).json({ success: false, error: "Write failed", rateLimit: rateLimitMeta });
+      return res
+        .status(500)
+        .json({
+          success: false,
+          error: "Write failed",
+          rateLimit: rateLimitMeta,
+        });
     }
-    const { finalSize, spaceRemaining, percentUsed, totalWrites, todayWrites } = await finalize(serialized);
-    await logProjectEvent(pid, uidForLog, "db", "db.written", { mode: "replace", bytes: serialized.length, viaApiKey: access.uid === "api" });
+    const { finalSize, spaceRemaining, percentUsed, totalWrites, todayWrites } =
+      await finalize(serialized);
+    await logProjectEvent(pid, uidForLog, "db", "db.written", {
+      mode: "replace",
+      bytes: serialized.length,
+      viaApiKey: access.uid === "api",
+    });
     return res.status(200).json({
-      success: true, mode: "replace",
-      space: { used: finalSize, remaining: spaceRemaining, limit: LIMIT, percentUsed },
+      success: true,
+      mode: "replace",
+      space: {
+        used: finalSize,
+        remaining: spaceRemaining,
+        limit: LIMIT,
+        percentUsed,
+      },
       rateLimit: rateLimitMeta,
       calls: { total: totalWrites, today: todayWrites },
     });
   }
 
-  return res.status(400).json({ success: false, error: "Missing key or data", rateLimit: rateLimitMeta });
+  return res
+    .status(400)
+    .json({
+      success: false,
+      error: "Missing key or data",
+      rateLimit: rateLimitMeta,
+    });
 }
 
 async function handleDbGet(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "dbGet", `pid_${pid}`))) return;
 
   const key = req.headers["x-project-key"];
@@ -3179,10 +4344,14 @@ async function handleDbGet(req, res, reqId) {
   }
   if (!authorized) {
     const access = await canAccessProjectFromReq(req);
-    if (access) { authorized = true; uidForLog = access.uid; }
+    if (access) {
+      authorized = true;
+      uidForLog = access.uid;
+    }
   }
   if (!authorized) authorized = await hasVisibility(pid, "db");
-  if (!authorized) return res.status(403).json({ success: false, error: "Access denied" });
+  if (!authorized)
+    return res.status(403).json({ success: false, error: "Access denied" });
 
   const [dataSnap, schemaSnap] = await Promise.all([
     db.ref(`projectData/${pid}`).once("value"),
@@ -3195,18 +4364,23 @@ async function handleDbGet(req, res, reqId) {
   const serialized = JSON.stringify(data || {});
   const bytesOut = serialized.length;
 
-  await db.ref(`analytics/${pid}/db/${today}`).transaction(cur => {
-    const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
-    c.reads = (c.reads || 0) + 1;
-    c.bytesOut = (c.bytesOut || 0) + bytesOut;
-    return c;
-  }).catch(() => {});
+  await db
+    .ref(`analytics/${pid}/db/${today}`)
+    .transaction((cur) => {
+      const c = cur || { reads: 0, writes: 0, bytesIn: 0, bytesOut: 0 };
+      c.reads = (c.reads || 0) + 1;
+      c.bytesOut = (c.bytesOut || 0) + bytesOut;
+      return c;
+    })
+    .catch(() => {});
 
-  let totalWrites = 0, todayWrites = 0, totalReads = 0;
+  let totalWrites = 0,
+    todayWrites = 0,
+    totalReads = 0;
   try {
     const a = await db.ref(`analytics/${pid}/db`).once("value");
     if (a.exists()) {
-      a.forEach(d => {
+      a.forEach((d) => {
         const v = d.val() || {};
         const w = typeof v.writes === "number" ? v.writes : 0;
         const r = typeof v.reads === "number" ? v.reads : 0;
@@ -3223,7 +4397,8 @@ async function handleDbGet(req, res, reqId) {
     used,
     remaining: Math.max(0, LIMIT - used),
     limit: LIMIT,
-    percentUsed: LIMIT > 0 ? Math.min(100, Math.round((used / LIMIT) * 1000) / 10) : 0,
+    percentUsed:
+      LIMIT > 0 ? Math.min(100, Math.round((used / LIMIT) * 1000) / 10) : 0,
   };
 
   // Cached rate limit lookup
@@ -3236,13 +4411,21 @@ async function handleDbGet(req, res, reqId) {
   } else {
     try {
       const rlKey = sanitizeFirebasePath(String(`pid_${pid}`).toLowerCase());
-      const rlSnap = await db.ref(`rate_limit/${API_NAME}/dbSet/${rlKey}`).once("value");
+      const rlSnap = await db
+        .ref(`rate_limit/${API_NAME}/dbSet/${rlKey}`)
+        .once("value");
       if (rlSnap.exists()) {
         const d = rlSnap.val();
         const now = Date.now();
         const resetAt = (d.first_request || now) + cfg.window;
-        if (now > resetAt) rateLimit = { limit: cfg.max, remaining: cfg.max, reset: null };
-        else rateLimit = { limit: cfg.max, remaining: Math.max(0, cfg.max - (d.count || 0)), reset: new Date(resetAt).toISOString() };
+        if (now > resetAt)
+          rateLimit = { limit: cfg.max, remaining: cfg.max, reset: null };
+        else
+          rateLimit = {
+            limit: cfg.max,
+            remaining: Math.max(0, cfg.max - (d.count || 0)),
+            reset: new Date(resetAt).toISOString(),
+          };
       } else {
         rateLimit = { limit: cfg.max, remaining: cfg.max, reset: null };
       }
@@ -3253,24 +4436,36 @@ async function handleDbGet(req, res, reqId) {
   }
 
   return res.status(200).json({
-    success: true, data, schema,
+    success: true,
+    data,
+    schema,
     calls: { total: totalWrites, today: todayWrites, reads: totalReads },
-    rateLimit, space,
+    rateLimit,
+    space,
   });
 }
 
 async function handleDbSchema(req, res, reqId) {
   const { pid, schema } = req.body || {};
   if (!pid || typeof schema !== "object" || schema === null) {
-    return res.status(400).json({ success: false, error: "Missing pid or schema" });
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid or schema" });
   }
   if (!(await enforceRate(req, res, "dbSchema", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
   const fields = Array.isArray(schema.fields) ? schema.fields : [];
-  if (fields.length > 100) return res.status(400).json({ success: false, error: "Too many schema fields (max 100)" });
-  await db.ref(`projectSchemas/${pid}`).set({ fields, layout: schema.layout || null, updatedAt: Date.now() });
-  await logProjectEvent(pid, access.uid, "db", "schema.updated", { fieldCount: fields.length });
+  if (fields.length > 100)
+    return res
+      .status(400)
+      .json({ success: false, error: "Too many schema fields (max 100)" });
+  await db
+    .ref(`projectSchemas/${pid}`)
+    .set({ fields, layout: schema.layout || null, updatedAt: Date.now() });
+  await logProjectEvent(pid, access.uid, "db", "schema.updated", {
+    fieldCount: fields.length,
+  });
   return res.status(200).json({ success: true });
 }
 
@@ -3280,15 +4475,19 @@ async function handleDbSchema(req, res, reqId) {
 
 async function handleApiKeyGenerate(req, res, reqId) {
   const { pid } = req.body || {};
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   const user = await requireAuth(req, res);
   if (!user) return;
-  if (!(await enforceRate(req, res, "apikeyGenerate", `uid_${user.uid}`))) return;
+  if (!(await enforceRate(req, res, "apikeyGenerate", `uid_${user.uid}`)))
+    return;
   const access = await requireProjectRole(req, res, pid, "owner");
   if (!access) return;
 
   const { key, hash } = generateApiKey();
-  await db.ref(`projects/${pid}`).update({ apiKeyHash: hash, apiKeyCreatedAt: Date.now() });
+  await db
+    .ref(`projects/${pid}`)
+    .update({ apiKeyHash: hash, apiKeyCreatedAt: Date.now() });
   invalidateProject(pid);
   await logProjectEvent(pid, access.uid, "project", "apikey.generated", {});
 
@@ -3299,10 +4498,15 @@ async function handleApiKeyGenerate(req, res, reqId) {
     let imageUrl = null;
     try {
       imageUrl = await notificationImageUrl({
-        title: "New API key", subtitle: `for "${pname}"`,
-        template: "hero-short", scene: "halftone", palette: "mono",
+        title: "New API key",
+        subtitle: `for "${pname}"`,
+        template: "hero-short",
+        scene: "halftone",
+        palette: "mono",
       });
-    } catch (err) { log("host.apikey_generate.image_error", { message: err.message }); }
+    } catch (err) {
+      log("host.apikey_generate.image_error", { message: err.message });
+    }
     await notifyMany("project", audience.uids, {
       title: "New API key generated",
       body: `A new API key was created for "${pname}". If this wasn't you, revoke it now.`,
@@ -3324,7 +4528,9 @@ const VISIBILITY_AXES = ["profile", "liveSite", "code", "languages", "db"];
 async function handleVisibility(req, res, reqId) {
   const { pid, visibility } = req.body || {};
   if (!pid || typeof visibility !== "object" || visibility === null) {
-    return res.status(400).json({ success: false, error: "Missing pid or visibility" });
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid or visibility" });
   }
   if (!(await enforceRate(req, res, "visibility", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "owner");
@@ -3335,27 +4541,40 @@ async function handleVisibility(req, res, reqId) {
   for (const axis of VISIBILITY_AXES) {
     if (visibility[axis] === undefined) continue;
     if (visibility[axis] !== "public" && visibility[axis] !== "private") {
-      return res.status(400).json({ success: false, error: `visibility.${axis} must be "public" or "private"` });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: `visibility.${axis} must be "public" or "private"`,
+        });
     }
     patch[`visibility/${axis}`] = visibility[axis];
     changes[axis] = visibility[axis];
   }
-  if (Object.keys(patch).length === 0) return res.status(400).json({ success: false, error: "No visibility axes to update" });
+  if (Object.keys(patch).length === 0)
+    return res
+      .status(400)
+      .json({ success: false, error: "No visibility axes to update" });
   patch.updatedAt = Date.now();
   await db.ref(`projects/${pid}`).update(patch);
   invalidateProject(pid);
-  await logProjectEvent(pid, access.uid, "project", "visibility.updated", { changes });
+  await logProjectEvent(pid, access.uid, "project", "visibility.updated", {
+    changes,
+  });
 
   try {
-    const significant = ["profile", "liveSite"].filter(a => changes[a]);
+    const significant = ["profile", "liveSite"].filter((a) => changes[a]);
     if (significant.length) {
       const audience = await getProjectAudience(pid);
-      const others = audience.uids.filter(u => u !== access.uid);
+      const others = audience.uids.filter((u) => u !== access.uid);
       if (others.length) {
-        const wentPublic = significant.some(a => changes[a] === "public");
+        const wentPublic = significant.some((a) => changes[a] === "public");
         let imageUrl = null;
         try {
-          const t = await db.ref(`projects/${pid}/ogImage/url`).once("value").catch(() => null);
+          const t = await db
+            .ref(`projects/${pid}/ogImage/url`)
+            .once("value")
+            .catch(() => null);
           if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
         } catch {}
         await notifyMany("project", others, {
@@ -3375,22 +4594,32 @@ async function handleVisibility(req, res, reqId) {
 async function handleFileVisibility(req, res, reqId) {
   const { pid, path: filePath, isPublic } = req.body || {};
   if (!pid || !filePath || typeof isPublic !== "boolean") {
-    return res.status(400).json({ success: false, error: "Missing pid, path, or isPublic" });
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid, path, or isPublic" });
   }
   if (!(await enforceRate(req, res, "fileVisibility", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
   const safePath = sanitizeFirebasePath(filePath.replace(/\//g, "__"));
-  if (isPublic) await db.ref(`projects/${pid}/publicFiles/${safePath}`).set(true);
+  if (isPublic)
+    await db.ref(`projects/${pid}/publicFiles/${safePath}`).set(true);
   else await db.ref(`projects/${pid}/publicFiles/${safePath}`).remove();
   invalidateProject(pid);
-  await logProjectEvent(pid, access.uid, "file", "file.visibility", { path: filePath, isPublic });
+  await logProjectEvent(pid, access.uid, "file", "file.visibility", {
+    path: filePath,
+    isPublic,
+  });
   return res.status(200).json({ success: true });
 }
 
 function hashToken(token) {
-  return crypto.createHash("sha256").update(String(token)).digest("hex").slice(0, 32);
+  return crypto
+    .createHash("sha256")
+    .update(String(token))
+    .digest("hex")
+    .slice(0, 32);
 }
 
 async function lookupInviteByToken(token) {
@@ -3401,8 +4630,14 @@ async function lookupInviteByToken(token) {
   const byRaw = await db.ref(`invites/${token}`).once("value");
   if (byRaw.exists()) {
     const invite = byRaw.val();
-    await db.ref(`invites/${tokenHash}`).set(invite).catch(() => {});
-    await db.ref(`invites/${token}`).remove().catch(() => {});
+    await db
+      .ref(`invites/${tokenHash}`)
+      .set(invite)
+      .catch(() => {});
+    await db
+      .ref(`invites/${token}`)
+      .remove()
+      .catch(() => {});
     return { key: tokenHash, invite };
   }
   return null;
@@ -3410,24 +4645,44 @@ async function lookupInviteByToken(token) {
 
 async function handleInviteCreate(req, res, reqId) {
   const { pid, username, role } = req.body || {};
-  if (!pid || !username || !role) return res.status(400).json({ success: false, error: "Missing pid, username, or role" });
-  if (!["viewer", "commenter", "editor"].includes(role)) return res.status(400).json({ success: false, error: "Invalid role" });
+  if (!pid || !username || !role)
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid, username, or role" });
+  if (!["viewer", "commenter", "editor"].includes(role))
+    return res.status(400).json({ success: false, error: "Invalid role" });
   if (!(await enforceRate(req, res, "inviteCreate", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
   const invited = await getUserByUsername(username);
-  if (!invited) return res.status(404).json({ success: false, error: "User not found" });
-  if (invited.uid === access.uid) return res.status(400).json({ success: false, error: "Cannot invite yourself" });
+  if (!invited)
+    return res.status(404).json({ success: false, error: "User not found" });
+  if (invited.uid === access.uid)
+    return res
+      .status(400)
+      .json({ success: false, error: "Cannot invite yourself" });
   const existingRole = await canAccessProject(invited.uid, pid);
-  if (existingRole) return res.status(409).json({ success: false, error: `User already has role: ${existingRole}` });
+  if (existingRole)
+    return res
+      .status(409)
+      .json({
+        success: false,
+        error: `User already has role: ${existingRole}`,
+      });
 
   const token = generateInviteToken();
   const tokenHash = hashToken(token);
   const now = Date.now();
   await db.ref(`invites/${tokenHash}`).set({
-    pid, role, invitedBy: access.uid, invitedUid: invited.uid,
-    expiresAt: now + INVITE_TTL_MS, used: false, usedAt: null, createdAt: now,
+    pid,
+    role,
+    invitedBy: access.uid,
+    invitedUid: invited.uid,
+    expiresAt: now + INVITE_TTL_MS,
+    used: false,
+    usedAt: null,
+    createdAt: now,
   });
 
   try {
@@ -3436,10 +4691,15 @@ async function handleInviteCreate(req, res, reqId) {
     let imageUrl = null;
     try {
       imageUrl = await notificationImageUrl({
-        title: `Invited to "${pname}"`, subtitle: `Join as ${role}`,
-        template: "hero-short", scene: "ribbon", palette: "warm",
+        title: `Invited to "${pname}"`,
+        subtitle: `Join as ${role}`,
+        template: "hero-short",
+        scene: "ribbon",
+        palette: "warm",
       });
-    } catch (err) { log("host.invite_create.image_error", { message: err.message }); }
+    } catch (err) {
+      log("host.invite_create.image_error", { message: err.message });
+    }
     await callNotify("invite", invited.uid, {
       title: "Project invitation",
       body: `You've been invited to join "${pname}" as ${role}.`,
@@ -3449,16 +4709,22 @@ async function handleInviteCreate(req, res, reqId) {
     });
   } catch {}
 
-  await logProjectEvent(pid, access.uid, "invite", "invite.sent", { invitedUid: invited.uid, role });
+  await logProjectEvent(pid, access.uid, "invite", "invite.sent", {
+    invitedUid: invited.uid,
+    role,
+  });
   return res.status(200).json({
-    success: true, token, inviteUrl: `${BASE_URL}/invite.html?token=${token}`,
+    success: true,
+    token,
+    inviteUrl: `${BASE_URL}/invite.html?token=${token}`,
     expiresAt: now + INVITE_TTL_MS,
   });
 }
 
 async function handleInviteList(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "inviteList", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
@@ -3467,51 +4733,73 @@ async function handleInviteList(req, res, reqId) {
   const invites = [];
   const now = Date.now();
   if (snap.exists()) {
-    snap.forEach(child => {
+    snap.forEach((child) => {
       const v = child.val();
       if (!v || v.pid !== pid) return;
-      const expiresAt = v.expiresAt || (v.createdAt ? v.createdAt + INVITE_TTL_MS : null);
+      const expiresAt =
+        v.expiresAt || (v.createdAt ? v.createdAt + INVITE_TTL_MS : null);
       const expired = !!(expiresAt && expiresAt < now);
       invites.push({
-        token: child.key, role: v.role || "viewer",
-        invitedUid: v.invitedUid || null, invitedBy: v.invitedBy || null,
-        createdAt: v.createdAt || null, expiresAt, expired,
-        used: !!v.used, usedAt: v.usedAt || null,
+        token: child.key,
+        role: v.role || "viewer",
+        invitedUid: v.invitedUid || null,
+        invitedBy: v.invitedBy || null,
+        createdAt: v.createdAt || null,
+        expiresAt,
+        expired,
+        used: !!v.used,
+        usedAt: v.usedAt || null,
       });
     });
   }
   const includeUsed = String(req.query?.includeUsed || "false") === "true";
-  const filtered = invites.filter(i => (includeUsed || (!i.used && !i.expired)));
+  const filtered = invites.filter(
+    (i) => includeUsed || (!i.used && !i.expired),
+  );
   filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   return res.status(200).json({
-    success: true, invites: filtered,
+    success: true,
+    invites: filtered,
     total: filtered.length,
-    pending: invites.filter(i => !i.used && !i.expired).length,
-    expired: invites.filter(i => !i.used && i.expired).length,
-    used: invites.filter(i => i.used).length,
+    pending: invites.filter((i) => !i.used && !i.expired).length,
+    expired: invites.filter((i) => !i.used && i.expired).length,
+    used: invites.filter((i) => i.used).length,
   });
 }
 
 async function handleInviteAccept(req, res, reqId) {
   const { token } = req.body || {};
-  if (!token) return res.status(400).json({ success: false, error: "Missing token" });
+  if (!token)
+    return res.status(400).json({ success: false, error: "Missing token" });
   const user = await requireAuth(req, res);
   if (!user) return;
   if (!(await enforceRate(req, res, "inviteAccept", `uid_${user.uid}`))) return;
 
   const found = await lookupInviteByToken(token);
-  if (!found) return res.status(404).json({ success: false, error: "Invite not found" });
+  if (!found)
+    return res.status(404).json({ success: false, error: "Invite not found" });
   const invite = found.invite;
 
-  if (invite.used) return res.status(410).json({ success: false, error: "Invite already used" });
-  if (invite.expiresAt && invite.expiresAt < Date.now()) return res.status(410).json({ success: false, error: "Invite expired" });
-  if (invite.invitedUid !== user.uid) return res.status(403).json({ success: false, error: "This invite is for someone else" });
+  if (invite.used)
+    return res
+      .status(410)
+      .json({ success: false, error: "Invite already used" });
+  if (invite.expiresAt && invite.expiresAt < Date.now())
+    return res.status(410).json({ success: false, error: "Invite expired" });
+  if (invite.invitedUid !== user.uid)
+    return res
+      .status(403)
+      .json({ success: false, error: "This invite is for someone else" });
 
   await db.ref(`projects/${invite.pid}/roles/${user.uid}`).set(invite.role);
   await db.ref(`users/${user.uid}/projectIds/${invite.pid}`).set(true);
-  await db.ref(`invites/${found.key}`).update({ used: true, usedAt: Date.now() });
+  await db
+    .ref(`invites/${found.key}`)
+    .update({ used: true, usedAt: Date.now() });
   invalidateProject(invite.pid);
-  await logProjectEvent(invite.pid, user.uid, "invite", "invite.accepted", { role: invite.role });
+  await logProjectEvent(invite.pid, user.uid, "invite", "invite.accepted", {
+    role: invite.role,
+  });
 
   try {
     if (invite.invitedBy && invite.invitedBy !== user.uid) {
@@ -3520,10 +4808,15 @@ async function handleInviteAccept(req, res, reqId) {
         getUser(user.uid),
       ]);
       const pname = nameSnap.exists() ? nameSnap.val() : "your project";
-      const who = acceptorUser?.profile?.username ? `@${acceptorUser.profile.username}` : "Someone";
+      const who = acceptorUser?.profile?.username
+        ? `@${acceptorUser.profile.username}`
+        : "Someone";
       let imageUrl = null;
       try {
-        const t = await db.ref(`projects/${invite.pid}/thumbnail/url`).once("value").catch(() => null);
+        const t = await db
+          .ref(`projects/${invite.pid}/thumbnail/url`)
+          .once("value")
+          .catch(() => null);
         if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
       } catch {}
       await callNotify("invite", invite.invitedBy, {
@@ -3536,23 +4829,36 @@ async function handleInviteAccept(req, res, reqId) {
     }
   } catch {}
 
-  return res.status(200).json({ success: true, pid: invite.pid, role: invite.role });
+  return res
+    .status(200)
+    .json({ success: true, pid: invite.pid, role: invite.role });
 }
 
 async function handleInviteCancel(req, res, reqId) {
   const { token } = req.body || {};
-  if (!token) return res.status(400).json({ success: false, error: "Missing token" });
+  if (!token)
+    return res.status(400).json({ success: false, error: "Missing token" });
   const found = await lookupInviteByToken(token);
-  if (!found) return res.status(404).json({ success: false, error: "Invite not found" });
+  if (!found)
+    return res.status(404).json({ success: false, error: "Invite not found" });
   const invite = found.invite;
-  if (!(await enforceRate(req, res, "inviteCancel", `pid_${invite.pid}`))) return;
+  if (!(await enforceRate(req, res, "inviteCancel", `pid_${invite.pid}`)))
+    return;
   const access = await requireProjectRole(req, res, invite.pid, "owner");
   if (!access) return;
   await db.ref(`invites/${found.key}`).remove();
-  await logProjectEvent(invite.pid, access.uid, "invite", "invite.cancelled", {});
+  await logProjectEvent(
+    invite.pid,
+    access.uid,
+    "invite",
+    "invite.cancelled",
+    {},
+  );
   try {
     if (invite.invitedUid) {
-      const nameSnap = await db.ref(`projects/${invite.pid}/name`).once("value");
+      const nameSnap = await db
+        .ref(`projects/${invite.pid}/name`)
+        .once("value");
       const pname = nameSnap.exists() ? nameSnap.val() : "a project";
       await callNotify("invite", invite.invitedUid, {
         title: "Invitation cancelled",
@@ -3567,14 +4873,20 @@ async function handleInviteCancel(req, res, reqId) {
 
 async function handleCollaboratorRemove(req, res, reqId) {
   const { pid, uid: targetUid } = req.body || {};
-  if (!pid || !targetUid) return res.status(400).json({ success: false, error: "Missing pid or uid" });
-  if (!(await enforceRate(req, res, "collaboratorRemove", `pid_${pid}`))) return;
+  if (!pid || !targetUid)
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid or uid" });
+  if (!(await enforceRate(req, res, "collaboratorRemove", `pid_${pid}`)))
+    return;
   const access = await requireProjectRole(req, res, pid, "owner");
   if (!access) return;
   await db.ref(`projects/${pid}/roles/${targetUid}`).remove();
   await db.ref(`users/${targetUid}/projectIds/${pid}`).remove();
   invalidateProject(pid);
-  await logProjectEvent(pid, access.uid, "invite", "collaborator.removed", { targetUid });
+  await logProjectEvent(pid, access.uid, "invite", "collaborator.removed", {
+    targetUid,
+  });
   try {
     const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
     const pname = nameSnap.exists() ? nameSnap.val() : "a project";
@@ -3591,7 +4903,9 @@ async function handleCollaboratorRemove(req, res, reqId) {
 async function handleMetatagsSave(req, res, reqId) {
   const { pid, metaTags } = req.body || {};
   if (!pid || typeof metaTags !== "object" || metaTags === null) {
-    return res.status(400).json({ success: false, error: "Missing pid or metaTags" });
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid or metaTags" });
   }
   if (!(await enforceRate(req, res, "metatagsSave", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "editor");
@@ -3600,13 +4914,20 @@ async function handleMetatagsSave(req, res, reqId) {
   const clean = {};
   if (metaTags.title !== undefined) {
     if (typeof metaTags.title !== "string" || metaTags.title.length > 70) {
-      return res.status(400).json({ success: false, error: "title must be ≤70 chars" });
+      return res
+        .status(400)
+        .json({ success: false, error: "title must be ≤70 chars" });
     }
     clean.title = metaTags.title;
   }
   if (metaTags.description !== undefined) {
-    if (typeof metaTags.description !== "string" || metaTags.description.length > 200) {
-      return res.status(400).json({ success: false, error: "description must be ≤200 chars" });
+    if (
+      typeof metaTags.description !== "string" ||
+      metaTags.description.length > 200
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, error: "description must be ≤200 chars" });
     }
     clean.description = metaTags.description;
   }
@@ -3616,7 +4937,9 @@ async function handleMetatagsSave(req, res, reqId) {
         const u = new URL(metaTags.ogImage);
         if (u.protocol !== "https:") throw 0;
       } catch {
-        return res.status(400).json({ success: false, error: "ogImage must be HTTPS or null" });
+        return res
+          .status(400)
+          .json({ success: false, error: "ogImage must be HTTPS or null" });
       }
     }
     clean.ogImage = metaTags.ogImage;
@@ -3629,7 +4952,9 @@ async function handleMetatagsSave(req, res, reqId) {
   }
   if (metaTags.twitterCard !== undefined) {
     if (!["summary", "summary_large_image"].includes(metaTags.twitterCard)) {
-      return res.status(400).json({ success: false, error: "twitterCard invalid" });
+      return res
+        .status(400)
+        .json({ success: false, error: "twitterCard invalid" });
     }
     clean.twitterCard = metaTags.twitterCard;
   }
@@ -3648,13 +4973,22 @@ async function handleMetatagsSave(req, res, reqId) {
 async function handleShare(req, res, reqId) {
   if (!(await enforceRate(req, res, "share", ipKey(req)))) return;
 
-  const username = String(req.query?.username || "").trim().toLowerCase();
+  const username = String(req.query?.username || "")
+    .trim()
+    .toLowerCase();
   const pidParam = String(req.query?.pid || "").trim();
   const slug = String(req.query?.project || "").trim();
   const fileParam = String(req.query?.file || "").trim();
 
-  if (fileParam && (fileParam.includes("..") || /[\x00-\x1F\x7F]/.test(fileParam) || fileParam.length > 200)) {
-    return res.status(400).json({ success: false, error: "Invalid file parameter" });
+  if (
+    fileParam &&
+    (fileParam.includes("..") ||
+      /[\x00-\x1F\x7F]/.test(fileParam) ||
+      fileParam.length > 200)
+  ) {
+    return res
+      .status(400)
+      .json({ success: false, error: "Invalid file parameter" });
   }
 
   let found = null;
@@ -3667,37 +5001,53 @@ async function handleShare(req, res, reqId) {
   } else if (username && slug) {
     const bySlug = await findProjectBySlug(username, slug);
     if (bySlug) {
-      const owner = bySlug.owner || await getUserByUsername(username);
+      const owner = bySlug.owner || (await getUserByUsername(username));
       if (owner) found = { ...bySlug, owner };
     }
   }
 
   if (!found) {
     return sendHtmlPage(res, {
-      title: "Project not found", heading: "Project not found",
-      message: "The link you followed may be broken, or the project may have been deleted.",
-      icon: "alert", status: 404,
+      title: "Project not found",
+      heading: "Project not found",
+      message:
+        "The link you followed may be broken, or the project may have been deleted.",
+      icon: "alert",
+      status: 404,
     });
   }
 
   const { pid, project, owner } = found;
 
   // Ensure languages are computed
-  if (!project.languages?.breakdown || Object.keys(project.languages.breakdown).length === 0) {
-    try { project.languages = await ensureProjectLanguages(pid, project, null); } catch (err) {
+  if (
+    !project.languages?.breakdown ||
+    Object.keys(project.languages.breakdown).length === 0
+  ) {
+    try {
+      project.languages = await ensureProjectLanguages(pid, project, null);
+    } catch (err) {
       log("host.share.languages_failed", { pid, message: err.message });
     }
   }
 
-  const langsAvailable = project.languages?.breakdown &&
-                         Object.keys(project.languages.breakdown).length > 0;
+  const langsAvailable =
+    project.languages?.breakdown &&
+    Object.keys(project.languages.breakdown).length > 0;
   if (!langsAvailable) {
-    project.languages = { breakdown: {}, totalLines: 0, computedAt: Date.now() };
+    project.languages = {
+      breakdown: {},
+      totalLines: 0,
+      computedAt: Date.now(),
+    };
   }
 
   let projectThumbnailUrl = null;
   try {
-    const t = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
+    const t = await db
+      .ref(`projects/${pid}/thumbnail/url`)
+      .once("value")
+      .catch(() => null);
     if (t?.exists() && isValidOgUrl(t.val())) projectThumbnailUrl = t.val();
   } catch {}
 
@@ -3714,7 +5064,8 @@ async function handleShare(req, res, reqId) {
         viewerUid = decoded.uid;
         const v = await getUser(decoded.uid);
         viewerUsername = v?.profile?.username || null;
-        viewerIsOwner = (project.ownerId === decoded.uid) ||
+        viewerIsOwner =
+          project.ownerId === decoded.uid ||
           (project.roles && project.roles[decoded.uid] === "editor");
       }
     } catch {}
@@ -3736,31 +5087,39 @@ async function handleShare(req, res, reqId) {
   const liveSitePublic = project.visibility?.liveSite === "public";
   const codePublic = project.visibility?.code === "public";
   const dbPublic = project.visibility?.db === "public";
-  const languagesPublic = project.visibility?.languages !== "private" && langsAvailable;
+  const languagesPublic =
+    project.visibility?.languages !== "private" && langsAvailable;
 
-  const ownerUsername = owner.profile?.username || username || project.ownerUsername || "";
+  const ownerUsername =
+    owner.profile?.username || username || project.ownerUsername || "";
 
   // ✅ The two URLs are independent:
   //   detailsUrl → two-segment, gated by visibility.profile
   //   liveUrl    → three-segment, gated by visibility.liveSite
-  const detailsUrl = ownerUsername && project.slug
-    ? buildProjectCleanUrl(ownerUsername, project)
-    : null;
-  const liveUrl = liveSitePublic && ownerUsername && project.slug
-    ? buildLiveSiteUrl(ownerUsername, project)
-    : null;
+  const detailsUrl =
+    ownerUsername && project.slug
+      ? buildProjectCleanUrl(ownerUsername, project)
+      : null;
+  const liveUrl =
+    liveSitePublic && ownerUsername && project.slug
+      ? buildLiveSiteUrl(ownerUsername, project)
+      : null;
 
   const canCopy = isProfilePublic && isSignedIn && !viewerIsOwner;
 
   const resolvedMeta = await resolveProjectMeta(pid, project);
   const ogImageUrl = resolvedMeta.ogImage || null;
 
-  const langBadges = languagesPublic && project.languages?.breakdown
-    ? Object.entries(project.languages.breakdown)
-        .sort(([, a], [, b]) => b - a)
-        .map(([name, pct]) => `<span class="lang-badge"><span class="lang-dot"></span>${escapeHtml(name)} ${pct}%</span>`)
-        .join("")
-    : "";
+  const langBadges =
+    languagesPublic && project.languages?.breakdown
+      ? Object.entries(project.languages.breakdown)
+          .sort(([, a], [, b]) => b - a)
+          .map(
+            ([name, pct]) =>
+              `<span class="lang-badge"><span class="lang-dot"></span>${escapeHtml(name)} ${pct}%</span>`,
+          )
+          .join("")
+      : "";
 
   const liveBadge = liveUrl
     ? `<span class="status-badge live"><span class="dot"></span>Live</span>`
@@ -3772,7 +5131,9 @@ async function handleShare(req, res, reqId) {
   } else if (canCopy) {
     ctaHtml = `<button class="btn primary" data-action="copy" data-pid="${escapeHtml(pid)}" type="button">${inlineSvg("copy", 14)} Save a copy</button>`;
   } else if (!isSignedIn) {
-    const next = encodeURIComponent("/" + (ownerUsername || "") + "/" + (project.slug || ""));
+    const next = encodeURIComponent(
+      "/" + (ownerUsername || "") + "/" + (project.slug || ""),
+    );
     ctaHtml = `<a class="btn primary" href="${BASE_URL}/register?next=${next}">${inlineSvg("user", 14)} Sign in to copy</a>`;
   }
 
@@ -3785,19 +5146,27 @@ async function handleShare(req, res, reqId) {
     : "";
 
   const projectIconHtml = projectIconHtmlFor(project);
-  const ownerAvatarHtml = avatarHtmlFor(owner.profile, { size: 32, username: ownerUsername });
+  const ownerAvatarHtml = avatarHtmlFor(owner.profile, {
+    size: 32,
+    username: ownerUsername,
+  });
   const updatedAgo = formatTimeAgo(project.updatedAt);
   const createdLabel = formatDate(project.createdAt);
 
   const ownerAvatarUrl = owner.profile?.avatarUrl || null;
   const ownerProfileUrl = ownerUsername ? `/${ownerUsername}` : `${BASE_URL}`;
-  const ownerDisplayName = owner.profile?.displayName || ownerUsername || "Anonymous";
+  const ownerDisplayName =
+    owner.profile?.displayName || ownerUsername || "Anonymous";
 
-  const contributors = await getVisibleContributors(pid, project, { viewerUid });
+  const contributors = await getVisibleContributors(pid, project, {
+    viewerUid,
+  });
 
   const payload = {
-    pid, slug: project.slug || "",
-    name: project.name || "", description: project.description || "",
+    pid,
+    slug: project.slug || "",
+    name: project.name || "",
+    description: project.description || "",
     ownerUsername,
     ownerDisplayName,
     ownerUid: project.ownerId || null,
@@ -3806,14 +5175,19 @@ async function handleShare(req, res, reqId) {
     contributors,
     detailsUrl: detailsUrl || null,
     liveUrl: liveUrl || null,
-    codePublic, dbPublic, languagesPublic,
-    isOwnerViewer: viewerIsOwner, isSignedIn, canCopy,
+    codePublic,
+    dbPublic,
+    languagesPublic,
+    isOwnerViewer: viewerIsOwner,
+    isSignedIn,
+    canCopy,
     viewerUsername,
     fileParam: fileParam || null,
-    canonicalPath: ownerUsername && project.slug
-      ? `/${ownerUsername}/${project.slug}`
-      : null,
-    languages: languagesPublic ? (project.languages?.breakdown || {}) : {},
+    canonicalPath:
+      ownerUsername && project.slug
+        ? `/${ownerUsername}/${project.slug}`
+        : null,
+    languages: languagesPublic ? project.languages?.breakdown || {} : {},
     updatedAt: project.updatedAt || null,
     createdAt: project.createdAt || null,
     deployedAt: project.deployment?.deployedAt || null,
@@ -3836,16 +5210,24 @@ async function handleShare(req, res, reqId) {
   };
   const projectScript = `<script>window.__PROJECT__ = ${JSON.stringify(payload).replace(/</g, "\\u003c")};</script>`;
 
-  const ogImageMeta = ogImageUrl ? `<meta property="og:image" content="${escapeHtml(ogImageUrl)}">` : "";
-  const twitterImageMeta = ogImageUrl ? `<meta name="twitter:image" content="${escapeHtml(ogImageUrl)}">` : "";
+  const ogImageMeta = ogImageUrl
+    ? `<meta property="og:image" content="${escapeHtml(ogImageUrl)}">`
+    : "";
+  const twitterImageMeta = ogImageUrl
+    ? `<meta name="twitter:image" content="${escapeHtml(ogImageUrl)}">`
+    : "";
 
-  const projectPreviewHtml = projectThumbnailUrl ? `
+  const projectPreviewHtml = projectThumbnailUrl
+    ? `
     <div class="project-hero">
       <img class="project-hero-image" src="${escapeHtml(projectThumbnailUrl)}" alt="${escapeHtml(project.name || "")} preview" loading="lazy" />
     </div>
-  ` : "";
+  `
+    : "";
 
-  const ogPreviewHtml = (viewerIsOwner && ogImageUrl) ? `
+  const ogPreviewHtml =
+    viewerIsOwner && ogImageUrl
+      ? `
     <div class="og-preview-panel">
       <div class="og-preview-head">
         <span class="og-preview-label">Share preview</span>
@@ -3853,7 +5235,8 @@ async function handleShare(req, res, reqId) {
       </div>
       <img class="og-preview-image" src="${escapeHtml(ogImageUrl)}" alt="OG preview" loading="lazy" />
     </div>
-  ` : "";
+  `
+      : "";
 
   const tmpl = readTemplate("project-template.html");
   const html = applyTemplate(tmpl, {
@@ -3863,12 +5246,14 @@ async function handleShare(req, res, reqId) {
     PROJECT_DESCRIPTION: project.description || "",
     PROJECT_ICON_HTML: { raw: projectIconHtml },
     LANGUAGES: { raw: langBadges },
-    UPDATED_AT: updatedAgo, CREATED_AT: createdLabel,
+    UPDATED_AT: updatedAgo,
+    CREATED_AT: createdLabel,
     OWNER_USERNAME: ownerUsername,
     OWNER_DISPLAY_NAME: ownerDisplayName,
     OWNER_AVATAR_HTML: { raw: ownerAvatarHtml },
     OWNER_PROFILE_URL: ownerProfileUrl,
-    VIEWER_IS_OWNER: String(viewerIsOwner), IS_SIGNED_IN: String(isSignedIn),
+    VIEWER_IS_OWNER: String(viewerIsOwner),
+    IS_SIGNED_IN: String(isSignedIn),
     CAN_COPY: String(canCopy),
     LIVE_SITE_ENABLED: String(!!liveUrl),
     CODE_ENABLED: String(codePublic),
@@ -3901,45 +5286,67 @@ async function handleShare(req, res, reqId) {
 async function handleProfilePublic(req, res, reqId) {
   if (!(await enforceRate(req, res, "profilePublic", ipKey(req)))) return;
 
-  const username = String(req.query?.username || "").trim().toLowerCase();
+  const username = String(req.query?.username || "")
+    .trim()
+    .toLowerCase();
   if (!username) {
     return sendHtmlPage(res, {
-      title: "Missing username", heading: "Profile not found",
-      message: "No username was provided in the URL.", status: 400, icon: "alert",
+      title: "Missing username",
+      heading: "Profile not found",
+      message: "No username was provided in the URL.",
+      status: 400,
+      icon: "alert",
     });
   }
   if (!/^[a-z0-9_-]{1,30}$/.test(username)) {
     return sendHtmlPage(res, {
-      title: "Invalid username", heading: "Profile not found",
-      message: "The username in the URL is not valid.", status: 400, icon: "user",
+      title: "Invalid username",
+      heading: "Profile not found",
+      message: "The username in the URL is not valid.",
+      status: 400,
+      icon: "user",
     });
   }
   if (RESERVED_USERNAMES.has(username)) {
     return sendHtmlPage(res, {
-      title: "Profile not found", heading: "Profile not found",
-      message: "This username is reserved.", status: 404, icon: "user",
+      title: "Profile not found",
+      heading: "Profile not found",
+      message: "This username is reserved.",
+      status: 404,
+      icon: "user",
     });
   }
 
   const prevSnap = await db.ref(`previousUsernames/${username}`).once("value");
-  if (prevSnap.exists()) return res.redirect(301, `${BASE_URL}/${prevSnap.val()}`);
+  if (prevSnap.exists())
+    return res.redirect(301, `${BASE_URL}/${prevSnap.val()}`);
 
   const user = await getUserByUsername(username);
   if (!user) {
     return sendHtmlPage(res, {
-      title: "Profile not found", heading: "Profile not found",
+      title: "Profile not found",
+      heading: "Profile not found",
       message: `@${username} doesn't have a Folio account, or has changed their username.`,
-      status: 404, icon: "user",
+      status: 404,
+      icon: "user",
     });
   }
 
   if (!user.profile?.avatarUrl) {
     (async () => {
       try {
-        const generated = await ensureUserAvatar(user.uid, user.profile?.displayName, username);
-        if (generated) log("host.profile.avatar_generated_bg", { uid: user.uid, username });
+        const generated = await ensureUserAvatar(
+          user.uid,
+          user.profile?.displayName,
+          username,
+        );
+        if (generated)
+          log("host.profile.avatar_generated_bg", { uid: user.uid, username });
       } catch (err) {
-        log("host.profile.avatar_bg_failed", { uid: user.uid, message: err.message });
+        log("host.profile.avatar_bg_failed", {
+          uid: user.uid,
+          message: err.message,
+        });
       }
     })();
   }
@@ -3975,10 +5382,13 @@ async function handleProfilePublic(req, res, reqId) {
     // ✅ Two independent URLs:
     //   url       → two-segment details page (always present in this list)
     //   liveUrl   → three-segment live site, or null if liveSite !== "public"
-    const url = p.slug ? `${BASE_URL}/${username}/${p.slug}` : `${BASE_URL}/${username}`;
-    const liveUrl = (p.visibility?.liveSite === "public" && p.slug)
-      ? `${BASE_URL}/${username}/project/${p.slug}`
-      : null;
+    const url = p.slug
+      ? `${BASE_URL}/${username}/${p.slug}`
+      : `${BASE_URL}/${username}`;
+    const liveUrl =
+      p.visibility?.liveSite === "public" && p.slug
+        ? `${BASE_URL}/${username}/project/${p.slug}`
+        : null;
 
     projectList.push({
       pid,
@@ -3987,7 +5397,10 @@ async function handleProfilePublic(req, res, reqId) {
       description: p.description || "",
       iconUrl: p.iconUrl || null,
       thumbnailUrl,
-      languages: p.visibility?.languages !== "private" ? (p.languages?.breakdown || {}) : {},
+      languages:
+        p.visibility?.languages !== "private"
+          ? p.languages?.breakdown || {}
+          : {},
       updatedAt: p.updatedAt || null,
       url,
       liveUrl,
@@ -3997,18 +5410,24 @@ async function handleProfilePublic(req, res, reqId) {
   }
   projectList.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-  const grid = projectList.length > 0
-    ? projectList.map(pr => {
-        const iconHtml = pr.iconUrl
-          ? `<img src="${escapeHtml(pr.iconUrl)}" alt="" style="width:44px;height:44px;border-radius:11px;object-fit:cover;display:block;">`
-          : `<span style="display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:11px;background:linear-gradient(135deg,#F59E0B,#f97316);color:#0a0c10;font-weight:800;font-size:15px;">${escapeHtml(initialsOf(pr.name))}</span>`;
-        const thumbHtml = pr.thumbnailUrl
-          ? `<div class="project-card-thumb" style="background-image:url('${escapeHtml(pr.thumbnailUrl)}')"></div>`
-          : `<div class="project-icon">${iconHtml}</div>`;
-        const langBadges = Object.entries(pr.languages).slice(0, 3).map(([n, v]) =>
-          `<span class="lang-badge"><span class="lang-dot"></span>${escapeHtml(n)} ${v}%</span>`
-        ).join("");
-        return `
+  const grid =
+    projectList.length > 0
+      ? projectList
+          .map((pr) => {
+            const iconHtml = pr.iconUrl
+              ? `<img src="${escapeHtml(pr.iconUrl)}" alt="" style="width:44px;height:44px;border-radius:11px;object-fit:cover;display:block;">`
+              : `<span style="display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:11px;background:linear-gradient(135deg,#F59E0B,#f97316);color:#0a0c10;font-weight:800;font-size:15px;">${escapeHtml(initialsOf(pr.name))}</span>`;
+            const thumbHtml = pr.thumbnailUrl
+              ? `<div class="project-card-thumb" style="background-image:url('${escapeHtml(pr.thumbnailUrl)}')"></div>`
+              : `<div class="project-icon">${iconHtml}</div>`;
+            const langBadges = Object.entries(pr.languages)
+              .slice(0, 3)
+              .map(
+                ([n, v]) =>
+                  `<span class="lang-badge"><span class="lang-dot"></span>${escapeHtml(n)} ${v}%</span>`,
+              )
+              .join("");
+            return `
           <a class="project-card" href="${escapeHtml(pr.url)}">
             ${thumbHtml}
             <div class="project-card-body">
@@ -4018,8 +5437,9 @@ async function handleProfilePublic(req, res, reqId) {
               <span class="project-time">${formatTimeAgo(pr.updatedAt)}</span>
             </div>
           </a>`;
-      }).join("")
-    : `<div class="empty-state">
+          })
+          .join("")
+      : `<div class="empty-state">
         <div class="empty-icon">${inlineSvg("folder", 22)}</div>
         <h3>No public projects yet</h3>
         <p>${isOwner ? "Publish a project to see it here." : `When @${escapeHtml(username)} publishes a project, it will appear here.`}</p>
@@ -4034,12 +5454,17 @@ async function handleProfilePublic(req, res, reqId) {
     : "";
 
   const avatarHtml = avatarHtmlFor(user.profile, { size: 96, username });
-  const bioBlock = user.profile?.bio ? `<p class="profile-bio">${escapeHtml(user.profile.bio)}</p>` : "";
+  const bioBlock = user.profile?.bio
+    ? `<p class="profile-bio">${escapeHtml(user.profile.bio)}</p>`
+    : "";
   const linksEntries = Object.entries(user.profile?.links || {});
   const linksBlock = linksEntries.length
-    ? `<div class="profile-links">${linksEntries.map(([k, v]) =>
-        `<a class="profile-link" href="${escapeHtml(v)}" target="_blank" rel="noopener">${escapeHtml(k)}</a>`
-      ).join("")}</div>`
+    ? `<div class="profile-links">${linksEntries
+        .map(
+          ([k, v]) =>
+            `<a class="profile-link" href="${escapeHtml(v)}" target="_blank" rel="noopener">${escapeHtml(k)}</a>`,
+        )
+        .join("")}</div>`
     : "";
 
   const profileUrl = `${BASE_URL}/${username}`;
@@ -4056,8 +5481,12 @@ async function handleProfilePublic(req, res, reqId) {
     : "";
 
   const profileOgImage = await ensureProfileOgImage({ user, username });
-  const ogImageMeta = profileOgImage ? `<meta property="og:image" content="${escapeHtml(profileOgImage)}">` : "";
-  const twitterImageMeta = profileOgImage ? `<meta name="twitter:image" content="${escapeHtml(profileOgImage)}">` : "";
+  const ogImageMeta = profileOgImage
+    ? `<meta property="og:image" content="${escapeHtml(profileOgImage)}">`
+    : "";
+  const twitterImageMeta = profileOgImage
+    ? `<meta name="twitter:image" content="${escapeHtml(profileOgImage)}">`
+    : "";
 
   const profileJson = {
     username,
@@ -4123,41 +5552,58 @@ async function handleProfilePublic(req, res, reqId) {
 async function handleView(req, res, reqId) {
   if (!(await enforceRate(req, res, "view", ipKey(req)))) return;
   const { username } = req.body || {};
-  if (!username) return res.status(400).json({ success: false, error: "Missing username" });
-  if (isBot(req)) return res.status(200).json({ success: true, skipped: "bot" });
+  if (!username)
+    return res.status(400).json({ success: false, error: "Missing username" });
+  if (isBot(req))
+    return res.status(200).json({ success: true, skipped: "bot" });
   const user = await getUserByUsername(username);
-  if (!user) return res.status(404).json({ success: false, error: "User not found" });
+  if (!user)
+    return res.status(404).json({ success: false, error: "User not found" });
   const authHeader = req.headers.authorization || "";
   if (authHeader.startsWith("Bearer ")) {
     try {
       const decoded = verifySession(authHeader.slice(7).trim());
-      if (decoded && decoded.uid === user.uid) return res.status(200).json({ success: true, skipped: "owner" });
+      if (decoded && decoded.uid === user.uid)
+        return res.status(200).json({ success: true, skipped: "owner" });
     } catch {}
   }
   const ip = getClientIp(req);
   const ua = req.headers["user-agent"] || "";
   const today = dayString();
-  const visitorHash = crypto.createHash("sha256").update(`${ip}|${ua}|${today}`).digest("hex").slice(0, 12);
-  await db.ref(`analytics/${user.uid}/profile/views/${today}/${visitorHash}`).set({ ts: Date.now() });
+  const visitorHash = crypto
+    .createHash("sha256")
+    .update(`${ip}|${ua}|${today}`)
+    .digest("hex")
+    .slice(0, 12);
+  await db
+    .ref(`analytics/${user.uid}/profile/views/${today}/${visitorHash}`)
+    .set({ ts: Date.now() });
   return res.status(200).json({ success: true });
 }
 
 async function handleLogs(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "logs", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "viewer");
   if (!access) return;
 
-  const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 50, 1), 200);
+  const limit = Math.min(
+    Math.max(parseInt(req.query?.limit, 10) || 50, 1),
+    200,
+  );
   const offset = Math.max(parseInt(req.query?.offset, 10) || 0, 0);
   const typeFilter = String(req.query?.type || "all");
 
   const snap = await db.ref(`logs/project/${pid}`).once("value");
-  if (!snap.exists()) return res.status(200).json({ success: true, logs: [], total: 0, hasMore: false });
+  if (!snap.exists())
+    return res
+      .status(200)
+      .json({ success: true, logs: [], total: 0, hasMore: false });
 
   const all = [];
-  snap.forEach(child => {
+  snap.forEach((child) => {
     const v = child.val();
     if (typeFilter !== "all" && v.type !== typeFilter) return;
     all.push({ id: child.key, ...v });
@@ -4165,7 +5611,9 @@ async function handleLogs(req, res, reqId) {
   all.sort((a, b) => (b.ts || 0) - (a.ts || 0));
   const slice = all.slice(offset, offset + limit);
   return res.status(200).json({
-    success: true, logs: slice, total: all.length,
+    success: true,
+    logs: slice,
+    total: all.length,
     hasMore: offset + limit < all.length,
   });
 }
@@ -4195,16 +5643,23 @@ async function handleClientError(req, res, reqId) {
   }
   const safeStack = typeof stack === "string" ? stack.slice(0, 4000) : null;
   const safeUrl = typeof url === "string" ? url.slice(0, 500) : null;
-  const safeSource = typeof source === "string" ? source.slice(0, 60) : "unknown";
-  const safeRequestId = typeof requestId === "string" ? requestId.slice(0, 60) : null;
+  const safeSource =
+    typeof source === "string" ? source.slice(0, 60) : "unknown";
+  const safeRequestId =
+    typeof requestId === "string" ? requestId.slice(0, 60) : null;
 
   try {
     const day = dayString();
     const id = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
     await db.ref(`logs/system/${day}/${id}`).set({
-      ts: now, message: message.slice(0, 2000), stack: safeStack,
-      url: safeUrl, source: safeSource, requestId: safeRequestId,
-      ipHash: ip, ua: (req.headers["user-agent"] || "").slice(0, 200),
+      ts: now,
+      message: message.slice(0, 2000),
+      stack: safeStack,
+      url: safeUrl,
+      source: safeSource,
+      requestId: safeRequestId,
+      ipHash: ip,
+      ua: (req.headers["user-agent"] || "").slice(0, 200),
     });
   } catch (err) {
     log("host.client_error.write_failed", { message: err.message });
@@ -4221,7 +5676,10 @@ export default async function handler(req, res) {
   res.setHeader("X-Request-Id", reqId);
   res.setHeader("Access-Control-Allow-Origin", BASE_URL);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Project-Key");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Project-Key",
+  );
   res.setHeader("Access-Control-Allow-Credentials", "true");
   if (req.method === "OPTIONS") return res.status(204).end();
 
@@ -4230,63 +5688,112 @@ export default async function handler(req, res) {
   const pidForLog = req.query?.pid || req.body?.pid || null;
 
   try {
-    if (method === "GET"  && action === "projects/list")        return await handleProjectsList(req, res, reqId);
-    if (method === "GET"  && action === "projects/get")         return await handleProjectsGet(req, res, reqId);
-    if (method === "POST" && action === "projects/create")      return await handleProjectsCreate(req, res, reqId);
-    if (method === "POST" && action === "projects/update")      return await handleProjectsUpdate(req, res, reqId);
-    if (method === "POST" && action === "projects/delete")      return await handleProjectsDelete(req, res, reqId);
-    if (method === "POST" && action === "project/regenerate-preview") return await handleRegeneratePreview(req, res, reqId);
+    if (method === "GET" && action === "projects/list")
+      return await handleProjectsList(req, res, reqId);
+    if (method === "GET" && action === "projects/get")
+      return await handleProjectsGet(req, res, reqId);
+    if (method === "POST" && action === "projects/create")
+      return await handleProjectsCreate(req, res, reqId);
+    if (method === "POST" && action === "projects/update")
+      return await handleProjectsUpdate(req, res, reqId);
+    if (method === "POST" && action === "projects/delete")
+      return await handleProjectsDelete(req, res, reqId);
+    if (method === "POST" && action === "project/regenerate-preview")
+      return await handleRegeneratePreview(req, res, reqId);
 
-    if (method === "POST" && action === "deploy")               return await handleDeploy(req, res, reqId);
-    if (method === "POST" && action === "redeploy")             return await handleRedeploy(req, res, reqId);
-    if (method === "GET"  && action === "status")               return await handleStatus(req, res, reqId);
+    if (method === "POST" && action === "deploy")
+      return await handleDeploy(req, res, reqId);
+    if (method === "POST" && action === "redeploy")
+      return await handleRedeploy(req, res, reqId);
+    if (method === "GET" && action === "status")
+      return await handleStatus(req, res, reqId);
 
-    if (method === "GET"  && action === "deployment/history")   return await handleDeploymentHistory(req, res, reqId);
-    if (method === "POST" && action === "deployment/offline")   return await handleDeploymentOffline(req, res, reqId);
-    if (method === "POST" && action === "deployment/delete")    return await handleDeploymentDelete(req, res, reqId);
+    if (method === "GET" && action === "deployment/history")
+      return await handleDeploymentHistory(req, res, reqId);
+    if (method === "POST" && action === "deployment/offline")
+      return await handleDeploymentOffline(req, res, reqId);
+    if (method === "POST" && action === "deployment/delete")
+      return await handleDeploymentDelete(req, res, reqId);
 
-    if (method === "POST" && action === "versions/clear")       return await handleVersionsClear(req, res, reqId);
-    if (method === "POST" && action === "cache/clear")          return await handleCacheClear(req, res, reqId);
+    if (method === "POST" && action === "versions/clear")
+      return await handleVersionsClear(req, res, reqId);
+    if (method === "POST" && action === "cache/clear")
+      return await handleCacheClear(req, res, reqId);
 
-    if (method === "GET"  && action === "project/export")       return await handleProjectExport(req, res, reqId);
-    if (method === "POST" && action === "project/sync-back")    return await handleProjectSyncBack(req, res, reqId);
-    if (method === "POST" && action === "project/copy")         return await handleProjectCopy(req, res, reqId);
+    if (method === "GET" && action === "project/export")
+      return await handleProjectExport(req, res, reqId);
+    if (method === "POST" && action === "project/sync-back")
+      return await handleProjectSyncBack(req, res, reqId);
+    if (method === "POST" && action === "project/copy")
+      return await handleProjectCopy(req, res, reqId);
 
-    if (method === "GET"  && action === "file/list")            return await handleFileList(req, res, reqId);
-    if (method === "GET"  && action === "file/get")             return await handleFileGet(req, res, reqId);
-    if (method === "POST" && action === "file/delete")          return await handleFileDelete(req, res, reqId);
+    if (method === "GET" && action === "file/list")
+      return await handleFileList(req, res, reqId);
+    if (method === "GET" && action === "file/get")
+      return await handleFileGet(req, res, reqId);
+    if (method === "POST" && action === "file/delete")
+      return await handleFileDelete(req, res, reqId);
+    if (method === "GET" && action === "project/hydrate")
+      return await handleProjectHydrate(req, res, reqId);
+    if (method === "GET" && action === "serve")
+      return await handleServe(req, res, reqId);
 
-    if (method === "GET"  && action === "serve")                return await handleServe(req, res, reqId);
+    if (method === "POST" && action === "db/set")
+      return await handleDbSet(req, res, reqId);
+    if (method === "GET" && action === "db/get")
+      return await handleDbGet(req, res, reqId);
+    if (method === "POST" && action === "db/schema")
+      return await handleDbSchema(req, res, reqId);
 
-    if (method === "POST" && action === "db/set")               return await handleDbSet(req, res, reqId);
-    if (method === "GET"  && action === "db/get")               return await handleDbGet(req, res, reqId);
-    if (method === "POST" && action === "db/schema")            return await handleDbSchema(req, res, reqId);
+    if (method === "POST" && action === "apikey/generate")
+      return await handleApiKeyGenerate(req, res, reqId);
+    if (method === "POST" && action === "visibility")
+      return await handleVisibility(req, res, reqId);
+    if (method === "POST" && action === "file-visibility")
+      return await handleFileVisibility(req, res, reqId);
+    if (method === "POST" && action === "invite/create")
+      return await handleInviteCreate(req, res, reqId);
+    if (method === "GET" && action === "invite/list")
+      return await handleInviteList(req, res, reqId);
+    if (method === "POST" && action === "invite/accept")
+      return await handleInviteAccept(req, res, reqId);
+    if (method === "POST" && action === "invite/cancel")
+      return await handleInviteCancel(req, res, reqId);
+    if (method === "POST" && action === "collaborator/remove")
+      return await handleCollaboratorRemove(req, res, reqId);
+    if (method === "POST" && action === "metatags/save")
+      return await handleMetatagsSave(req, res, reqId);
 
-    if (method === "POST" && action === "apikey/generate")      return await handleApiKeyGenerate(req, res, reqId);
-    if (method === "POST" && action === "visibility")           return await handleVisibility(req, res, reqId);
-    if (method === "POST" && action === "file-visibility")      return await handleFileVisibility(req, res, reqId);
-    if (method === "POST" && action === "invite/create")        return await handleInviteCreate(req, res, reqId);
-    if (method === "GET"  && action === "invite/list")          return await handleInviteList(req, res, reqId);
-    if (method === "POST" && action === "invite/accept")        return await handleInviteAccept(req, res, reqId);
-    if (method === "POST" && action === "invite/cancel")        return await handleInviteCancel(req, res, reqId);
-    if (method === "POST" && action === "collaborator/remove")  return await handleCollaboratorRemove(req, res, reqId);
-    if (method === "POST" && action === "metatags/save")        return await handleMetatagsSave(req, res, reqId);
+    if (method === "GET" && action === "share")
+      return await handleShare(req, res, reqId);
+    if (method === "GET" && action === "profile")
+      return await handleProfilePublic(req, res, reqId);
+    if (method === "POST" && action === "view")
+      return await handleView(req, res, reqId);
 
-    if (method === "GET"  && action === "share")                return await handleShare(req, res, reqId);
-    if (method === "GET"  && action === "profile")              return await handleProfilePublic(req, res, reqId);
-    if (method === "POST" && action === "view")                 return await handleView(req, res, reqId);
+    if (method === "GET" && action === "logs")
+      return await handleLogs(req, res, reqId);
 
-    if (method === "GET"  && action === "logs")                 return await handleLogs(req, res, reqId);
+    if (method === "POST" && action === "client-error")
+      return await handleClientError(req, res, reqId);
 
-    if (method === "POST" && action === "client-error")         return await handleClientError(req, res, reqId);
-
-    return res.status(404).json({ success: false, error: `Unknown action: ${action || "(none)"}` });
+    return res
+      .status(404)
+      .json({ success: false, error: `Unknown action: ${action || "(none)"}` });
   } catch (err) {
-    log("host.unhandled_error", { reqId, action, method, message: err.message, stack: err.stack });
+    log("host.unhandled_error", {
+      reqId,
+      action,
+      method,
+      message: err.message,
+      stack: err.stack,
+    });
     if (pidForLog) {
       logProjectApiCall(pidForLog, false).catch(() => {});
     }
-    return res.status(500).json({ success: false, error: "Internal error", reqId });
+    return res
+      .status(500)
+      .json({ success: false, error: "Internal error", reqId });
   } finally {
     if (pidForLog) {
       logProjectApiCall(pidForLog, true).catch(() => {});
@@ -4310,5 +5817,5 @@ export {
   rewriteRelativeUrls,
   rewriteCssUrls,
   injectMetaIntoHtml,
-  getProjectCached, 
+  getProjectCached,
 };
