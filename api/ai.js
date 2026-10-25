@@ -16,18 +16,17 @@
 //  Host-integration tasks (readProject, commitChanges, writeDeploy) are
 //  READ-ONLY on this server. commitChanges / writeDeploy return ONLY a
 //  message + changed-path list. They never return file contents — the
-//  client already has them. The client applies via existing host
-//  endpoints (project/sync-back, deploy) after explicit confirmation.
+//  client already has them.
 //
 //  Two-layer cache:
-//    • HTTP:       Cache-Control: no-store (no intermediary caching)
+//    • HTTP:       Cache-Control: no-store
 //    • In-process: CACHE Map, 10min TTL, 200 entries, canonical key
-//  Repeated identical calls within 10min skip Groq entirely.
 //
-//  Rate-limit windows are FIXED (wall-clock), matching host.js's
-//  checkRateLimit. A user can burst up to 2× the per-hour limit across
-//  an hour boundary; the global hourly cap (AUTHED_GLOBAL_HOURLY)
-//  bounds the worst case.
+//  Depends on (added to utils/users.js):
+//    listProjectFiles, computeLanguageBreakdown, maybeNotifyRateLimitAbuse
+//  And on (exported from host.js):
+//    getProjectCached
+//  All three have inline fallbacks so ai.js works standalone.
 // ═══════════════════════════════════════════════════════════════════
 
 import crypto from "node:crypto";
@@ -40,20 +39,13 @@ import {
   getClientIp,
   hashIp,
   logProjectApiCall,
+  listProjectFiles,
+  computeLanguageBreakdown,
+  maybeNotifyRateLimitAbuse,
 } from "../utils/users.js";
 
-// ── Optional shared helpers (fall back to inline if not yet exported) ──
-let _maybeNotifyRateLimitAbuse = null;
-let _listProjectFiles = null;
-let _computeLanguageBreakdown = null;
+// ── getProjectCached from host.js (optional — falls back to direct read) ──
 let _getProjectCached = null;
-
-try {
-  const usersMod = await import("../utils/users.js");
-  _maybeNotifyRateLimitAbuse = usersMod.maybeNotifyRateLimitAbuse || null;
-  _listProjectFiles = usersMod.listProjectFiles || null;
-  _computeLanguageBreakdown = usersMod.computeLanguageBreakdown || null;
-} catch {}
 try {
   const hostMod = await import("./host.js");
   _getProjectCached = hostMod.getProjectCached || null;
@@ -64,28 +56,24 @@ try {
 // =========================================================================
 
 const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
-const GROQ_API_URL = "https://api.groq.com/openai/v1/responses";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
-const GROQ_MODEL_FAST = process.env.GROQ_MODEL_FAST || "openai/gpt-oss-20b";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const GROQ_MODEL_FAST = process.env.GROQ_MODEL_FAST || "llama-3.1-8b-instant";
 
 const MAX_OUTPUT_TOKENS = 8192;
 const MODEL_TIMEOUT_MS = 55_000;
 
 const MODEL_MAX_OUTPUT = {
-  "openai/gpt-oss-120b": 65_536,
-  "openai/gpt-oss-20b": 65_536,
   "llama-3.3-70b-versatile": 8192,
   "llama-3.1-8b-instant": 8192,
 };
 
-// Authed global caps
 const AUTHED_GLOBAL_HOURLY = 200;
 const AUTHED_GLOBAL_DAILY = 1000;
 const AUTHED_TOKENS_DAILY = 500_000;
 
-// Guest caps
 const GUEST_GLOBAL_HOURLY = 10;
 const GUEST_GLOBAL_DAILY = 20;
 const GUEST_TOKENS_DAILY = 5_000;
@@ -93,33 +81,21 @@ const GUEST_MAX_INPUT_CHARS = 5_000;
 const GUEST_MAX_OUTPUT_TOKENS = 500;
 
 const GUEST_ALLOWED_TASKS = new Set([
-  "explain",
-  "logExplain",
-  "metatags",
-  "brainstorm",
-  "diagram",
+  "explain", "logExplain", "metatags", "brainstorm", "diagram",
 ]);
 
-// Host-integration tasks — auth + editor role required. Never guest-accessible.
 const HOST_TASKS = new Set(["readProject", "commitChanges", "writeDeploy"]);
 const HOST_TASKS_REQUIRE_EDITOR = new Set(["readProject", "commitChanges", "writeDeploy"]);
 
-// Cache
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_MAX = 200;
 
-// File validation caps (mirror host.js deploy limits)
 const MAX_ARTIFACT_FILES = 50;
 const MAX_ARTIFACT_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_ARTIFACT_PATH_LEN = 500;
 
 // =========================================================================
 // TASK LIMITS
-//   hourly, daily:   per-actor rate limits
-//   maxTokens:       model output cap
-//   maxInputChars:   hard input cap for this task (belt + suspenders)
-//   maxTotalFilesChars: total chars across all <file> blocks
-//   temp, model
 // =========================================================================
 
 const TASK_LIMITS = {
@@ -266,11 +242,6 @@ function isValidArtifactPath(p) {
   return true;
 }
 
-/**
- * Format files for a prompt with BOTH per-file and total-char budgets.
- * Groq's 128K-token context ≈ 500K chars; we cap well below that so
- * the output budget survives. maxTotal=0 disables (single-file tasks).
- */
 function formatFilesForPrompt(files, maxEach = 15_000, maxTotal = 0) {
   if (!files || typeof files !== "object") return "";
   const entries = Object.entries(files);
@@ -286,20 +257,7 @@ function formatFilesForPrompt(files, maxEach = 15_000, maxTotal = 0) {
   return parts.join("\n\n");
 }
 
-// ── Shared helpers with inline fallbacks ──
-
-async function listProjectFilesImpl(pid) {
-  if (_listProjectFiles) return await _listProjectFiles(pid);
-  const snap = await db.ref(`files/${pid}`).once("value");
-  const files = {};
-  if (snap.exists()) {
-    snap.forEach(c => {
-      const v = c.val();
-      if (v?.path && typeof v.content === "string") files[v.path] = v.content;
-    });
-  }
-  return files;
-}
+// ── Shared helpers (real imports, with defensive fallbacks) ──
 
 async function getProjectCachedImpl(pid) {
   if (_getProjectCached) {
@@ -309,39 +267,7 @@ async function getProjectCachedImpl(pid) {
   return snap.exists() ? snap.val() : null;
 }
 
-const LANG_MAP = {
-  html: "HTML", htm: "HTML",
-  css: "CSS", scss: "CSS", less: "CSS",
-  js: "JavaScript", mjs: "JavaScript", cjs: "JavaScript",
-  jsx: "JSX", ts: "TypeScript", tsx: "TSX",
-  json: "JSON", md: "Markdown", py: "Python",
-  svg: "SVG", xml: "XML", yml: "YAML", yaml: "YAML",
-};
-
-function computeLanguageBreakdownImpl(files) {
-  if (_computeLanguageBreakdown) {
-    try { return _computeLanguageBreakdown(files); } catch {}
-  }
-  const byExt = {};
-  let total = 0;
-  for (const [path, content] of Object.entries(files || {})) {
-    const ext = (path.split(".").pop() || "").toLowerCase();
-    const lang = LANG_MAP[ext];
-    if (!lang || typeof content !== "string") continue;
-    const lines = content.split("\n").length;
-    byExt[lang] = (byExt[lang] || 0) + lines;
-    total += lines;
-  }
-  if (total === 0) return { breakdown: {}, totalLines: 0, computedAt: Date.now() };
-  const breakdown = {};
-  for (const [lang, lines] of Object.entries(byExt)) {
-    breakdown[lang] = Math.round((lines / total) * 1000) / 10;
-  }
-  return { breakdown, totalLines: total, computedAt: Date.now() };
-}
-
 async function readLatestVersion(pid) {
-  // Fast path: pointer written by host.js on every version/deploy write.
   const pointerSnap = await db.ref(`projects/${pid}/latestVersionVid`).once("value").catch(() => null);
   if (pointerSnap?.exists()) {
     const vid = pointerSnap.val();
@@ -350,7 +276,6 @@ async function readLatestVersion(pid) {
       if (snap?.exists()) return { vid, ...snap.val() };
     }
   }
-  // Fallback: full scan (unoptimized until host.js writes the pointer).
   const snap = await db.ref(`versions/${pid}`).once("value").catch(() => null);
   if (!snap?.exists()) return null;
   let latest = null;
@@ -379,9 +304,6 @@ function summarizeFileChanges(current, previous) {
 
 // =========================================================================
 // ARTIFACT VALIDATORS
-//   Every JSON validator strips fences before parsing.
-//   Every validator receives (attrs, body, ctx).
-//   ctx.sourceContent — when present, diff.old is verified against it.
 // =========================================================================
 
 function parseJsonBody(body) {
@@ -417,9 +339,7 @@ const ARTIFACT_VALIDATORS = {
           rows: parsed.rows.slice(0, 200).map(r => Array.isArray(r) ? r.map(String) : []),
         },
       };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 
   tree: (attrs, body) => {
@@ -429,9 +349,7 @@ const ARTIFACT_VALIDATORS = {
         return { error: "tree root must have a label" };
       }
       return { ok: true, value: { type: "tree", root: parsed } };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 
   steps: (attrs, body) => {
@@ -439,9 +357,7 @@ const ARTIFACT_VALIDATORS = {
       const parsed = parseJsonBody(body);
       if (!Array.isArray(parsed.steps)) return { error: "steps must be an array" };
       return { ok: true, value: { type: "steps", steps: parsed.steps.slice(0, 500) } };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 
   diff: (attrs, body, ctx = {}) => {
@@ -456,17 +372,13 @@ const ARTIFACT_VALIDATORS = {
     const oldText = oldMatch[1];
     const newText = newMatch ? newMatch[1] : "";
 
-    // Server-side stale check when we have the source.
     if (typeof ctx.sourceContent === "string" && ctx.sourceContent.length > 0) {
       if (oldText.length > 0 && !ctx.sourceContent.includes(oldText)) {
         return { error: "old snippet not found in source" };
       }
     }
 
-    return {
-      ok: true,
-      value: { type: "diff", file, old: oldText, new: newText },
-    };
+    return { ok: true, value: { type: "diff", file, old: oldText, new: newText } };
   },
 
   files: (attrs, body) => {
@@ -488,9 +400,7 @@ const ARTIFACT_VALIDATORS = {
         cleaned.push({ path: p, content: f.content });
       }
       return { ok: true, value: { type: "files", files: cleaned } };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 
   mentions: (attrs, body) => {
@@ -509,9 +419,7 @@ const ARTIFACT_VALIDATORS = {
         });
       }
       return { ok: true, value: { type: "mentions", mentions: cleaned } };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 
   findings: (attrs, body) => {
@@ -526,9 +434,7 @@ const ARTIFACT_VALIDATORS = {
         detail: String(f.detail || f.body || "").slice(0, 1000),
       }));
       return { ok: true, value: { type: "findings", findings: cleaned } };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 
   concepts: (attrs, body) => {
@@ -541,13 +447,9 @@ const ARTIFACT_VALIDATORS = {
         detail: String(c.detail || "").slice(0, 600),
       }));
       return { ok: true, value: { type: "concepts", concepts: cleaned } };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 
-  // Host-integration artifacts — text-only drafts.
-  // NEVER include `files` — the client already has them.
   commit: (attrs, body) => {
     try {
       const parsed = parseJsonBody(body);
@@ -557,18 +459,8 @@ const ARTIFACT_VALIDATORS = {
       const changed = Array.isArray(parsed.changed)
         ? parsed.changed.filter(p => typeof p === "string" && isValidArtifactPath(p)).slice(0, 100)
         : [];
-      return {
-        ok: true,
-        value: {
-          type: "commitDraft",
-          message,
-          body: commitBody,
-          changed,
-        },
-      };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+      return { ok: true, value: { type: "commitDraft", message, body: commitBody, changed } };
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 
   deploy: (attrs, body) => {
@@ -587,9 +479,7 @@ const ARTIFACT_VALIDATORS = {
           sinceDeploymentId: parsed.sinceDeploymentId ? String(parsed.sinceDeploymentId) : null,
         },
       };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 
   projectSummary: (attrs, body) => {
@@ -606,25 +496,19 @@ const ARTIFACT_VALIDATORS = {
           architectureSummary: String(parsed.architectureSummary || "").slice(0, 2000),
         },
       };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 
-  // Convenience artifact for tasks that return pure JSON in <explanation>.
   json: (attrs, body) => {
     try {
       const parsed = parseJsonBody(body);
       return { ok: true, value: { type: "json", data: parsed, task: attrs.task || null } };
-    } catch (e) {
-      return { error: `invalid JSON: ${e.message}` };
-    }
+    } catch (e) { return { error: `invalid JSON: ${e.message}` }; }
   },
 };
 
 // =========================================================================
 // PROMPTS — 22 builders
-// Each builder: (payload, limits) → { system, user }
 // =========================================================================
 
 function promptExplain(p, limits) {
@@ -1260,21 +1144,18 @@ async function getActor(req) {
 }
 
 // =========================================================================
-// ACCESS — no res writes; returns { ok, role }
+// ACCESS
 // =========================================================================
 
 async function checkProjectAccess(actor, pid) {
   if (!pid) return { ok: true, role: null };
   if (String(pid).startsWith("local_")) return { ok: true, role: "owner" };
 
-  // Authed: check role directly.
   if (!actor.isGuest) {
     const role = await canAccessProject(actor.uid, pid).catch(() => null);
     if (role) return { ok: true, role };
-    // Fall through to public-visibility check.
   }
 
-  // Guest (or authed-non-member): visibility.
   const visSnap = await db.ref(`projects/${pid}/visibility`).once("value").catch(() => null);
   const vis = visSnap?.exists() ? visSnap.val() : {};
   const isPublic = vis.profile === "public" || vis.liveSite === "public";
@@ -1330,10 +1211,7 @@ async function checkRateLimit(actor, task) {
       error: actor.isGuest
         ? `Guest hourly limit for '${task}' reached (${taskHourly}). Sign in for higher limits.`
         : `Hourly limit for '${task}' reached (${taskHourly}).`,
-      scope: "per_task",
-      task,
-      limit: taskHourly,
-      used: taskHourCount,
+      scope: "per_task", task, limit: taskHourly, used: taskHourCount,
       resetAt: new Date((hour + 1) * 60 * 60 * 1000).toISOString(),
       retryAfter: Math.ceil(((hour + 1) * 60 * 60 * 1000 - now) / 1000),
     };
@@ -1344,10 +1222,7 @@ async function checkRateLimit(actor, task) {
       error: actor.isGuest
         ? `Guest daily limit for '${task}' reached (${taskDaily}). Sign in for higher limits.`
         : `Daily limit for '${task}' reached (${taskDaily}).`,
-      scope: "per_task",
-      task,
-      limit: taskDaily,
-      used: taskDayCount,
+      scope: "per_task", task, limit: taskDaily, used: taskDayCount,
       resetAt: new Date((day + 1) * 24 * 60 * 60 * 1000).toISOString(),
       retryAfter: Math.ceil(((day + 1) * 24 * 60 * 60 * 1000 - now) / 1000),
     };
@@ -1358,9 +1233,7 @@ async function checkRateLimit(actor, task) {
       error: actor.isGuest
         ? `Guest global limit reached (${globalHourly}/hour). Sign in for higher limits.`
         : `Global hourly limit reached (${globalHourly}).`,
-      scope: "global",
-      limit: globalHourly,
-      used: globalHourCount,
+      scope: "global", limit: globalHourly, used: globalHourCount,
       resetAt: new Date((hour + 1) * 60 * 60 * 1000).toISOString(),
       retryAfter: Math.ceil(((hour + 1) * 60 * 60 * 1000 - now) / 1000),
     };
@@ -1371,9 +1244,7 @@ async function checkRateLimit(actor, task) {
       error: actor.isGuest
         ? `Guest global limit reached (${globalDaily}/day). Sign in for higher limits.`
         : `Global daily limit reached (${globalDaily}).`,
-      scope: "global",
-      limit: globalDaily,
-      used: globalDayCount,
+      scope: "global", limit: globalDaily, used: globalDayCount,
       resetAt: new Date((day + 1) * 24 * 60 * 60 * 1000).toISOString(),
       retryAfter: Math.ceil(((day + 1) * 24 * 60 * 60 * 1000 - now) / 1000),
     };
@@ -1386,7 +1257,6 @@ async function checkRateLimit(actor, task) {
     globalDayRef.transaction(cur => (cur || 0) + 1),
   ]);
 
-  // Best-effort prune of old hour buckets for this task.
   db.ref(`ai_usage/${actor.key}/limits/${task}/hours`).once("value").then(snap => {
     if (!snap.exists()) return;
     const updates = {};
@@ -1399,16 +1269,14 @@ async function checkRateLimit(actor, task) {
   }).catch(() => {});
 
   return {
-    ok: true,
-    scope: "per_task",
-    task,
+    ok: true, scope: "per_task", task,
     limit: taskHourly,
     remaining: taskHourly - taskHourCount - 1,
   };
 }
 
 // =========================================================================
-// TOKEN QUOTA — applies to both guests and authed
+// TOKEN QUOTA
 // =========================================================================
 
 async function checkTokenQuota(actor) {
@@ -1422,9 +1290,7 @@ async function checkTokenQuota(actor) {
     return {
       ok: false,
       error: `Daily token budget reached (${limit} tokens).`,
-      scope: "tokens",
-      limit,
-      used: total,
+      scope: "tokens", limit, used: total,
       resetAt: new Date((day + 1) * 24 * 60 * 60 * 1000).toISOString(),
     };
   }
@@ -1452,10 +1318,12 @@ async function recordUsage(actor, task, usage) {
   }
 }
 
+// =========================================================================
+// GROQ PROVIDER (Responses API) — with bounded retry
+// =========================================================================
 
-// =========================================================================
-// GROQ PROVIDER (Responses API)
-// =========================================================================
+const GROQ_RETRY_STATUSES = new Set([502, 503, 504]);
+const GROQ_MAX_RETRIES = 3;
 
 async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
   if (!GROQ_API_KEY) {
@@ -1473,81 +1341,106 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
     ],
     max_output_tokens: capped,
     temperature: temp != null ? temp : 0.3,
-    // Keep reasoning minimal for speed; raise to "medium"/"high" per-task if needed.
     reasoning: { effort: "low" },
-    store: false,
+    // Do NOT send `store` — Groq Responses is stateless.
   };
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
+  let lastErr = null;
 
-  let res;
-  try {
-    res = await fetch(GROQ_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    clearTimeout(timer);
-    if (err.name === "AbortError") {
-      throw Object.assign(new Error("AI timeout"), { status: 504 });
+  for (let attempt = 0; attempt <= GROQ_MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
+
+    let res;
+    try {
+      res = await fetch(GROQ_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      if (err.name === "AbortError") {
+        lastErr = Object.assign(new Error("AI timeout"), { status: 504 });
+      } else {
+        lastErr = Object.assign(new Error(`Groq network error: ${err.message}`), { status: 502 });
+      }
+      // Network/timeout is retryable.
+      if (attempt < GROQ_MAX_RETRIES) {
+        const backoff = Math.min(8000, 500 * 2 ** attempt) + Math.random() * 400;
+        await new Promise(r => setTimeout(r, backoff));
+        continue;
+      }
+      throw lastErr;
     }
-    throw Object.assign(new Error(`Groq network error: ${err.message}`), { status: 502 });
-  }
-  clearTimeout(timer);
+    clearTimeout(timer);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    log("ai.groq_http_error", { reqId, status: res.status, body: text.slice(0, 300) });
-    throw Object.assign(new Error(`Groq HTTP ${res.status}`), { status: 502 });
-  }
+    if (res.ok) {
+      const json = await res.json();
 
-  const json = await res.json();
-
-  // Responses API exposes `output_text` as a convenience field. Fall back to
-  // walking `output[]` if it's missing.
-  let content = json?.output_text;
-  if (!content || typeof content !== "string") {
-    const parts = [];
-    if (Array.isArray(json?.output)) {
-      for (const item of json.output) {
-        if (item?.type === "message" && Array.isArray(item.content)) {
-          for (const c of item.content) {
-            if (c?.type === "output_text" && typeof c.text === "string") {
-              parts.push(c.text);
+      let content = json?.output_text;
+      if (!content || typeof content !== "string") {
+        const parts = [];
+        if (Array.isArray(json?.output)) {
+          for (const item of json.output) {
+            if (item?.type === "message" && Array.isArray(item.content)) {
+              for (const c of item.content) {
+                if (c?.type === "output_text" && typeof c.text === "string") {
+                  parts.push(c.text);
+                }
+              }
             }
           }
         }
+        content = parts.join("");
       }
+
+      if (!content || typeof content !== "string") {
+        throw Object.assign(new Error("Groq returned no content"), { status: 502 });
+      }
+
+      const usage = json.usage || {};
+      return {
+        content,
+        usage: {
+          promptTokens: usage.input_tokens || 0,
+          completionTokens: usage.output_tokens || 0,
+          totalTokens: usage.total_tokens || 0,
+        },
+      };
     }
-    content = parts.join("");
+
+    const text = await res.text().catch(() => "");
+    log("ai.groq_http_error", {
+      reqId,
+      attempt,
+      status: res.status,
+      body: text.slice(0, 300),
+    });
+
+    if (GROQ_RETRY_STATUSES.has(res.status) && attempt < GROQ_MAX_RETRIES) {
+      lastErr = Object.assign(new Error(`Groq HTTP ${res.status}`), { status: 502 });
+      const retryAfter = Number(res.headers.get("retry-after")) || 0;
+      const backoff = retryAfter
+        ? retryAfter * 1000
+        : Math.min(8000, 500 * 2 ** attempt) + Math.random() * 400;
+      await new Promise(r => setTimeout(r, backoff));
+      continue;
+    }
+
+    // Non-retryable (4xx or retries exhausted).
+    throw Object.assign(new Error(`Groq HTTP ${res.status}`), { status: 502 });
   }
 
-  if (!content || typeof content !== "string") {
-    throw Object.assign(new Error("Groq returned no content"), { status: 502 });
-  }
-
-  const usage = json.usage || {};
-  return {
-    content,
-    usage: {
-      promptTokens: usage.input_tokens || 0,
-      completionTokens: usage.output_tokens || 0,
-      totalTokens: usage.total_tokens || 0,
-    },
-  };
+  throw lastErr || Object.assign(new Error("Groq call failed"), { status: 502 });
 }
 
 // =========================================================================
 // RESPONSE PARSER
-//   Returns { ok, text, artifacts }.
-//   ok=false when no <explanation> and no valid artifact — caller
-//   skips cacheSet in that case so garbage isn't cached.
 // =========================================================================
 
 function parseResponse(raw, { task, sourceContent } = {}) {
@@ -1566,7 +1459,6 @@ function parseResponse(raw, { task, sourceContent } = {}) {
 
   explanation = stripFences(explanation);
 
-  // Tolerant artifact parsing — attr order doesn't matter, single or double quotes.
   const artifactRe = /<artifact\b([^>]*)>([\s\S]*?)<\/artifact>/gi;
   let match;
   while ((match = artifactRe.exec(text)) !== null) {
@@ -1593,14 +1485,10 @@ function parseResponse(raw, { task, sourceContent } = {}) {
     }
 
     const result = validator(attrs, body, { sourceContent });
-    if (result.ok) {
-      artifacts.push(result.value);
-    } else {
-      log("ai.artifact_invalid", { task, type, error: result.error });
-    }
+    if (result.ok) artifacts.push(result.value);
+    else log("ai.artifact_invalid", { task, type, error: result.error });
   }
 
-  // JSON-in-explanation fallback for metatags / commitMsg (older prompts).
   if (artifacts.length === 0 && (task === "metatags" || task === "commitMsg") && explanation) {
     try {
       const cleaned = stripFences(explanation);
@@ -1619,7 +1507,7 @@ function parseResponse(raw, { task, sourceContent } = {}) {
 }
 
 // =========================================================================
-// CACHE — in-process, TTL'd, canonical-keyed
+// CACHE
 // =========================================================================
 
 const CACHE = new Map();
@@ -1646,7 +1534,6 @@ function cacheSet(key, value) {
 
 // =========================================================================
 // HOST-TASK BUILDER
-//   Re-verifies role here (defense in depth).
 // =========================================================================
 
 async function buildHostTask(task, actor, pid, payload, limits) {
@@ -1665,11 +1552,11 @@ async function buildHostTask(task, actor, pid, payload, limits) {
     throw Object.assign(new Error("Project not found"), { status: 404 });
   }
 
-  const files = await listProjectFilesImpl(pid);
+  const files = await listProjectFiles(pid);
   const latestVersion = await readLatestVersion(pid);
   const lastFiles = latestVersion?.files || {};
   const changes = summarizeFileChanges(files, lastFiles);
-  const lang = computeLanguageBreakdownImpl(files);
+  const lang = computeLanguageBreakdown(files);
 
   if (task === "readProject") {
     return promptReadProject(payload, limits, project, files, latestVersion, changes, lang);
@@ -1687,6 +1574,15 @@ async function buildHostTask(task, actor, pid, payload, limits) {
 // HEALTH / SCENES (admin)
 // =========================================================================
 
+function isAdminRequest(req) {
+  const key = req.headers["x-api-key"] || req.headers["admin-api-key"] || "";
+  const expected = process.env.ADMIN_API_KEY || "";
+  if (!expected || key.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(key), Buffer.from(expected));
+  } catch { return false; }
+}
+
 async function handleHealth(req, res) {
   if (!isAdminRequest(req)) {
     return res.status(401).json({ success: false, error: "Admin credentials required" });
@@ -1695,7 +1591,6 @@ async function handleHealth(req, res) {
     success: true,
     status: GROQ_API_KEY ? "ok" : "unconfigured",
     configured: !!GROQ_API_KEY,
-    provider: "groq-responses",
     models: { power: GROQ_MODEL, fast: GROQ_MODEL_FAST },
     tasks: Object.keys(TASK_LIMITS).length,
     hostTasks: [...HOST_TASKS],
@@ -1709,13 +1604,9 @@ async function handleHealth(req, res) {
 }
 
 async function handleScenes(req, res) {
-  const isAdmin = (
-    req.headers["x-api-key"] === process.env.ADMIN_API_KEY ||
-    (req.headers.authorization?.startsWith("Bearer ") &&
-      req.headers.authorization.slice(7) === process.env.ADMIN_API_KEY)
-  );
-  if (!isAdmin) return res.status(401).json({ success: false, error: "Admin credentials required" });
-
+  if (!isAdminRequest(req)) {
+    return res.status(401).json({ success: false, error: "Admin credentials required" });
+  }
   const tasks = Object.entries(TASK_LIMITS).map(([id, t]) => ({
     id,
     hourly: t.hourly,
@@ -1723,19 +1614,7 @@ async function handleScenes(req, res) {
     model: t.model,
     guest: GUEST_ALLOWED_TASKS.has(id),
     host: HOST_TASKS.has(id),
-    artifacts: id === "debug" || id === "optimize" || id === "struggle" || id === "audit"
-      ? ["findings", "diff"]
-      : id === "diagram" || id === "designExplain" || id === "docs"
-        ? ["mermaid", "tree", "mindmap", "flowtable"]
-        : id === "readProject"
-          ? ["projectSummary"]
-          : id === "commitChanges"
-            ? ["commitDraft"]
-            : id === "writeDeploy"
-              ? ["deployDraft"]
-              : [],
   }));
-
   return res.status(200).json({
     success: true,
     tasks,
@@ -1770,7 +1649,6 @@ export default async function handler(req, res) {
   let pid = null;
   let task = null;
   try {
-    // ── CORS ──
     const origin = req.headers.origin;
     if (origin && !isOriginAllowed(origin)) {
       return res.status(403).json({ success: false, error: "Origin not allowed" });
@@ -1784,7 +1662,6 @@ export default async function handler(req, res) {
     }
     if (req.method === "OPTIONS") return res.status(204).end();
 
-    // ── GET actions (admin) ──
     if (req.method === "GET") {
       const action = String(req.query?.action || "").trim();
       if (action === "health") return await handleHealth(req, res);
@@ -1795,12 +1672,10 @@ export default async function handler(req, res) {
       return res.status(405).json({ success: false, error: "Method not allowed" });
     }
 
-    // ── Provider check ──
     if (!GROQ_API_KEY) {
       return res.status(503).json({ success: false, error: "AI not configured" });
     }
 
-    // ── Parse body ──
     const body = req.body || {};
     task = typeof body.task === "string" ? body.task.trim() : null;
     pid = typeof body.pid === "string" ? body.pid.trim() : null;
@@ -1815,10 +1690,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: `Task not implemented: ${task}` });
     }
 
-    // ── Actor ──
     const actor = await getActor(req);
 
-    // ── Guest gate ──
     const guestBlocked =
       (isHostTask && HOST_TASKS_REQUIRE_EDITOR.has(task)) ||
       (!GUEST_ALLOWED_TASKS.has(task) && !isHostTask);
@@ -1832,13 +1705,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // ── Project access ──
     const access = await checkProjectAccess(actor, pid);
     if (!access.ok) {
       return res.status(403).json({ success: false, error: "Access denied" });
     }
 
-    // Host tasks require pid + editor-role (rechecked in buildHostTask too).
     if (isHostTask) {
       if (!pid) return res.status(400).json({ success: false, error: `Task "${task}" requires pid` });
       if (HOST_TASKS_REQUIRE_EDITOR.has(task) && access.role !== "owner" && access.role !== "editor") {
@@ -1846,7 +1717,6 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── Token quota (before rate-limit increment) ──
     const tq = await checkTokenQuota(actor);
     if (!tq.ok) {
       if (tq.limit) res.setHeader("X-RateLimit-Limit", String(tq.limit));
@@ -1854,17 +1724,12 @@ export default async function handler(req, res) {
       res.setHeader("X-RateLimit-Scope", tq.scope);
       if (tq.resetAt) res.setHeader("X-RateLimit-Reset", tq.resetAt);
       return res.status(429).json({
-        success: false,
-        error: tq.error,
-        scope: tq.scope,
-        limit: tq.limit,
-        used: tq.used,
-        resetAt: tq.resetAt,
+        success: false, error: tq.error, scope: tq.scope,
+        limit: tq.limit, used: tq.used, resetAt: tq.resetAt,
         guest: actor.isGuest,
       });
     }
 
-    // ── Rate limit ──
     const rl = await checkRateLimit(actor, task);
     if (rl.limit) res.setHeader("X-RateLimit-Limit", String(rl.limit));
     res.setHeader("X-RateLimit-Remaining", String(rl.remaining != null ? rl.remaining : 0));
@@ -1874,28 +1739,19 @@ export default async function handler(req, res) {
 
     if (!rl.ok) {
       try {
-        if (_maybeNotifyRateLimitAbuse) {
-          await _maybeNotifyRateLimitAbuse(`ai:${task}`, actor.key, rl).catch(() => {});
-        }
+        await maybeNotifyRateLimitAbuse(`ai:${task}`, actor.key, rl).catch(() => {});
       } catch {}
       log("ai.rate_limit_hit", { reqId, task, guest: actor.isGuest, scope: rl.scope, limit: rl.limit });
       return res.status(429).json({
-        success: false,
-        error: rl.error,
-        scope: rl.scope,
-        task: rl.task || task,
-        limit: rl.limit,
-        used: rl.used,
-        resetAt: rl.resetAt,
-        retryAfter: rl.retryAfter,
+        success: false, error: rl.error, scope: rl.scope,
+        task: rl.task || task, limit: rl.limit, used: rl.used,
+        resetAt: rl.resetAt, retryAfter: rl.retryAfter,
         guest: actor.isGuest,
       });
     }
 
-    // ── Guest truncation ──
     const effectivePayload = actor.isGuest ? truncatePayloadForGuest(payload) : payload;
 
-    // ── Cache ──
     const cacheKey = hashCacheKey({
       task,
       pid: pid || null,
@@ -1905,21 +1761,13 @@ export default async function handler(req, res) {
     const cached = cacheGet(cacheKey);
     if (cached) {
       return res.status(200).json({
-        success: true,
-        task,
-        text: cached.text,
-        artifacts: cached.artifacts,
-        guest: actor.isGuest,
-        cached: true,
-        rateLimit: {
-          limit: rl.limit,
-          remaining: rl.remaining,
-          reset: rl.resetAt || null,
-        },
+        success: true, task,
+        text: cached.text, artifacts: cached.artifacts,
+        guest: actor.isGuest, cached: true,
+        rateLimit: { limit: rl.limit, remaining: rl.remaining, reset: rl.resetAt || null },
       });
     }
 
-    // ── Build prompt ──
     let prompt;
     try {
       if (isHostTask) {
@@ -1935,22 +1783,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: "Invalid payload for task" });
     }
 
-    // ── Model selection + cap ──
     const modelKey = limits.model === "fast" ? GROQ_MODEL_FAST : GROQ_MODEL;
     const maxTokens = actor.isGuest
       ? Math.min(limits.maxTokens, GUEST_MAX_OUTPUT_TOKENS)
       : limits.maxTokens;
 
-    // ── Model call ──
     let modelRes;
     try {
       modelRes = await callGroq({
-        system: prompt.system,
-        user: prompt.user,
-        maxTokens,
-        temp: limits.temp,
-        model: modelKey,
-        reqId,
+        system: prompt.system, user: prompt.user,
+        maxTokens, temp: limits.temp, model: modelKey, reqId,
       });
     } catch (err) {
       log("ai.model_call_failed", {
@@ -1963,7 +1805,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // ── Parse ──
     const sourceContent = typeof effectivePayload.content === "string"
       ? effectivePayload.content
       : (typeof effectivePayload.selection === "string" ? effectivePayload.selection : null);
@@ -1973,7 +1814,6 @@ export default async function handler(req, res) {
       parsed.text = modelRes.content.trim() || "No response from AI.";
     }
 
-    // ── Usage + audit ──
     await recordUsage(actor, task, modelRes.usage);
     log("ai.task_completed", {
       reqId, task, pid: pid || null, guest: actor.isGuest, key: actor.key,
@@ -1983,24 +1823,15 @@ export default async function handler(req, res) {
       parseOk: parsed.ok,
     });
 
-    // ── Cache (only on successful parse) ──
     if (parsed.ok) {
       cacheSet(cacheKey, { text: parsed.text, artifacts: parsed.artifacts });
     }
 
     return res.status(200).json({
-      success: true,
-      task,
-      text: parsed.text,
-      artifacts: parsed.artifacts,
-      usage: modelRes.usage,
-      guest: actor.isGuest,
-      cached: false,
-      rateLimit: {
-        limit: rl.limit,
-        remaining: rl.remaining,
-        reset: rl.resetAt || null,
-      },
+      success: true, task,
+      text: parsed.text, artifacts: parsed.artifacts,
+      usage: modelRes.usage, guest: actor.isGuest, cached: false,
+      rateLimit: { limit: rl.limit, remaining: rl.remaining, reset: rl.resetAt || null },
     });
   } catch (err) {
     log("ai.unhandled_error", {
@@ -2015,7 +1846,7 @@ export default async function handler(req, res) {
 }
 
 // =========================================================================
-// EXPORTS (for tests + internal reuse)
+// EXPORTS
 // =========================================================================
 
 export {
