@@ -64,17 +64,18 @@ try {
 // =========================================================================
 
 const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/responses";
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-const GROQ_MODEL_FAST = process.env.GROQ_MODEL_FAST || "llama-3.1-8b-instant";
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+const GROQ_MODEL_FAST = process.env.GROQ_MODEL_FAST || "openai/gpt-oss-20b";
 
 const MAX_OUTPUT_TOKENS = 8192;
 const MODEL_TIMEOUT_MS = 55_000;
 
-// Groq model output caps — kept in sync with provider docs.
 const MODEL_MAX_OUTPUT = {
+  "openai/gpt-oss-120b": 65_536,
+  "openai/gpt-oss-20b": 65_536,
   "llama-3.3-70b-versatile": 8192,
   "llama-3.1-8b-instant": 8192,
 };
@@ -1451,8 +1452,9 @@ async function recordUsage(actor, task, usage) {
   }
 }
 
+
 // =========================================================================
-// GROQ PROVIDER
+// GROQ PROVIDER (Responses API)
 // =========================================================================
 
 async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
@@ -1465,13 +1467,15 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
 
   const body = {
     model,
-    messages: [
+    input: [
       { role: "system", content: system },
       { role: "user", content: user },
     ],
-    max_tokens: capped,
+    max_output_tokens: capped,
     temperature: temp != null ? temp : 0.3,
-    stream: false,
+    // Keep reasoning minimal for speed; raise to "medium"/"high" per-task if needed.
+    reasoning: { effort: "low" },
+    store: false,
   };
 
   const controller = new AbortController();
@@ -1504,7 +1508,26 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
   }
 
   const json = await res.json();
-  const content = json?.choices?.[0]?.message?.content;
+
+  // Responses API exposes `output_text` as a convenience field. Fall back to
+  // walking `output[]` if it's missing.
+  let content = json?.output_text;
+  if (!content || typeof content !== "string") {
+    const parts = [];
+    if (Array.isArray(json?.output)) {
+      for (const item of json.output) {
+        if (item?.type === "message" && Array.isArray(item.content)) {
+          for (const c of item.content) {
+            if (c?.type === "output_text" && typeof c.text === "string") {
+              parts.push(c.text);
+            }
+          }
+        }
+      }
+    }
+    content = parts.join("");
+  }
+
   if (!content || typeof content !== "string") {
     throw Object.assign(new Error("Groq returned no content"), { status: 502 });
   }
@@ -1513,8 +1536,8 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
   return {
     content,
     usage: {
-      promptTokens: usage.prompt_tokens || 0,
-      completionTokens: usage.completion_tokens || 0,
+      promptTokens: usage.input_tokens || 0,
+      completionTokens: usage.output_tokens || 0,
       totalTokens: usage.total_tokens || 0,
     },
   };
@@ -1665,17 +1688,14 @@ async function buildHostTask(task, actor, pid, payload, limits) {
 // =========================================================================
 
 async function handleHealth(req, res) {
-  const isAdmin = (
-    req.headers["x-api-key"] === process.env.ADMIN_API_KEY ||
-    (req.headers.authorization?.startsWith("Bearer ") &&
-      req.headers.authorization.slice(7) === process.env.ADMIN_API_KEY)
-  );
-  if (!isAdmin) return res.status(401).json({ success: false, error: "Admin credentials required" });
-
+  if (!isAdminRequest(req)) {
+    return res.status(401).json({ success: false, error: "Admin credentials required" });
+  }
   return res.status(200).json({
     success: true,
     status: GROQ_API_KEY ? "ok" : "unconfigured",
     configured: !!GROQ_API_KEY,
+    provider: "groq-responses",
     models: { power: GROQ_MODEL, fast: GROQ_MODEL_FAST },
     tasks: Object.keys(TASK_LIMITS).length,
     hostTasks: [...HOST_TASKS],
