@@ -1,17 +1,11 @@
 /* ============================================================
    Folio — update.js
-   Service worker update prompt + apply.
-   DESIGN: flat glass / translucent, no shadows, hairline borders.
-
-   Usage:
-     <script src="/update.js" defer></script>
+   KOFA X–style update prompt. Theme-aware, self-contained CSS.
 
    API:
      FOLIO.update.check()
      FOLIO.update.applyNow()
-     FOLIO.update.pause()
-     FOLIO.update.resume()
-     FOLIO.update.isPaused()
+     FOLIO.update.pause() / resume() / isPaused()
 
    Events:
      folio:update:available
@@ -23,33 +17,33 @@
   const CFG = {
     checkIntervalMs: 5 * 60 * 1000,
     minCheckGapMs: 30 * 1000,
-    autoApplyMs: 30 * 1000,
+    autoDismissMs: 30 * 1000,           // ← KOFA X behaviour: dismiss, not apply
     reloadDelayMs: 700,
     controllerTimeoutMs: 4000,
     waitingPollTimeoutMs: 5000,
     versionProbeMs: 2500,
+    autoShowDelayMs: 800,
   };
 
   const POSTPONE_KEY = 'folio.upd.postponed';
+  const FIRST_ACTIVATE_KEY = 'folio.sw.firstActivate';
 
   const S = {
     reg: null,
     dialogEl: null,
     dialogVersion: null,
-    countdownRaf: null,
-    countdownStartAt: 0,
+    autoDismissTimer: null,
     applying: false,
     paused: false,
-    postponed: false,
     postponedVersion: null,
     stylesInjected: false,
     initialized: false,
     checkTimer: null,
     safetyTimer: null,
     onCtrlHandler: null,
-    reducedMotion: false,
     lastCheckedAt: 0,
     pageVersion: '',
+    swActivatedHandled: false,
   };
 
   let postponedMemory = null;
@@ -62,6 +56,8 @@
     } catch {}
   };
 
+  const haptic = () => { try { navigator.vibrate?.(8); } catch {} };
+
   function hasReducedMotion() {
     try {
       if (localStorage.getItem('folio.reducedMotion') === 'true') return true;
@@ -71,8 +67,6 @@
     } catch {}
     return matchMedia?.('(prefers-reduced-motion: reduce)').matches || false;
   }
-
-  function fmtSeconds(ms) { return Math.max(0, Math.ceil(ms / 1000)); }
 
   function getWorkerVersion(worker, timeoutMs = CFG.versionProbeMs) {
     return new Promise((resolve) => {
@@ -98,12 +92,6 @@
       const cs = document.currentScript;
       if (cs?.dataset?.version) return String(cs.dataset.version);
     } catch {}
-    try {
-      const all = document.querySelectorAll('script[data-version]');
-      for (const s of all) {
-        if ((s.src || '').includes('update.js')) return String(s.dataset.version || '');
-      }
-    } catch {}
     return '';
   }
 
@@ -125,16 +113,8 @@
 
   function clearPostponed() {
     postponedMemory = null;
-    S.postponed = false;
     S.postponedVersion = null;
     try { sessionStorage.removeItem(POSTPONE_KEY); } catch {}
-  }
-
-  function hasPostponed() {
-    if (postponedMemory) return true;
-    const p = readPostponed();
-    if (p) { postponedMemory = p; return true; }
-    return false;
   }
 
   function hasUnsavedWork() {
@@ -146,9 +126,6 @@
     } catch { return false; }
   }
 
-  // ✅ FIX: Only call the custom Promise-returning confirm if it's actually
-  // an overridden function. Pass a plain string to native confirm so we don't
-  // accidentally call `window.confirm({ ... })` and show "[object Object]".
   async function confirmDiscard() {
     const opts = {
       title: 'Reload anyway?',
@@ -158,8 +135,6 @@
     };
     try {
       if (typeof window.confirm === 'function') {
-        // Try the "opts-style" call first. If it returns a Promise (custom
-        // override), await it. If it returns a boolean, use it directly.
         const r = window.confirm(opts);
         if (r && typeof r.then === 'function') return !!(await r);
         if (typeof r === 'boolean') return r;
@@ -168,10 +143,6 @@
     try { return !!window.confirm(opts.message); } catch { return false; }
   }
 
-  // ✅ FIX: Return false when we truly can't tell if it's a new version —
-  // previously defaulted to true, causing infinite prompts on ghost workers.
-  // Also fix: use pageVersion from meta or fall back to reg.active's version
-  // so the comparison is reliable even when the page has no meta marker.
   async function isRealUpdate(reg) {
     if (!reg?.waiting) return false;
     if (!navigator.serviceWorker.controller) return false;
@@ -182,22 +153,16 @@
       getWorkerVersion(reg.waiting),
     ]);
 
-    // Most reliable: compare active vs waiting
     if (activeVer && waitingVer) return activeVer !== waitingVer;
-
-    // Fallback: compare against page version if we have one
     if (waitingVer && S.pageVersion) return waitingVer !== S.pageVersion;
-
-    // Last resort: if waiting worker responds but active doesn't, treat as real
+    // If only the waiting worker responds, treat as real. This unblocks
+    // cases where the active worker's message port is stale.
     if (waitingVer && !activeVer) return true;
-
-    // If neither responds, we can't know. Assume NOT a real update to avoid
-    // the "prompt that never goes away" bug.
     return false;
   }
 
   // ═══════════════════════════════════════════════════════════
-  // STYLES — flat glass, no shadows, hairline borders
+  // STYLES — KOFA X–style, theme-token aware
   // ═══════════════════════════════════════════════════════════
   function injectStyles() {
     if (S.stylesInjected || document.getElementById('folio-update-style')) {
@@ -206,210 +171,229 @@
     }
 
     const css = `
-      /* ─── Overlay ─────────────────────────────────────── */
+      /* ─── Theme tokens ─────────────────────────────────────── */
+      :root {
+        --folio-upd-accent: var(--theme-primary, #F59E0B);
+        --folio-upd-accent-soft: var(--theme-primary-soft, rgba(245,158,11,0.14));
+        --folio-upd-accent-glow: var(--theme-primary-glow, rgba(245,158,11,0.40));
+        --folio-upd-accent-hover: var(--theme-primary-hover, #fbbf24);
+        --folio-upd-surface: var(--theme-surface, #0f1218);
+        --folio-upd-surface-raised: var(--theme-surface-elevated, #1a1f2a);
+        --folio-upd-border: var(--theme-glass-border, rgba(255,255,255,0.09));
+        --folio-upd-divider: var(--theme-divider, rgba(255,255,255,0.08));
+        --folio-upd-text-1: var(--theme-text, #e8ecf1);
+        --folio-upd-text-2: var(--theme-text-secondary, rgba(232,236,241,0.72));
+        --folio-upd-text-3: var(--theme-text-tertiary, rgba(232,236,241,0.44));
+        --folio-upd-on-accent: #0a0c10;
+        --folio-upd-overlay: rgba(10, 12, 16, 0.72);
+        --folio-upd-font: var(--font, "Inter", -apple-system, system-ui, sans-serif);
+        --folio-upd-mono: var(--font-mono, "SF Mono", Consolas, monospace);
+      }
+      [data-theme="light"] {
+        --folio-upd-surface: var(--theme-surface, #ffffff);
+        --folio-upd-surface-raised: var(--theme-surface-elevated, #ffffff);
+        --folio-upd-border: var(--theme-glass-border, rgba(0,0,0,0.08));
+        --folio-upd-divider: var(--theme-divider, rgba(0,0,0,0.06));
+        --folio-upd-text-1: var(--theme-text, #121316);
+        --folio-upd-text-2: var(--theme-text-secondary, rgba(18,19,22,0.72));
+        --folio-upd-text-3: var(--theme-text-tertiary, rgba(18,19,22,0.48));
+        --folio-upd-on-accent: #ffffff;
+        --folio-upd-overlay: rgba(18, 19, 22, 0.55);
+      }
+
+      /* ─── Overlay ──────────────────────────────────────────── */
       .folio-upd {
         position: fixed; inset: 0; z-index: 999991;
         display: flex; align-items: center; justify-content: center;
         padding: 20px;
-        background: rgba(6, 8, 12, 0.35);
-        backdrop-filter: blur(24px) saturate(120%);
-        -webkit-backdrop-filter: blur(24px) saturate(120%);
+        background: var(--folio-upd-overlay);
+        backdrop-filter: blur(12px) saturate(140%);
+        -webkit-backdrop-filter: blur(12px) saturate(140%);
         opacity: 0; pointer-events: none;
-        transition: opacity 200ms ease;
-        font-family: var(--font, "Inter", -apple-system, system-ui, sans-serif);
+        transition: opacity 320ms cubic-bezier(0.16, 1, 0.3, 1);
+        font-family: var(--folio-upd-font);
       }
       .folio-upd.open { opacity: 1; pointer-events: auto; }
 
-      /* ─── Card: frosted translucent panel ─────────────── */
+      /* ─── Card ─────────────────────────────────────────────── */
       .folio-upd-card {
-        width: 100%; max-width: 380px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 20px;
-        padding: 24px 20px 18px;
+        width: 100%; max-width: 400px;
+        background: var(--folio-upd-surface);
+        border: 1px solid var(--folio-upd-border);
+        border-radius: 28px;
+        padding: 32px 28px 28px;
         text-align: center;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+        transform: scale(0.9) translateY(20px);
+        transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
         position: relative;
         overflow: hidden;
-        backdrop-filter: blur(20px) saturate(140%);
-        -webkit-backdrop-filter: blur(20px) saturate(140%);
-        transform: translateY(10px) scale(0.98);
-        opacity: 0;
-        transition:
-          transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
-          opacity 260ms ease;
       }
       .folio-upd.open .folio-upd-card {
-        transform: translateY(0) scale(1);
-        opacity: 1;
+        transform: scale(1) translateY(0);
       }
 
-      .folio-upd-card::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 50%;
-        transform: translateX(-50%);
-        width: 44px; height: 2px;
-        background: rgba(245, 158, 11, 0.55);
-        border-radius: 0 0 2px 2px;
-      }
-
+      /* ─── Spinning icon + version badge ────────────────────── */
       .folio-upd-icon {
-        width: 48px; height: 48px;
-        margin: 6px auto 16px;
-        border-radius: 50%;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        background: rgba(255, 255, 255, 0.04);
-        display: flex; align-items: center; justify-content: center;
-        color: rgba(245, 158, 11, 0.9);
         position: relative;
+        width: 80px; height: 80px;
+        margin: 0 auto 16px;
       }
-      .folio-upd-icon svg {
-        width: 22px; height: 22px;
-        stroke: currentColor; fill: none;
-        stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+      .folio-upd-spinner {
+        width: 100%; height: 100%;
+        animation: folioUpdSpin 2s linear infinite;
       }
-
-      .folio-upd-card.applying .folio-upd-icon svg {
-        animation: folioSpin 1.6s linear infinite;
-      }
-      @keyframes folioSpin { to { transform: rotate(360deg); } }
-
-      .folio-upd-title {
-        font-size: 17px; font-weight: 650; letter-spacing: -0.2px;
-        color: #f1f5f9; margin: 0 0 6px;
-      }
-      .folio-upd-sub {
-        font-size: 12.5px; line-height: 1.55;
-        color: rgba(241, 245, 249, 0.55);
-        margin: 0 0 20px;
-        max-width: 300px; margin-left: auto; margin-right: auto;
-      }
-
-      .folio-upd-countdown {
-        display: flex; align-items: center; gap: 12px;
-        padding: 11px 12px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px;
-        margin: 0 0 16px;
-        text-align: left;
-        transition: opacity 200ms ease, transform 200ms ease;
-      }
-      .folio-upd-countdown-ring {
-        flex-shrink: 0;
-        width: 34px; height: 34px;
-        position: relative;
-      }
-      .folio-upd-countdown-ring svg {
-        width: 34px; height: 34px;
-        transform: rotate(-90deg);
-        overflow: visible;
-      }
-      .folio-upd-countdown-ring circle {
+      .folio-upd-spinner .ring {
         fill: none;
-        stroke-width: 1.5;
+        stroke: var(--folio-upd-accent);
+        stroke-width: 2;
+        stroke-dasharray: 60 140;
         stroke-linecap: round;
       }
-      .folio-upd-countdown-ring .track {
-        stroke: rgba(255, 255, 255, 0.08);
+      .folio-upd-spinner .dots {
+        fill: none;
+        stroke: var(--folio-upd-accent);
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-dasharray: 6 30;
       }
-      .folio-upd-countdown-ring .progress {
-        stroke: rgba(245, 158, 11, 0.85);
-        transition: stroke-dashoffset 100ms linear, stroke 300ms ease;
-      }
-      .folio-upd-countdown-text {
-        position: absolute; inset: 0;
-        display: flex; align-items: center; justify-content: center;
-        font-family: var(--font-mono, ui-monospace, monospace);
-        font-size: 11px; font-weight: 600;
-        color: rgba(245, 158, 11, 0.95);
-        font-variant-numeric: tabular-nums;
-        letter-spacing: -0.3px;
-        transition: color 250ms ease;
-      }
-      .folio-upd-countdown-info {
-        flex: 1; min-width: 0;
-      }
-      .folio-upd-countdown-info-title {
-        font-size: 12px; font-weight: 600;
-        color: rgba(241, 245, 249, 0.9);
-        margin-bottom: 1px;
-      }
-      .folio-upd-countdown-info-desc {
-        font-size: 10.5px;
-        color: rgba(241, 245, 249, 0.45);
-        line-height: 1.4;
+      @keyframes folioUpdSpin { to { transform: rotate(360deg); } }
+
+      .folio-upd-card.applying .folio-upd-spinner {
+        animation-duration: 900ms;
       }
 
-      .folio-upd-progress {
-        height: 2px; border-radius: 2px;
-        background: rgba(255, 255, 255, 0.06);
+      .folio-upd-badge {
+        position: absolute;
+        bottom: 0; right: 0;
+        background: var(--folio-upd-accent);
+        color: var(--folio-upd-on-accent);
+        font-family: var(--folio-upd-mono);
+        font-size: 9px; font-weight: 800;
+        padding: 3px 10px;
+        border-radius: 20px;
+        border: 2px solid var(--folio-upd-surface);
+        letter-spacing: 0.3px;
+        max-width: 90%;
         overflow: hidden;
-        margin: 0 0 16px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        line-height: 1.5;
+      }
+
+      /* ─── Text ─────────────────────────────────────────────── */
+      .folio-upd-title {
+        font-size: 20px; font-weight: 800;
+        letter-spacing: -0.3px;
+        color: var(--folio-upd-text-1);
+        margin: 0 0 6px;
+        line-height: 1.2;
+      }
+      .folio-upd-sub {
+        font-size: 13px; font-weight: 400;
+        color: var(--folio-upd-text-2);
+        line-height: 1.5;
+        margin: 0 0 22px;
+      }
+
+      /* ─── Progress (hidden until apply) ────────────────────── */
+      .folio-upd-progress {
+        margin: 0 0 20px;
         display: none;
       }
       .folio-upd-progress.visible { display: block; }
+      .folio-upd-progress-track {
+        width: 100%; height: 4px;
+        border-radius: 4px;
+        background: var(--folio-upd-divider);
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
       .folio-upd-progress-fill {
-        height: 100%; width: 0;
-        background: rgba(245, 158, 11, 0.85);
-        transition: width 280ms cubic-bezier(0.16, 1, 0.3, 1);
+        height: 100%; width: 0%;
+        background: linear-gradient(90deg,
+          var(--folio-upd-accent),
+          var(--folio-upd-accent-glow));
+        border-radius: 4px;
+        transition: width 300ms ease;
+      }
+      .folio-upd-progress-text {
+        font-size: 11px;
+        color: var(--folio-upd-text-3);
+        font-weight: 600;
+        font-family: var(--folio-upd-mono);
       }
 
+      /* ─── Buttons ──────────────────────────────────────────── */
       .folio-upd-actions {
-        display: flex; gap: 8px;
+        display: flex;
+        gap: 10px;
       }
       .folio-upd-btn {
         flex: 1;
         font-family: inherit;
-        font-size: 13px; font-weight: 600;
-        padding: 11px 14px;
-        border-radius: 11px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(255, 255, 255, 0.03);
-        color: rgba(241, 245, 249, 0.85);
+        font-size: 13px; font-weight: 700;
+        padding: 12px 20px;
+        border-radius: 14px;
+        border: 1px solid var(--folio-upd-border);
+        background: var(--folio-upd-surface-raised);
+        color: var(--folio-upd-text-2);
         cursor: pointer;
-        transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+        display: flex; align-items: center; justify-content: center;
+        gap: 6px;
+        transition: all 0.2s ease;
         touch-action: manipulation;
         user-select: none;
       }
       .folio-upd-btn:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.07);
-        border-color: rgba(255, 255, 255, 0.18);
-        color: #f1f5f9;
+        border-color: var(--folio-upd-accent-glow);
+        color: var(--folio-upd-text-1);
       }
-      .folio-upd-btn:active:not(:disabled) {
-        background: rgba(255, 255, 255, 0.10);
-      }
+      .folio-upd-btn:active:not(:disabled) { transform: scale(0.96); }
+      .folio-upd-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       .folio-upd-btn:focus-visible {
-        outline: 1.5px solid rgba(245, 158, 11, 0.6);
+        outline: 2px solid var(--folio-upd-accent);
         outline-offset: 2px;
       }
-      .folio-upd-btn:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
       .folio-upd-btn.primary {
-        background: rgba(245, 158, 11, 0.9);
-        border-color: rgba(245, 158, 11, 0.9);
-        color: #0a0c10;
+        background: var(--folio-upd-accent);
+        border-color: var(--folio-upd-accent);
+        color: var(--folio-upd-on-accent);
+        box-shadow: 0 4px 20px var(--folio-upd-accent-glow);
       }
       .folio-upd-btn.primary:hover:not(:disabled) {
-        background: rgba(251, 191, 36, 0.95);
-        border-color: rgba(251, 191, 36, 0.95);
-        color: #0a0c10;
+        background: var(--folio-upd-accent-hover);
+        border-color: var(--folio-upd-accent-hover);
       }
-      .folio-upd-btn.primary:active:not(:disabled) {
-        background: rgba(245, 158, 11, 1);
+      .folio-upd-btn svg {
+        width: 14px; height: 14px;
+        stroke: currentColor; fill: none;
+        stroke-width: 2.4;
+        stroke-linecap: round; stroke-linejoin: round;
       }
 
+      /* ─── Mobile bottom sheet ──────────────────────────────── */
+      @media (max-width: 480px) {
+        .folio-upd { align-items: flex-end; padding: 0; }
+        .folio-upd-card {
+          max-width: 100%;
+          border-radius: 28px 28px 0 0;
+          border-bottom: none;
+          padding: 28px 22px calc(24px + env(safe-area-inset-bottom, 0px));
+          transform: translateY(100%);
+        }
+        .folio-upd.open .folio-upd-card { transform: translateY(0); }
+      }
+
+      /* ─── Reload overlay (shown during apply) ──────────────── */
       .folio-reload {
         position: fixed; inset: 0; z-index: 999992;
         display: flex; align-items: center; justify-content: center;
-        background: rgba(6, 8, 12, 0.55);
+        background: var(--folio-upd-overlay);
         backdrop-filter: blur(28px) saturate(120%);
         -webkit-backdrop-filter: blur(28px) saturate(120%);
-        font-family: var(--font, "Inter", system-ui, sans-serif);
-        color: #f1f5f9;
+        font-family: var(--folio-upd-font);
+        color: var(--folio-upd-text-1);
         text-align: center;
         padding: 24px;
         opacity: 0;
@@ -418,15 +402,12 @@
       .folio-reload.open { opacity: 1; }
       .folio-reload-inner {
         padding: 32px 28px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: var(--folio-upd-surface);
+        border: 1px solid var(--folio-upd-border);
         border-radius: 18px;
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
         max-width: 300px;
         width: 100%;
       }
-
       .folio-reload-spinner {
         width: 40px; height: 40px;
         margin: 0 auto 20px;
@@ -435,83 +416,55 @@
       .folio-reload-spinner::before {
         content: '';
         position: absolute; inset: 0;
-        border: 1.5px solid rgba(255, 255, 255, 0.10);
+        border: 1.5px solid var(--folio-upd-divider);
         border-radius: 50%;
       }
       .folio-reload-spinner::after {
         content: '';
         position: absolute; inset: 0;
         border: 1.5px solid transparent;
-        border-top-color: rgba(245, 158, 11, 0.9);
+        border-top-color: var(--folio-upd-accent);
         border-radius: 50%;
         animation: folioReloadSpin 0.95s linear infinite;
       }
       @keyframes folioReloadSpin { to { transform: rotate(360deg); } }
-
       .folio-reload-title {
         font-size: 15px; font-weight: 600;
         letter-spacing: -0.2px;
         margin: 0 0 4px;
-        color: #f1f5f9;
+        color: var(--folio-upd-text-1);
       }
       .folio-reload-sub {
         font-size: 12px;
-        color: rgba(241, 245, 249, 0.5);
+        color: var(--folio-upd-text-2);
         margin: 0 0 20px;
         line-height: 1.5;
       }
       .folio-reload-bar {
         width: 100%; height: 2px;
-        background: rgba(255, 255, 255, 0.06);
+        background: var(--folio-upd-divider);
         border-radius: 2px;
         overflow: hidden;
       }
       .folio-reload-bar-fill {
         height: 100%; width: 0;
-        background: rgba(245, 158, 11, 0.85);
+        background: var(--folio-upd-accent);
         border-radius: 2px;
         transition: width 300ms ease;
       }
 
-      @media (max-width: 480px) {
-        .folio-upd { align-items: flex-end; padding: 0; }
-        .folio-upd-card {
-          max-width: 100%;
-          border-radius: 20px 20px 0 0;
-          border-bottom: none;
-          padding: 22px 18px calc(18px + env(safe-area-inset-bottom, 0px));
-          transform: translateY(100%);
-        }
-        .folio-upd.open .folio-upd-card {
-          transform: translateY(0);
-        }
-        .folio-upd-card::before {
-          width: 36px; height: 3px;
-          top: 8px;
-          background: rgba(255, 255, 255, 0.18);
-          border-radius: 3px;
-        }
-        .folio-upd-card::after {
-          content: none;
-        }
-      }
-
+      /* ─── Reduced motion ───────────────────────────────────── */
       @media (prefers-reduced-motion: reduce) {
-        .folio-upd,
-        .folio-upd-card,
-        .folio-upd-countdown,
-        .folio-upd-countdown-ring .progress,
-        .folio-upd-btn,
-        .folio-upd-progress-fill,
-        .folio-upd-card.applying .folio-upd-icon svg,
-        .folio-reload,
-        .folio-reload-spinner::after,
+        .folio-upd, .folio-upd-card, .folio-upd-btn,
+        .folio-upd-progress-fill, .folio-upd-spinner,
+        .folio-reload, .folio-reload-spinner::after,
         .folio-reload-bar-fill {
           transition-duration: 0.01ms !important;
           animation-duration: 0.01ms !important;
         }
+        .folio-upd-spinner { animation: none; }
       }
-      html[data-reduced-motion="true"] .folio-upd-card.applying .folio-upd-icon svg,
+      html[data-reduced-motion="true"] .folio-upd-spinner,
       html[data-reduced-motion="true"] .folio-reload-spinner::after {
         animation: none !important;
       }
@@ -526,9 +479,6 @@
   // ═══════════════════════════════════════════════════════════
   // DIALOG
   // ═══════════════════════════════════════════════════════════
-  const RING_R = 15.5;
-  const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
-
   function buildDialog() {
     injectStyles();
     const ov = document.createElement('div');
@@ -537,37 +487,29 @@
     ov.innerHTML = `
       <div class="folio-upd-card" role="dialog" aria-modal="true" aria-labelledby="folio-upd-title">
         <div class="folio-upd-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <polyline points="23 4 23 10 17 10"/>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          <svg class="folio-upd-spinner" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" class="ring"/>
+            <path d="M12 2v4M12 22v-4M4.93 4.93l2.83 2.83M19.07 19.07l-2.83-2.83M2 12h4M22 12h-4M4.93 19.07l2.83-2.83M19.07 4.93l-2.83 2.83" class="dots"/>
           </svg>
+          <div class="folio-upd-badge" id="folioUpdBadge">new</div>
         </div>
-        <h3 class="folio-upd-title" id="folio-upd-title">Update available</h3>
-        <p class="folio-upd-sub">A new version of Folio is ready. Reload to apply it.</p>
 
-        <div class="folio-upd-countdown" id="folioUpdCountdown">
-          <div class="folio-upd-countdown-ring" aria-hidden="true">
-            <svg viewBox="0 0 40 40">
-              <circle class="track" cx="20" cy="20" r="${RING_R}"></circle>
-              <circle class="progress" cx="20" cy="20" r="${RING_R}"
-                      stroke-dasharray="${RING_CIRCUMFERENCE.toFixed(2)}"
-                      stroke-dashoffset="0"></circle>
-            </svg>
-            <div class="folio-upd-countdown-text" id="folioUpdCountdownText">30</div>
-          </div>
-          <div class="folio-upd-countdown-info">
-            <div class="folio-upd-countdown-info-title">Auto-reloading</div>
-            <div class="folio-upd-countdown-info-desc">Cancel to stay on this version</div>
-          </div>
-        </div>
+        <h3 class="folio-upd-title" id="folio-upd-title">New version available</h3>
+        <p class="folio-upd-sub">A fresh update is ready. Reload to apply it.</p>
 
         <div class="folio-upd-progress" id="folioUpdProgress">
-          <div class="folio-upd-progress-fill"></div>
+          <div class="folio-upd-progress-track">
+            <div class="folio-upd-progress-fill"></div>
+          </div>
+          <span class="folio-upd-progress-text">Updating…</span>
         </div>
 
         <div class="folio-upd-actions">
           <button class="folio-upd-btn" data-folio-upd="later" type="button">Later</button>
-          <button class="folio-upd-btn primary" data-folio-upd="apply" type="button">Reload now</button>
+          <button class="folio-upd-btn primary" data-folio-upd="apply" type="button">
+            <span>Update Now</span>
+            <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
       </div>
     `;
@@ -581,98 +523,50 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // COUNTDOWN
-  // ═══════════════════════════════════════════════════════════
-  function startCountdown() {
-    const text = S.dialogEl?.querySelector('#folioUpdCountdownText');
-    const ring = S.dialogEl?.querySelector('.folio-upd-countdown-ring .progress');
-    if (!text || !ring) return;
-
-    S.countdownStartAt = Date.now();
-
-    const tick = () => {
-      if (!S.dialogEl || S.applying) return;
-      const elapsed = Date.now() - S.countdownStartAt;
-      const remaining = Math.max(0, CFG.autoApplyMs - elapsed);
-      const remainingSec = Math.ceil(remaining / 1000);
-
-      text.textContent = String(remainingSec);
-
-      const pct = Math.min(1, elapsed / CFG.autoApplyMs);
-      ring.style.strokeDashoffset = String(RING_CIRCUMFERENCE * pct);
-
-      if (remainingSec <= 5 && remainingSec > 0) {
-        text.style.color = 'rgba(248, 113, 113, 0.95)';
-        ring.style.stroke = 'rgba(248, 113, 113, 0.85)';
-      } else {
-        text.style.color = 'rgba(245, 158, 11, 0.95)';
-        ring.style.stroke = 'rgba(245, 158, 11, 0.85)';
-      }
-
-      if (remaining <= 0) { applyNow(true); return; }
-      S.countdownRaf = requestAnimationFrame(tick);
-    };
-
-    text.textContent = String(fmtSeconds(CFG.autoApplyMs));
-    ring.style.strokeDashoffset = '0';
-    S.countdownRaf = requestAnimationFrame(tick);
-  }
-
-  function stopCountdown() {
-    if (S.countdownRaf) {
-      cancelAnimationFrame(S.countdownRaf);
-      S.countdownRaf = null;
-    }
-  }
-
-  function showCountdown() {
-    const cd = S.dialogEl?.querySelector('#folioUpdCountdown');
-    if (cd) {
-      cd.style.opacity = '';
-      cd.style.transform = '';
-    }
-  }
-
-  function hideCountdown() {
-    const cd = S.dialogEl?.querySelector('#folioUpdCountdown');
-    if (cd) {
-      cd.style.opacity = '0';
-      cd.style.transform = 'translateY(-4px)';
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════
   // SHOW / DISMISS
   // ═══════════════════════════════════════════════════════════
   function show(version) {
     if (S.applying || S.dialogEl) return;
 
-    // ✅ FIX: Only block when the *same* version is already postponed.
-    // Previously `hasPostponed()` blocked ALL versions after the first
-    // postpone, which made newer updates invisible for the whole session.
+    // Same-version-only suppression (was: block all)
     if (version && S.postponedVersion && version === S.postponedVersion) return;
-    if (!version && hasPostponed()) return;
 
     const ov = buildDialog();
     S.dialogEl = ov;
     S.dialogVersion = version || null;
+
+    // Version badge — short form (last -N segment)
+    const badge = ov.querySelector('#folioUpdBadge');
+    if (badge) {
+      const short = version ? String(version).split('-').pop() : 'new';
+      badge.textContent = short.slice(0, 6);
+      badge.title = String(version || 'Latest');
+    }
+
     document.body.style.overflow = 'hidden';
     void ov.offsetWidth;
     ov.classList.add('open');
 
-    setTimeout(() => startCountdown(), 60);
+    // KOFA X behaviour: auto-DISMISS (not auto-apply)
+    if (S.autoDismissTimer) clearTimeout(S.autoDismissTimer);
+    S.autoDismissTimer = setTimeout(() => {
+      if (!S.applying) dismiss();
+    }, CFG.autoDismissMs);
+
     try { window.dispatchEvent(new CustomEvent('folio:update:available')); } catch {}
   }
 
   function dismiss() {
-    stopCountdown();
+    if (S.autoDismissTimer) {
+      clearTimeout(S.autoDismissTimer);
+      S.autoDismissTimer = null;
+    }
     if (!S.dialogEl) return;
 
     const waiting = S.reg?.waiting;
     const fallbackVersion = S.dialogVersion || '';
 
     if (waiting) {
-      S.postponed = true;
       S.postponedVersion = fallbackVersion || 'pending';
       writePostponed(S.postponedVersion);
     }
@@ -681,7 +575,7 @@
     S.dialogEl = null;
     ov.classList.remove('open');
     document.body.style.overflow = '';
-    setTimeout(() => ov.remove(), 260);
+    setTimeout(() => ov.remove(), 320);
 
     if (waiting) {
       getWorkerVersion(waiting).then((ver) => {
@@ -692,9 +586,6 @@
       }).catch(() => {});
     }
 
-    // ✅ FIX: Previously said "you can update from Settings" — but Settings
-    // has no update control. Be honest: we'll re-prompt when a newer
-    // version is ready (or next session, since postpone is sessionStorage).
     if (typeof window.toast === 'function') {
       toast('Update postponed — you\'ll be prompted again when a newer version is ready', 'info', 3200);
     }
@@ -706,8 +597,12 @@
   function setProgress(pct) {
     const wrap = S.dialogEl?.querySelector('#folioUpdProgress');
     const fill = S.dialogEl?.querySelector('.folio-upd-progress-fill');
+    const text = S.dialogEl?.querySelector('.folio-upd-progress-text');
     if (wrap) wrap.classList.add('visible');
     if (fill) fill.style.width = Math.min(100, Math.max(0, pct)) + '%';
+    if (text) {
+      text.textContent = pct >= 100 ? '✓ Complete!' : `Updating… ${Math.round(pct)}%`;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -747,31 +642,32 @@
   // ═══════════════════════════════════════════════════════════
   // APPLY
   // ═══════════════════════════════════════════════════════════
-  async function applyNow(fromCountdown = false) {
+  async function applyNow(fromTimer = false) {
     if (S.applying) return;
     S.applying = true;
-    stopCountdown();
 
-    if (hasUnsavedWork() && !fromCountdown) {
+    if (S.autoDismissTimer) {
+      clearTimeout(S.autoDismissTimer);
+      S.autoDismissTimer = null;
+    }
+
+    if (hasUnsavedWork()) {
       const ok = await confirmDiscard();
       if (!ok) {
         S.applying = false;
-        const card = S.dialogEl?.querySelector('.folio-upd-card');
-        if (card) card.classList.remove('applying');
-        showCountdown();
-        startCountdown();
+        if (!fromTimer) {
+          // Restart the auto-dismiss window
+          if (S.autoDismissTimer) clearTimeout(S.autoDismissTimer);
+          S.autoDismissTimer = setTimeout(() => {
+            if (!S.applying) dismiss();
+          }, CFG.autoDismissMs);
+        }
         return;
       }
-    }
-    if (hasUnsavedWork() && fromCountdown) {
-      S.applying = false;
-      dismiss();
-      return;
     }
 
     const card = S.dialogEl?.querySelector('.folio-upd-card');
     if (card) card.classList.add('applying');
-    hideCountdown();
 
     const applyBtn = S.dialogEl?.querySelector('[data-folio-upd="apply"]');
     const laterBtn = S.dialogEl?.querySelector('[data-folio-upd="later"]');
@@ -779,18 +675,17 @@
     if (laterBtn) laterBtn.disabled = true;
 
     setProgress(10);
+    haptic();
 
-    // Shared failure path so we can restore UI cleanly
     const fail = (msg) => {
       S.applying = false;
       if (card) card.classList.remove('applying');
-      if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Reload now'; }
+      if (applyBtn) {
+        applyBtn.disabled = false;
+        applyBtn.innerHTML = '<span>Update Now</span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+      }
       if (laterBtn) laterBtn.disabled = false;
       setProgress(0);
-      // ✅ FIX: Restore the countdown so the dialog isn't stuck in a
-      // dead state if apply fails.
-      showCountdown();
-      startCountdown();
       if (msg) toast(msg, 'error', 4200);
     };
 
@@ -820,7 +715,11 @@
           S.onCtrlHandler = null;
         }
 
+        // ✅ FIX: guard against `controllerchange` from *other* tabs.
+        // Without this, `clients.claim()` in activate fires the event in
+        // every open tab → all tabs reload → nothing updates.
         S.onCtrlHandler = () => {
+          if (!S.applying) return;
           if (S.safetyTimer) { clearTimeout(S.safetyTimer); S.safetyTimer = null; }
           navigator.serviceWorker.removeEventListener('controllerchange', S.onCtrlHandler);
           S.onCtrlHandler = null;
@@ -830,6 +729,8 @@
           clearPostponed();
           setTimeout(() => location.reload(), CFG.reloadDelayMs);
         };
+
+        // ✅ FIX: listener attached BEFORE postMessage.
         navigator.serviceWorker.addEventListener('controllerchange', S.onCtrlHandler);
 
         setProgress(75);
@@ -844,16 +745,14 @@
           location.reload();
         }, CFG.controllerTimeoutMs);
       } else {
-        // ✅ FIX: Do NOT reload if there's no waiting worker. Previously
-        // this triggered a reload with the SAME old code, causing the
-        // "update button does nothing" loop.
         S.applying = false;
         if (card) card.classList.remove('applying');
-        if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Check again'; }
+        if (applyBtn) {
+          applyBtn.disabled = false;
+          applyBtn.textContent = 'Check again';
+        }
         if (laterBtn) laterBtn.disabled = false;
         setProgress(0);
-        showCountdown();
-        // Don't restart the countdown — the user explicitly asked to check.
         toast('You\'re already on the latest version', 'info', 3000);
       }
     } catch (err) {
@@ -867,9 +766,6 @@
   // ═══════════════════════════════════════════════════════════
   async function checkNow(force = false) {
     if (S.paused || S.applying || S.dialogEl) return;
-    // ✅ FIX: Do NOT bail early just because something is postponed.
-    // We still need to *check* so we can detect a NEWER version than the
-    // postponed one. `show()` handles the "same version postponed" case.
     if (!force && Date.now() - S.lastCheckedAt < CFG.minCheckGapMs) return;
     S.lastCheckedAt = Date.now();
 
@@ -888,8 +784,7 @@
       let version = await getWorkerVersion(reg.waiting);
       if (!version) version = S.postponedVersion || '';
 
-      // ✅ FIX: Only suppress if the waiting version is the one the user
-      // already postponed. A different version should show through.
+      // Only suppress the exact postponed version
       if (version && S.postponedVersion && version === S.postponedVersion) return;
 
       show(version || null);
@@ -904,7 +799,6 @@
   async function init() {
     if (S.initialized || !('serviceWorker' in navigator)) return;
     S.initialized = true;
-    S.reducedMotion = hasReducedMotion();
     S.pageVersion = readPageVersion();
 
     try {
@@ -912,23 +806,36 @@
       if (!S.reg) return;
 
       const postponed = readPostponed();
-      if (postponed) {
-        S.postponed = true;
-        S.postponedVersion = postponed.version;
-      }
+      if (postponed) S.postponedVersion = postponed.version;
 
-      navigator.serviceWorker.addEventListener('message', async (event) => {
+      // ✅ Moved here from index.html/settings.html: reload once on the
+      // very first SW activation so the controller takes over and the
+      // current page gets cached on the *first* visit (not the second).
+      navigator.serviceWorker.addEventListener('message', (event) => {
         const d = event.data || {};
-        if (d.type !== 'SW_UPDATE_AVAILABLE' && d.type !== 'UPDATE_AVAILABLE') return;
-
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (!(await isRealUpdate(reg))) return;
-
-        const ver = String(d.version || d.builtAt || '');
-        // ✅ FIX: same-version-only suppression (was: block everything)
-        if (ver && S.postponedVersion && ver === S.postponedVersion) return;
-
-        show(ver || null);
+        if (d.type === 'SW_ACTIVATED') {
+          if (S.swActivatedHandled) return;
+          S.swActivatedHandled = true;
+          if (S.applying) return;
+          if (navigator.serviceWorker.controller) return;
+          let shown = false;
+          try { shown = sessionStorage.getItem(FIRST_ACTIVATE_KEY) === '1'; } catch {}
+          if (shown) return;
+          try { sessionStorage.setItem(FIRST_ACTIVATE_KEY, '1'); } catch {}
+          // Defer so any other load work finishes first
+          setTimeout(() => {
+            if (!hasUnsavedWork()) location.reload();
+          }, 600);
+        }
+        if (d.type === 'SW_UPDATE_AVAILABLE' || d.type === 'UPDATE_AVAILABLE') {
+          (async () => {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (!(await isRealUpdate(reg))) return;
+            const ver = String(d.version || '');
+            if (ver && S.postponedVersion && ver === S.postponedVersion) return;
+            show(ver || null);
+          })().catch(() => {});
+        }
       });
 
       if (S.checkTimer) clearInterval(S.checkTimer);
@@ -939,7 +846,7 @@
       });
       window.addEventListener('online', () => checkNow());
 
-      await checkNow(true);
+      setTimeout(() => checkNow(true), CFG.autoShowDelayMs);
     } catch (err) {
       console.warn('[Folio update] init error:', err);
     }
@@ -955,7 +862,7 @@
     pause() {
       S.paused = true;
       if (S.checkTimer) { clearInterval(S.checkTimer); S.checkTimer = null; }
-      stopCountdown();
+      if (S.autoDismissTimer) { clearTimeout(S.autoDismissTimer); S.autoDismissTimer = null; }
     },
     resume() {
       S.paused = false;
