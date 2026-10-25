@@ -3,17 +3,6 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/register", "destination": "/register.html" },
-    { "source": "/profile", "destination": "/profile.html" },
-    { "source": "/project", "destination": "/project.html" },
-    { "source": "/tools", "destination": "/tools.html" },
-    { "source": "/settings", "destination": "/settings.html" },
-    { "source": "/analytics", "destination": "/analytics.html" },
-    { "source": "/offline", "destination": "/offline.html" },
-    { "source": "/invite", "destination": "/invite.html" },
-    { "source": "/notifications", "destination": "/notifications.html" },
-
     { "source": "/p/:pid", "destination": "/api/host?action=share&pid=:pid" },
 
     {
