@@ -2,7 +2,7 @@
 // Folio — Service Worker
 // ============================================================
 
-const CACHE_VERSION = '2026-10-25-1';
+const CACHE_VERSION = '2026-10-25-2';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
 
@@ -50,7 +50,7 @@ const CACHED_FILES = [
   '/notifications.html',
 
   // ── CSS ────────────────────────────────────────────────────
-  '/app.css',
+  '/css/app.css',
   '/css/project.css',
 
   // ── PWA metadata ───────────────────────────────────────────
@@ -75,6 +75,8 @@ const CACHED_FILES = [
   '/update.js',
   '/fcm-client.js',
   '/notifications.js',
+  '/js/ai.js',
+  '/js/create-project',
 
   // ── CodeMirror via deno.land ───────────────────────────────
   'https://deno.land/x/codemirror_esm@v6.0.1/esm/codemirror/dist/index.js',
