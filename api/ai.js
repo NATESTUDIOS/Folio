@@ -7,8 +7,8 @@
 //  GET  /api/ai?action=scenes  (admin) — task catalog + limits
 //
 //  Provider: Groq (free tier)
-//  Models:   GROQ_MODEL       (default: llama-3.3-70b-versatile) — "power"
-//            GROQ_MODEL_FAST  (default: llama-3.1-8b-instant)    — "fast"
+//  Models:   GROQ_MODEL       (default: openai/gpt-oss-120b) — "power"
+//            GROQ_MODEL_FAST  (default: openai/gpt-oss-20b)  — "fast"
 //
 //  Guests:   IP-keyed, 5-task allowlist, tighter caps, truncated I/O
 //  Authed:   uid-keyed, all 22 tasks, per-task + global + token budgets
@@ -56,16 +56,18 @@ try {
 // =========================================================================
 
 const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
-const GROQ_API_URL = "https://api.groq.com/openai/v1/responses";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-const GROQ_MODEL_FAST = process.env.GROQ_MODEL_FAST || "llama-3.1-8b-instant";
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+const GROQ_MODEL_FAST = process.env.GROQ_MODEL_FAST || "openai/gpt-oss-20b";
 
 const MAX_OUTPUT_TOKENS = 8192;
 const MODEL_TIMEOUT_MS = 55_000;
 
 const MODEL_MAX_OUTPUT = {
+  "openai/gpt-oss-120b": 65_536,
+  "openai/gpt-oss-20b": 65_536,
   "llama-3.3-70b-versatile": 8192,
   "llama-3.1-8b-instant": 8192,
 };
@@ -93,6 +95,9 @@ const CACHE_MAX = 200;
 const MAX_ARTIFACT_FILES = 50;
 const MAX_ARTIFACT_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_ARTIFACT_PATH_LEN = 500;
+
+const GROQ_RETRY_STATUSES = new Set([502, 503, 504]);
+const GROQ_MAX_RETRIES = 3;
 
 // =========================================================================
 // TASK LIMITS
@@ -1319,11 +1324,8 @@ async function recordUsage(actor, task, usage) {
 }
 
 // =========================================================================
-// GROQ PROVIDER (Responses API) — with bounded retry
+// GROQ PROVIDER (Chat Completions) — with bounded retry
 // =========================================================================
-
-const GROQ_RETRY_STATUSES = new Set([502, 503, 504]);
-const GROQ_MAX_RETRIES = 3;
 
 async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
   if (!GROQ_API_KEY) {
@@ -1335,14 +1337,14 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
 
   const body = {
     model,
-    input: [
+    messages: [
       { role: "system", content: system },
       { role: "user", content: user },
     ],
-    max_output_tokens: capped,
+    max_tokens: capped,
     temperature: temp != null ? temp : 0.3,
-    reasoning: { effort: "low" },
-    // Do NOT send `store` — Groq Responses is stateless.
+    reasoning_effort: "low",
+    stream: false,
   };
 
   let lastErr = null;
@@ -1369,7 +1371,6 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
       } else {
         lastErr = Object.assign(new Error(`Groq network error: ${err.message}`), { status: 502 });
       }
-      // Network/timeout is retryable.
       if (attempt < GROQ_MAX_RETRIES) {
         const backoff = Math.min(8000, 500 * 2 ** attempt) + Math.random() * 400;
         await new Promise(r => setTimeout(r, backoff));
@@ -1381,24 +1382,7 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
 
     if (res.ok) {
       const json = await res.json();
-
-      let content = json?.output_text;
-      if (!content || typeof content !== "string") {
-        const parts = [];
-        if (Array.isArray(json?.output)) {
-          for (const item of json.output) {
-            if (item?.type === "message" && Array.isArray(item.content)) {
-              for (const c of item.content) {
-                if (c?.type === "output_text" && typeof c.text === "string") {
-                  parts.push(c.text);
-                }
-              }
-            }
-          }
-        }
-        content = parts.join("");
-      }
-
+      const content = json?.choices?.[0]?.message?.content;
       if (!content || typeof content !== "string") {
         throw Object.assign(new Error("Groq returned no content"), { status: 502 });
       }
@@ -1407,8 +1391,8 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
       return {
         content,
         usage: {
-          promptTokens: usage.input_tokens || 0,
-          completionTokens: usage.output_tokens || 0,
+          promptTokens: usage.prompt_tokens || 0,
+          completionTokens: usage.completion_tokens || 0,
           totalTokens: usage.total_tokens || 0,
         },
       };
@@ -1432,7 +1416,6 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
       continue;
     }
 
-    // Non-retryable (4xx or retries exhausted).
     throw Object.assign(new Error(`Groq HTTP ${res.status}`), { status: 502 });
   }
 
