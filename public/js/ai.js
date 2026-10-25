@@ -1,34 +1,31 @@
 // js/ai.js
 // ═══════════════════════════════════════════════════════════════════
-//  Folio AI — complete client module
+//  Folio AI — complete client module (v2, matches api/ai.js word+credit)
 //  ────────────────────────────────────────────────────────────────
 //  One file. Everything the AI needs on the client.
 //
+//  Contract with api/ai.js (server):
+//    POST /api/ai { task, pid?, payload }
+//      → { success, task, text, artifacts, usage, guest, cached, quota, rateLimit }
+//    usage:  { promptTokens, completionTokens, totalTokens,
+//              promptWords, completionWords, totalWords }
+//    quota:  { wordsUsed, wordsLimit, creditsUsed, creditsLimit, resetAt }
+//    errors: { success:false, error, scope: "words"|"credits"|"per_task"|"global",
+//              limit, used, resetAt, retryAfter }
+//
+//  Task name mapping (client label → server task id):
+//    "commitDraft"  → "commitChanges"
+//    "deployDraft"  → "writeDeploy"
+//    (other tasks are identical)
+//
 //  Offline-first:
-//    • All rendering (markdown, mermaid, katex, diff, artifacts) works
-//      offline once the lazy assets are cached by the SW.
+//    • All rendering works offline once lazy assets are cached by the SW.
 //    • Pending proposals persist in sessionStorage keyed on pid.
-//    • The panel queues every unapplied proposal; apply when online.
-//    • If Mermaid or KaTeX can't be fetched, we render a clear fallback
-//      <pre> block — no blank boxes, no silent failures.
+//    • Quota HUD shows live words + credits remaining.
 //
 //  Safety invariant:
 //    This module NEVER calls /api/host?action=deploy or project/sync-back.
-//    It prefills the existing dialogs. Those dialogs already have role
-//    checks and file maps. AI drafts text only.
-//
-//  Exports:
-//    createAIPanel({ mount, deps })         → { unmount, open, close }
-//    runTask({ task, pid, payload, signal }) → Promise<{ ok, status, data }>
-//    applyPatch({ artifact, pid, deps })    → Promise<{ ok, path }>
-//    applyFiles({ artifact, pid, deps })    → Promise<{ ok, results }>
-//    renderMarkdown(text)                    → string
-//    hydrateMarkdown(root, opts)             → Promise<void>
-//    renderArtifacts(root, artifacts, opts)  → void
-//    openContextMenu({ x, y, context, onRun, deps }) → { close }
-//    prefillCommit({ artifact })             → { message, changed }
-//    prefillDeploy({ artifact })             → { summary, changed, sinceDeploymentId }
-//    isTaskAvailable(task, { online, guest }) → boolean
+//    It prefills the existing dialogs. AI drafts text only.
 // ═══════════════════════════════════════════════════════════════════
 
 "use strict";
@@ -41,49 +38,55 @@ const API_BASE = (typeof window !== "undefined" && window.FOLIO_API_BASE)
   || "https://foliostudios.vercel.app/api";
 const API_AI = API_BASE + "/ai";
 
-// Lazy assets. If the SW has cached them, these resolve offline too.
 const MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js";
 const KATEX_CSS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
 const KATEX_JS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js";
 
-// Cache sizes
 const RESULT_CACHE_MAX = 40;
 const RESULT_CACHE_TTL_MS = 10 * 60 * 1000;
 const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
 const PENDING_STORAGE_PREFIX = "folio.ai.pending.";
+const QUOTA_CACHE_KEY = "folio.ai.quota";
 
-// Guest + task gating
+// Task gating
 const GUEST_TASKS = new Set(["explain", "logExplain", "metatags", "brainstorm", "diagram"]);
-const HOST_TASKS = new Set(["readProject", "commitDraft", "deployDraft"]);
+const HOST_TASKS = new Set(["readProject", "commitChanges", "writeDeploy"]);
 const APPLY_TASKS = new Set([
   "debug", "codefix", "optimize", "suggest", "docstrings", "audit",
   "scaffold", "translate", "findFn",
 ]);
 
-// Task metadata (labels, groups, offline behaviour)
+// Client-side "commitDraft"/"deployDraft" → server task id
+const TASK_ALIAS = {
+  commitDraft: "commitChanges",
+  deployDraft: "writeDeploy",
+};
+
+// Server-side task metadata, mirrored from TASK_LIMITS (weights only).
+// These are display hints; the server enforces the real limits.
 const TASK_META = {
-  explain:       { label: "Explain",         group: "Understand", offline: false },
-  debug:         { label: "Debug",           group: "Fix",        offline: false },
-  codefix:       { label: "Fix",             group: "Fix",        offline: false },
-  optimize:      { label: "Optimize",        group: "Improve",    offline: false },
-  suggest:       { label: "Suggest",         group: "Complete",   offline: false },
-  brainstorm:    { label: "Brainstorm",      group: "Design",     offline: false },
-  metatags:      { label: "Meta tags",       group: "Content",    offline: false },
-  scaffold:      { label: "Scaffold",        group: "Build",      offline: false },
-  docs:          { label: "Docs",            group: "Document",   offline: false },
-  findFn:        { label: "Find fn",         group: "Refactor",   offline: false },
-  commitMsg:     { label: "Commit msg",      group: "Meta",       offline: false },
-  logExplain:    { label: "Explain log",     group: "Debug",      offline: false },
-  diagram:       { label: "Diagram",         group: "Understand", offline: false },
-  simulate:      { label: "Simulate",        group: "Understand", offline: false },
-  designExplain: { label: "Architecture",    group: "Understand", offline: false },
-  translate:     { label: "Translate",       group: "Convert",    offline: false },
-  docstrings:    { label: "Docstrings",      group: "Document",   offline: false },
-  struggle:      { label: "Struggle",        group: "Diagnose",   offline: false },
-  audit:         { label: "Audit",           group: "Secure",     offline: false },
-  readProject:   { label: "Project summary", group: "Host",       offline: false, requiresPid: true, requiresAuth: true },
-  commitDraft:   { label: "Commit draft",    group: "Host",       offline: false, requiresPid: true, requiresAuth: true },
-  deployDraft:   { label: "Deploy draft",    group: "Host",       offline: false, requiresPid: true, requiresAuth: true },
+  explain:       { label: "Explain",          group: "Understand", weight: 1, requiresPid: false },
+  debug:         { label: "Debug",            group: "Fix",        weight: 3, requiresPid: false },
+  codefix:       { label: "Fix",              group: "Fix",        weight: 3, requiresPid: false },
+  optimize:      { label: "Optimize",         group: "Improve",    weight: 3, requiresPid: false },
+  suggest:       { label: "Suggest",          group: "Complete",   weight: 1, requiresPid: false },
+  brainstorm:    { label: "Brainstorm",       group: "Design",     weight: 2, requiresPid: false },
+  metatags:      { label: "Meta tags",        group: "Content",    weight: 1, requiresPid: false },
+  scaffold:      { label: "Scaffold",         group: "Build",      weight: 8, requiresPid: false },
+  docs:          { label: "Docs",             group: "Document",   weight: 8, requiresPid: false },
+  findFn:        { label: "Find fn",          group: "Refactor",   weight: 5, requiresPid: false },
+  commitMsg:     { label: "Commit msg",       group: "Meta",       weight: 1, requiresPid: false },
+  logExplain:    { label: "Explain log",      group: "Debug",      weight: 1, requiresPid: false },
+  diagram:       { label: "Diagram",          group: "Understand", weight: 2, requiresPid: false },
+  simulate:      { label: "Simulate",         group: "Understand", weight: 3, requiresPid: false },
+  designExplain: { label: "Architecture",     group: "Understand", weight: 6, requiresPid: false },
+  translate:     { label: "Translate",        group: "Convert",    weight: 3, requiresPid: false },
+  docstrings:    { label: "Docstrings",       group: "Document",   weight: 1, requiresPid: false },
+  struggle:      { label: "Struggle",         group: "Diagnose",   weight: 4, requiresPid: false },
+  audit:         { label: "Audit",            group: "Secure",     weight: 3, requiresPid: false },
+  readProject:   { label: "Project summary",  group: "Host",       weight: 5, requiresPid: true },
+  commitDraft:   { label: "Commit draft",     group: "Host",       weight: 2, requiresPid: true, alias: "commitChanges" },
+  deployDraft:   { label: "Deploy draft",     group: "Host",       weight: 2, requiresPid: true, alias: "writeDeploy" },
 };
 
 // ─────────────────────────────────────────────────────────────────────
@@ -162,12 +165,13 @@ function svgIcon(name, size = 14, sw = 2.2) {
     layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
     clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    coins: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
   };
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ""}</svg>`;
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// LAZY ASSET LOADERS — with graceful offline fallback
+// LAZY ASSET LOADERS
 // ─────────────────────────────────────────────────────────────────────
 
 let _mermaidPromise = null;
@@ -231,29 +235,34 @@ function ensureKaTeX() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// MARKDOWN RENDERER — the one canonical renderer
+// QUOTA CACHE (mirror of last server response, per page)
 // ─────────────────────────────────────────────────────────────────────
 
-/**
- * Renders markdown to HTML with support for:
- *   • Headings, bold, italic, strike, inline code
- *   • Links, images
- *   • Fenced code blocks (```lang)
- *   • Mermaid fences (```mermaid, ```mindmap) → placeholder divs
- *   • Math fences (```math, $$…$$) → placeholder divs
- *   • Flowtable fences (```flowtable) → placeholder divs
- *   • Tables (GFM, alignment)
- *   • Task lists (- [ ] / - [x])
- *   • Blockquotes, HR
- *   • Ordered / unordered lists
- *
- * Placeholder divs get hydrated by hydrateMarkdown(root) — lazy-loading
- * Mermaid, KaTeX, or the flowtable renderer only when they're needed.
- */
+function quotaLoad() {
+  try {
+    const raw = localStorage.getItem(QUOTA_CACHE_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== "object") return null;
+    return v;
+  } catch { return null; }
+}
+
+function quotaSave(q) {
+  try { localStorage.setItem(QUOTA_CACHE_KEY, JSON.stringify(q)); } catch {}
+}
+
+function quotaClear() {
+  try { localStorage.removeItem(QUOTA_CACHE_KEY); } catch {}
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// MARKDOWN RENDERER
+// ─────────────────────────────────────────────────────────────────────
+
 export function renderMarkdown(text) {
   let src = String(text ?? "");
 
-  // 1. Extract fenced code blocks first so inline rules can't touch them
   const fences = [];
   src = src.replace(/```([a-zA-Z0-9_-]*)\s*\n([\s\S]*?)```/g, (m, lang, body) => {
     const idx = fences.length;
@@ -261,14 +270,12 @@ export function renderMarkdown(text) {
     return `\u0000FENCE${idx}\u0000`;
   });
 
-  // 2. Escape HTML
   src = src
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-  // 3. Inline formatting (applied per-line)
   const inline = (s) => s
     .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img alt="$1" src="$2" loading="lazy">')
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
@@ -277,7 +284,6 @@ export function renderMarkdown(text) {
     .replace(/~~([^~]+)~~/g, "<del>$1</del>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 
-  // 4. Line-by-line pass
   const lines = src.split("\n");
   const out = [];
   let inUl = false;
@@ -298,7 +304,6 @@ export function renderMarkdown(text) {
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
 
-    // Fence placeholder
     const fenceMatch = raw.match(/^\s*\u0000FENCE(\d+)\u0000\s*$/);
     if (fenceMatch) {
       closeAll();
@@ -316,7 +321,6 @@ export function renderMarkdown(text) {
       continue;
     }
 
-    // Inline math $$…$$
     const displayMath = raw.match(/^\s*\$\$([\s\S]+?)\$\$\s*$/);
     if (displayMath) {
       closeAll();
@@ -324,13 +328,10 @@ export function renderMarkdown(text) {
       continue;
     }
 
-    // Blank line
     if (/^\s*$/.test(raw)) { closeAll(); continue; }
 
-    // HR
     if (/^\s*[-*_]{3,}\s*$/.test(raw)) { closeAll(); out.push("<hr>"); continue; }
 
-    // Headings
     const h = raw.match(/^(#{1,6})\s+(.*)$/);
     if (h) {
       closeAll();
@@ -339,7 +340,6 @@ export function renderMarkdown(text) {
       continue;
     }
 
-    // Blockquote
     const bq = raw.match(/^>\s?(.*)$/);
     if (bq) {
       closeUl(); closeOl(); closeTable();
@@ -348,7 +348,6 @@ export function renderMarkdown(text) {
       continue;
     } else { closeBq(); }
 
-    // Task list (- [ ] / - [x])
     const task = raw.match(/^\s*[-*]\s+\[([ xX])\]\s+(.*)$/);
     if (task) {
       closeOl(); closeTable();
@@ -360,7 +359,6 @@ export function renderMarkdown(text) {
       closeUl();
     }
 
-    // Unordered list
     const ul = raw.match(/^\s*[-*]\s+(.*)$/);
     if (ul) {
       closeOl(); closeTable();
@@ -369,7 +367,6 @@ export function renderMarkdown(text) {
       continue;
     }
 
-    // Ordered list
     const ol = raw.match(/^\s*\d+\.\s+(.*)$/);
     if (ol) {
       closeUl(); closeTable();
@@ -380,7 +377,6 @@ export function renderMarkdown(text) {
       closeOl();
     }
 
-    // Table: header row + separator
     if (/^\s*\|.*\|\s*$/.test(raw) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
       closeAll();
       const headers = raw.split("|").slice(1, -1).map((c) => c.trim());
@@ -407,7 +403,6 @@ export function renderMarkdown(text) {
       }
     }
 
-    // Paragraph
     out.push(`<p>${inline(raw)}</p>`);
   }
 
@@ -415,11 +410,6 @@ export function renderMarkdown(text) {
   return out.join("\n");
 }
 
-/**
- * Replaces placeholder divs with real rendered content.
- * Lazy-loads Mermaid / KaTeX / flowtable only when a placeholder exists.
- * Offline-safe: if a loader fails, the fallback <pre> stays visible.
- */
 export async function hydrateMarkdown(root, opts = {}) {
   if (!root) return;
 
@@ -437,7 +427,6 @@ export async function hydrateMarkdown(root, opts = {}) {
           const { svg } = await m.render(id, src);
           node.innerHTML = svg;
           node.classList.add("ai-diagram-rendered");
-          // Let external code hook post-render (e.g. click-to-fullscreen)
           if (typeof opts.onDiagramRendered === "function") {
             try { opts.onDiagramRendered(node, src); } catch {}
           }
@@ -447,10 +436,7 @@ export async function hydrateMarkdown(root, opts = {}) {
         }
       }
     } else {
-      // Mermaid unavailable (offline without cache). Leave the <pre> as-is.
-      for (const node of diagrams) {
-        node.classList.add("ai-diagram-offline");
-      }
+      for (const node of diagrams) node.classList.add("ai-diagram-offline");
     }
   }
 
@@ -505,7 +491,7 @@ function renderFlowtable(spec) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// RESULT CACHE (per-page, memory only)
+// RESULT CACHE
 // ─────────────────────────────────────────────────────────────────────
 
 const RESULT_CACHE = new Map();
@@ -513,14 +499,12 @@ const RESULT_CACHE = new Map();
 function cacheKey(pid, task, hash) {
   return `${pid || "none"}::${task}::${hash || ""}`;
 }
-
 function cacheGet(key) {
   const e = RESULT_CACHE.get(key);
   if (!e) return null;
   if (nowMs() - e.at > RESULT_CACHE_TTL_MS) { RESULT_CACHE.delete(key); return null; }
   return e.value;
 }
-
 function cacheSet(key, value) {
   if (RESULT_CACHE.size >= RESULT_CACHE_MAX) {
     const first = RESULT_CACHE.keys().next().value;
@@ -530,7 +514,7 @@ function cacheSet(key, value) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// PENDING STORAGE (sessionStorage, TTL'd)
+// PENDING STORAGE
 // ─────────────────────────────────────────────────────────────────────
 
 function pendingKey(pid) { return PENDING_STORAGE_PREFIX + (pid || "none"); }
@@ -573,7 +557,8 @@ function pendingClear(pid) {
 
 /**
  * POST /api/ai. Returns { ok, status, data, headers }.
- * data = { success, task, text, artifacts, usage, guest, cached, rateLimit }
+ * `data` now includes `quota` on success and `scope`/`limit`/`used`/`resetAt`
+ * on failure. Errors are turned into a `quotaExceeded` flag for the UI.
  */
 export async function runTask({ task, pid = null, payload = {}, signal = null, deps = {} } = {}) {
   if (!task) return { ok: false, status: 0, data: { success: false, error: "Missing task" }, headers: null };
@@ -588,12 +573,28 @@ export async function runTask({ task, pid = null, payload = {}, signal = null, d
   const fetchImpl = deps.apiFetch
     || (typeof window.apiFetch === "function" ? window.apiFetch : null)
     || defaultApiFetch;
+
+  const serverTask = meta.alias || task;
+
   try {
-    return await fetchImpl(API_AI, {
+    const res = await fetchImpl(API_AI, {
       method: "POST",
-      body: JSON.stringify({ task, pid: pid || null, payload }),
+      body: JSON.stringify({ task: serverTask, pid: pid || null, payload }),
       signal: signal || undefined,
     });
+
+    // Cache + quota mirror on any response that carries `quota`
+    if (res?.data?.quota) {
+      quotaSave(res.data.quota);
+    }
+
+    // If the server rejected due to quota, mark it so the panel can render
+    // a "quota exhausted" banner instead of the generic error card.
+    if (!res.ok && res.data && res.data.scope && /words|credits|global|per_task/.test(res.data.scope)) {
+      res.data.quotaExceeded = true;
+    }
+
+    return res;
   } catch (err) {
     if (err?.name === "AbortError") {
       return { ok: false, status: 0, data: { success: false, error: "Cancelled" }, headers: null };
@@ -648,10 +649,6 @@ async function writeFileImpl(pid, path, content, idb) {
   return false;
 }
 
-/**
- * Applies a `diff` artifact to IDB.
- * Verifies `old` is still in the file before writing — stale patches rejected.
- */
 export async function applyPatch({ artifact, pid, deps = {} } = {}) {
   if (!artifact || artifact.type !== "diff") return { ok: false, error: "Not a diff artifact" };
   if (!pid) return { ok: false, error: "Missing pid" };
@@ -789,14 +786,12 @@ function renderDiff(root, artifact, opts) {
   wrap.appendChild(body);
 
   const actions = el("div", { class: "diff-actions" });
-  const acceptBtn = el("button", { class: "btn btn-sm btn-primary", type: "button", onclick: () => {
+  actions.appendChild(el("button", { class: "btn btn-sm btn-primary", type: "button", onclick: () => {
     if (typeof opts.onAccept === "function") opts.onAccept(artifact);
-  } }, "Accept patch");
-  const rejectBtn = el("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => {
+  } }, "Accept patch"));
+  actions.appendChild(el("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => {
     if (typeof opts.onReject === "function") opts.onReject(artifact);
-  } }, "Reject");
-  actions.appendChild(acceptBtn);
-  actions.appendChild(rejectBtn);
+  } }, "Reject"));
   wrap.appendChild(actions);
 
   return wrap;
@@ -810,10 +805,9 @@ function renderFiles(root, artifact, opts) {
     return wrap;
   }
 
-  const head = el("div", { class: "files-head" },
+  wrap.appendChild(el("div", { class: "files-head" },
     el("span", null, `${files.length} file${files.length === 1 ? "" : "s"}`),
-  );
-  wrap.appendChild(head);
+  ));
 
   const list = el("div", { class: "files-list" });
   for (const f of files) {
@@ -914,9 +908,7 @@ function renderTree(root, artifact) {
 function renderJson(root, artifact, opts) {
   const wrap = el("div", { class: "ai-json" });
   wrap.appendChild(el("pre", { class: "json-body" }, JSON.stringify(artifact.data, null, 2)));
-  if (opts?.task) {
-    wrap.setAttribute("data-task", opts.task);
-  }
+  if (opts?.task) wrap.setAttribute("data-task", opts.task);
   return wrap;
 }
 
@@ -977,10 +969,6 @@ function renderProjectSummary(root, artifact) {
   return wrap;
 }
 
-/**
- * Public renderer. Walks the artifacts array and appends each to `root`.
- * `opts` carries task name + action callbacks (onAccept, onReject, onPrefill*).
- */
 export function renderArtifacts(root, artifacts, opts = {}) {
   if (!root) return;
   const list = Array.isArray(artifacts) ? artifacts : [];
@@ -1000,10 +988,6 @@ export function renderArtifacts(root, artifacts, opts = {}) {
       case "deployDraft":   node = renderDeployDraft(root, a, opts); break;
       case "projectSummary": node = renderProjectSummary(root, a); break;
       case "mermaid":
-        node = el("div", { class: "ai-diagram", dataset: { diagram: "mermaid", source: a.source || "" } },
-          el("pre", null, a.source || ""),
-        );
-        break;
       case "mindmap":
         node = el("div", { class: "ai-diagram", dataset: { diagram: "mermaid", source: a.source || "" } },
           el("pre", null, a.source || ""),
@@ -1015,7 +999,6 @@ export function renderArtifacts(root, artifacts, opts = {}) {
         );
         break;
       default:
-        // Unknown artifact type — surface a compact fallback
         node = el("div", { class: "ai-unknown" },
           el("div", { class: "ai-empty" }, `Unknown artifact: ${a.type}`),
           el("pre", null, JSON.stringify(a, null, 2)),
@@ -1023,8 +1006,6 @@ export function renderArtifacts(root, artifacts, opts = {}) {
     }
     if (node) root.appendChild(node);
   }
-
-  // Hydrate diagrams / math / flowtables in this root (async, non-blocking)
   Promise.resolve().then(() => hydrateMarkdown(root, opts)).catch(() => {});
 }
 
@@ -1033,21 +1014,20 @@ export function renderArtifacts(root, artifacts, opts = {}) {
 // ─────────────────────────────────────────────────────────────────────
 
 const CONTEXT_MENU_ITEMS = [
-  { id: "explain",  label: "Explain selection" },
-  { id: "codefix",  label: "Fix selection" },
-  { id: "optimize", label: "Optimize selection" },
+  { id: "explain",    label: "Explain selection" },
+  { id: "codefix",    label: "Fix selection" },
+  { id: "optimize",   label: "Optimize selection" },
   { id: "docstrings", label: "Add docstrings" },
-  { id: "audit",    label: "Audit for issues" },
-  { id: "diagram",  label: "Diagram this" },
-  { id: "simulate", label: "Simulate with inputs…" },
+  { id: "audit",      label: "Audit for issues" },
+  { id: "diagram",    label: "Diagram this" },
+  { id: "simulate",   label: "Simulate with inputs…" },
 ];
 
 export function openContextMenu({ x = 0, y = 0, context = {}, onRun, deps = {} } = {}) {
-  // Tear down any existing menu
   document.querySelectorAll(".ai-context-menu").forEach((m) => m.remove());
 
   const menu = el("div", { class: "ai-context-menu", role: "menu" });
-  const guest = !isOnline() ? true : !hasSession();
+  const guest = !hasSession();
 
   for (const item of CONTEXT_MENU_ITEMS) {
     const meta = TASK_META[item.id];
@@ -1069,7 +1049,6 @@ export function openContextMenu({ x = 0, y = 0, context = {}, onRun, deps = {} }
     menu.appendChild(row);
   }
 
-  // Position
   menu.style.position = "fixed";
   menu.style.top = Math.max(0, y) + "px";
   menu.style.left = Math.max(0, x) + "px";
@@ -1077,7 +1056,6 @@ export function openContextMenu({ x = 0, y = 0, context = {}, onRun, deps = {} }
   menu.style.minWidth = "200px";
   document.body.appendChild(menu);
 
-  // Clamp into viewport
   requestAnimationFrame(() => {
     const r = menu.getBoundingClientRect();
     if (r.right > window.innerWidth - 8) {
@@ -1132,26 +1110,14 @@ const STATE = {
   pendingBadgeRefresh: null,
 };
 
-/**
- * Mounts the AI panel into `mount`. Idempotent — calling twice reuses the
- * existing DOM and just updates the context. Call `panel.unmount()` when done.
- *
- * deps = {
- *   apiFetch, idb, toast, openCommitDialog, deployNow,
- *   context: () => ({ pid, activeFile, selection, content, files }),
- *   onPrefillCommit: ({message, changed}) => void,
- *   onPrefillDeploy: ({summary, changed, sinceDeploymentId}) => void,
- *   onOpenFile: (path) => void,
- * }
- */
 export function createAIPanel({ mount, deps = {} } = {}) {
   if (!mount) throw new Error("createAIPanel: mount is required");
 
-  // Reuse the existing panel if the same mount is used
   if (STATE.mounted && STATE.mounted === mount && STATE.root && mount.contains(STATE.root)) {
     STATE.deps = deps;
     refreshContext(deps);
     renderPendingBadge();
+    renderQuotaHud();
     return {
       unmount: () => doUnmount(),
       open: () => ensureVisible(true),
@@ -1159,9 +1125,7 @@ export function createAIPanel({ mount, deps = {} } = {}) {
     };
   }
 
-  if (STATE.mounted && STATE.mounted !== mount) {
-    doUnmount();
-  }
+  if (STATE.mounted && STATE.mounted !== mount) doUnmount();
 
   STATE.mounted = mount;
   STATE.deps = deps;
@@ -1191,6 +1155,7 @@ export function createAIPanel({ mount, deps = {} } = {}) {
         </button>
       </div>
     </div>
+    <div class="ai-quota-hud" data-ai-quota hidden></div>
     <div class="ai-panel-body">
       <div class="ai-task-row">
         <label class="ai-label">Task</label>
@@ -1219,6 +1184,7 @@ export function createAIPanel({ mount, deps = {} } = {}) {
   wirePanel(root, deps);
   refreshContext(deps);
   renderPendingBadge();
+  renderQuotaHud();
 
   function ensureVisible(visible) {
     if (!root.isConnected) return;
@@ -1259,14 +1225,14 @@ function populateTaskSelect(root) {
       const opt = document.createElement("option");
       opt.value = item.id;
       const available = isTaskAvailable(item.id, { online, guest });
-      opt.textContent = item.meta.label + (available ? "" : " (unavailable)");
+      const cost = item.meta.weight > 1 ? ` · ${item.meta.weight} credits` : "";
+      opt.textContent = item.meta.label + cost + (available ? "" : " (unavailable)");
       if (!available) opt.disabled = true;
       og.appendChild(opt);
     }
     sel.appendChild(og);
   }
   sel.value = STATE.activeTask;
-  // If the current selection is now unavailable, pick the first available
   const selected = sel.querySelector(`option[value="${STATE.activeTask}"]`);
   if (selected?.disabled) {
     const firstAvailable = Array.from(sel.options).find((o) => !o.disabled);
@@ -1332,7 +1298,7 @@ function updateHint() {
     return;
   }
 
-  if (STATE.scope === "selection" && !getCurrentSelection(deps)) {
+  if (STATE.scope === "selection" && !getCurrentSelection(STATE.deps)) {
     hint.hidden = false;
     hint.classList.add("ai-hint-info");
     hint.innerHTML = `<span>Select text in the editor first to scope to selection.</span>`;
@@ -1352,6 +1318,54 @@ function refreshContext(deps) {
   updateHint();
 }
 
+// ── Quota HUD ─────────────────────────────────────────────────────────
+
+function renderQuotaHud() {
+  if (!STATE.root) return;
+  const hud = STATE.root.querySelector("[data-ai-quota]");
+  if (!hud) return;
+  const q = quotaLoad();
+  if (!q || (q.wordsLimit == null && q.creditsLimit == null)) {
+    hud.hidden = true;
+    return;
+  }
+  const words = q.wordsUsed != null ? q.wordsUsed : 0;
+  const credits = q.creditsUsed != null ? q.creditsUsed : 0;
+  const wordsPct = q.wordsLimit ? Math.min(100, Math.round((words / q.wordsLimit) * 100)) : 0;
+  const creditsPct = q.creditsLimit ? Math.min(100, Math.round((credits / q.creditsLimit) * 100)) : 0;
+
+  hud.hidden = false;
+  hud.innerHTML = "";
+  hud.appendChild(el("div", { class: "quota-bar", title: `${words.toLocaleString()} / ${q.wordsLimit?.toLocaleString?.() || "?"} words` },
+    el("span", { class: "quota-icon" }, svgIcon("file", 11, 2.2)),
+    el("div", { class: "quota-track" },
+      el("div", { class: "quota-fill quota-fill-words", style: { width: wordsPct + "%" } }),
+    ),
+    el("span", { class: "quota-text" },
+      `${formatCompact(words)} / ${formatCompact(q.wordsLimit)} words`,
+    ),
+  ));
+  hud.appendChild(el("div", { class: "quota-bar", title: `${credits} / ${q.creditsLimit ?? "?"} credits` },
+    el("span", { class: "quota-icon" }, svgIcon("coins", 11, 2.2)),
+    el("div", { class: "quota-track" },
+      el("div", { class: "quota-fill quota-fill-credits", style: { width: creditsPct + "%" } }),
+    ),
+    el("span", { class: "quota-text" },
+      `${formatCompact(credits)} / ${formatCompact(q.creditsLimit)} credits`,
+    ),
+  ));
+}
+
+function formatCompact(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "?";
+  if (v >= 100000) return (v / 1000).toFixed(0) + "k";
+  if (v >= 1000) return (v / 1000).toFixed(1) + "k";
+  return String(v);
+}
+
+// ── Run ───────────────────────────────────────────────────────────────
+
 async function runCurrent(deps) {
   if (STATE.running) return;
 
@@ -1359,32 +1373,20 @@ async function runCurrent(deps) {
   const guest = !hasSession();
   const task = STATE.activeTask;
 
-  if (!online) {
-    showResultError("Offline — AI tasks need a connection.");
-    return;
-  }
-  if (guest && !GUEST_TASKS.has(task)) {
-    showResultError("Sign in to unlock this task.");
-    return;
-  }
+  if (!online) { showResultError("Offline — AI tasks need a connection."); return; }
+  if (guest && !GUEST_TASKS.has(task)) { showResultError("Sign in to unlock this task."); return; }
 
   let ctx;
   try { ctx = deps?.context?.() || {}; }
-  catch (err) { showResultError("Could not read editor context."); return; }
+  catch { showResultError("Could not read editor context."); return; }
 
   const pid = ctx.pid || null;
   const meta = TASK_META[task];
 
-  if (meta.requiresPid && !pid) {
-    showResultError("Open a project first.");
-    return;
-  }
+  if (meta.requiresPid && !pid) { showResultError("Open a project first."); return; }
 
-  // Build the payload from context
   const payload = {};
-  if (task === "explain" || task === "debug" || task === "codefix" ||
-      task === "optimize" || task === "suggest" || task === "docstrings" ||
-      task === "audit" || task === "diagram" || task === "simulate") {
+  if (["explain","debug","codefix","optimize","suggest","docstrings","audit","diagram","simulate"].includes(task)) {
     if (!ctx.activeFile) { showResultError("No file open."); return; }
     payload.file = ctx.activeFile;
     if (STATE.scope === "selection" && ctx.selection) {
@@ -1431,7 +1433,7 @@ async function runCurrent(deps) {
   } else if (task === "struggle") {
     payload.files = filesToMap(ctx.files);
   } else if (task === "readProject" || task === "commitDraft" || task === "deployDraft") {
-    // pid-only
+    // pid-only — payload is empty
   }
 
   STATE.running = true;
@@ -1441,28 +1443,25 @@ async function runCurrent(deps) {
   showResultLoading(task);
 
   try {
-    const res = await runTask({
-      task, pid, payload,
-      signal: abort.signal,
-      deps,
-    });
+    const res = await runTask({ task, pid, payload, signal: abort.signal, deps });
     if (!res.ok || !res.data?.success) {
+      if (res.data?.quotaExceeded) {
+        showQuotaError(res.data);
+        return;
+      }
       const errMsg = res.data?.error || `AI error (${res.status || "network"})`;
       showResultError(errMsg);
       return;
     }
     STATE.lastResult = res.data;
     showResult(task, res.data);
-    // Staging: if this task produces applyable artifacts, add them to pending
+    renderQuotaHud();
     if (APPLY_TASKS.has(task)) {
       stageArtifacts(pid, task, res.data.artifacts || []);
     }
   } catch (err) {
-    if (err?.name === "AbortError") {
-      showResultError("Cancelled.");
-    } else {
-      showResultError(err?.message || "AI call failed.");
-    }
+    if (err?.name === "AbortError") showResultError("Cancelled.");
+    else showResultError(err?.message || "AI call failed.");
   } finally {
     STATE.running = false;
     STATE.abort = null;
@@ -1501,9 +1500,7 @@ function promptTargetLanguage() {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// RESULT UI
-// ─────────────────────────────────────────────────────────────────────
+// ── Result UI ─────────────────────────────────────────────────────────
 
 function setRunningUI(running) {
   if (!STATE.root) return;
@@ -1536,6 +1533,44 @@ function showResultError(message) {
   </div>`;
 }
 
+function showQuotaError(data) {
+  if (!STATE.root) return;
+  const box = STATE.root.querySelector("[data-ai-result]");
+  if (!box) return;
+  box.hidden = false;
+
+  const scopeLabel = data.scope === "words"
+    ? "Word quota"
+    : data.scope === "credits"
+    ? "Credit quota"
+    : data.scope === "global"
+    ? "Global limit"
+    : "Per-task limit";
+
+  const reset = data.resetAt ? new Date(data.resetAt) : null;
+  const resetLabel = reset ? `Resets ${formatRelative(reset)}` : "";
+
+  box.innerHTML = `<div class="ai-quota-error">
+    ${svgIcon("coins", 14, 2.4)}
+    <div>
+      <div class="ai-quota-error-title">${escapeHtml(scopeLabel)} reached</div>
+      <div class="ai-quota-error-body">${escapeHtml(data.error || "")}</div>
+      ${resetLabel ? `<div class="ai-quota-error-reset">${escapeHtml(resetLabel)}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+function formatRelative(date) {
+  const ms = date.getTime() - Date.now();
+  if (ms <= 0) return "now";
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `in ${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `in ${hours}h`;
+  const days = Math.round(hours / 24);
+  return `in ${days}d`;
+}
+
 function showResult(task, data) {
   if (!STATE.root) return;
   const box = STATE.root.querySelector("[data-ai-result]");
@@ -1543,7 +1578,6 @@ function showResult(task, data) {
   box.hidden = false;
   box.innerHTML = "";
 
-  // Markdown text
   if (data.text) {
     const md = el("div", { class: "ai-markdown" });
     md.innerHTML = renderMarkdown(data.text);
@@ -1551,7 +1585,6 @@ function showResult(task, data) {
     hydrateMarkdown(md);
   }
 
-  // Artifacts
   if (Array.isArray(data.artifacts) && data.artifacts.length) {
     const artifactsBox = el("div", { class: "ai-artifacts" });
     renderArtifacts(artifactsBox, data.artifacts, {
@@ -1569,14 +1602,30 @@ function showResult(task, data) {
     box.appendChild(artifactsBox);
   }
 
-  // Usage footer
+  // Usage footer — words first (user-facing), tokens second (diagnostic)
   if (data.usage) {
-    const footer = el("div", { class: "ai-usage" },
-      el("span", null, `Model: ${data.usage.model || "groq"}`),
-      el("span", null, `${data.usage.promptTokens || 0} in / ${data.usage.completionTokens || 0} out`),
-    );
+    const u = data.usage;
+    const footer = el("div", { class: "ai-usage" });
+
+    if (u.totalWords != null) {
+      footer.appendChild(el("span", null, `${u.promptWords || 0}w in · ${u.completionWords || 0}w out`));
+    }
+    if (data.cached) footer.appendChild(el("span", { class: "usage-cached" }, "cached"));
     if (data.rateLimit) {
-      footer.appendChild(el("span", null, `Rate: ${data.rateLimit.remaining ?? "?"}/${data.rateLimit.limit ?? "?"}`));
+      const rl = data.rateLimit;
+      if (rl.remaining != null && rl.limit != null) {
+        footer.appendChild(el("span", null, `calls: ${rl.remaining}/${rl.limit}`));
+      }
+    }
+    if (data.quota) {
+      const q = data.quota;
+      footer.appendChild(el("span", null,
+        `credits: ${q.creditsUsed ?? 0}/${q.creditsLimit ?? "?"}`,
+      ));
+    }
+    // Show token counts as a dim secondary line
+    if (u.totalTokens) {
+      footer.appendChild(el("span", { class: "usage-tokens" }, `${u.totalTokens}t`));
     }
     box.appendChild(footer);
   }
@@ -1591,9 +1640,7 @@ function clearResult() {
   STATE.lastResult = null;
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// PENDING STAGING
-// ─────────────────────────────────────────────────────────────────────
+// ── Pending ───────────────────────────────────────────────────────────
 
 function stageArtifacts(pid, task, artifacts) {
   if (!pid) return;
@@ -1627,13 +1674,9 @@ async function handleArtifactAccept(task, artifact, data) {
 
   if (artifact.type === "diff") {
     const result = await applyPatch({ artifact, pid, deps });
-    if (!result.ok) {
-      toastInDeps(result.error || "Patch failed", "error");
-      return;
-    }
+    if (!result.ok) { toastInDeps(result.error || "Patch failed", "error"); return; }
     toastInDeps(`Applied ${artifact.file}`, "success");
     if (typeof deps?.onOpenFile === "function") deps.onOpenFile(artifact.file);
-    // Mark applied in pending
     prunePendingByArtifact(pid, artifact);
   } else if (artifact.type === "files") {
     const result = await applyFiles({ artifact, pid, deps });
@@ -1685,13 +1728,8 @@ function togglePendingView() {
   if (!STATE.root) return;
   const box = STATE.root.querySelector("[data-ai-pending]");
   if (!box) return;
-  if (box.hidden) {
-    renderPendingView(box);
-    box.hidden = false;
-  } else {
-    box.hidden = true;
-    box.innerHTML = "";
-  }
+  if (box.hidden) { renderPendingView(box); box.hidden = false; }
+  else { box.hidden = true; box.innerHTML = ""; }
 }
 
 function renderPendingView(box) {
@@ -1743,10 +1781,6 @@ function renderPendingView(box) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// TOAST ADAPTER
-// ─────────────────────────────────────────────────────────────────────
-
 function toastInDeps(msg, type = "info") {
   try {
     if (typeof STATE.deps?.toast === "function") { STATE.deps.toast(msg, type); return; }
@@ -1761,10 +1795,7 @@ function toastInDeps(msg, type = "info") {
 
 if (typeof window !== "undefined") {
   window.addEventListener("online", () => {
-    if (STATE.root) {
-      populateTaskSelect(STATE.root);
-      updateHint();
-    }
+    if (STATE.root) { populateTaskSelect(STATE.root); updateHint(); renderQuotaHud(); }
   });
   window.addEventListener("offline", () => {
     if (STATE.root) updateHint();
@@ -1772,7 +1803,7 @@ if (typeof window !== "undefined") {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// STYLES — injected once, scoped under .ai-* / .ai-panel-*
+// STYLES
 // ─────────────────────────────────────────────────────────────────────
 
 const STYLE_ID = "folio-ai-styles";
@@ -1822,6 +1853,32 @@ function injectStyles() {
   transition: all 0.15s ease;
 }
 .ai-panel-btn:hover { color: var(--theme-text, #e8ecf1); background: var(--theme-glass-bg, rgba(255,255,255,0.05)); }
+
+/* ── Quota HUD ───────────────────────────────────────── */
+.ai-quota-hud {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--theme-divider, rgba(255,255,255,0.08));
+  flex-shrink: 0;
+  background: var(--theme-glass-bg, rgba(255,255,255,0.02));
+}
+.quota-bar { display: flex; align-items: center; gap: 6px; font-size: 10px; }
+.quota-icon { color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); display: inline-flex; flex-shrink: 0; }
+.quota-track {
+  flex: 1; height: 4px; border-radius: 2px;
+  background: var(--theme-glass-bg, rgba(255,255,255,0.06));
+  overflow: hidden;
+}
+.quota-fill { height: 100%; border-radius: 2px; transition: width 0.3s ease; }
+.quota-fill-words { background: var(--theme-primary, #F59E0B); }
+.quota-fill-credits { background: var(--theme-success, #10B981); }
+.quota-text {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9.5px; font-weight: 600;
+  color: var(--theme-text-tertiary, rgba(232,236,241,0.44));
+  white-space: nowrap; flex-shrink: 0;
+}
+
 .ai-panel-body {
   flex: 1; min-height: 0; overflow-y: auto;
   padding: 10px 12px;
@@ -1916,100 +1973,55 @@ function injectStyles() {
 }
 .ai-error svg { flex-shrink: 0; margin-top: 1px; }
 
+/* ── Quota error card ───────────────────────────────── */
+.ai-quota-error {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 10px; border-radius: 7px;
+  background: var(--theme-warning-soft, rgba(217,119,6,0.14));
+  color: var(--theme-warning, #D97706);
+  font-size: 12px; line-height: 1.4;
+  border: 1px solid rgba(217,119,6,0.3);
+}
+.ai-quota-error svg { flex-shrink: 0; margin-top: 1px; }
+.ai-quota-error-title { font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+.ai-quota-error-body { font-size: 11.5px; opacity: 0.9; }
+.ai-quota-error-reset { font-size: 10.5px; margin-top: 4px; opacity: 0.75; font-family: var(--font-mono, ui-monospace, monospace); }
+
 /* ── Markdown output ─────────────────────────────────── */
-.ai-markdown {
-  font-size: 12.5px; line-height: 1.6;
-  color: var(--theme-text-secondary, rgba(232,236,241,0.72));
-  word-wrap: break-word; overflow-wrap: anywhere;
-}
+.ai-markdown { font-size: 12.5px; line-height: 1.6; color: var(--theme-text-secondary, rgba(232,236,241,0.72)); word-wrap: break-word; overflow-wrap: anywhere; }
 .ai-markdown h1, .ai-markdown h2, .ai-markdown h3,
-.ai-markdown h4, .ai-markdown h5, .ai-markdown h6 {
-  color: var(--theme-text, #e8ecf1);
-  font-weight: 800; letter-spacing: -0.2px;
-  margin: 10px 0 4px;
-}
+.ai-markdown h4, .ai-markdown h5, .ai-markdown h6 { color: var(--theme-text, #e8ecf1); font-weight: 800; letter-spacing: -0.2px; margin: 10px 0 4px; }
 .ai-markdown h1 { font-size: 16px; }
 .ai-markdown h2 { font-size: 14px; }
 .ai-markdown h3 { font-size: 13px; }
 .ai-markdown p { margin: 4px 0; }
 .ai-markdown ul, .ai-markdown ol { margin: 4px 0; padding-left: 18px; }
 .ai-markdown li { margin: 2px 0; }
-.ai-markdown code {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  padding: 1px 4px; border-radius: 3px;
-  background: var(--theme-glass-bg, rgba(255,255,255,0.05));
-}
-.ai-markdown pre {
-  padding: 10px; border-radius: 6px;
-  background: var(--theme-glass-bg, rgba(255,255,255,0.05));
-  overflow-x: auto;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px; line-height: 1.5;
-}
+.ai-markdown code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; padding: 1px 4px; border-radius: 3px; background: var(--theme-glass-bg, rgba(255,255,255,0.05)); }
+.ai-markdown pre { padding: 10px; border-radius: 6px; background: var(--theme-glass-bg, rgba(255,255,255,0.05)); overflow-x: auto; font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; line-height: 1.5; }
 .ai-markdown pre code { padding: 0; background: none; }
 .ai-markdown a { color: var(--theme-primary, #F59E0B); text-decoration: underline; }
 .ai-markdown strong { color: var(--theme-text, #e8ecf1); font-weight: 700; }
 .ai-markdown hr { border: 0; border-top: 1px solid var(--theme-divider, rgba(255,255,255,0.08)); margin: 10px 0; }
-.ai-markdown blockquote {
-  border-left: 3px solid var(--theme-primary, #F59E0B);
-  padding-left: 10px; margin: 6px 0;
-  color: var(--theme-text-tertiary, rgba(232,236,241,0.44));
-}
-.ai-markdown table.ai-table {
-  width: 100%; border-collapse: collapse;
-  margin: 6px 0; font-size: 11.5px;
-}
-.ai-markdown table.ai-table th,
-.ai-markdown table.ai-table td {
-  border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08));
-  padding: 4px 8px;
-}
+.ai-markdown blockquote { border-left: 3px solid var(--theme-primary, #F59E0B); padding-left: 10px; margin: 6px 0; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
+.ai-markdown table.ai-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 11.5px; }
+.ai-markdown table.ai-table th, .ai-markdown table.ai-table td { border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08)); padding: 4px 8px; }
 .ai-markdown table.ai-table th { background: var(--theme-glass-bg, rgba(255,255,255,0.05)); font-weight: 700; }
 .ai-markdown .task-list { list-style: none; padding-left: 0; }
 .ai-markdown .task-item { display: flex; gap: 6px; align-items: flex-start; }
-.ai-markdown .task-item .task-box {
-  flex-shrink: 0; width: 13px; height: 13px; margin-top: 3px;
-  border-radius: 3px; border: 1.5px solid var(--theme-card-border, rgba(255,255,255,0.08));
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 800;
-}
-.ai-markdown .task-item.done .task-box {
-  background: var(--theme-primary, #F59E0B); color: #0a0c10;
-  border-color: var(--theme-primary, #F59E0B);
-}
+.ai-markdown .task-item .task-box { flex-shrink: 0; width: 13px; height: 13px; margin-top: 3px; border-radius: 3px; border: 1.5px solid var(--theme-card-border, rgba(255,255,255,0.08)); display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; }
+.ai-markdown .task-item.done .task-box { background: var(--theme-primary, #F59E0B); color: #0a0c10; border-color: var(--theme-primary, #F59E0B); }
 
 /* ── Diagrams / Math / Flowtable ─────────────────────── */
-.ai-diagram, .ai-math, .ai-flowtable {
-  margin: 8px 0; padding: 8px;
-  border-radius: 6px;
-  background: var(--theme-glass-bg, rgba(255,255,255,0.05));
-  overflow: auto;
-}
-.ai-diagram pre, .ai-math pre, .ai-flowtable pre {
-  margin: 0; padding: 0; background: none;
-  font-size: 10.5px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44));
-}
+.ai-diagram, .ai-math, .ai-flowtable { margin: 8px 0; padding: 8px; border-radius: 6px; background: var(--theme-glass-bg, rgba(255,255,255,0.05)); overflow: auto; }
+.ai-diagram pre, .ai-math pre, .ai-flowtable pre { margin: 0; padding: 0; background: none; font-size: 10.5px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
 .ai-diagram-rendered svg { max-width: 100%; height: auto; display: block; }
-.ai-diagram-error::after {
-  content: "Diagram could not be rendered";
-  display: block; font-size: 10.5px; color: var(--theme-danger, #EF4444); margin-top: 4px;
-}
-.ai-diagram-offline::after {
-  content: "Diagram requires connection (first load)";
-  display: block; font-size: 10.5px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); margin-top: 4px;
-}
+.ai-diagram-error::after { content: "Diagram could not be rendered"; display: block; font-size: 10.5px; color: var(--theme-danger, #EF4444); margin-top: 4px; }
+.ai-diagram-offline::after { content: "Diagram requires connection (first load)"; display: block; font-size: 10.5px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); margin-top: 4px; }
 .ai-math-rendered .katex { font-size: 13px; }
 .ai-flowtable-wrap { overflow-x: auto; }
-.ai-flowtable {
-  width: 100%; border-collapse: collapse;
-  font-size: 11px; background: transparent;
-}
-.ai-flowtable th, .ai-flowtable td {
-  padding: 5px 8px;
-  border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08));
-  text-align: left;
-}
+.ai-flowtable { width: 100%; border-collapse: collapse; font-size: 11px; background: transparent; }
+.ai-flowtable th, .ai-flowtable td { padding: 5px 8px; border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08)); text-align: left; }
 .ai-flowtable th { background: var(--theme-glass-bg, rgba(255,255,255,0.05)); font-weight: 700; }
 .ai-flowtable .ft-row-alt td { background: rgba(255,255,255,0.02); }
 
@@ -2057,14 +2069,7 @@ function injectStyles() {
 .file-bytes { font-size: 10px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
 .file-preview { padding: 5px 6px; margin: 0; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 10.5px; font-family: var(--font-mono, ui-monospace, monospace); line-height: 1.4; max-height: 120px; overflow-y: auto; white-space: pre-wrap; }
 
-.mention {
-  display: block; width: 100%; text-align: left;
-  padding: 6px 8px; border-radius: 5px;
-  background: transparent; border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08));
-  color: inherit; font-family: inherit; font-size: 11px;
-  margin-bottom: 4px; cursor: pointer;
-  transition: background 0.15s ease;
-}
+.mention { display: block; width: 100%; text-align: left; padding: 6px 8px; border-radius: 5px; background: transparent; border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08)); color: inherit; font-family: inherit; font-size: 11px; margin-bottom: 4px; cursor: pointer; transition: background 0.15s ease; }
 .mention:hover { background: var(--theme-glass-bg, rgba(255,255,255,0.05)); }
 .mention-file { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 700; color: var(--theme-primary, #F59E0B); }
 .mention-line { color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); font-family: var(--font-mono, ui-monospace, monospace); }
@@ -2108,6 +2113,8 @@ function injectStyles() {
 .summary-arch { margin: 0; font-size: 11.5px; line-height: 1.55; color: var(--theme-text-secondary, rgba(232,236,241,0.72)); }
 
 .ai-usage { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid var(--theme-divider, rgba(255,255,255,0.08)); font-size: 10px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); font-family: var(--font-mono, ui-monospace, monospace); }
+.usage-cached { color: var(--theme-success, #10B981); font-weight: 700; }
+.usage-tokens { opacity: 0.6; }
 
 /* ── Pending ─────────────────────────────────────────── */
 .ai-pending { margin-top: 6px; padding: 8px; border-radius: 7px; background: var(--theme-glass-bg, rgba(255,255,255,0.05)); border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08)); }
@@ -2121,38 +2128,14 @@ function injectStyles() {
 .pending-actions { display: flex; gap: 3px; }
 
 /* ── Context menu ────────────────────────────────────── */
-.ai-context-menu {
-  background: var(--theme-surface-card-solid, #151922);
-  border: 1px solid var(--theme-glass-border, rgba(255,255,255,0.09));
-  border-radius: 8px;
-  padding: 4px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
-  font-family: var(--font, 'Inter', system-ui, sans-serif);
-  font-size: 12px;
-}
-.ai-context-item {
-  display: flex; align-items: center; gap: 8px;
-  width: 100%; padding: 7px 10px;
-  border-radius: 5px;
-  background: transparent; border: none;
-  color: var(--theme-text, #e8ecf1);
-  font-family: inherit; font-size: 12px; font-weight: 600;
-  text-align: left; cursor: pointer;
-  transition: background 0.1s ease;
-}
+.ai-context-menu { background: var(--theme-surface-card-solid, #151922); border: 1px solid var(--theme-glass-border, rgba(255,255,255,0.09)); border-radius: 8px; padding: 4px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); font-family: var(--font, 'Inter', system-ui, sans-serif); font-size: 12px; }
+.ai-context-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border-radius: 5px; background: transparent; border: none; color: var(--theme-text, #e8ecf1); font-family: inherit; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; transition: background 0.1s ease; }
 .ai-context-item:hover:not(.disabled) { background: var(--theme-primary-soft, rgba(245,158,11,0.14)); color: var(--theme-primary, #F59E0B); }
 .ai-context-item.disabled { opacity: 0.45; cursor: not-allowed; }
 .ai-context-item svg { flex-shrink: 0; }
 
 /* ── Small-button base ───────────────────────────────── */
-.ai-panel .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-  padding: 5px 9px; border-radius: 6px;
-  font-size: 11px; font-weight: 700;
-  border: 1px solid transparent; cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: inherit;
-}
+.ai-panel .btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 5px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; border: 1px solid transparent; cursor: pointer; transition: all 0.15s ease; font-family: inherit; }
 .ai-panel .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ai-panel .btn-primary { background: var(--theme-primary, #F59E0B); color: #0a0c10; }
 .ai-panel .btn-primary:hover:not(:disabled) { background: var(--theme-primary-hover, #fbbf24); }
