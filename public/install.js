@@ -1,16 +1,13 @@
 /* ============================================================
    Folio — install.js
-   Bottom-sheet install prompt (Play Store–style).
-
-   Usage:
-     <script src="/install.js" defer></script>
+   Play Store–style install prompt. Theme-aware, self-contained CSS.
 
    API:
-     FOLIO.install.show();
-     FOLIO.install.prompt();
-     FOLIO.install.hide();
-     FOLIO.install.isInstalled();
-     FOLIO.install.reset();
+     FOLIO.install.show()
+     FOLIO.install.prompt()
+     FOLIO.install.hide()
+     FOLIO.install.isInstalled()
+     FOLIO.install.reset()
 
    Auto-wires: [data-folio-install-button]
 
@@ -20,10 +17,10 @@
        cooldowns: [5h, 24h, 7d, Infinity],
        autoPromptDelayMs: 2000,
        showDialogOnFirstVisit: true,
-       screenshots: ['/screenshots/screenshot1.png', ...],
+       screenshots: [...],
        appName: 'Folio',
        developer: 'Folio Labs',
-       description: 'Code from your pocket...',
+       description: '...',
        version: '2026.10.19',
        updated: 'Oct 19, 2026',
        size: '~2 MB',
@@ -32,10 +29,6 @@
    ============================================================ */
 (function () {
   'use strict';
-
-  // ═══════════════════════════════════════════════════════════
-  // CONFIG
-  // ═══════════════════════════════════════════════════════════
 
   const CFG = Object.assign({
     dismissCountdownMs: 5000,
@@ -86,6 +79,7 @@
     scrimEl: null,
     escListener: null,
     shotsBuilt: false,
+    cachedDismissState: null,   // ← cache readDismissState per show()
   };
 
   // ═══════════════════════════════════════════════════════════
@@ -98,8 +92,7 @@
     document.referrer?.startsWith('android-app://');
 
   const isiOS = () =>
-    /iPad|iPhone|iPod/.test(navigator.userAgent || '') &&
-    !window.MSStream ||
+    (/iPad|iPhone|iPod/.test(navigator.userAgent || '') && !window.MSStream) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
   const isInstalled = () => {
@@ -126,27 +119,47 @@
   };
 
   // ═══════════════════════════════════════════════════════════
-  // DISMISS STATE
+  // DISMISS STATE (cached)
   // ═══════════════════════════════════════════════════════════
 
   function readDismissState() {
+    if (S.cachedDismissState) return S.cachedDismissState;
     try {
       const raw = localStorage.getItem(KEYS.dismissed);
-      if (!raw) return { t: 0, count: 0 };
+      if (!raw) {
+        S.cachedDismissState = { t: 0, count: 0 };
+        return S.cachedDismissState;
+      }
       const parsed = JSON.parse(raw);
-      if (typeof parsed === 'number') return { t: parsed, count: 1 };
-      return { t: parsed?.t || 0, count: Math.max(0, parseInt(parsed?.count || 0, 10) || 0) };
-    } catch { return { t: 0, count: 0 }; }
+      if (typeof parsed === 'number') {
+        S.cachedDismissState = { t: parsed, count: 1 };
+      } else {
+        S.cachedDismissState = {
+          t: parsed?.t || 0,
+          count: Math.max(0, parseInt(parsed?.count || 0, 10) || 0),
+        };
+      }
+    } catch {
+      S.cachedDismissState = { t: 0, count: 0 };
+    }
+    return S.cachedDismissState;
+  }
+
+  function invalidateDismissCache() {
+    S.cachedDismissState = null;
   }
 
   function markDismissed() {
+    invalidateDismissCache();
     const state = readDismissState();
     const next = { t: Date.now(), count: state.count + 1 };
     try { localStorage.setItem(KEYS.dismissed, JSON.stringify(next)); } catch {}
+    invalidateDismissCache();
     return next.count;
   }
 
   function clearDismissed() {
+    invalidateDismissCache();
     try { localStorage.removeItem(KEYS.dismissed); } catch {}
   }
 
@@ -190,11 +203,11 @@
     } catch {}
   };
 
-  const pauseUpdates  = () => { try { window.__updateManager?.pause?.();  } catch {} };
-  const resumeUpdates = () => { try { window.__updateManager?.resume?.(); } catch {} };
+  const pauseUpdates  = () => { try { window.FOLIO?.update?.pause?.(); } catch {} };
+  const resumeUpdates = () => { try { window.FOLIO?.update?.resume?.(); } catch {} };
 
   // ═══════════════════════════════════════════════════════════
-  // STYLES
+  // STYLES — theme-token aware, self-contained
   // ═══════════════════════════════════════════════════════════
 
   function injectStyles() {
@@ -204,22 +217,54 @@
     }
 
     const css = `
-      /* ─── Fonts ──────────────────────────────────────────── */
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      /* ─── Theme tokens ─────────────────────────────────────── */
+      :root {
+        --folio-inst-accent: var(--theme-success, #34a853);
+        --folio-inst-accent-hover: #46b960;
+        --folio-inst-on-accent: #000000;
+        --folio-inst-bg: var(--theme-surface, #000000);
+        --folio-inst-surface-1: var(--theme-surface-card-solid, #131314);
+        --folio-inst-surface-2: var(--theme-surface-elevated, #1f1f1f);
+        --folio-inst-border: var(--theme-divider, #1e1e1e);
+        --folio-inst-border-2: var(--theme-card-border, #2a2a2a);
+        --folio-inst-border-3: var(--theme-glass-border, #3a3a3a);
+        --folio-inst-text-1: var(--theme-text, #ffffff);
+        --folio-inst-text-2: var(--theme-text-secondary, #e3e3e3);
+        --folio-inst-text-3: var(--theme-text-tertiary, #9aa0a6);
+        --folio-inst-text-4: rgba(154, 160, 166, 0.65);
+        --folio-inst-scrim: rgba(0, 0, 0, 0.65);
+        --folio-inst-font: var(--font, "Inter", -apple-system, "Roboto", "Segoe UI", system-ui, sans-serif);
+      }
+      [data-theme="light"] {
+        --folio-inst-bg: var(--theme-surface, #ffffff);
+        --folio-inst-surface-1: var(--theme-surface-card-solid, #f7f8fa);
+        --folio-inst-surface-2: var(--theme-surface-elevated, #eef0f4);
+        --folio-inst-border: var(--theme-divider, rgba(0,0,0,0.08));
+        --folio-inst-border-2: var(--theme-card-border, rgba(0,0,0,0.10));
+        --folio-inst-border-3: var(--theme-glass-border, rgba(0,0,0,0.14));
+        --folio-inst-text-1: var(--theme-text, #121316);
+        --folio-inst-text-2: var(--theme-text-secondary, rgba(18,19,22,0.72));
+        --folio-inst-text-3: var(--theme-text-tertiary, rgba(18,19,22,0.48));
+        --folio-inst-text-4: rgba(18, 19, 22, 0.40);
+        --folio-inst-scrim: rgba(18, 19, 22, 0.45);
+        --folio-inst-on-accent: #ffffff;
+      }
 
+      /* ─── Scrim ───────────────────────────────────────────── */
       .folio-inst-scrim {
         position: fixed; inset: 0; z-index: 999990;
-        background: rgba(0, 0, 0, 0.65);
+        background: var(--folio-inst-scrim);
         opacity: 0; pointer-events: none;
         transition: opacity 220ms ease;
       }
       .folio-inst-scrim.open { opacity: 1; pointer-events: auto; }
 
+      /* ─── Sheet ───────────────────────────────────────────── */
       .folio-inst {
         position: fixed;
         left: 0; right: 0; bottom: 0;
         z-index: 999991;
-        background: #000000;
+        background: var(--folio-inst-bg);
         border-top-left-radius: 28px;
         border-top-right-radius: 28px;
         max-width: 500px;
@@ -229,17 +274,18 @@
         max-height: 90vh;
         display: flex; flex-direction: column;
         overflow: hidden;
-        font-family: "Inter", -apple-system, "Roboto", "Segoe UI", system-ui, sans-serif;
+        font-family: var(--folio-inst-font);
         font-feature-settings: "cv11", "ss01";
         -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
         text-rendering: optimizeLegibility;
-        color: #e3e3e3;
+        color: var(--folio-inst-text-2);
         line-height: 1.45;
+        border: 1px solid var(--folio-inst-border);
+        border-bottom: none;
       }
       .folio-inst.open { transform: translateY(0); }
 
-      /* ─── Handle ─────────────────────────────────────────── */
+      /* ─── Handle ──────────────────────────────────────────── */
       .folio-inst-handle-wrap {
         display: flex; justify-content: center;
         padding: 10px 0 4px;
@@ -248,10 +294,10 @@
       .folio-inst-handle {
         width: 32px; height: 4px;
         border-radius: 4px;
-        background: #3a3a3a;
+        background: var(--folio-inst-border-3);
       }
 
-      /* ─── Header ─────────────────────────────────────────── */
+      /* ─── Header ──────────────────────────────────────────── */
       .folio-inst-head {
         display: flex; gap: 16px; align-items: flex-start;
         padding: 8px 20px 16px;
@@ -261,13 +307,14 @@
         width: 72px; height: 72px;
         border-radius: 16px;
         flex-shrink: 0;
-        background: #ffffff;
-        color: #000000;
+        background: var(--folio-inst-text-1);
+        color: var(--folio-inst-bg);
         display: flex; align-items: center; justify-content: center;
         font-weight: 700; font-size: 34px;
         letter-spacing: -1.5px;
         position: relative;
         overflow: hidden;
+        border: 1px solid var(--folio-inst-border);
       }
       .folio-inst-icon img {
         position: absolute; inset: 0;
@@ -288,27 +335,28 @@
       .folio-inst-name {
         font-size: 22px; font-weight: 600;
         letter-spacing: -0.4px; line-height: 1.15;
-        color: #ffffff; margin: 0 0 4px;
+        color: var(--folio-inst-text-1); margin: 0 0 4px;
       }
       .folio-inst-dev {
-        font-size: 13px; color: #34a853;
+        font-size: 13px; color: var(--folio-inst-accent);
         font-weight: 500; margin: 0 0 8px;
         letter-spacing: 0.05px;
       }
       .folio-inst-stats {
         display: flex; align-items: center; gap: 12px;
-        font-size: 12px; color: #9aa0a6;
+        font-size: 12px; color: var(--folio-inst-text-3);
         font-weight: 400; letter-spacing: 0.05px;
       }
       .folio-inst-stats .stat { display: flex; align-items: center; gap: 4px; }
       .folio-inst-stats svg {
-        width: 11px; height: 11px; fill: #9aa0a6; stroke: none;
+        width: 11px; height: 11px;
+        fill: var(--folio-inst-text-3); stroke: none;
       }
       .folio-inst-stats .divider {
-        width: 1px; height: 11px; background: #2a2a2a;
+        width: 1px; height: 11px; background: var(--folio-inst-border-2);
       }
 
-      /* ─── Install button ─────────────────────────────────── */
+      /* ─── Install button ──────────────────────────────────── */
       .folio-inst-cta-row { padding: 0 20px 16px; flex-shrink: 0; }
       .folio-inst-cta {
         width: 100%;
@@ -316,15 +364,15 @@
         font-size: 14.5px; font-weight: 500;
         letter-spacing: 0.1px;
         padding: 13px 20px;
-        background: #34a853;
-        color: #000000;
+        background: var(--folio-inst-accent);
+        color: var(--folio-inst-on-accent);
         border: none; border-radius: 100px;
         cursor: pointer;
         display: flex; align-items: center; justify-content: center;
         gap: 8px;
         transition: background 140ms ease, transform 120ms ease;
       }
-      .folio-inst-cta:hover:not(:disabled) { background: #46b960; }
+      .folio-inst-cta:hover:not(:disabled) { background: var(--folio-inst-accent-hover); }
       .folio-inst-cta:active:not(:disabled) { transform: scale(0.99); }
       .folio-inst-cta:disabled { cursor: default; }
       .folio-inst-cta svg {
@@ -335,7 +383,7 @@
       .folio-inst-cta.loading svg { animation: folioInstSpin 0.9s linear infinite; }
       @keyframes folioInstSpin { to { transform: rotate(360deg); } }
 
-      /* ─── Body ───────────────────────────────────────────── */
+      /* ─── Body ────────────────────────────────────────────── */
       .folio-inst-body {
         overflow-y: auto; overflow-x: hidden;
         flex: 1; min-height: 0;
@@ -343,7 +391,7 @@
       }
       .folio-inst-body::-webkit-scrollbar { display: none; }
 
-      /* ─── Screenshots ────────────────────────────────────── */
+      /* ─── Screenshots ─────────────────────────────────────── */
       .folio-inst-shots-wrap { padding: 4px 0 20px; flex-shrink: 0; }
       .folio-inst-shots {
         display: flex; gap: 10px;
@@ -362,9 +410,9 @@
         width: 156px; height: 278px;
         border-radius: 12px;
         scroll-snap-align: start;
-        border: 1px solid #1e1e1e;
+        border: 1px solid var(--folio-inst-border);
         overflow: hidden;
-        background: #131314;
+        background: var(--folio-inst-surface-1);
         position: relative;
       }
       .folio-inst-shot img {
@@ -386,10 +434,17 @@
         animation: folioInstShimmer 1.6s linear infinite;
         transition: opacity 260ms ease;
       }
+      [data-theme="light"] .folio-inst-shot-skel {
+        background: linear-gradient(100deg,
+          rgba(0,0,0,0.02) 30%,
+          rgba(0,0,0,0.06) 50%,
+          rgba(0,0,0,0.02) 70%);
+        background-size: 200% 100%;
+      }
       .folio-inst-shot.loaded .folio-inst-shot-skel { opacity: 0; pointer-events: none; }
       .folio-inst-shot.error .folio-inst-shot-skel {
         animation: none;
-        background: #1f1f1f;
+        background: var(--folio-inst-surface-2);
       }
       .folio-inst-shot.error::after {
         content: '';
@@ -404,18 +459,18 @@
         100% { background-position: -200% 0; }
       }
 
-      /* ─── Sections ───────────────────────────────────────── */
+      /* ─── Sections ────────────────────────────────────────── */
       .folio-inst-section {
         padding: 16px 20px;
-        border-top: 1px solid #1e1e1e;
+        border-top: 1px solid var(--folio-inst-border);
       }
       .folio-inst-section-title {
         font-size: 15.5px; font-weight: 600;
         letter-spacing: -0.1px;
-        color: #ffffff; margin: 0 0 10px;
+        color: var(--folio-inst-text-1); margin: 0 0 10px;
       }
       .folio-inst-about {
-        font-size: 13.5px; color: #e3e3e3;
+        font-size: 13.5px; color: var(--folio-inst-text-2);
         line-height: 1.6; margin: 0;
         letter-spacing: 0.05px;
       }
@@ -427,10 +482,10 @@
         display: inline-flex; align-items: center;
         padding: 8px 14px;
         background: transparent;
-        border: 1px solid #2a2a2a;
+        border: 1px solid var(--folio-inst-border-2);
         border-radius: 100px;
         font-size: 12.5px; font-weight: 500;
-        color: #e3e3e3;
+        color: var(--folio-inst-text-2);
         letter-spacing: 0.05px;
       }
       .folio-inst-data {
@@ -440,44 +495,44 @@
         margin-top: 4px;
       }
       .folio-inst-data-cell .label {
-        font-size: 11px; color: #5f6368;
+        font-size: 11px; color: var(--folio-inst-text-4);
         font-weight: 500; margin-bottom: 3px;
         letter-spacing: 0.2px;
       }
       .folio-inst-data-cell .value {
-        font-size: 13px; color: #e3e3e3;
+        font-size: 13px; color: var(--folio-inst-text-2);
         font-weight: 400;
         letter-spacing: 0.05px;
       }
 
-      /* ─── iOS steps ──────────────────────────────────────── */
+      /* ─── iOS steps ───────────────────────────────────────── */
       .folio-inst-steps {
         display: flex; flex-direction: column; gap: 12px;
         padding: 16px 20px;
-        border-top: 1px solid #1e1e1e;
+        border-top: 1px solid var(--folio-inst-border);
       }
       .folio-inst-step {
         display: flex; gap: 12px; align-items: flex-start;
         font-size: 13.5px; line-height: 1.55;
-        color: #e3e3e3;
+        color: var(--folio-inst-text-2);
       }
-      .folio-inst-step b { color: #ffffff; font-weight: 600; }
+      .folio-inst-step b { color: var(--folio-inst-text-1); font-weight: 600; }
       .folio-inst-num {
         flex-shrink: 0;
         width: 22px; height: 22px;
         border-radius: 50%;
-        background: #34a853;
-        color: #000000;
+        background: var(--folio-inst-accent);
+        color: var(--folio-inst-on-accent);
         font-size: 12px; font-weight: 700;
         display: flex; align-items: center; justify-content: center;
         margin-top: 1px;
       }
 
-      /* ─── Footer ─────────────────────────────────────────── */
+      /* ─── Footer ──────────────────────────────────────────── */
       .folio-inst-footer {
         padding: 10px 20px calc(14px + env(safe-area-inset-bottom, 0px));
-        background: #000000;
-        border-top: 1px solid #1e1e1e;
+        background: var(--folio-inst-bg);
+        border-top: 1px solid var(--folio-inst-border);
         flex-shrink: 0;
       }
       .folio-inst-dismiss {
@@ -487,27 +542,27 @@
         letter-spacing: 0.1px;
         padding: 10px 16px;
         background: transparent;
-        color: #9aa0a6;
-        border: 1px solid #2a2a2a;
+        color: var(--folio-inst-text-3);
+        border: 1px solid var(--folio-inst-border-2);
         border-radius: 100px;
         cursor: pointer;
         transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
       }
       .folio-inst-dismiss:hover:not(:disabled) {
-        color: #ffffff;
-        background: #131314;
-        border-color: #3a3a3a;
+        color: var(--folio-inst-text-1);
+        background: var(--folio-inst-surface-1);
+        border-color: var(--folio-inst-border-3);
       }
       .folio-inst-dismiss:disabled { opacity: 0.45; cursor: not-allowed; }
 
-      /* ─── Success ────────────────────────────────────────── */
+      /* ─── Success state ───────────────────────────────────── */
       .folio-inst.success .folio-inst-cta {
-        background: #34a853;
-        color: #000000;
+        background: var(--folio-inst-accent);
+        color: var(--folio-inst-on-accent);
         cursor: default;
       }
 
-      /* ─── Mobile ─────────────────────────────────────────── */
+      /* ─── Mobile ──────────────────────────────────────────── */
       @media (max-width: 480px) {
         .folio-inst { max-width: 100%; border-radius: 24px 24px 0 0; }
         .folio-inst-head { padding: 6px 16px 14px; gap: 14px; }
@@ -520,7 +575,7 @@
         .folio-inst-shot { width: 144px; height: 260px; }
       }
 
-      /* ─── Reduced motion ─────────────────────────────────── */
+      /* ─── Reduced motion ──────────────────────────────────── */
       @media (prefers-reduced-motion: reduce) {
         .folio-inst, .folio-inst-scrim,
         .folio-inst-cta, .folio-inst-dismiss,
@@ -681,7 +736,7 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SCREENSHOT BUILDER (fixed: img in DOM before src set)
+  // SCREENSHOT BUILDER
   // ═══════════════════════════════════════════════════════════
 
   function buildShots(container) {
@@ -741,11 +796,9 @@
     document.body.appendChild(ov);
     S.overlayEl = ov;
 
-    // Build screenshots (standard layout only)
     const shotsEl = ov.querySelector('#folioInstShots');
     if (shotsEl) buildShots(shotsEl);
 
-    // Wire actions
     ov.querySelectorAll('[data-folio-action]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -819,10 +872,13 @@
 
   function show() {
     if (isInstalled()) return false;
+
+    // ✅ FIX: was silent `return false` on offline. Now toasts.
     if (!navigator.onLine) {
       toast('Connect to the internet to install', 'warning', 3000);
       return false;
     }
+
     injectStyles();
     const ov = ensureOverlay();
     document.body.style.overflow = 'hidden';
@@ -1033,6 +1089,7 @@
         hide();
         updateAllButtons();
       }
+      if (e.key === KEYS.dismissed) invalidateDismissCache();
     });
 
     window.addEventListener('online', updateAllButtons);
