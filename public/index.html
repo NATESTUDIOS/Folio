@@ -141,7 +141,9 @@
       <div class="sidebar-body" id="sidebarBody"></div>
     </aside>
     <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-
+    
+<aside class="ai-panel-mount" id="aiPanelMount" hidden></aside>
+    
     <main class="editor-area" id="editorArea">
       <div class="editor-tabs" id="tabs" style="display:none;"></div>
       <div class="editor-container" id="editorContainer"></div>
@@ -262,6 +264,11 @@
   </svg>
   <span class="label">Expand</span>
 </button>
+      <button class="toolbar-btn" id="tbAI" aria-label="AI assistant">
+        <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
+        <span class="label">Lens</span>
+      </button>
+    </div>
     </div>
   </div>
 
@@ -476,6 +483,7 @@
 <script type="module">
 "use strict";
 import { initCreateProject, createNewProject, handleNewProjectImageReturn } from '/js/create-project.js';
+  import { createAIPanel, openContextMenu } from '/js/ai.js';
 // ═══════════════════════════════════════════════════════════
 // THEME (unchanged)
 // ═══════════════════════════════════════════════════════════
@@ -1989,10 +1997,11 @@ const workspace = {
       try { lastPath = localStorage.getItem(STORAGE.lastFile); } catch {}
       const target = (lastPath && realFiles.find(f => f.path === lastPath)) || realFiles[0];
       await this.openFile(target.path);
-    } else {
-      showEmpty('No files yet — create one from the sidebar');
-    }
-  },
+  } else {
+    showEmpty('No files yet — create one from the sidebar');
+  }
+  refreshAIFileCache().catch(function () {});
+},
 
   async openFile(path) {
     if (!S.currentProject) return;
@@ -2033,12 +2042,13 @@ const workspace = {
     }
 
     try {
-      container.innerHTML = '';
-      await cm.init(container, file.content, path);
-      loading?.classList.add('hidden');
-      empty?.classList.add('hidden');
-      updateDirtyDot();
-    } catch (err) {
+  container.innerHTML = '';
+  await cm.init(container, file.content, path);
+  loading?.classList.add('hidden');
+  empty?.classList.add('hidden');
+  updateDirtyDot();
+  wireAIContextMenu();
+} catch (err) {
       console.error('[Workspace] Editor failed:', err);
       loading?.classList.add('hidden');
       showEditorError();
@@ -2106,8 +2116,9 @@ const workspace = {
       updateDirtyDot();
       updateTabs();
       refreshInfoIfOpen();
-      if (!silent) { toast(S.isGuest ? 'Saved locally' : 'Saved', 'success'); haptic(6); }
-    } catch (err) {
+        if (!silent) { toast(S.isGuest ? 'Saved locally' : 'Saved', 'success'); haptic(6); }
+  refreshAIFileCache().catch(function () {});
+} catch (err) {
       if (err?.name === 'QuotaExceededError') {
         toast('Storage full. Delete old versions or projects.', 'error', 8000);
       } else {
@@ -2150,7 +2161,160 @@ initCreateProject({
   getUsername: () => S.user?.profile?.username || null,
   getSession: () => S.session,
 });
-  
+
+  // ═══════════════════════════════════════════════════════════
+// AI PANEL INTEGRATION
+// ═══════════════════════════════════════════════════════════
+
+S.aiFileCache = [];
+
+function buildAIContext() {
+  const ctx = {
+    pid: S.currentProject ? S.currentProject.pid : null,
+    activeFile: S.activeFile || null,
+    selection: '',
+    content: '',
+    files: S.aiFileCache || [],
+    projectName: S.currentProject ? (S.currentProject.name || '') : '',
+    projectDescription: S.currentProject ? (S.currentProject.description || '') : '',
+    diff: '',
+    log: '',
+    focus: '',
+  };
+  if (cm.view) {
+    try {
+      ctx.selection = cm.getSelection() || '';
+      ctx.content = cm.getContent() || '';
+    } catch (e) {
+      // ignore
+    }
+  }
+  return ctx;
+}
+
+async function refreshAIFileCache() {
+  if (!S.currentProject) {
+    S.aiFileCache = [];
+    return;
+  }
+  try {
+    const files = await db.listFiles(S.currentProject.pid);
+    S.aiFileCache = files
+      .filter(f => !isSystemFile(f.path))
+      .map(f => ({ path: f.path, content: f.content || '' }));
+  } catch (e) {
+    S.aiFileCache = [];
+  }
+}
+
+let aiPanel = null;
+
+function ensureAIPanel() {
+  if (aiPanel) return aiPanel;
+  const mount = document.getElementById('aiPanelMount');
+  if (!mount) return null;
+
+  aiPanel = createAIPanel({
+    mount: mount,
+    deps: {
+      apiFetch: apiFetch,
+      idb: db,
+      toast: toast,
+      context: buildAIContext,
+      onOpenFile: async function (path) {
+        if (!S.currentProject) return;
+        if (path === S.activeFile) {
+          S.dirtyFiles.delete(path);
+        }
+        await workspace.openFile(path);
+        await refreshAIFileCache();
+
+        if (S.session && navigator.onLine && S.currentProject._server) {
+          const file = await db.getFile(S.currentProject.pid, path).catch(function () { return null; });
+          if (file) {
+            apiFetch(API_HOST + '?action=project/sync-back', {
+              method: 'POST',
+              body: JSON.stringify({
+                pid: S.currentProject.pid,
+                files: { [path]: file.content },
+              }),
+            }).catch(function () {});
+          }
+        }
+      },
+      onPrefillCommit: function (prefill) {
+        openCommitDialog(prefill);
+      },
+      onPrefillDeploy: function (prefill) {
+        hostProject(prefill);
+      },
+    },
+  });
+  return aiPanel;
+}
+
+function toggleAIPanel(force) {
+  const mount = document.getElementById('aiPanelMount');
+  if (!mount) return;
+  const panel = ensureAIPanel();
+  if (!panel) return;
+
+  const shouldOpen = (typeof force === 'boolean') ? force : mount.hidden;
+
+  if (shouldOpen) {
+    mount.hidden = false;
+    requestAnimationFrame(function () {
+      mount.classList.add('open');
+    });
+    panel.open();
+  } else {
+    panel.close();
+    mount.classList.remove('open');
+    setTimeout(function () {
+      if (!mount.classList.contains('open')) {
+        mount.hidden = true;
+      }
+    }, 280);
+  }
+}
+
+function wireAIPanelButton() {
+  const btn = document.getElementById('tbAI');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    toggleAIPanel();
+  });
+}
+
+function wireAIContextMenu() {
+  if (!cm.view) return;
+  const dom = cm.view.contentDOM;
+  if (dom._aiContextBound) return;
+  dom._aiContextBound = true;
+  dom.addEventListener('contextmenu', function (e) {
+    const sel = cm.getSelection();
+    if (!sel) return;
+    e.preventDefault();
+    openContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      context: buildAIContext(),
+      onRun: function (task) {
+        const mount = document.getElementById('aiPanelMount');
+        const panel = ensureAIPanel();
+        if (!mount || !panel) return;
+        mount.hidden = false;
+        requestAnimationFrame(function () {
+          mount.classList.add('open');
+        });
+        panel.open();
+        if (typeof panel.run === 'function') {
+          panel.run(task, cm.getSelection() ? 'selection' : 'file');
+        }
+      },
+    });
+  });
+}
 // ═══════════════════════════════════════════════════════════
 // HEADER / TABS / EMPTY
 // ═══════════════════════════════════════════════════════════
@@ -2983,9 +3147,10 @@ async function createFilePrompt(parentPath = '') {
     }
     S.expandedFolders.add(parentPath);
   }
-  toast(`Created ${path}`, 'success');
+    toast(`Created ${path}`, 'success');
   await workspace.openFile(path);
   renderSidebar();
+  refreshAIFileCache().catch(function () {});
 }
 
 async function createFolderPrompt(parentPath = '') {
@@ -3000,9 +3165,10 @@ async function createFolderPrompt(parentPath = '') {
     await db.putFolder(S.currentProject.pid, parts.slice(0, i).join('/')).catch(() => {});
   }
   S.expandedFolders.add(folderPath);
-  toast(`Created ${folderPath}`, 'success');
+    toast(`Created ${folderPath}`, 'success');
   renderSidebar();
   refreshInfoIfOpen();
+  refreshAIFileCache().catch(function () {});
 }
 
 async function deleteFile(path) {
@@ -3032,9 +3198,10 @@ async function deleteFile(path) {
     if (S.openFiles.length > 0) await workspace.openFile(S.openFiles[S.openFiles.length - 1]);
     else showEmpty('No file open');
   }
-  toast('File deleted', 'info');
+    toast('File deleted', 'info');
   renderSidebar();
   refreshInfoIfOpen();
+  refreshAIFileCache().catch(function () {});
 }
 
 async function deleteFolder(path) {
@@ -3067,11 +3234,12 @@ async function deleteFolder(path) {
     await db.deleteFile(S.currentProject.pid, f.path);
     S.dirtyFiles.delete(f.path);
   }
-  await db.deleteFolder(S.currentProject.pid, path);
+    await db.deleteFolder(S.currentProject.pid, path);
   S.expandedFolders.delete(path);
   toast('Folder deleted', 'info');
   renderSidebar();
   refreshInfoIfOpen();
+  refreshAIFileCache().catch(function () {});
 }
 
 async function renameFile(oldPath) {
@@ -3091,10 +3259,10 @@ async function renameFile(oldPath) {
   if (S.dirtyFiles.has(oldPath)) { S.dirtyFiles.delete(oldPath); S.dirtyFiles.add(newPath); }
   updateTabs();
   updateBreadcrumb();
-  toast('Renamed', 'success');
+    toast('Renamed', 'success');
   renderSidebar();
+  refreshAIFileCache().catch(function () {});
 }
-
 async function renameFolder(path) {
   if (!S.currentProject) return;
   const newName = await promptSheet('Rename folder', '', path.split('/').pop());
@@ -3115,9 +3283,10 @@ async function renameFolder(path) {
   }
   await db.deleteFolder(S.currentProject.pid, path);
   await db.putFolder(S.currentProject.pid, newPath).catch(() => {});
-  toast('Folder renamed', 'success');
+    toast('Folder renamed', 'success');
   updateTabs();
   renderSidebar();
+  refreshAIFileCache().catch(function () {});
 }
 
 async function importFile() {
@@ -3168,12 +3337,13 @@ async function importFile() {
       }
     }
 
-    if (imported > 0) {
-      toast(`Imported ${imported} file${imported === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
-      renderSidebar();
-      refreshInfoIfOpen();
-    }
-  };
+      if (imported > 0) {
+    toast(`Imported ${imported} file${imported === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
+    renderSidebar();
+    refreshInfoIfOpen();
+    refreshAIFileCache().catch(function () {});
+  }
+};
   input.click();
 }
 
@@ -4030,10 +4200,11 @@ async function restoreVersion(vid) {
   if (S.activeFile && version.files[S.activeFile]) await workspace.openFile(S.activeFile);
   else if (firstPath) await workspace.openFile(firstPath);
   else showEmpty('Version was empty');
-  toast('Version restored', 'success');
+    toast('Version restored', 'success');
   renderSidebar();
+  refreshAIFileCache().catch(function () {});
 }
-
+  
 async function deleteVersionConfirm(vid) {
   const ok = await confirm({ title: 'Delete this version?', message: "This can't be undone.", confirmLabel: 'Delete', danger: true });
   if (!ok) return;
@@ -4160,7 +4331,7 @@ function extractOutline(content, lang) {
 // COMMIT
 // ═══════════════════════════════════════════════════════════
 
-async function openCommitDialog() {
+async function openCommitDialog(prefill = null) {
   if (!S.currentProject) { toast('No project', 'warning'); return; }
   if (S.activeFile && S.dirtyFiles.has(S.activeFile)) await workspace.saveActiveFile({ silent: true });
 
@@ -4197,24 +4368,37 @@ async function openCommitDialog() {
 
   const autoMsg = generateCommitMessage(changes, totalAdd, totalRem);
 
-  const msgInput = el('input', {
-    class: 'input', value: autoMsg, maxlength: '200',
-    placeholder: 'Describe what changed…',
-  });
+  const autoMsg = (prefill && prefill.message)
+  ? prefill.message
+  : generateCommitMessage(changes, totalAdd, totalRem);
+
+const prefillChangedSet = new Set(
+  prefill && Array.isArray(prefill.changed) ? prefill.changed : []
+);
+
+const msgInput = el('input', {
+  class: 'input', value: autoMsg, maxlength: '200',
+  placeholder: 'Describe what changed…',
+});
 
   const changesList = el('div', { class: 'commit-changes' });
-  for (const c of changes) {
-    changesList.appendChild(el('div', { class: 'commit-change-row' },
-      el('span', { class: 'icon' }, icon(fileIconName(c.path), 10)),
-      el('span', { class: 'name' }, c.path),
-      el('span', { class: 'stat' },
-        el('span', { class: 'add' }, `+${c.add}`),
-        ' ',
-        el('span', { class: 'rem' }, `−${c.rem}`)
-      )
-    ));
+for (const c of changes) {
+  const row = el('div', { class: 'commit-change-row' },
+    el('span', { class: 'icon' }, icon(fileIconName(c.path), 10)),
+    el('span', { class: 'name' }, c.path),
+    el('span', { class: 'stat' },
+      el('span', { class: 'add' }, `+${c.add}`),
+      ' ',
+      el('span', { class: 'rem' }, `−${c.rem}`)
+    )
+  );
+  if (prefillChangedSet.has(c.path)) {
+    row.style.background = 'var(--theme-primary-soft)';
+    row.style.borderRadius = '4px';
   }
-
+  changesList.appendChild(row);
+}
+  
   const body = el('div', {},
     el('div', { class: 'field' },
       el('label', { class: 'field-label' }, 'Message (auto-generated)'),
@@ -4587,15 +4771,23 @@ function applyGuestState() {
   }
 }
 
-async function hostProject() {
+async function hostProject(prefill = null) {
   if (S.isGuest) {
-    const ok = await confirm({
-      title: 'Sign in to deploy',
-      message: 'Hosting requires a Folio account. Your local project is safe.',
-      confirmLabel: 'Sign in', danger: false,
-    });
-    if (ok) window.location.href = '/register?next=' + encodeURIComponent('/');
-    return;
+    let deployMessage = 'Your project will be built and deployed to a live URL. Each deploy creates a snapshot that stays previewable.';
+if (prefill && prefill.summary) {
+  const changedCount = Array.isArray(prefill.changed) ? prefill.changed.length : 0;
+  deployMessage = prefill.summary
+    + (changedCount > 0 ? ` (${changedCount} file${changedCount === 1 ? '' : 's'} changed)` : '')
+    + '\n\n' + deployMessage;
+}
+
+const ok = await confirm({
+  title: 'Deploy project?',
+  message: deployMessage,
+  confirmLabel: 'Deploy', danger: false,
+});
+if (!ok) return;
+    
   }
   if (!S.online) { toast('Requires internet', 'warning'); return; }
   if (!S.currentProject) { toast('No project', 'warning'); return; }
@@ -5011,7 +5203,7 @@ $('tbUnfoldAll')?.addEventListener('click', () => cm.view ? cm.unfoldAll() : toa
   window.addEventListener('offline', updateOnline);
   updateOnline();
 
-  window.addEventListener('resize', () => {
+    window.addEventListener('resize', () => {
     if (window.innerWidth >= 1024) {
       $('sidebarBackdrop')?.classList.remove('open');
     } else {
@@ -5021,7 +5213,11 @@ $('tbUnfoldAll')?.addEventListener('click', () => cm.view ? cm.unfoldAll() : toa
   });
 
   setupPreviewConsole();
+
+  wireAIPanelButton();
 }
+
+
 
 // ═══════════════════════════════════════════════════════════
 // BOOT
@@ -5152,7 +5348,17 @@ if (handleNewProjectImageReturn()) {
     } catch {}
   }, 800);
 
-  // ─── OFFLINE-FIRST: auto-promote local projects ───────────────
+// Rehydrate the AI panel's pending badge for the loaded project.
+try {
+  if (aiPanel && S.currentProject) {
+    aiPanel.close();
+    aiPanel.open();
+  }
+} catch (e) {
+  // ignore
+}
+
+// ─── OFFLINE-FIRST: auto-promote local projects ───────────────
   // When the user opens the editor while signed in and online, any
   // projects that were created offline (or as a guest, then signed in)
   // get promoted to server projects in the background.

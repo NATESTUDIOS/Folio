@@ -3097,3 +3097,33 @@ svg { display: block; }
   border-top: 1px solid var(--theme-divider);
   margin: 18px 0;
 }
+/* ═══════════════════════════════════════════════════════════
+   AI PANEL MOUNT
+   ═══════════════════════════════════════════════════════════ */
+.ai-panel-mount {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  border-left: 1px solid var(--theme-glass-border);
+  background: var(--theme-surface);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition: transform 0.28s var(--ease);
+  z-index: 25;
+}
+.ai-panel-mount[hidden] { display: none; }
+
+@media (max-width: 1023px) {
+  .ai-panel-mount {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(88vw, 340px);
+    transform: translateX(100%);
+    box-shadow: -6px 0 40px rgba(0, 0, 0, 0.35);
+    border-left: 1px solid var(--theme-glass-border);
+  }
+  .ai-panel-mount.open { transform: translateX(0); }
+}
