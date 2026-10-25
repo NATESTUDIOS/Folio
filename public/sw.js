@@ -51,7 +51,7 @@ const CACHED_FILES = [
 
   // ── CSS ────────────────────────────────────────────────────
   '/app.css',
-  '/project.css',
+  '/css/project.css',
 
   // ── PWA metadata ───────────────────────────────────────────
   '/manifest.json',
