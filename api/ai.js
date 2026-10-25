@@ -6,27 +6,21 @@
 //  GET  /api/ai?action=health  (admin) — provider + cache status
 //  GET  /api/ai?action=scenes  (admin) — task catalog + limits
 //
-//  Provider: Groq (free tier)
+//  Provider: Groq (Chat Completions, stable endpoint)
 //  Models:   GROQ_MODEL       (default: openai/gpt-oss-120b) — "power"
 //            GROQ_MODEL_FAST  (default: openai/gpt-oss-20b)  — "fast"
 //
+//  Quotas (per actor, per UTC day):
+//    • Words:   input words + output words
+//    • Credits: sum of task weights (feature "power" cost)
+//    • Per-task hourly/daily use counts (TASK_LIMITS)
+//
 //  Guests:   IP-keyed, 5-task allowlist, tighter caps, truncated I/O
-//  Authed:   uid-keyed, all 22 tasks, per-task + global + token budgets
+//  Authed:   uid-keyed, all 22 tasks, per-task + global + word/credit budgets
 //
 //  Host-integration tasks (readProject, commitChanges, writeDeploy) are
 //  READ-ONLY on this server. commitChanges / writeDeploy return ONLY a
-//  message + changed-path list. They never return file contents — the
-//  client already has them.
-//
-//  Two-layer cache:
-//    • HTTP:       Cache-Control: no-store
-//    • In-process: CACHE Map, 10min TTL, 200 entries, canonical key
-//
-//  Depends on (added to utils/users.js):
-//    listProjectFiles, computeLanguageBreakdown, maybeNotifyRateLimitAbuse
-//  And on (exported from host.js):
-//    getProjectCached
-//  All three have inline fallbacks so ai.js works standalone.
+//  message + changed-path list. They never return file contents.
 // ═══════════════════════════════════════════════════════════════════
 
 import crypto from "node:crypto";
@@ -64,6 +58,7 @@ const GROQ_MODEL_FAST = process.env.GROQ_MODEL_FAST || "openai/gpt-oss-20b";
 
 const MAX_OUTPUT_TOKENS = 8192;
 const MODEL_TIMEOUT_MS = 55_000;
+const WORDS_TO_TOKENS = 1.35;
 
 const MODEL_MAX_OUTPUT = {
   "openai/gpt-oss-120b": 65_536,
@@ -72,15 +67,19 @@ const MODEL_MAX_OUTPUT = {
   "llama-3.1-8b-instant": 8192,
 };
 
+// ── Word & credit quotas (per actor, per UTC day) ──
+const AUTHED_DAILY_WORDS = 100_000;
+const AUTHED_DAILY_CREDITS = 2_000;
+const GUEST_DAILY_WORDS = 2_000;
+const GUEST_DAILY_CREDITS = 50;
+const GUEST_MAX_INPUT_WORDS = 600;
+const GUEST_MAX_OUTPUT_WORDS = 400;
+
+// ── Global per-hour / per-day call counts ──
 const AUTHED_GLOBAL_HOURLY = 200;
 const AUTHED_GLOBAL_DAILY = 1000;
-const AUTHED_TOKENS_DAILY = 500_000;
-
 const GUEST_GLOBAL_HOURLY = 10;
 const GUEST_GLOBAL_DAILY = 20;
-const GUEST_TOKENS_DAILY = 5_000;
-const GUEST_MAX_INPUT_CHARS = 5_000;
-const GUEST_MAX_OUTPUT_TOKENS = 500;
 
 const GUEST_ALLOWED_TASKS = new Set([
   "explain", "logExplain", "metatags", "brainstorm", "diagram",
@@ -96,44 +95,45 @@ const MAX_ARTIFACT_FILES = 50;
 const MAX_ARTIFACT_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_ARTIFACT_PATH_LEN = 500;
 
-const GROQ_RETRY_STATUSES = new Set([502, 503, 504]);
+const FATAL_STATUSES = new Set([400, 401, 404, 413, 498, 499]);
+const RETRY_STATUSES = new Set([422, 429, 500, 502, 503]);
 const GROQ_MAX_RETRIES = 3;
 
 // =========================================================================
-// TASK LIMITS
+// TASK LIMITS — per-task call counts, feature weight, output word cap
 // =========================================================================
 
 const TASK_LIMITS = {
-  explain:       { hourly: 60,  daily: 500, maxTokens: 2000, maxInputChars: 20_000,  maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
-  debug:         { hourly: 30,  daily: 200, maxTokens: 4000, maxInputChars: 60_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "power" },
-  codefix:       { hourly: 40,  daily: 300, maxTokens: 3000, maxInputChars: 40_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "power" },
-  optimize:      { hourly: 30,  daily: 200, maxTokens: 4000, maxInputChars: 60_000,  maxTotalFilesChars: 0,      temp: 0.3, model: "power" },
-  suggest:       { hourly: 100, daily: 800, maxTokens: 1500, maxInputChars: 15_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "fast" },
-  brainstorm:    { hourly: 20,  daily: 150, maxTokens: 2000, maxInputChars: 10_000,  maxTotalFilesChars: 0,      temp: 0.8, model: "fast" },
-  metatags:      { hourly: 40,  daily: 300, maxTokens: 800,  maxInputChars: 20_000,  maxTotalFilesChars: 0,      temp: 0.4, model: "fast" },
-  scaffold:      { hourly: 5,   daily: 40,  maxTokens: 8000, maxInputChars: 30_000,  maxTotalFilesChars: 0,      temp: 0.5, model: "power" },
-  docs:          { hourly: 5,   daily: 40,  maxTokens: 8000, maxInputChars: 62_000,  maxTotalFilesChars: 60_000, temp: 0.4, model: "power" },
-  findFn:        { hourly: 30,  daily: 200, maxTokens: 3000, maxInputChars: 82_000,  maxTotalFilesChars: 80_000, temp: 0.2, model: "power" },
-  commitMsg:     { hourly: 100, daily: 800, maxTokens: 400,  maxInputChars: 10_000,  maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
-  logExplain:    { hourly: 60,  daily: 500, maxTokens: 800,  maxInputChars: 4_000,   maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
-  diagram:       { hourly: 20,  daily: 150, maxTokens: 3000, maxInputChars: 60_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "power" },
-  simulate:      { hourly: 20,  daily: 150, maxTokens: 4000, maxInputChars: 30_000,  maxTotalFilesChars: 0,      temp: 0.1, model: "power" },
-  designExplain: { hourly: 10,  daily: 80,  maxTokens: 5000, maxInputChars: 62_000,  maxTotalFilesChars: 60_000, temp: 0.4, model: "power" },
-  translate:     { hourly: 20,  daily: 150, maxTokens: 4000, maxInputChars: 20_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "power" },
-  docstrings:    { hourly: 30,  daily: 200, maxTokens: 2000, maxInputChars: 30_000,  maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
-  struggle:      { hourly: 10,  daily: 80,  maxTokens: 3000, maxInputChars: 62_000,  maxTotalFilesChars: 60_000, temp: 0.4, model: "power" },
-  audit:         { hourly: 30,  daily: 200, maxTokens: 3000, maxInputChars: 60_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "power" },
-  readProject:   { hourly: 30,  daily: 200, maxTokens: 4000, maxInputChars: 42_000,  maxTotalFilesChars: 40_000, temp: 0.3, model: "power" },
-  commitChanges: { hourly: 20,  daily: 150, maxTokens: 300,  maxInputChars: 12_000,  maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
-  writeDeploy:   { hourly: 10,  daily: 80,  maxTokens: 300,  maxInputChars: 8_000,   maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
+  explain:       { hourly: 60,  daily: 500, weight: 1, maxOutputWords: 1500, maxInputChars: 20_000,  maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
+  debug:         { hourly: 30,  daily: 200, weight: 3, maxOutputWords: 3000, maxInputChars: 60_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "power" },
+  codefix:       { hourly: 40,  daily: 300, weight: 3, maxOutputWords: 2250, maxInputChars: 40_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "power" },
+  optimize:      { hourly: 30,  daily: 200, weight: 3, maxOutputWords: 3000, maxInputChars: 60_000,  maxTotalFilesChars: 0,      temp: 0.3, model: "power" },
+  suggest:       { hourly: 100, daily: 800, weight: 1, maxOutputWords: 1125, maxInputChars: 15_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "fast" },
+  brainstorm:    { hourly: 20,  daily: 150, weight: 2, maxOutputWords: 1500, maxInputChars: 10_000,  maxTotalFilesChars: 0,      temp: 0.8, model: "fast" },
+  metatags:      { hourly: 40,  daily: 300, weight: 1, maxOutputWords: 600,  maxInputChars: 20_000,  maxTotalFilesChars: 0,      temp: 0.4, model: "fast" },
+  scaffold:      { hourly: 5,   daily: 40,  weight: 8, maxOutputWords: 6000, maxInputChars: 30_000,  maxTotalFilesChars: 0,      temp: 0.5, model: "power" },
+  docs:          { hourly: 5,   daily: 40,  weight: 8, maxOutputWords: 6000, maxInputChars: 62_000,  maxTotalFilesChars: 60_000, temp: 0.4, model: "power" },
+  findFn:        { hourly: 30,  daily: 200, weight: 5, maxOutputWords: 2250, maxInputChars: 82_000,  maxTotalFilesChars: 80_000, temp: 0.2, model: "power" },
+  commitMsg:     { hourly: 100, daily: 800, weight: 1, maxOutputWords: 300,  maxInputChars: 10_000,  maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
+  logExplain:    { hourly: 60,  daily: 500, weight: 1, maxOutputWords: 600,  maxInputChars: 4_000,   maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
+  diagram:       { hourly: 20,  daily: 150, weight: 2, maxOutputWords: 2250, maxInputChars: 60_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "power" },
+  simulate:      { hourly: 20,  daily: 150, weight: 3, maxOutputWords: 3000, maxInputChars: 30_000,  maxTotalFilesChars: 0,      temp: 0.1, model: "power" },
+  designExplain: { hourly: 10,  daily: 80,  weight: 6, maxOutputWords: 3750, maxInputChars: 62_000,  maxTotalFilesChars: 60_000, temp: 0.4, model: "power" },
+  translate:     { hourly: 20,  daily: 150, weight: 3, maxOutputWords: 3000, maxInputChars: 20_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "power" },
+  docstrings:    { hourly: 30,  daily: 200, weight: 1, maxOutputWords: 1500, maxInputChars: 30_000,  maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
+  struggle:      { hourly: 10,  daily: 80,  weight: 4, maxOutputWords: 2250, maxInputChars: 62_000,  maxTotalFilesChars: 60_000, temp: 0.4, model: "power" },
+  audit:         { hourly: 30,  daily: 200, weight: 3, maxOutputWords: 2250, maxInputChars: 60_000,  maxTotalFilesChars: 0,      temp: 0.2, model: "power" },
+  readProject:   { hourly: 30,  daily: 200, weight: 5, maxOutputWords: 3000, maxInputChars: 42_000,  maxTotalFilesChars: 40_000, temp: 0.3, model: "power" },
+  commitChanges: { hourly: 20,  daily: 150, weight: 2, maxOutputWords: 225,  maxInputChars: 12_000,  maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
+  writeDeploy:   { hourly: 10,  daily: 80,  weight: 2, maxOutputWords: 225,  maxInputChars: 8_000,   maxTotalFilesChars: 0,      temp: 0.3, model: "fast" },
 };
 
 const GUEST_TASK_LIMITS = {
-  explain:    { hourly: 5, daily: 10 },
-  logExplain: { hourly: 5, daily: 10 },
-  metatags:   { hourly: 3, daily: 5  },
-  brainstorm: { hourly: 2, daily: 3  },
-  diagram:    { hourly: 2, daily: 3  },
+  explain:    { hourly: 5, daily: 10, weight: 1 },
+  logExplain: { hourly: 5, daily: 10, weight: 1 },
+  metatags:   { hourly: 3, daily: 5,  weight: 1 },
+  brainstorm: { hourly: 2, daily: 3,  weight: 2 },
+  diagram:    { hourly: 2, daily: 3,  weight: 2 },
 };
 
 // =========================================================================
@@ -177,6 +177,23 @@ function truncate(str, max) {
   return s.slice(0, max) + "\n\n[...truncated]";
 }
 
+function countWords(text) {
+  if (!text) return 0;
+  const m = String(text).match(/\S+/g);
+  return m ? m.length : 0;
+}
+
+function wordsToTokens(words) {
+  return Math.ceil(Math.max(1, words) * WORDS_TO_TOKENS);
+}
+
+function truncateWords(text, maxWords) {
+  const s = String(text || "");
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return s;
+  return words.slice(0, maxWords).join(" ") + "\n\n[...truncated]";
+}
+
 function stripFences(s) {
   return String(s || "")
     .replace(/^\uFEFF/, "")
@@ -200,7 +217,7 @@ function canonicalize(v) {
 
 function truncateValue(value, budget) {
   if (budget <= 0) return "";
-  if (typeof value === "string") return truncate(value, budget);
+  if (typeof value === "string") return truncateWords(value, GUEST_MAX_INPUT_WORDS);
   if (Array.isArray(value)) {
     const arr = [];
     let remaining = budget;
@@ -229,7 +246,7 @@ function truncateValue(value, budget) {
 function truncatePayloadForGuest(payload) {
   const out = {};
   for (const [key, value] of Object.entries(payload || {})) {
-    out[key] = truncateValue(value, GUEST_MAX_INPUT_CHARS);
+    out[key] = truncateValue(value, GUEST_MAX_INPUT_WORDS * 6);
   }
   return out;
 }
@@ -1281,39 +1298,64 @@ async function checkRateLimit(actor, task) {
 }
 
 // =========================================================================
-// TOKEN QUOTA
+// WORD & CREDIT QUOTA (per day)
 // =========================================================================
 
-async function checkTokenQuota(actor) {
+async function checkQuota(actor) {
   const day = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
-  const ref = db.ref(`ai_usage/${actor.key}/tokens/${day}`);
+  const ref = db.ref(`ai_usage/${actor.key}/usage/${day}`);
   const snap = await ref.once("value").catch(() => null);
   const data = snap?.exists() ? snap.val() : {};
-  const total = (data.tokensIn || 0) + (data.tokensOut || 0);
-  const limit = actor.isGuest ? GUEST_TOKENS_DAILY : AUTHED_TOKENS_DAILY;
-  if (total >= limit) {
+
+  const wordsUsed = (data.wordsIn || 0) + (data.wordsOut || 0);
+  const creditsUsed = data.credits || 0;
+
+  const wordLimit = actor.isGuest ? GUEST_DAILY_WORDS : AUTHED_DAILY_WORDS;
+  const creditLimit = actor.isGuest ? GUEST_DAILY_CREDITS : AUTHED_DAILY_CREDITS;
+  const resetAt = new Date((day + 1) * 24 * 60 * 60 * 1000).toISOString();
+
+  if (wordsUsed >= wordLimit) {
     return {
       ok: false,
-      error: `Daily token budget reached (${limit} tokens).`,
-      scope: "tokens", limit, used: total,
-      resetAt: new Date((day + 1) * 24 * 60 * 60 * 1000).toISOString(),
+      error: `Daily word limit reached (${wordLimit.toLocaleString()} words).`,
+      scope: "words", limit: wordLimit, used: wordsUsed, resetAt,
     };
   }
-  return { ok: true };
+
+  if (creditsUsed >= creditLimit) {
+    return {
+      ok: false,
+      error: `Daily action-credit limit reached (${creditLimit} credits).`,
+      scope: "credits", limit: creditLimit, used: creditsUsed, resetAt,
+    };
+  }
+
+  return {
+    ok: true,
+    wordsUsed,
+    creditsUsed,
+    wordLimit,
+    creditLimit,
+    wordsRemaining: wordLimit - wordsUsed,
+    creditsRemaining: creditLimit - creditsUsed,
+    resetAt,
+  };
 }
 
 // =========================================================================
 // USAGE RECORDING
 // =========================================================================
 
-async function recordUsage(actor, task, usage) {
+async function recordUsage(actor, task, usage, weight) {
   const day = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
-  const ref = db.ref(`ai_usage/${actor.key}/tokens/${day}`);
+  const ref = db.ref(`ai_usage/${actor.key}/usage/${day}`);
+
   try {
     await ref.transaction(cur => {
-      const c = cur || { tasks: {}, tokensIn: 0, tokensOut: 0 };
-      c.tokensIn = (c.tokensIn || 0) + (usage.promptTokens || 0);
-      c.tokensOut = (c.tokensOut || 0) + (usage.completionTokens || 0);
+      const c = cur || { wordsIn: 0, wordsOut: 0, credits: 0, tasks: {} };
+      c.wordsIn = (c.wordsIn || 0) + (usage.promptWords || 0);
+      c.wordsOut = (c.wordsOut || 0) + (usage.completionWords || 0);
+      c.credits = (c.credits || 0) + (weight || 1);
       c.tasks = c.tasks || {};
       c.tasks[task] = (c.tasks[task] || 0) + 1;
       return c;
@@ -1324,16 +1366,20 @@ async function recordUsage(actor, task, usage) {
 }
 
 // =========================================================================
-// GROQ PROVIDER (Chat Completions) — with bounded retry
+// GROQ PROVIDER (Chat Completions) — word-capped, retry-aware
 // =========================================================================
 
-async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
+async function callGroq({ system, user, maxWords, temp, model, reqId }) {
   if (!GROQ_API_KEY) {
     throw Object.assign(new Error("GROQ_API_KEY not configured"), { status: 503 });
   }
 
-  const modelMax = MODEL_MAX_OUTPUT[model] || MAX_OUTPUT_TOKENS;
-  const capped = Math.min(maxTokens || 4000, modelMax, MAX_OUTPUT_TOKENS);
+  const cappedWords = Math.max(1, maxWords || 1000);
+  const maxCompletionTokens = Math.min(
+    wordsToTokens(cappedWords),
+    MODEL_MAX_OUTPUT[model] || MAX_OUTPUT_TOKENS,
+    MAX_OUTPUT_TOKENS,
+  );
 
   const body = {
     model,
@@ -1341,7 +1387,7 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
       { role: "system", content: system },
       { role: "user", content: user },
     ],
-    max_tokens: capped,
+    max_completion_tokens: maxCompletionTokens,
     temperature: temp != null ? temp : 0.3,
     reasoning_effort: "low",
     stream: false,
@@ -1366,11 +1412,11 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
       });
     } catch (err) {
       clearTimeout(timer);
-      if (err.name === "AbortError") {
-        lastErr = Object.assign(new Error("AI timeout"), { status: 504 });
-      } else {
-        lastErr = Object.assign(new Error(`Groq network error: ${err.message}`), { status: 502 });
-      }
+      const status = err.name === "AbortError" ? 504 : 502;
+      lastErr = Object.assign(
+        new Error(err.name === "AbortError" ? "AI timeout" : `Groq network error: ${err.message}`),
+        { status },
+      );
       if (attempt < GROQ_MAX_RETRIES) {
         const backoff = Math.min(8000, 500 * 2 ** attempt) + Math.random() * 400;
         await new Promise(r => setTimeout(r, backoff));
@@ -1387,26 +1433,39 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
         throw Object.assign(new Error("Groq returned no content"), { status: 502 });
       }
 
-      const usage = json.usage || {};
+      const rawUsage = json.usage || {};
+      const promptWords = countWords(system) + countWords(user);
+      const completionWords = countWords(content);
+
       return {
         content,
         usage: {
-          promptTokens: usage.prompt_tokens || 0,
-          completionTokens: usage.completion_tokens || 0,
-          totalTokens: usage.total_tokens || 0,
+          promptTokens: rawUsage.prompt_tokens || 0,
+          completionTokens: rawUsage.completion_tokens || 0,
+          totalTokens: rawUsage.total_tokens || 0,
+          promptWords,
+          completionWords,
+          totalWords: promptWords + completionWords,
         },
       };
     }
 
-    const text = await res.text().catch(() => "");
+    const detail = await res.text().catch(() => "");
     log("ai.groq_http_error", {
       reqId,
       attempt,
       status: res.status,
-      body: text.slice(0, 300),
+      body: detail.slice(0, 300),
     });
 
-    if (GROQ_RETRY_STATUSES.has(res.status) && attempt < GROQ_MAX_RETRIES) {
+    if (FATAL_STATUSES.has(res.status)) {
+      throw Object.assign(
+        new Error(`Groq fatal ${res.status}: ${detail.slice(0, 200)}`),
+        { status: 502 },
+      );
+    }
+
+    if (RETRY_STATUSES.has(res.status) && attempt < GROQ_MAX_RETRIES) {
       lastErr = Object.assign(new Error(`Groq HTTP ${res.status}`), { status: 502 });
       const retryAfter = Number(res.headers.get("retry-after")) || 0;
       const backoff = retryAfter
@@ -1416,7 +1475,10 @@ async function callGroq({ system, user, maxTokens, temp, model, reqId }) {
       continue;
     }
 
-    throw Object.assign(new Error(`Groq HTTP ${res.status}`), { status: 502 });
+    throw Object.assign(
+      new Error(`Groq HTTP ${res.status}: ${detail.slice(0, 200)}`),
+      { status: 502 },
+    );
   }
 
   throw lastErr || Object.assign(new Error("Groq call failed"), { status: 502 });
@@ -1574,14 +1636,19 @@ async function handleHealth(req, res) {
     success: true,
     status: GROQ_API_KEY ? "ok" : "unconfigured",
     configured: !!GROQ_API_KEY,
+    provider: "groq-chat-completions",
     models: { power: GROQ_MODEL, fast: GROQ_MODEL_FAST },
     tasks: Object.keys(TASK_LIMITS).length,
     hostTasks: [...HOST_TASKS],
     guestTasks: [...GUEST_ALLOWED_TASKS],
     cache: { size: CACHE.size, max: CACHE_MAX, ttlMs: CACHE_TTL_MS },
-    limits: {
-      authedGlobal: { hourly: AUTHED_GLOBAL_HOURLY, daily: AUTHED_GLOBAL_DAILY, tokensDaily: AUTHED_TOKENS_DAILY },
-      guestGlobal: { hourly: GUEST_GLOBAL_HOURLY, daily: GUEST_GLOBAL_DAILY, tokensDaily: GUEST_TOKENS_DAILY },
+    quotas: {
+      authedDaily: { words: AUTHED_DAILY_WORDS, credits: AUTHED_DAILY_CREDITS },
+      guestDaily: { words: GUEST_DAILY_WORDS, credits: GUEST_DAILY_CREDITS },
+    },
+    globalLimits: {
+      authed: { hourly: AUTHED_GLOBAL_HOURLY, daily: AUTHED_GLOBAL_DAILY },
+      guest: { hourly: GUEST_GLOBAL_HOURLY, daily: GUEST_GLOBAL_DAILY },
     },
   });
 }
@@ -1594,6 +1661,8 @@ async function handleScenes(req, res) {
     id,
     hourly: t.hourly,
     daily: t.daily,
+    weight: t.weight,
+    maxOutputWords: t.maxOutputWords,
     model: t.model,
     guest: GUEST_ALLOWED_TASKS.has(id),
     host: HOST_TASKS.has(id),
@@ -1700,19 +1769,21 @@ export default async function handler(req, res) {
       }
     }
 
-    const tq = await checkTokenQuota(actor);
-    if (!tq.ok) {
-      if (tq.limit) res.setHeader("X-RateLimit-Limit", String(tq.limit));
-      res.setHeader("X-RateLimit-Remaining", "0");
-      res.setHeader("X-RateLimit-Scope", tq.scope);
-      if (tq.resetAt) res.setHeader("X-RateLimit-Reset", tq.resetAt);
+    // ── Word + credit quota ──
+    const quota = await checkQuota(actor);
+    if (!quota.ok) {
+      if (quota.limit) res.setHeader("X-Quota-Limit", String(quota.limit));
+      res.setHeader("X-Quota-Remaining", "0");
+      res.setHeader("X-Quota-Scope", quota.scope);
+      if (quota.resetAt) res.setHeader("X-Quota-Reset", quota.resetAt);
       return res.status(429).json({
-        success: false, error: tq.error, scope: tq.scope,
-        limit: tq.limit, used: tq.used, resetAt: tq.resetAt,
+        success: false, error: quota.error, scope: quota.scope,
+        limit: quota.limit, used: quota.used, resetAt: quota.resetAt,
         guest: actor.isGuest,
       });
     }
 
+    // ── Per-task + global call rate limit ──
     const rl = await checkRateLimit(actor, task);
     if (rl.limit) res.setHeader("X-RateLimit-Limit", String(rl.limit));
     res.setHeader("X-RateLimit-Remaining", String(rl.remaining != null ? rl.remaining : 0));
@@ -1747,6 +1818,12 @@ export default async function handler(req, res) {
         success: true, task,
         text: cached.text, artifacts: cached.artifacts,
         guest: actor.isGuest, cached: true,
+        quota: {
+          wordsUsed: quota.wordsUsed,
+          wordsLimit: quota.wordLimit,
+          creditsUsed: quota.creditsUsed,
+          creditsLimit: quota.creditLimit,
+        },
         rateLimit: { limit: rl.limit, remaining: rl.remaining, reset: rl.resetAt || null },
       });
     }
@@ -1767,15 +1844,16 @@ export default async function handler(req, res) {
     }
 
     const modelKey = limits.model === "fast" ? GROQ_MODEL_FAST : GROQ_MODEL;
-    const maxTokens = actor.isGuest
-      ? Math.min(limits.maxTokens, GUEST_MAX_OUTPUT_TOKENS)
-      : limits.maxTokens;
+    const weight = limits.weight || 1;
+    const maxWords = actor.isGuest
+      ? Math.min(limits.maxOutputWords, GUEST_MAX_OUTPUT_WORDS)
+      : limits.maxOutputWords;
 
     let modelRes;
     try {
       modelRes = await callGroq({
         system: prompt.system, user: prompt.user,
-        maxTokens, temp: limits.temp, model: modelKey, reqId,
+        maxWords, temp: limits.temp, model: modelKey, reqId,
       });
     } catch (err) {
       log("ai.model_call_failed", {
@@ -1797,9 +1875,13 @@ export default async function handler(req, res) {
       parsed.text = modelRes.content.trim() || "No response from AI.";
     }
 
-    await recordUsage(actor, task, modelRes.usage);
+    await recordUsage(actor, task, modelRes.usage, weight);
+
     log("ai.task_completed", {
       reqId, task, pid: pid || null, guest: actor.isGuest, key: actor.key,
+      weight,
+      wordsIn: modelRes.usage.promptWords,
+      wordsOut: modelRes.usage.completionWords,
       tokensIn: modelRes.usage.promptTokens,
       tokensOut: modelRes.usage.completionTokens,
       artifacts: parsed.artifacts.length,
@@ -1813,7 +1895,15 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true, task,
       text: parsed.text, artifacts: parsed.artifacts,
-      usage: modelRes.usage, guest: actor.isGuest, cached: false,
+      usage: modelRes.usage,
+      guest: actor.isGuest, cached: false,
+      quota: {
+        wordsUsed: quota.wordsUsed + modelRes.usage.totalWords,
+        wordsLimit: quota.wordLimit,
+        creditsUsed: quota.creditsUsed + weight,
+        creditsLimit: quota.creditLimit,
+        resetAt: quota.resetAt,
+      },
       rateLimit: { limit: rl.limit, remaining: rl.remaining, reset: rl.resetAt || null },
     });
   } catch (err) {
@@ -1840,4 +1930,8 @@ export {
   GUEST_TASK_LIMITS,
   HOST_TASKS,
   ARTIFACT_VALIDATORS,
+  checkQuota,
+  recordUsage,
+  countWords,
+  wordsToTokens,
 };
