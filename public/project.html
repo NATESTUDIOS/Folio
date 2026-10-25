@@ -47,7 +47,7 @@
 })();
 </script>
 
-<link rel="stylesheet" href="/project.css">
+<link rel="stylesheet" href="/css/project.css">
 </head>
 <body>
 
@@ -664,18 +664,30 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   async function apiFetch(url, opts = {}) {
-    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-    if (S.session) headers['Authorization'] = `Bearer ${S.session}`;
-    try {
-      const res = await fetch(url, { ...opts, headers });
-      let data = {};
-      try { data = await res.json(); } catch {}
-      if (res.status === 401) handle401();
-      return { ok: res.ok, status: res.status, data, headers: res.headers };
-    } catch (err) {
-      return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' }, headers: null };
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (S.session) headers['Authorization'] = `Bearer ${S.session}`;
+  try {
+    const res = await fetch(url, { ...opts, headers });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    if (res.status === 401) {
+      try {
+        localStorage.removeItem(STORAGE.session);
+        localStorage.removeItem(STORAGE.user);
+      } catch {}
+      if (!sessionStorage.getItem('folio.authRedirectShown')) {
+        sessionStorage.setItem('folio.authRedirectShown', '1');
+        setTimeout(() => {
+          const next = encodeURIComponent(location.pathname + location.search);
+          location.href = '/register?next=' + next;
+        }, 800);
+      }
     }
+    return { ok: res.ok, status: res.status, data };
+  } catch (err) {
+    return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
   }
+}
 
   // ═══════════════════════════════════════════════════════════
   // TOAST / MODAL / LOADING
@@ -907,55 +919,109 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   function updateModeBanner() {
-    const banner = $('modeBanner');
-    const text = $('modeBannerText');
-    const action = $('modeBannerAction');
-    if (!banner || !text || !action) return;
+  const banner = $('modeBanner');
+  const text = $('modeBannerText');
+  const action = $('modeBannerAction');
+  if (!banner || !text || !action) return;
 
-    const state = S.syncState;
+  const state = S.syncState;
 
-    if (state === 'local' && !S.session) {
-      banner.hidden = false;
-      banner.classList.add('visible');
-      text.textContent = 'Saved only on this device. Sign in to back it up and deploy.';
-      action.textContent = 'Sign in';
+  if (state === 'needs-pull') {
+    banner.hidden = false;
+    banner.classList.add('visible');
+    banner.dataset.kind = 'pull';
+    if (!S.online) {
+      text.textContent = `Offline — ${S.serverFileCount || 0} files on your account. Will sync when you're online.`;
+      action.textContent = 'Sync';
+      action.disabled = true;
+    } else {
+      text.textContent = `${S.serverFileCount || 0} files on your account — not on this device yet.`;
+      action.textContent = 'Sync now';
       action.disabled = false;
-      action.onclick = () => {
-        window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
-      };
-      return;
     }
-    if (state === 'local' && S.session) {
-      banner.hidden = false;
-      banner.classList.add('visible');
-      text.textContent = 'Saved only on this device. Sync to your account.';
-      action.textContent = 'Sync to account';
-      action.disabled = false;
-      action.onclick = () => promoteLocalProject();
-      return;
-    }
-    if (state === 'orphan') {
-      banner.hidden = false;
-      banner.classList.add('visible');
-      text.textContent = 'This project isn\'t on the server yet. Push it to keep your files safe.';
-      action.textContent = 'Push to server';
-      action.disabled = false;
-      action.onclick = () => pushOrphanToServer();
-      return;
-    }
-    if (state === 'cached' || !S.online) {
-      banner.hidden = false;
-      banner.classList.add('visible');
-      text.textContent = 'Offline — showing cached data. Changes will sync when you reconnect.';
-      action.textContent = 'Retry';
-      action.disabled = false;
-      action.onclick = () => location.reload();
-      return;
-    }
-
-    banner.hidden = true;
-    banner.classList.remove('visible');
+    action.onclick = () => pullFromServer();
+    return;
   }
+
+  banner.dataset.kind = 'default';
+
+  if (state === 'local' && !S.session) {
+    banner.hidden = false;
+    banner.classList.add('visible');
+    text.textContent = 'Saved only on this device. Sign in to back it up and deploy.';
+    action.textContent = 'Sign in';
+    action.disabled = false;
+    action.onclick = () => {
+      window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
+    };
+    return;
+  }
+  if (state === 'local' && S.session) {
+    banner.hidden = false;
+    banner.classList.add('visible');
+    text.textContent = 'Saved only on this device. Sync to your account.';
+    action.textContent = 'Sync to account';
+    action.disabled = false;
+    action.onclick = () => promoteLocalProject();
+    return;
+  }
+  if (state === 'orphan') {
+    banner.hidden = false;
+    banner.classList.add('visible');
+    text.textContent = "This project isn't on the server yet. Push it to keep your files safe.";
+    action.textContent = 'Push to server';
+    action.disabled = false;
+    action.onclick = () => pushOrphanToServer();
+    return;
+  }
+  if (state === 'cached' || !S.online) {
+    banner.hidden = false;
+    banner.classList.add('visible');
+    text.textContent = 'Offline — showing cached data. Changes will sync when you reconnect.';
+    action.textContent = 'Retry';
+    action.disabled = false;
+    action.onclick = () => location.reload();
+    return;
+  }
+
+  banner.hidden = true;
+  banner.classList.remove('visible');
+}
+
+// ── Pull handler (Scenario 1) ─────────────────────────────────────────
+async function pullFromServer() {
+  if (!S.online) { toast('Requires internet', 'warning'); return; }
+  if (!S.session) {
+    window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+
+  showLoading('Syncing', 'Pulling files from your account…');
+  try {
+    const result = await hydrateProjectFromServer(S.pid);
+    hideLoading();
+    if (!result.ok) {
+      toast(result.reason || 'Sync failed', 'error', 4000);
+      return;
+    }
+    S.syncState = 'synced';
+    markSynced(S.pid);
+    toast(
+      `Synced ${result.filesWritten} file${result.filesWritten === 1 ? '' : 's'}` +
+      (result.versionsWritten ? `, ${result.versionsWritten} version${result.versionsWritten === 1 ? '' : 's'}` : ''),
+      'success',
+      2400
+    );
+    updateModeBanner();
+    updateHeader();
+    renderPanel();
+    refreshFileCount().catch(() => {});
+    refreshSyncQueueCount().catch(() => {});
+  } catch (err) {
+    hideLoading();
+    toast(err.message || 'Sync failed', 'error', 5000);
+  }
+}
 
   // ═══════════════════════════════════════════════════════════
   // PROJECT ICON HELPERS
@@ -1062,7 +1128,64 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
     if (rail) rail.style.display = '';
     S.projectState = 'normal';
   }
+// ── Last-sync tracking ────────────────────────────────────────────────
+// Stamps a per-project timestamp in localStorage every time we successfully
+// pull or push. Rendered in the header as "Synced 2m ago".
+function markSynced(pid) {
+  if (!pid) return;
+  try { localStorage.setItem('folio.lastSync.' + pid, String(Date.now())); } catch {}
+}
+function readLastSynced(pid) {
+  if (!pid) return 0;
+  try { return Number(localStorage.getItem('folio.lastSync.' + pid) || 0); } catch { return 0; }
+}
 
+// ── Hydrate IDB from server: files + versions ─────────────────────────
+// Single API call. Used by the "Sync now" banner action when IDB has no
+// files for this project (fresh device, cleared storage, new browser).
+async function hydrateProjectFromServer(pid) {
+  if (!pid || !S.online || !S.session) return { ok: false, reason: 'offline' };
+
+  let res;
+  try {
+    res = await apiFetch(API_HOST + '?action=project/hydrate&pid=' + encodeURIComponent(pid));
+  } catch {
+    return { ok: false, reason: 'network' };
+  }
+  if (!res.ok || !res.data?.success) {
+    return { ok: false, reason: res.data?.error || `HTTP ${res.status}` };
+  }
+
+  const files = res.data.files || {};
+  const versions = res.data.versions || {};
+
+  let filesWritten = 0;
+  for (const [path, content] of Object.entries(files)) {
+    if (typeof content !== 'string') continue;
+    try {
+      await IDB.putFile(pid, path, content);
+      filesWritten++;
+    } catch (err) {
+      console.warn('[Hydrate] file write failed:', path, err);
+    }
+  }
+
+  let versionsWritten = 0;
+  for (const [vid, data] of Object.entries(versions)) {
+    try {
+      const existing = await IDB.getVersion(vid);
+      if (existing) continue;
+      await IDB.putVersion({ vid, pid, ...data });
+      versionsWritten++;
+    } catch (err) {
+      console.warn('[Hydrate] version write failed:', vid, err);
+    }
+  }
+
+  markSynced(pid);
+  return { ok: true, filesWritten, versionsWritten };
+}
+  
   // ═══════════════════════════════════════════════════════════
   // LOAD PROJECT
   // ═══════════════════════════════════════════════════════════
@@ -1089,7 +1212,6 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   if (S.session && S.online) {
-    // ✅ FIX: retry up to 3 times before giving up
     let res = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -1097,9 +1219,7 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
       } catch (err) {
         res = { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
       }
-      // Stop retrying on definitive answers
       if (res.ok || res.status === 404 || res.status === 403) break;
-      // Backoff before retry
       if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
     }
 
@@ -1108,8 +1228,25 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
       try { await IDB.putProject(norm); } catch {}
       S.project = { ...res.data.project, ...norm };
       S.isLocalOnly = false;
-      setSyncState('synced');
       cacheProject(S.project);
+
+      // ✅ Scenario 1: server has files but this device doesn't. Prompt.
+      // We do NOT auto-hydrate — the user clicks "Sync now".
+      const serverFileCount = res.data.project.fileCount || 0;
+      let localFileCount = 0;
+      try {
+        const localFiles = await IDB.listFiles(S.pid);
+        localFileCount = localFiles.length;
+      } catch {}
+
+      if (serverFileCount > 0 && localFileCount === 0) {
+        S.serverFileCount = serverFileCount;
+        setSyncState('needs-pull');
+      } else {
+        S.serverFileCount = serverFileCount;
+        setSyncState('synced');
+      }
+
       applyProjectMeta();
       return true;
     }
@@ -1135,8 +1272,6 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
       return false;
     }
 
-    // ✅ FIX: network error path — if we have a local copy, stay in cached mode but
-    // DON'T set 'orphan' (that blocks deploy). Just mark cached.
     if (localProject) {
       const inferredRole = localProject.myRole || (localProject._server ? 'viewer' : 'owner');
       S.project = {
@@ -1145,8 +1280,6 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
         visibility: localProject.visibility || { profile: 'private' },
       };
       S.isLocalOnly = false;
-      // ✅ Keep as 'cached' not 'orphan' so deploy stays enabled.
-      // Deploy's own server-side check will fail with the correct error if the project really doesn't exist.
       setSyncState('cached');
       applyProjectMeta();
       return true;
@@ -1197,39 +1330,55 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   function updateHeader() {
-    $('headerProjectName').textContent = S.project.name || 'Untitled project';
+  $('headerProjectName').textContent = S.project.name || 'Untitled project';
 
-    const slugPart = S.project.slug ? `@${escapeHTML(S.project.slug)}` : '';
-    const updatedPart = S.project.updatedAt ? ` · ${timeAgo(S.project.updatedAt)}` : '';
-    const roleBadge = `<span class="header-role-badge">${S.isOwner ? 'Owner' : escapeHTML(S.role || 'Viewer')}</span>`;
-    const syncBadge = (() => {
-      if (S.syncState === 'local' || S.syncState === 'orphan') return '<span class="header-sync-badge">Not synced</span>';
-      if (S.syncState === 'cached') return '<span class="header-sync-badge cached">Cached</span>';
-      return '';
-    })();
-    const deployBadge = S.project.deployment?.url
-      ? `<span class="header-deploy-badge"><span class="dot"></span>Live</span>`
-      : S.project.deployment?.state === 'OFFLINE'
-        ? `<span class="header-deploy-badge offline">Offline</span>`
-        : '';
+  const slugPart = S.project.slug ? `@${escapeHTML(S.project.slug)}` : '';
+  const updatedPart = S.project.updatedAt ? ` · ${timeAgo(S.project.updatedAt)}` : '';
+  const roleBadge = `<span class="header-role-badge">${S.isOwner ? 'Owner' : escapeHTML(S.role || 'Viewer')}</span>`;
 
-    $('headerProjectSub').innerHTML = `<span class="sub-slug">${slugPart}</span><span class="sub-sep">·</span>${roleBadge}${syncBadge}${deployBadge}<span class="sub-updated">${updatedPart}</span>`;
-
-    document.title = `${S.project.name || 'Project'} — Folio`;
-
-    const deployBtn = $('btnDeploy');
-    if (deployBtn) {
-      if (S.project.deployment?.url) {
-        deployBtn.classList.add('is-live');
-        deployBtn.querySelector('.lbl').textContent = 'Live';
-      } else {
-        deployBtn.classList.remove('is-live');
-        deployBtn.querySelector('.lbl').textContent = 'Deploy';
-      }
+  // Sync indicator reflects the four-state model.
+  const syncBadge = (() => {
+    if (S.syncState === 'needs-pull') {
+      return `<span class="header-sync-badge warn" title="Server has files this device doesn't">Pull needed</span>`;
     }
+    if (S.syncState === 'local') return `<span class="header-sync-badge">Not synced</span>`;
+    if (S.syncState === 'orphan') return `<span class="header-sync-badge">Not on server</span>`;
+    if (S.syncState === 'cached' || !S.online) {
+      return `<span class="header-sync-badge cached">Cached</span>`;
+    }
+    if (S.syncState === 'synced') {
+      const ts = readLastSynced(S.pid);
+      const label = ts ? `Synced ${timeAgo(ts)}` : 'Synced';
+      return `<span class="header-sync-badge ok">${label}</span>`;
+    }
+    return '';
+  })();
 
-    $('btnBell').style.display = S.session ? '' : 'none';
+  const deployBadge = S.project.deployment?.url
+    ? `<span class="header-deploy-badge"><span class="dot"></span>Live</span>`
+    : S.project.deployment?.state === 'OFFLINE'
+      ? `<span class="header-deploy-badge offline">Offline</span>`
+      : '';
+
+  $('headerProjectSub').innerHTML =
+    `<span class="sub-slug">${slugPart}</span><span class="sub-sep">·</span>` +
+    `${roleBadge}${syncBadge}${deployBadge}<span class="sub-updated">${updatedPart}</span>`;
+
+  document.title = `${S.project.name || 'Project'} — Folio`;
+
+  const deployBtn = $('btnDeploy');
+  if (deployBtn) {
+    if (S.project.deployment?.url) {
+      deployBtn.classList.add('is-live');
+      deployBtn.querySelector('.lbl').textContent = 'Live';
+    } else {
+      deployBtn.classList.remove('is-live');
+      deployBtn.querySelector('.lbl').textContent = 'Deploy';
+    }
   }
+
+  $('btnBell').style.display = S.session ? '' : 'none';
+}
 
   // ═══════════════════════════════════════════════════════════
   // TOP TABS
@@ -3156,8 +3305,11 @@ async function generateCoverViaFlier({
 
   async function deployNow() {
   if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
-  // ✅ FIX: only block on local-only projects; server does its own auth check.
   if (S.isLocalOnly) { toast("Local projects can't be deployed — sync to account first", 'warning'); return; }
+  if (S.syncState === 'needs-pull') {
+    toast('Sync files first before deploying', 'warning', 4000);
+    return;
+  }
 
   let files = [];
   try { files = await IDB.listFiles(S.pid); } catch {}
@@ -3177,8 +3329,6 @@ async function generateCoverViaFlier({
     async () => {
       showLoading('Deploying', 'Uploading files…');
       try {
-        // ✅ FIX: Call deploy directly. The server creates the version snapshot internally
-        // (via ensureDeployVersion in handleDeploy). No fragile pre-step that can 403.
         $('loadingDesc').textContent = 'Deploying…';
         const res = await apiFetch(API_HOST + '?action=deploy', {
           method: 'POST',
@@ -3193,7 +3343,6 @@ async function generateCoverViaFlier({
           throw new Error(msg);
         }
 
-        // ✅ Update local state immediately with the response
         const returnedUrl = res.data.url || null;
         if (returnedUrl) {
           const liveDeployment = {
@@ -3208,9 +3357,9 @@ async function generateCoverViaFlier({
           S.project.deployment = liveDeployment;
         }
 
+        markSynced(S.pid);
+
         $('loadingDesc').textContent = 'Confirming…';
-        // Poll for confirmation but don't fail the deploy if polling times out —
-        // the deployment record already exists.
         const live = await pollDeployStatus(S.pid);
         if (live) {
           S.deployState = live;
@@ -3224,13 +3373,14 @@ async function generateCoverViaFlier({
           toast(`${res.data.filesSkipped} file(s) skipped — usually size or invalid path`, 'warning', 4000);
         }
 
+        // ✅ Invalidate cache and re-fetch history so (N/5) badges and
+        // the history list refresh immediately after deploy.
         S.deployCache = { history: null, currentId: null, total: 0, at: 0, maxDeployments: 5 };
-        setTimeout(() => {
-          loadDeployState().then(() => {
-            if (['deployments', 'overview', 'commits'].includes(S.activeTab)) renderPanel();
-            updateHeader();
-          });
-        }, 600);
+        await loadDeployState();
+        await new Promise(r => setTimeout(r, 400));
+
+        if (['deployments', 'overview', 'commits'].includes(S.activeTab)) renderPanel();
+        updateHeader();
       } catch (err) {
         hideLoading();
         toast(err.message || 'Deploy failed', 'error', 5000);
@@ -3413,7 +3563,7 @@ async function generateCoverViaFlier({
         ${history.length === 0
           ? emptyState('clock', 'No deployments', 'Deploy your project to start building history.')
           : `<div class="row-list">${history.map(d => renderDeploymentRow(d, currentId, previewIds)).join('')}</div>
-             <div class="field-hint" style="margin-top:8px;">Deploys keep the ${maxDeployments || 5} most recent snapshots. Older ones are pruned automatically.</div>`}
+             <div class="field-hint" style="margin-top:8px;">Deploys keep the ${maxDeployments || 5} most recent snapshots.${history.length >= (maxDeployments || 5) ? ' You\'re at the limit — the next deploy will prune the oldest.' : ''}</div>`}
       </div>
     </div>
   `;
@@ -3453,37 +3603,96 @@ async function generateCoverViaFlier({
       if (url) window.open(url, '_blank', 'noopener');
     });
   });
-  panel.querySelectorAll('[data-copy-preview]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const url = buildProjectUrl({ deploymentId: btn.dataset.copyPreview });
-      if (url && copyToClipboard(url)) toast('Preview URL copied', 'success', 1200);
-      else toast('Copy failed', 'error');
+    panel.querySelectorAll('[data-preview-menu]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDeploymentLinks(btn.dataset.previewMenu, btn);
     });
   });
 }
 
-  function renderDeploymentRow(d, currentId, previewIds) {
-    const isCurrent = d.id === currentId;
-    const canPreview = previewIds.has(d.id);
-    const hasSnapshot = d.hasSnapshot === true;
-    const isLegacy = !d.versionId;
-    return `<div class="row-item">
-      <div class="row-icon">${svg(isCurrent ? 'check' : isLegacy ? 'file' : 'rocket', 13, 2.2)}</div>
-      <div class="row-content">
-        <div class="row-title">${d.versionId ? `v${escapeHTML(d.versionId.slice(-6))}` : 'Legacy deploy'}
-          ${isCurrent ? '<span class="badge success" style="margin-left:5px;font-size:8px;">CURRENT</span>' : ''}
-          ${!hasSnapshot ? '<span class="badge neutral" style="margin-left:5px;font-size:8px;">NO SNAPSHOT</span>' : ''}
-        </div>
-        <div class="row-sub">${timeAgo(d.deployedAt)} · ${escapeHTML(d.state || 'READY')}</div>
-      </div>
-      <div class="row-actions">
-        ${canPreview ? `<button class="btn btn-ghost btn-sm btn-icon" data-copy-preview="${escapeAttr(d.id)}" aria-label="Copy preview URL" title="Copy preview URL">${svg('copy', 10, 2.2)}</button>` : ''}
-        ${canPreview ? `<button class="btn btn-ghost btn-sm btn-icon" data-preview-deploy="${escapeAttr(d.id)}" aria-label="Preview" title="Preview">${svg('eye', 10, 2.2)}</button>` : ''}
-        ${S.isEditor && !isCurrent && d.versionId && hasSnapshot ? `<button class="btn btn-ghost btn-sm btn-icon" data-redeploy="${escapeAttr(d.versionId)}" aria-label="Redeploy">${svg('refresh', 10, 2.2)}</button>` : ''}
-        ${S.isOwner ? `<button class="btn btn-ghost btn-sm btn-icon" data-delete-deploy="${escapeAttr(d.id)}" aria-label="Delete" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>` : ''}
-      </div>
-    </div>`;
+function openDeploymentLinks(deploymentId, anchor) {
+  const urls = buildDeploymentUrls(deploymentId);
+  if (!urls) { toast('URLs unavailable — missing username or slug', 'warning'); return; }
+
+  const existing = document.querySelector('.deployment-links-popover');
+  if (existing) existing.remove();
+
+  const pop = el('div', { class: 'deployment-links-popover' });
+  const rows = [
+    { label: 'Preview (clean URL)',   value: urls.clean, icon: 'eye' },
+    { label: 'Preview (direct)',      value: urls.serve, icon: 'code' },
+    { label: 'Open in new tab',       value: urls.clean, icon: 'external', open: true },
+  ];
+  for (const row of rows) {
+    const btn = el('button', {
+      class: 'deployment-links-item', type: 'button',
+      onclick: () => {
+        if (row.open) {
+          window.open(row.value, '_blank', 'noopener');
+        } else {
+          if (copyToClipboard(row.value)) toast('Copied', 'success', 1000);
+          else toast('Copy failed', 'error');
+        }
+        pop.remove();
+      },
+    },
+      el('span', { class: 'deployment-links-icon' }, ''),
+      el('span', { class: 'deployment-links-label' }, row.label),
+      el('code', { class: 'deployment-links-value' }, row.value)
+    );
+    btn.querySelector('.deployment-links-icon').innerHTML = svg(row.icon, 12, 2.2);
+    pop.appendChild(btn);
   }
+
+  const rect = anchor.getBoundingClientRect();
+  pop.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+  pop.style.left = Math.max(8, rect.right - 300 + window.scrollX) + 'px';
+  document.body.appendChild(pop);
+
+  setTimeout(() => {
+    document.addEventListener('click', function handler(ev) {
+      if (!pop.contains(ev.target) && ev.target !== anchor) {
+        pop.remove();
+        document.removeEventListener('click', handler);
+      }
+    });
+  }, 50);
+}
+
+  function buildDeploymentUrls(deploymentId) {
+  const user = getOwnerUsername();
+  const slug = S.project?.slug || '';
+  if (!user || !slug) return null;
+  const base = `${BASE_URL}/${encodeURIComponent(user)}/project/${encodeURIComponent(slug)}/`;
+  return {
+    clean: base + '?from=' + encodeURIComponent(deploymentId),
+    serve: `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(S.pid)}&path=index.html&from=${encodeURIComponent(deploymentId)}`,
+    bare:  base,
+  };
+}
+
+function renderDeploymentRow(d, currentId, previewIds) {
+  const isCurrent = d.id === currentId;
+  const canPreview = previewIds.has(d.id);
+  const hasSnapshot = d.hasSnapshot === true;
+  const isLegacy = !d.versionId;
+  return `<div class="row-item">
+    <div class="row-icon">${svg(isCurrent ? 'check' : isLegacy ? 'file' : 'rocket', 13, 2.2)}</div>
+    <div class="row-content">
+      <div class="row-title">${d.versionId ? `v${escapeHTML(d.versionId.slice(-6))}` : 'Legacy deploy'}
+        ${isCurrent ? '<span class="badge success" style="margin-left:5px;font-size:8px;">CURRENT</span>' : ''}
+        ${!hasSnapshot ? '<span class="badge neutral" style="margin-left:5px;font-size:8px;">NO SNAPSHOT</span>' : ''}
+      </div>
+      <div class="row-sub">${timeAgo(d.deployedAt)} · ${escapeHTML(d.state || 'READY')}</div>
+    </div>
+    <div class="row-actions">
+      ${canPreview ? `<button class="btn btn-ghost btn-sm btn-icon" data-preview-menu="${escapeAttr(d.id)}" aria-label="Deployment links" title="Deployment links">${svg('link', 10, 2.2)}</button>` : ''}
+      ${S.isEditor && !isCurrent && d.versionId && hasSnapshot ? `<button class="btn btn-ghost btn-sm btn-icon" data-redeploy="${escapeAttr(d.versionId)}" aria-label="Redeploy" title="Redeploy">${svg('refresh', 10, 2.2)}</button>` : ''}
+      ${S.isOwner ? `<button class="btn btn-ghost btn-sm btn-icon" data-delete-deploy="${escapeAttr(d.id)}" aria-label="Delete" title="Delete" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>` : ''}
+    </div>
+  </div>`;
+}
 
   async function confirmDeleteDeployment(deploymentId) {
     if (!S.isOwner || !S.online) return;
