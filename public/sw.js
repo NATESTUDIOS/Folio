@@ -8,7 +8,7 @@
 //   ✅ MUST bump this on every deploy of sw.js, otherwise the browser
 //      installs the new worker but caches into the same CACHE_NAME,
 //      causing mixed stale/fresh state.
-const CACHE_VERSION = '2026-10-22-3';
+const CACHE_VERSION = '2026-10-25-1';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
 
@@ -66,6 +66,8 @@ const CACHED_FILES = [
 
   // ── Scripts ─────────────────────────────────────────────
   '/install.js',
+  '/js/ai.js',
+  '/js/create-project.js',
   '/update.js',
   '/fcm-client.js',
   '/notifications.js',
