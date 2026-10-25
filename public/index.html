@@ -56,7 +56,7 @@
 })();
 </script>
 
-<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
 
@@ -104,6 +104,7 @@
         <span class="seg current">No project</span>
       </nav>
       <span class="dirty-dot" id="dirtyDot"></span>
+      <span class="header-sync-badge" id="headerSyncBadge" hidden></span>
       <span class="header-guest-badge" id="guestBadge">Guest</span>
     </div>
     <div class="header-right">
@@ -141,9 +142,7 @@
       <div class="sidebar-body" id="sidebarBody"></div>
     </aside>
     <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-    
-<aside class="ai-panel-mount" id="aiPanelMount" hidden></aside>
-    
+
     <main class="editor-area" id="editorArea">
       <div class="editor-tabs" id="tabs" style="display:none;"></div>
       <div class="editor-container" id="editorContainer"></div>
@@ -247,28 +246,23 @@
         <span class="label">Host</span>
       </button>
       <button class="toolbar-btn" id="tbFoldAll" aria-label="Collapse all code">
-  <svg viewBox="0 0 24 24">
-    <polyline points="4 14 10 14 10 20"/>
-    <polyline points="20 10 14 10 14 4"/>
-    <line x1="14" y1="10" x2="21" y2="3"/>
-    <line x1="3" y1="21" x2="10" y2="14"/>
-  </svg>
-  <span class="label">Collapse</span>
-</button>
-<button class="toolbar-btn" id="tbUnfoldAll" aria-label="Expand all code">
-  <svg viewBox="0 0 24 24">
-    <polyline points="15 3 21 3 21 9"/>
-    <polyline points="9 21 3 21 3 15"/>
-    <line x1="21" y1="3" x2="14" y2="10"/>
-    <line x1="3" y1="21" x2="10" y2="14"/>
-  </svg>
-  <span class="label">Expand</span>
-</button>
-      <button class="toolbar-btn" id="tbAI" aria-label="AI assistant">
-        <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
-        <span class="label">Lens</span>
+        <svg viewBox="0 0 24 24">
+          <polyline points="4 14 10 14 10 20"/>
+          <polyline points="20 10 14 10 14 4"/>
+          <line x1="14" y1="10" x2="21" y2="3"/>
+          <line x1="3" y1="21" x2="10" y2="14"/>
+        </svg>
+        <span class="label">Collapse</span>
       </button>
-    </div>
+      <button class="toolbar-btn" id="tbUnfoldAll" aria-label="Expand all code">
+        <svg viewBox="0 0 24 24">
+          <polyline points="15 3 21 3 21 9"/>
+          <polyline points="9 21 3 21 3 15"/>
+          <line x1="21" y1="3" x2="14" y2="10"/>
+          <line x1="3" y1="21" x2="10" y2="14"/>
+        </svg>
+        <span class="label">Expand</span>
+      </button>
     </div>
   </div>
 
@@ -304,6 +298,15 @@
   <button class="close" id="guestBannerClose" aria-label="Dismiss">
     <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
+</div>
+
+<div class="sync-banner" id="syncBanner" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="23 4 23 10 17 10"/>
+    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+  </svg>
+  <div class="txt" id="syncBannerText"><strong>Files on your account.</strong> Sync to this device to edit.</div>
+  <button class="sign-in" id="syncBannerBtn" type="button">Sync now</button>
 </div>
 
 <div class="offline-banner" id="offlineBanner">
@@ -483,9 +486,9 @@
 <script type="module">
 "use strict";
 import { initCreateProject, createNewProject, handleNewProjectImageReturn } from '/js/create-project.js';
-  import { createAIPanel, openContextMenu } from '/js/ai.js';
+
 // ═══════════════════════════════════════════════════════════
-// THEME (unchanged)
+// THEME
 // ═══════════════════════════════════════════════════════════
 
 function applyTheme(pref) {
@@ -607,11 +610,10 @@ const S = {
   ctrlLatch: false,
   deploymentCache: new Map(),
   notesCorruptWarned: false,
+  syncState: 'idle',      // 'idle' | 'synced' | 'needs-pull' | 'needs-push' | 'offline'
+  serverFileCount: 0,
 };
 
-
-  
-  
 // ═══════════════════════════════════════════════════════════
 // DOM HELPERS
 // ═══════════════════════════════════════════════════════════
@@ -782,12 +784,17 @@ function handle401() {
     localStorage.removeItem(STORAGE.session);
     localStorage.removeItem(STORAGE.user);
   } catch {}
+  S.session = null;
+  S.user = null;
+  S.isGuest = true;
   if (!sessionStorage.getItem('folio.authRedirectShown')) {
     sessionStorage.setItem('folio.authRedirectShown', '1');
     setTimeout(() => {
       const next = encodeURIComponent(location.pathname + location.search);
       location.href = '/register?next=' + next;
     }, 800);
+  } else {
+    try { applyGuestState(); } catch {}
   }
 }
 
@@ -833,7 +840,7 @@ window.addEventListener('error', (e) => reportClientError(e.message, e.error?.st
 window.addEventListener('unhandledrejection', (e) => reportClientError(String(e.reason?.message || e.reason), e.reason?.stack));
 
 // ═══════════════════════════════════════════════════════════
-// TOAST (queue — max 3 visible, cap total stack)
+// TOAST
 // ═══════════════════════════════════════════════════════════
 
 const toastQueue = [];
@@ -1050,7 +1057,7 @@ function promptSheet(title, placeholder = '', defaultValue = '') {
 }
 
 // ═══════════════════════════════════════════════════════════
-// INDEXEDDB (retry on transient failures)
+// INDEXEDDB
 // ═══════════════════════════════════════════════════════════
 
 let dbConn = null;
@@ -1363,6 +1370,7 @@ function normalizeServerProject(p) {
     storageLimit: p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT,
     deployment: p.deployment || null,
     ownerUsername: p.ownerUsername || null,
+    fileCount: typeof p.fileCount === 'number' ? p.fileCount : null,
     _server: true,
     _serverData: p,
   };
@@ -1396,6 +1404,207 @@ function hideProjectLoader() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// SYNC HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function markSynced(pid) {
+  if (!pid) return;
+  try { localStorage.setItem('folio.lastSync.' + pid, String(Date.now())); } catch {}
+}
+function readLastSynced(pid) {
+  if (!pid) return 0;
+  try { return Number(localStorage.getItem('folio.lastSync.' + pid) || 0); } catch { return 0; }
+}
+
+function setSyncState(next) {
+  S.syncState = next;
+  updateSyncBadge();
+}
+
+function updateSyncBadge() {
+  const badge = $('headerSyncBadge');
+  if (!badge) return;
+  const state = S.syncState;
+  if (!S.currentProject || state === 'idle') {
+    badge.hidden = true;
+    badge.textContent = '';
+    badge.className = 'header-sync-badge';
+    return;
+  }
+  badge.hidden = false;
+  if (state === 'needs-pull') {
+    badge.className = 'header-sync-badge warn';
+    badge.textContent = 'Pull needed';
+    badge.title = 'Server has files this device doesn\'t';
+  } else if (state === 'needs-push') {
+    badge.className = 'header-sync-badge warn';
+    badge.textContent = 'Sync needed';
+    badge.title = 'Local changes not yet on the server';
+  } else if (state === 'offline') {
+    badge.className = 'header-sync-badge cached';
+    badge.textContent = 'Offline';
+    badge.title = 'Offline — showing cached data';
+  } else {
+    const ts = readLastSynced(S.currentProject.pid);
+    badge.className = 'header-sync-badge ok';
+    badge.textContent = ts ? `Synced ${relativeTime(ts).toLowerCase()}` : 'Synced';
+    badge.title = ts ? `Last synced ${new Date(ts).toLocaleString()}` : 'Synced';
+  }
+}
+
+function showSyncBanner(fileCount) {
+  const banner = $('syncBanner');
+  const txt = $('syncBannerText');
+  const btn = $('syncBannerBtn');
+  if (!banner || !txt || !btn) return;
+  S.serverFileCount = Number(fileCount) || 0;
+  if (!S.online) {
+    txt.innerHTML = `<strong>Offline.</strong> ${S.serverFileCount} file${S.serverFileCount === 1 ? '' : 's'} on your account — will sync when you're online.`;
+    btn.disabled = true;
+    btn.textContent = 'Sync';
+  } else {
+    txt.innerHTML = `<strong>${S.serverFileCount} file${S.serverFileCount === 1 ? '' : 's'}</strong> on your account — not on this device yet.`;
+    btn.disabled = false;
+    btn.textContent = 'Sync now';
+  }
+  banner.hidden = false;
+  banner.classList.add('visible');
+}
+
+function hideSyncBanner() {
+  const banner = $('syncBanner');
+  if (!banner) return;
+  banner.classList.remove('visible');
+  banner.hidden = true;
+}
+
+async function hydrateProjectFromServer(pid) {
+  if (!pid || !S.online || !S.session) return { ok: false, reason: 'offline' };
+  let res;
+  try {
+    res = await apiFetch(API_HOST + '?action=project/hydrate&pid=' + encodeURIComponent(pid));
+  } catch {
+    return { ok: false, reason: 'network' };
+  }
+  if (!res.ok || !res.data?.success) {
+    return { ok: false, reason: res.data?.error || `HTTP ${res.status}` };
+  }
+  const files = res.data.files || {};
+  const versions = res.data.versions || {};
+  let filesWritten = 0;
+  for (const [path, content] of Object.entries(files)) {
+    if (typeof content !== 'string') continue;
+    try { await db.putFile(pid, path, content); filesWritten++; }
+    catch (err) { console.warn('[Hydrate] file write failed:', path, err); }
+  }
+  let versionsWritten = 0;
+  for (const [vid, data] of Object.entries(versions)) {
+    try {
+      const existing = await db.getVersion(vid);
+      if (existing) continue;
+      await db.putVersion({ vid, pid, ...data });
+      versionsWritten++;
+    } catch (err) { console.warn('[Hydrate] version write failed:', vid, err); }
+  }
+  markSynced(pid);
+  return { ok: true, filesWritten, versionsWritten };
+}
+
+async function pullFromServerInEditor() {
+  if (!S.currentProject) return;
+  if (!S.online) { toast('Requires internet', 'warning'); return; }
+  if (!S.session) {
+    window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+  const pid = S.currentProject.pid;
+  showProjectLoader('Syncing files…', 'Pulling from your account');
+  try {
+    const result = await hydrateProjectFromServer(pid);
+    hideProjectLoader();
+    if (!result.ok) {
+      toast(result.reason || 'Sync failed', 'error', 4000);
+      return;
+    }
+    hideSyncBanner();
+    setSyncState('synced');
+    toast(
+      `Synced ${result.filesWritten} file${result.filesWritten === 1 ? '' : 's'}` +
+      (result.versionsWritten ? `, ${result.versionsWritten} version${result.versionsWritten === 1 ? '' : 's'}` : ''),
+      'success', 2400
+    );
+    // Refresh whatever is visible
+    renderSidebar();
+    refreshInfoIfOpen();
+    const files = await db.listFiles(pid).catch(() => []);
+    const realFiles = files.filter(f => !isSystemFile(f.path));
+    if (realFiles.length > 0) {
+      let lastPath = null;
+      try { lastPath = localStorage.getItem(STORAGE.lastFile); } catch {}
+      const target = (lastPath && realFiles.find(f => f.path === lastPath)) || realFiles[0];
+      await workspace.openFile(target.path);
+    }
+    renderEmptyRecent();
+  } catch (err) {
+    hideProjectLoader();
+    toast(err.message || 'Sync failed', 'error', 5000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// COMMIT QUEUE
+// ═══════════════════════════════════════════════════════════
+
+const COMMIT_QUEUE_LS_KEY = 'folio.commitQueue';
+
+async function enqueueCommitToServer(pid, vid, versionData) {
+  try {
+    const raw = localStorage.getItem(COMMIT_QUEUE_LS_KEY);
+    const queue = raw ? JSON.parse(raw) : [];
+    queue.push({ pid, vid, versionData, at: Date.now(), attempts: 0 });
+    if (queue.length > 50) queue.splice(0, queue.length - 50);
+    localStorage.setItem(COMMIT_QUEUE_LS_KEY, JSON.stringify(queue));
+  } catch (err) {
+    console.warn('[CommitQueue] enqueue failed:', err);
+  }
+}
+
+let _commitQueueFlushing = false;
+async function flushCommitQueue() {
+  if (_commitQueueFlushing) return;
+  if (!S.session || !navigator.onLine) return;
+  let queue;
+  try {
+    const raw = localStorage.getItem(COMMIT_QUEUE_LS_KEY);
+    queue = raw ? JSON.parse(raw) : [];
+  } catch { return; }
+  if (!queue.length) return;
+  _commitQueueFlushing = true;
+  const remaining = [];
+  for (const item of queue) {
+    if (/^local_/.test(item.pid)) continue;
+    try {
+      const res = await apiFetch(API_HOST + '?action=project/sync-back', {
+        method: 'POST',
+        body: JSON.stringify({ pid: item.pid, versions: { [item.vid]: item.versionData } }),
+      });
+      if (res.ok && res.data?.success) continue;
+      if (res.status === 400 || res.status === 403 || res.status === 404) {
+        console.warn('[CommitQueue] dropped', item.vid, '— server said', res.status);
+        continue;
+      }
+      item.attempts = (item.attempts || 0) + 1;
+      if (item.attempts < 5) remaining.push(item);
+    } catch {
+      item.attempts = (item.attempts || 0) + 1;
+      if (item.attempts < 5) remaining.push(item);
+    }
+  }
+  try { localStorage.setItem(COMMIT_QUEUE_LS_KEY, JSON.stringify(remaining)); } catch {}
+  _commitQueueFlushing = false;
+}
+
+// ═══════════════════════════════════════════════════════════
 // PROJECT OPEN
 // ═══════════════════════════════════════════════════════════
 
@@ -1405,11 +1614,15 @@ async function openProjectById(pid, { showLoader = true } = {}) {
   let project = null;
   try { project = await db.getProject(pid); } catch {}
 
-  if (!project && S.session && navigator.onLine) {
+  let fileCount = project?.fileCount ?? null;
+
+  if (S.session && navigator.onLine && (!project || project._server)) {
     try {
       const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(pid));
       if (res?.ok && res.data?.success && res.data.project) {
-        project = normalizeServerProject(res.data.project);
+        const serverProject = normalizeServerProject(res.data.project);
+        project = { ...(project || {}), ...serverProject };
+        fileCount = serverProject.fileCount;
         try { await db.putProject(project); } catch {}
       }
     } catch {}
@@ -1426,6 +1639,18 @@ async function openProjectById(pid, { showLoader = true } = {}) {
     await workspace.openProject(project);
     setPidInUrl(project.pid);
     try { localStorage.setItem(STORAGE.lastProject, project.pid); } catch {}
+
+    // Detect needs-pull after openProject ran (which checked IDB)
+    const files = await db.listFiles(project.pid).catch(() => []);
+    const realFiles = files.filter(f => !isSystemFile(f.path));
+    if (realFiles.length === 0 && fileCount && fileCount > 0 && S.session && navigator.onLine) {
+      setSyncState('needs-pull');
+      showSyncBanner(fileCount);
+    } else {
+      hideSyncBanner();
+      setSyncState(navigator.onLine ? 'synced' : 'offline');
+    }
+
     renderEmptyRecent();
     if (showLoader) hideProjectLoader();
     return project;
@@ -1580,38 +1805,37 @@ const cm = {
   _loading: null,
   _initToken: 0,
   _prettierCache: new Map(),
-  
 
   async loadModules() {
     if (this.modules) return this.modules;
     if (this._loading) return this._loading;
 
     this._loading = (async () => {
-  const [codemirrorPkg, oneDark, searchMod, commandsMod, viewMod, stateMod, lintMod, mergeMod, languageMod] = await Promise.all([
-    import('codemirror/codemirror/dist/index.js'),
-    import('codemirror/theme-one-dark/dist/index.js'),
-    import('codemirror/search/dist/index.js'),
-    import('codemirror/commands/dist/index.js'),
-    import('codemirror/view/dist/index.js'),
-    import('codemirror/state/dist/index.js'),
-    import('codemirror/lint/dist/index.js'),
-    import('codemirror/merge/dist/index.js'),
-    import('codemirror/language/dist/index.js'),
-  ]);
+      const [codemirrorPkg, oneDark, searchMod, commandsMod, viewMod, stateMod, lintMod, mergeMod, languageMod] = await Promise.all([
+        import('codemirror/codemirror/dist/index.js'),
+        import('codemirror/theme-one-dark/dist/index.js'),
+        import('codemirror/search/dist/index.js'),
+        import('codemirror/commands/dist/index.js'),
+        import('codemirror/view/dist/index.js'),
+        import('codemirror/state/dist/index.js'),
+        import('codemirror/lint/dist/index.js'),
+        import('codemirror/merge/dist/index.js'),
+        import('codemirror/language/dist/index.js'),
+      ]);
 
-  this.modules = {
-    basicSetup: codemirrorPkg.basicSetup,
-    EditorView: viewMod.EditorView,
-    EditorState: stateMod.EditorState,
-    keymap: viewMod.keymap,
-    oneDark: oneDark.oneDark,
-    foldGutter: languageMod.foldGutter,
-    foldAll: languageMod.foldAll,
-    unfoldAll: languageMod.unfoldAll,
-    foldCode: languageMod.foldCode,
-    unfoldCode: languageMod.unfoldCode,
-    foldKeymap: languageMod.foldKeymap,
-  };
+      this.modules = {
+        basicSetup: codemirrorPkg.basicSetup,
+        EditorView: viewMod.EditorView,
+        EditorState: stateMod.EditorState,
+        keymap: viewMod.keymap,
+        oneDark: oneDark.oneDark,
+        foldGutter: languageMod.foldGutter,
+        foldAll: languageMod.foldAll,
+        unfoldAll: languageMod.unfoldAll,
+        foldCode: languageMod.foldCode,
+        unfoldCode: languageMod.unfoldCode,
+        foldKeymap: languageMod.foldKeymap,
+      };
       this.commands = {
         undo: commandsMod.undo,
         redo: commandsMod.redo,
@@ -1693,55 +1917,55 @@ const cm = {
   },
 
   async init(container, content, path) {
-  const m = await this.loadModules();
-  const token = ++this._initToken;
-  if (this.view) { this.view.destroy(); this.view = null; }
+    const m = await this.loadModules();
+    const token = ++this._initToken;
+    if (this.view) { this.view.destroy(); this.view = null; }
 
-  const extensions = [
-    m.basicSetup,
-    m.oneDark,
-    this.buildTheme(),
-    m.EditorView.contentAttributes.of({ inputstyle: 'contenteditable' }),
-    m.foldGutter(),
-    m.keymap.of(m.foldKeymap),
-  ];
+    const extensions = [
+      m.basicSetup,
+      m.oneDark,
+      this.buildTheme(),
+      m.EditorView.contentAttributes.of({ inputstyle: 'contenteditable' }),
+      m.foldGutter(),
+      m.keymap.of(m.foldKeymap),
+    ];
 
-  const langExt = await this.getLanguageExtension(path);
-  if (langExt && token === this._initToken) extensions.push(langExt);
+    const langExt = await this.getLanguageExtension(path);
+    if (langExt && token === this._initToken) extensions.push(langExt);
 
-  if (S.prefs.wordWrap) extensions.push(m.EditorView.lineWrapping);
-  if (!S.prefs.lineNumbers) extensions.push(m.EditorView.theme({ '.cm-lineNumbers': { display: 'none' } }));
+    if (S.prefs.wordWrap) extensions.push(m.EditorView.lineWrapping);
+    if (!S.prefs.lineNumbers) extensions.push(m.EditorView.theme({ '.cm-lineNumbers': { display: 'none' } }));
 
-  if (this.detectLanguage(path) === 'json' && this.lintMod) {
-    try {
-      const m2 = await import('codemirror/lang-json/dist/index.js');
-      if (m2.jsonParseLinter && token === this._initToken) {
-        extensions.push(this.lintMod.linter(m2.jsonParseLinter()));
+    if (this.detectLanguage(path) === 'json' && this.lintMod) {
+      try {
+        const m2 = await import('codemirror/lang-json/dist/index.js');
+        if (m2.jsonParseLinter && token === this._initToken) {
+          extensions.push(this.lintMod.linter(m2.jsonParseLinter()));
+        }
+      } catch {}
+    }
+
+    extensions.push(m.EditorView.updateListener.of((update) => {
+      if (update.docChanged) {
+        if (token !== this._initToken) return;
+        workspace.markDirty();
+        this.scheduleAutosave();
       }
-    } catch {}
-  }
+    }));
 
-  extensions.push(m.EditorView.updateListener.of((update) => {
-    if (update.docChanged) {
-      if (token !== this._initToken) return;
-      workspace.markDirty();
-      this.scheduleAutosave();
-    }
-  }));
+    const state = m.EditorState.create({ doc: content || '', extensions });
+    if (token !== this._initToken) return null;
 
-  const state = m.EditorState.create({ doc: content || '', extensions });
-  if (token !== this._initToken) return null;
+    this.view = new m.EditorView({ state, parent: container });
 
-  this.view = new m.EditorView({ state, parent: container });
+    this.view.contentDOM.addEventListener('blur', () => {
+      if (workspace.activeFile && workspace.dirtyFiles.has(workspace.activeFile)) {
+        workspace.saveActiveFile({ silent: true });
+      }
+    });
 
-  this.view.contentDOM.addEventListener('blur', () => {
-    if (workspace.activeFile && workspace.dirtyFiles.has(workspace.activeFile)) {
-      workspace.saveActiveFile({ silent: true });
-    }
-  });
-
-  return this.view;
-},
+    return this.view;
+  },
 
   scheduleAutosave() {
     if (this._autosaveTimer) clearTimeout(this._autosaveTimer);
@@ -1801,15 +2025,15 @@ const cm = {
   },
 
   foldAll() {
-  if (!this.view || !this.modules) return;
-  this.modules.foldAll(this.view);
-  this.view.focus();
-},
-unfoldAll() {
-  if (!this.view || !this.modules) return;
-  this.modules.unfoldAll(this.view);
-  this.view.focus();
-},
+    if (!this.view || !this.modules) return;
+    this.modules.foldAll(this.view);
+    this.view.focus();
+  },
+  unfoldAll() {
+    if (!this.view || !this.modules) return;
+    this.modules.unfoldAll(this.view);
+    this.view.focus();
+  },
   async formatCurrent() {
     if (!this.view || !workspace.activeFile) { toast('Open a file first', 'info'); return; }
     const lang = this.detectLanguage(workspace.activeFile);
@@ -1997,11 +2221,21 @@ const workspace = {
       try { lastPath = localStorage.getItem(STORAGE.lastFile); } catch {}
       const target = (lastPath && realFiles.find(f => f.path === lastPath)) || realFiles[0];
       await this.openFile(target.path);
-  } else {
-    showEmpty('No files yet — create one from the sidebar');
-  }
-  refreshAIFileCache().catch(function () {});
-},
+      hideSyncBanner();
+      setSyncState(navigator.onLine ? 'synced' : 'offline');
+    } else {
+      const serverFileCount = project.fileCount;
+      if (S.session && navigator.onLine && typeof serverFileCount === 'number' && serverFileCount > 0) {
+        showEmpty('Files on your account — sync to edit');
+        showSyncBanner(serverFileCount);
+        setSyncState('needs-pull');
+      } else {
+        showEmpty('No files yet — create one from the sidebar');
+        hideSyncBanner();
+        setSyncState(navigator.onLine ? 'synced' : 'offline');
+      }
+    }
+  },
 
   async openFile(path) {
     if (!S.currentProject) return;
@@ -2042,13 +2276,12 @@ const workspace = {
     }
 
     try {
-  container.innerHTML = '';
-  await cm.init(container, file.content, path);
-  loading?.classList.add('hidden');
-  empty?.classList.add('hidden');
-  updateDirtyDot();
-  wireAIContextMenu();
-} catch (err) {
+      container.innerHTML = '';
+      await cm.init(container, file.content, path);
+      loading?.classList.add('hidden');
+      empty?.classList.add('hidden');
+      updateDirtyDot();
+    } catch (err) {
       console.error('[Workspace] Editor failed:', err);
       loading?.classList.add('hidden');
       showEditorError();
@@ -2116,9 +2349,8 @@ const workspace = {
       updateDirtyDot();
       updateTabs();
       refreshInfoIfOpen();
-        if (!silent) { toast(S.isGuest ? 'Saved locally' : 'Saved', 'success'); haptic(6); }
-  refreshAIFileCache().catch(function () {});
-} catch (err) {
+      if (!silent) { toast(S.isGuest ? 'Saved locally' : 'Saved', 'success'); haptic(6); }
+    } catch (err) {
       if (err?.name === 'QuotaExceededError') {
         toast('Storage full. Delete old versions or projects.', 'error', 8000);
       } else {
@@ -2143,7 +2375,7 @@ const workspace = {
     haptic(10);
   },
 };
-  
+
 initCreateProject({
   apiFetch,
   db,
@@ -2162,159 +2394,6 @@ initCreateProject({
   getSession: () => S.session,
 });
 
-  // ═══════════════════════════════════════════════════════════
-// AI PANEL INTEGRATION
-// ═══════════════════════════════════════════════════════════
-
-S.aiFileCache = [];
-
-function buildAIContext() {
-  const ctx = {
-    pid: S.currentProject ? S.currentProject.pid : null,
-    activeFile: S.activeFile || null,
-    selection: '',
-    content: '',
-    files: S.aiFileCache || [],
-    projectName: S.currentProject ? (S.currentProject.name || '') : '',
-    projectDescription: S.currentProject ? (S.currentProject.description || '') : '',
-    diff: '',
-    log: '',
-    focus: '',
-  };
-  if (cm.view) {
-    try {
-      ctx.selection = cm.getSelection() || '';
-      ctx.content = cm.getContent() || '';
-    } catch (e) {
-      // ignore
-    }
-  }
-  return ctx;
-}
-
-async function refreshAIFileCache() {
-  if (!S.currentProject) {
-    S.aiFileCache = [];
-    return;
-  }
-  try {
-    const files = await db.listFiles(S.currentProject.pid);
-    S.aiFileCache = files
-      .filter(f => !isSystemFile(f.path))
-      .map(f => ({ path: f.path, content: f.content || '' }));
-  } catch (e) {
-    S.aiFileCache = [];
-  }
-}
-
-let aiPanel = null;
-
-function ensureAIPanel() {
-  if (aiPanel) return aiPanel;
-  const mount = document.getElementById('aiPanelMount');
-  if (!mount) return null;
-
-  aiPanel = createAIPanel({
-    mount: mount,
-    deps: {
-      apiFetch: apiFetch,
-      idb: db,
-      toast: toast,
-      context: buildAIContext,
-      onOpenFile: async function (path) {
-        if (!S.currentProject) return;
-        if (path === S.activeFile) {
-          S.dirtyFiles.delete(path);
-        }
-        await workspace.openFile(path);
-        await refreshAIFileCache();
-
-        if (S.session && navigator.onLine && S.currentProject._server) {
-          const file = await db.getFile(S.currentProject.pid, path).catch(function () { return null; });
-          if (file) {
-            apiFetch(API_HOST + '?action=project/sync-back', {
-              method: 'POST',
-              body: JSON.stringify({
-                pid: S.currentProject.pid,
-                files: { [path]: file.content },
-              }),
-            }).catch(function () {});
-          }
-        }
-      },
-      onPrefillCommit: function (prefill) {
-        openCommitDialog(prefill);
-      },
-      onPrefillDeploy: function (prefill) {
-        hostProject(prefill);
-      },
-    },
-  });
-  return aiPanel;
-}
-
-function toggleAIPanel(force) {
-  const mount = document.getElementById('aiPanelMount');
-  if (!mount) return;
-  const panel = ensureAIPanel();
-  if (!panel) return;
-
-  const shouldOpen = (typeof force === 'boolean') ? force : mount.hidden;
-
-  if (shouldOpen) {
-    mount.hidden = false;
-    requestAnimationFrame(function () {
-      mount.classList.add('open');
-    });
-    panel.open();
-  } else {
-    panel.close();
-    mount.classList.remove('open');
-    setTimeout(function () {
-      if (!mount.classList.contains('open')) {
-        mount.hidden = true;
-      }
-    }, 280);
-  }
-}
-
-function wireAIPanelButton() {
-  const btn = document.getElementById('tbAI');
-  if (!btn) return;
-  btn.addEventListener('click', function () {
-    toggleAIPanel();
-  });
-}
-
-function wireAIContextMenu() {
-  if (!cm.view) return;
-  const dom = cm.view.contentDOM;
-  if (dom._aiContextBound) return;
-  dom._aiContextBound = true;
-  dom.addEventListener('contextmenu', function (e) {
-    const sel = cm.getSelection();
-    if (!sel) return;
-    e.preventDefault();
-    openContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      context: buildAIContext(),
-      onRun: function (task) {
-        const mount = document.getElementById('aiPanelMount');
-        const panel = ensureAIPanel();
-        if (!mount || !panel) return;
-        mount.hidden = false;
-        requestAnimationFrame(function () {
-          mount.classList.add('open');
-        });
-        panel.open();
-        if (typeof panel.run === 'function') {
-          panel.run(task, cm.getSelection() ? 'selection' : 'file');
-        }
-      },
-    });
-  });
-}
 // ═══════════════════════════════════════════════════════════
 // HEADER / TABS / EMPTY
 // ═══════════════════════════════════════════════════════════
@@ -2355,6 +2434,7 @@ function updateBreadcrumb() {
   bc.innerHTML = '';
   if (!S.currentProject) {
     bc.appendChild(el('span', { class: 'seg current' }, 'No project'));
+    updateSyncBadge();
     return;
   }
   bc.appendChild(el('span', { class: S.activeFile ? 'seg' : 'seg current' }, S.currentProject.name));
@@ -2362,6 +2442,7 @@ function updateBreadcrumb() {
     bc.appendChild(el('span', { class: 'sep' }, '›'));
     bc.appendChild(el('span', { class: 'seg current' }, S.activeFile.split('/').pop()));
   }
+  updateSyncBadge();
 }
 
 function updateTabs() {
@@ -2743,8 +2824,68 @@ async function renderTreeNodes(container, node, depth) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// INFO PANEL — with meta auto-fill from project data
+// INFO PANEL
 // ═══════════════════════════════════════════════════════════
+
+function buildDeploymentUrls(deploymentId) {
+  if (!S.currentProject) return null;
+  const user = S.currentProject.ownerUsername || S.user?.profile?.username || S.user?.username || '';
+  const slug = S.currentProject.slug || '';
+  if (!user || !slug) return null;
+  const base = `${BASE_URL}/${encodeURIComponent(user)}/project/${encodeURIComponent(slug)}/`;
+  return {
+    clean: base + '?from=' + encodeURIComponent(deploymentId),
+    serve: `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(S.currentProject.pid)}&path=index.html&from=${encodeURIComponent(deploymentId)}`,
+    bare:  base,
+  };
+}
+
+function openDeploymentLinks(deploymentId, anchor) {
+  const urls = buildDeploymentUrls(deploymentId);
+  if (!urls) { toast('URLs unavailable — missing username or slug', 'warning'); return; }
+  const existing = document.querySelector('.deployment-links-popover');
+  if (existing) existing.remove();
+  const pop = el('div', { class: 'deployment-links-popover' });
+  const rows = [
+    { label: 'Preview (clean URL)', value: urls.clean, iconName: 'external' },
+    { label: 'Preview (direct)',    value: urls.serve, iconName: 'code' },
+    { label: 'Open in new tab',     value: urls.clean, iconName: 'external', open: true },
+  ];
+  for (const row of rows) {
+    const btn = el('button', {
+      class: 'deployment-links-item', type: 'button',
+      onclick: () => {
+        if (row.open) window.open(row.value, '_blank', 'noopener');
+        else {
+          try { navigator.clipboard.writeText(row.value); toast('Copied', 'success', 1200); }
+          catch { toast('Copy failed', 'error'); }
+        }
+        pop.remove();
+      },
+    },
+      el('span', { class: 'deployment-links-icon' }, icon(row.iconName, 12)),
+      el('span', { class: 'deployment-links-text' },
+        el('span', { class: 'deployment-links-label' }, row.label),
+        el('code', { class: 'deployment-links-value' }, row.value)
+      )
+    );
+    pop.appendChild(btn);
+  }
+  const rect = anchor.getBoundingClientRect();
+  const top = rect.bottom + window.scrollY + 4;
+  const left = Math.max(8, Math.min(rect.right - 300 + window.scrollX, window.innerWidth - 308));
+  pop.style.top = top + 'px';
+  pop.style.left = left + 'px';
+  document.body.appendChild(pop);
+  setTimeout(() => {
+    document.addEventListener('click', function handler(ev) {
+      if (!pop.contains(ev.target) && ev.target !== anchor) {
+        pop.remove();
+        document.removeEventListener('click', handler);
+      }
+    });
+  }, 50);
+}
 
 async function renderInfoPanel(container) {
   if (!S.currentProject) {
@@ -2777,7 +2918,7 @@ async function renderInfoPanel(container) {
     onclick: () => { window.location.href = '/project?pid=' + encodeURIComponent(p.pid); },
   }, icon('external', 12), ' Open dashboard'));
 
-  // ── Preview card ──
+  // Preview card
   const previewCard = el('div', { class: 'preview-card' });
   previewCard.appendChild(el('div', { class: 'preview-card-header' },
     el('span', { class: 'preview-card-label' }, 'Preview'),
@@ -2818,7 +2959,7 @@ async function renderInfoPanel(container) {
     ));
   }
 
-  // ── Generate actions ──
+  // Generate actions
   const generateCard = el('div', { class: 'generate-card' });
   generateCard.appendChild(el('div', { class: 'generate-card-header' },
     el('span', { class: 'generate-card-label' }, 'Actions')
@@ -2881,7 +3022,7 @@ async function renderInfoPanel(container) {
     : `${formatBytes(totalLimit - totalBytes)} remaining`
   ));
 
-  // ── Deployments ──
+  // Deployments
   const deployments = el('div', { class: 'info-deployments' });
   deployments.appendChild(el('div', { class: 'sidebar-section-title' },
     el('span', {}, 'Deployments'),
@@ -2893,7 +3034,12 @@ async function renderInfoPanel(container) {
     )
   ));
 
-  const cache = S.deploymentCache.get(p.pid);
+  // Refresh cache in background if stale
+  const cached = S.deploymentCache.get(p.pid);
+  if (!cached && S.online && S.session) {
+    loadDeploymentHistoryFor(p.pid).then(() => refreshInfoIfOpen()).catch(() => {});
+  }
+
   const deployUrl = p.deployment?.url;
   const isLive = deployUrl && p.deployment?.state !== 'OFFLINE';
   const isOffline = p.deployment?.state === 'OFFLINE';
@@ -2924,6 +3070,14 @@ async function renderInfoPanel(container) {
       class: 'btn btn-primary btn-sm', type: 'button',
       onclick: () => hostProject(),
     }, 'Deploy to go live'));
+  } else if (S.syncState === 'needs-pull') {
+    deployRow.appendChild(el('div', { class: 'deploy-status offline' },
+      el('span', { class: 'deploy-dot' }), 'Sync first'
+    ));
+    deployRow.appendChild(el('button', {
+      class: 'btn btn-primary btn-sm', type: 'button',
+      onclick: () => pullFromServerInEditor(),
+    }, icon('refresh', 10), ' Sync'));
   } else {
     deployRow.appendChild(el('div', { class: 'deploy-status offline' },
       el('span', { class: 'deploy-dot' }), 'Not deployed'
@@ -2935,37 +3089,35 @@ async function renderInfoPanel(container) {
   }
   deployments.appendChild(deployRow);
 
-  if (cache && cache.deployments.length > 1) {
+  // History with popover
+  if (cached && cached.deployments.length > 0) {
     const hist = el('div', { class: 'deploy-history' });
-    for (const d of cache.deployments.slice(0, 5)) {
-      const isCurrent = d.id === cache.currentId;
-      hist.appendChild(el('div', { class: `deploy-history-row${isCurrent ? ' current' : ''}` },
+    const histHeader = el('div', { class: 'deploy-history-header' },
+      el('span', {}, `History (${cached.deployments.length} / ${cached.maxDeployments || 5})`),
+      el('button', {
+        class: 'deploy-history-action', type: 'button', title: 'Open dashboard',
+        onclick: () => { window.location.href = '/project?pid=' + encodeURIComponent(p.pid) + '#/deployments'; },
+      }, icon('external', 10))
+    );
+    hist.appendChild(histHeader);
+    for (const d of cached.deployments.slice(0, 5)) {
+      const isCurrent = d.id === cached.currentId;
+      const row = el('div', { class: `deploy-history-row${isCurrent ? ' current' : ''}` },
         el('span', { class: 'deploy-history-time' }, relativeTime(d.deployedAt)),
         el('span', { class: 'deploy-history-status' }, isCurrent ? 'Current' : (d.state || 'READY')),
-        d.url ? el('a', {
-          class: 'deploy-history-link',
-          href: d.url,
-          target: '_blank',
-          rel: 'noopener',
-          'aria-label': 'Open',
-        }, icon('external', 10)) : null,
-        d.hasSnapshot && !isCurrent ? el('button', {
+        el('button', {
           class: 'deploy-history-action',
           type: 'button',
-          title: 'Preview',
-          onclick: () => {
-            if (!deployUrl) return;
-            const u = new URL(deployUrl);
-            u.searchParams.set('from', d.id);
-            window.open(u.toString(), '_blank', 'noopener');
-          },
-        }, icon('external', 10)) : null
-      ));
+          title: 'Deployment links',
+          onclick: (e) => { e.stopPropagation(); openDeploymentLinks(d.id, e.currentTarget); },
+        }, icon('link', 10))
+      );
+      hist.appendChild(row);
     }
     deployments.appendChild(hist);
   }
 
-  // ── Meta tags form (with auto-fill from project data) ──
+  // Meta tags form
   const metaSection = el('div', { class: 'meta-form' });
   metaSection.appendChild(el('div', { class: 'sidebar-section-title' },
     el('span', {}, 'Meta tags'),
@@ -3060,6 +3212,14 @@ async function renderInfoPanel(container) {
     el('span', { class: 'name' }, 'Last edit'),
     el('span', { class: 'value' }, relativeTime(p.updatedAt || Date.now()))
   ));
+  const lastSync = readLastSynced(p.pid);
+  if (lastSync) {
+    timeline.appendChild(el('div', { class: 'list-row' },
+      el('span', { class: 'icon' }, icon('refresh', 12)),
+      el('span', { class: 'name' }, 'Last sync'),
+      el('span', { class: 'value' }, relativeTime(lastSync))
+    ));
+  }
 
   // Danger
   const danger = el('button', {
@@ -3079,6 +3239,8 @@ async function renderInfoPanel(container) {
       S.activeFile = null;
       showEmpty('No project open');
       setPidInUrl(null);
+      hideSyncBanner();
+      setSyncState('idle');
       try { localStorage.removeItem(STORAGE.lastProject); } catch {}
       toast('Project deleted', 'info');
       renderSidebar();
@@ -3147,10 +3309,9 @@ async function createFilePrompt(parentPath = '') {
     }
     S.expandedFolders.add(parentPath);
   }
-    toast(`Created ${path}`, 'success');
+  toast(`Created ${path}`, 'success');
   await workspace.openFile(path);
   renderSidebar();
-  refreshAIFileCache().catch(function () {});
 }
 
 async function createFolderPrompt(parentPath = '') {
@@ -3165,10 +3326,9 @@ async function createFolderPrompt(parentPath = '') {
     await db.putFolder(S.currentProject.pid, parts.slice(0, i).join('/')).catch(() => {});
   }
   S.expandedFolders.add(folderPath);
-    toast(`Created ${folderPath}`, 'success');
+  toast(`Created ${folderPath}`, 'success');
   renderSidebar();
   refreshInfoIfOpen();
-  refreshAIFileCache().catch(function () {});
 }
 
 async function deleteFile(path) {
@@ -3176,7 +3336,6 @@ async function deleteFile(path) {
   const ok = await confirm({ title: `Delete ${path.split('/').pop()}?`, message: "This can't be undone.", confirmLabel: 'Delete', danger: true });
   if (!ok) return;
 
-  // Server delete (best-effort) then local delete
   if (S.session && navigator.onLine && S.currentProject._server) {
     try {
       const res = await apiFetch(API_HOST + '?action=file/delete', {
@@ -3198,10 +3357,9 @@ async function deleteFile(path) {
     if (S.openFiles.length > 0) await workspace.openFile(S.openFiles[S.openFiles.length - 1]);
     else showEmpty('No file open');
   }
-    toast('File deleted', 'info');
+  toast('File deleted', 'info');
   renderSidebar();
   refreshInfoIfOpen();
-  refreshAIFileCache().catch(function () {});
 }
 
 async function deleteFolder(path) {
@@ -3234,12 +3392,11 @@ async function deleteFolder(path) {
     await db.deleteFile(S.currentProject.pid, f.path);
     S.dirtyFiles.delete(f.path);
   }
-    await db.deleteFolder(S.currentProject.pid, path);
+  await db.deleteFolder(S.currentProject.pid, path);
   S.expandedFolders.delete(path);
   toast('Folder deleted', 'info');
   renderSidebar();
   refreshInfoIfOpen();
-  refreshAIFileCache().catch(function () {});
 }
 
 async function renameFile(oldPath) {
@@ -3259,9 +3416,8 @@ async function renameFile(oldPath) {
   if (S.dirtyFiles.has(oldPath)) { S.dirtyFiles.delete(oldPath); S.dirtyFiles.add(newPath); }
   updateTabs();
   updateBreadcrumb();
-    toast('Renamed', 'success');
+  toast('Renamed', 'success');
   renderSidebar();
-  refreshAIFileCache().catch(function () {});
 }
 async function renameFolder(path) {
   if (!S.currentProject) return;
@@ -3283,10 +3439,9 @@ async function renameFolder(path) {
   }
   await db.deleteFolder(S.currentProject.pid, path);
   await db.putFolder(S.currentProject.pid, newPath).catch(() => {});
-    toast('Folder renamed', 'success');
+  toast('Folder renamed', 'success');
   updateTabs();
   renderSidebar();
-  refreshAIFileCache().catch(function () {});
 }
 
 async function importFile() {
@@ -3337,13 +3492,12 @@ async function importFile() {
       }
     }
 
-      if (imported > 0) {
-    toast(`Imported ${imported} file${imported === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
-    renderSidebar();
-    refreshInfoIfOpen();
-    refreshAIFileCache().catch(function () {});
-  }
-};
+    if (imported > 0) {
+      toast(`Imported ${imported} file${imported === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
+      renderSidebar();
+      refreshInfoIfOpen();
+    }
+  };
   input.click();
 }
 
@@ -3375,12 +3529,11 @@ function notePreviewText(md) {
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/^---+$/gm, ' ');
-  // Prefer the first non-heading line with actual content
   const lines = cleaned.split('\n').map(l => l.replace(/^#{1,6}\s+/, '').trim()).filter(Boolean);
   const prose = lines.find(l => l.length > 0) || '';
   return prose.replace(/\s+/g, ' ').trim().slice(0, 120);
 }
-  
+
 async function renderNotesPanel(container) {
   if (!S.currentProject) {
     container.appendChild(el('div', { class: 'empty-state', style: 'padding:20px 6px' },
@@ -3442,23 +3595,17 @@ function openNoteEditor(noteId) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// NOTE EDITOR — markdown toolbar (Google-Docs-style)
-// ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
-// MINIMAL MARKDOWN RENDERER (no deps)
+// MARKDOWN RENDERER
 // ═══════════════════════════════════════════════════════════
 
 function renderMarkdownSafe(text) {
-  // Escape first, then re-introduce only safe tags.
   let src = String(text ?? '');
-  // Fenced code blocks (extract first so inline rules don't touch them)
   const codeBlocks = [];
   src = src.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (m, lang, body) => {
     const idx = codeBlocks.length;
     codeBlocks.push({ lang, body });
     return `\u0000CODE${idx}\u0000`;
   });
-  // Escape remaining HTML
   src = src
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -3478,17 +3625,11 @@ function renderMarkdownSafe(text) {
   };
 
   const inlineFmt = (s) => {
-    // images: ![alt](url)
     s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img alt="$1" src="$2">');
-    // links: [text](url)
     s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-    // bold
     s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    // italic
     s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    // strikethrough
     s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
-    // inline code
     s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
     return s;
   };
@@ -3560,25 +3701,19 @@ function renderMarkdownSafe(text) {
   closeBlockquote();
   return out.join('\n');
 }
+
 async function showFullscreenNoteEditor(noteId) {
   const data = await readNotes(S.currentProject.pid);
   const existing = noteId ? data.notes.find(n => n.id === noteId) : null;
   const note = existing || {
     id: `n_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    title: '',
-    body: '',
-    color: 'amber',
-    pinned: false,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    title: '', body: '', color: 'amber', pinned: false,
+    createdAt: Date.now(), updatedAt: Date.now(),
   };
 
-  // Empty new notes go straight to edit
   const startInEdit = !existing || !(note.body || '').trim();
 
   const overlay = el('div', { class: 'note-editor-overlay' });
-
-  // Header
   const header = el('div', { class: 'note-editor-header' });
   const backBtn = el('button', {
     class: 'note-editor-back', type: 'button', 'aria-label': 'Back',
@@ -3593,27 +3728,20 @@ async function showFullscreenNoteEditor(noteId) {
   });
   header.appendChild(titleInput);
 
-  // Title in reading mode
   const titleDisplay = el('div', { class: 'note-editor-title-readonly' }, note.title || 'Untitled');
   header.appendChild(titleDisplay);
 
   const actions = el('div', { class: 'note-editor-actions' });
-
-  // Mode toggle button (Edit / Done)
   const modeBtn = el('button', {
-    class: 'note-editor-action note-mode-btn',
-    type: 'button',
-    'aria-label': 'Edit note',
-    title: 'Edit note',
+    class: 'note-editor-action note-mode-btn', type: 'button',
+    'aria-label': 'Edit note', title: 'Edit note',
     onclick: () => toggleMode(),
   }, icon('edit', 14));
   actions.appendChild(modeBtn);
 
   const pinBtn = el('button', {
     class: `note-editor-action${note.pinned ? ' active' : ''}`,
-    type: 'button',
-    'aria-label': note.pinned ? 'Unpin' : 'Pin',
-    title: note.pinned ? 'Unpin' : 'Pin',
+    type: 'button', 'aria-label': note.pinned ? 'Unpin' : 'Pin', title: note.pinned ? 'Unpin' : 'Pin',
     onclick: () => {
       note.pinned = !note.pinned;
       pinBtn.classList.toggle('active', note.pinned);
@@ -3639,7 +3767,6 @@ async function showFullscreenNoteEditor(noteId) {
   header.appendChild(actions);
   overlay.appendChild(header);
 
-  // ── Formatting toolbar (edit mode only) ──
   const fmtBar = el('div', { class: 'note-format-bar hidden' });
   const fmtGroups = [
     [
@@ -3688,11 +3815,9 @@ async function showFullscreenNoteEditor(noteId) {
     fmtBar.appendChild(g);
   }
   overlay.appendChild(fmtBar);
-
   overlay.appendChild(bodyArea);
   overlay.appendChild(bodyRead);
 
-  // Footer / status
   const status = el('div', { class: 'note-editor-status' });
   const wordCount = el('span', { class: 'note-editor-words' }, '0 words');
   const saveState = el('span', { class: 'note-editor-save' }, 'Saved');
@@ -3725,28 +3850,23 @@ async function showFullscreenNoteEditor(noteId) {
     markDirty();
   }
 
-  // ── Mode toggle ──
   function setMode(mode) {
     overlay.dataset.mode = mode;
     const isEdit = mode === 'edit';
-
     titleInput.classList.toggle('hidden', !isEdit);
     titleDisplay.classList.toggle('hidden', isEdit);
     fmtBar.classList.toggle('hidden', !isEdit);
     bodyArea.classList.toggle('hidden', !isEdit);
     bodyRead.classList.toggle('hidden', isEdit);
-
     modeBtn.innerHTML = '';
     modeBtn.appendChild(icon(isEdit ? 'check' : 'edit', 14));
     modeBtn.setAttribute('aria-label', isEdit ? 'Done editing' : 'Edit note');
     modeBtn.setAttribute('title', isEdit ? 'Done editing' : 'Edit note');
     modeBtn.classList.toggle('active', isEdit);
-
     if (isEdit) {
       titleDisplay.textContent = titleInput.value || 'Untitled';
       setTimeout(() => bodyArea.focus(), 50);
     } else {
-      // Render reading view
       titleDisplay.textContent = titleInput.value || 'Untitled';
       bodyRead.innerHTML = renderMarkdownSafe(bodyArea.value || '');
       if (dirty) doSave();
@@ -3769,7 +3889,6 @@ async function showFullscreenNoteEditor(noteId) {
       const lineEnd = value.indexOf('\n', start);
       const targetEnd = lineEnd === -1 ? value.length : lineEnd;
       const line = value.slice(lineStart, targetEnd);
-
       if (line.startsWith(action.prefix)) {
         bodyArea.value = value.slice(0, lineStart) + line.slice(action.prefix.length) + value.slice(targetEnd);
         bodyArea.selectionStart = Math.max(lineStart, start - action.prefix.length);
@@ -3800,7 +3919,6 @@ async function showFullscreenNoteEditor(noteId) {
       bodyArea.selectionStart = start + before.length;
       bodyArea.selectionEnd = start + before.length + (selected || '').length;
     }
-
     note.body = bodyArea.value;
     scheduleAutosave();
     bodyArea.focus();
@@ -3818,23 +3936,17 @@ async function showFullscreenNoteEditor(noteId) {
         }
       }
       note.updatedAt = Date.now();
-
       const fresh = await readNotes(S.currentProject.pid);
       const idx = fresh.notes.findIndex(n => n.id === note.id);
       if (idx >= 0) fresh.notes[idx] = note;
       else fresh.notes.push(note);
-
       await writeNotes(S.currentProject.pid, fresh);
       dirty = false;
       saveState.textContent = 'Saved';
       saveState.classList.remove('dirty');
-
       if (S.sidebarPanel === 'notes') {
         const bodyEl = $('sidebarBody');
-        if (bodyEl) {
-          bodyEl.innerHTML = '';
-          renderNotesPanel(bodyEl).catch(() => {});
-        }
+        if (bodyEl) { bodyEl.innerHTML = ''; renderNotesPanel(bodyEl).catch(() => {}); }
       }
       refreshInfoIfOpen();
     } catch (err) {
@@ -3846,11 +3958,8 @@ async function showFullscreenNoteEditor(noteId) {
   }
 
   function closeNoteEditor() {
-    if (dirty && !isDeleted) {
-      doSave().then(() => teardown());
-    } else {
-      teardown();
-    }
+    if (dirty && !isDeleted) doSave().then(() => teardown());
+    else teardown();
   }
 
   function teardown() {
@@ -3862,10 +3971,8 @@ async function showFullscreenNoteEditor(noteId) {
 
   async function deleteNote(id) {
     const ok = await confirm({
-      title: 'Delete this note?',
-      message: "This can't be undone.",
-      confirmLabel: 'Delete',
-      danger: true,
+      title: 'Delete this note?', message: "This can't be undone.",
+      confirmLabel: 'Delete', danger: true,
     });
     if (!ok) return;
     isDeleted = true;
@@ -3876,10 +3983,7 @@ async function showFullscreenNoteEditor(noteId) {
     teardown();
     if (S.sidebarPanel === 'notes') {
       const bodyEl = $('sidebarBody');
-      if (bodyEl) {
-        bodyEl.innerHTML = '';
-        renderNotesPanel(bodyEl).catch(() => {});
-      }
+      if (bodyEl) { bodyEl.innerHTML = ''; renderNotesPanel(bodyEl).catch(() => {}); }
     }
     refreshInfoIfOpen();
   }
@@ -3887,13 +3991,11 @@ async function showFullscreenNoteEditor(noteId) {
   function openColorPicker(note, anchor) {
     const existingPop = document.querySelector('.note-color-popover');
     if (existingPop) { existingPop.remove(); return; }
-
     const pop = el('div', { class: 'note-color-popover' });
     for (const [name, hex] of Object.entries(NOTE_COLORS)) {
       pop.appendChild(el('button', {
         class: `note-color-swatch${note.color === name ? ' active' : ''}`,
-        type: 'button', 'aria-label': name,
-        style: `background:${hex};`,
+        type: 'button', 'aria-label': name, style: `background:${hex};`,
         onclick: () => {
           note.color = name;
           anchor.style.color = hex;
@@ -4038,7 +4140,6 @@ async function doSearch(query, resultsEl, summaryEl) {
 
   for (const { path, matches } of matchesByFile) {
     const block = el('div', { class: 'search-file-block' });
-
     const header = el('div', { class: 'search-file-header' },
       el('span', { class: 'search-file-caret' }, icon('chevron-right', 9)),
       el('span', { class: 'search-file-icon' }, icon(fileIconName(path), 11)),
@@ -4047,7 +4148,6 @@ async function doSearch(query, resultsEl, summaryEl) {
     );
 
     const body = el('div', { class: 'search-file-body' });
-
     for (const m of matches) {
       const ctx = buildHighlightedLine(m.content, m.matchStart, m.matchLen, query);
       const row = el('div', { class: 'search-match' },
@@ -4080,17 +4180,14 @@ function buildHighlightedLine(content, start, len, _query) {
   const ctxAfter = 60;
   const winStart = Math.max(0, start - ctxBefore);
   const winEnd = Math.min(content.length, start + len + ctxAfter);
-
   const pre = content.slice(winStart, start);
   const hit = content.slice(start, start + len);
   const post = content.slice(start + len, winEnd);
-
   if (winStart > 0) wrap.appendChild(el('span', { class: 'search-match-ellipsis' }, '…'));
   if (pre) wrap.appendChild(el('span', { class: 'search-match-pre' }, pre));
   wrap.appendChild(el('mark', { class: 'search-match-hit' }, hit));
   if (post) wrap.appendChild(el('span', { class: 'search-match-post' }, post));
   if (winEnd < content.length) wrap.appendChild(el('span', { class: 'search-match-ellipsis' }, '…'));
-
   return wrap;
 }
 
@@ -4200,11 +4297,10 @@ async function restoreVersion(vid) {
   if (S.activeFile && version.files[S.activeFile]) await workspace.openFile(S.activeFile);
   else if (firstPath) await workspace.openFile(firstPath);
   else showEmpty('Version was empty');
-    toast('Version restored', 'success');
+  toast('Version restored', 'success');
   renderSidebar();
-  refreshAIFileCache().catch(function () {});
 }
-  
+
 async function deleteVersionConfirm(vid) {
   const ok = await confirm({ title: 'Delete this version?', message: "This can't be undone.", confirmLabel: 'Delete', danger: true });
   if (!ok) return;
@@ -4366,39 +4462,37 @@ async function openCommitDialog(prefill = null) {
     return;
   }
 
-
-
   const autoMsg = (prefill && prefill.message)
-  ? prefill.message
-  : generateCommitMessage(changes, totalAdd, totalRem);
+    ? prefill.message
+    : generateCommitMessage(changes, totalAdd, totalRem);
 
-const prefillChangedSet = new Set(
-  prefill && Array.isArray(prefill.changed) ? prefill.changed : []
-);
+  const prefillChangedSet = new Set(
+    prefill && Array.isArray(prefill.changed) ? prefill.changed : []
+  );
 
-const msgInput = el('input', {
-  class: 'input', value: autoMsg, maxlength: '200',
-  placeholder: 'Describe what changed…',
-});
+  const msgInput = el('input', {
+    class: 'input', value: autoMsg, maxlength: '200',
+    placeholder: 'Describe what changed…',
+  });
 
   const changesList = el('div', { class: 'commit-changes' });
-for (const c of changes) {
-  const row = el('div', { class: 'commit-change-row' },
-    el('span', { class: 'icon' }, icon(fileIconName(c.path), 10)),
-    el('span', { class: 'name' }, c.path),
-    el('span', { class: 'stat' },
-      el('span', { class: 'add' }, `+${c.add}`),
-      ' ',
-      el('span', { class: 'rem' }, `−${c.rem}`)
-    )
-  );
-  if (prefillChangedSet.has(c.path)) {
-    row.style.background = 'var(--theme-primary-soft)';
-    row.style.borderRadius = '4px';
+  for (const c of changes) {
+    const row = el('div', { class: 'commit-change-row' },
+      el('span', { class: 'icon' }, icon(fileIconName(c.path), 10)),
+      el('span', { class: 'name' }, c.path),
+      el('span', { class: 'stat' },
+        el('span', { class: 'add' }, `+${c.add}`),
+        ' ',
+        el('span', { class: 'rem' }, `−${c.rem}`)
+      )
+    );
+    if (prefillChangedSet.has(c.path)) {
+      row.style.background = 'var(--theme-primary-soft)';
+      row.style.borderRadius = '4px';
+    }
+    changesList.appendChild(row);
   }
-  changesList.appendChild(row);
-}
-  
+
   const body = el('div', {},
     el('div', { class: 'field' },
       el('label', { class: 'field-label' }, 'Message (auto-generated)'),
@@ -4452,7 +4546,6 @@ async function createVersion(message) {
   const vid = `v_${Date.now()}`;
   const versionData = { message, files: snapshot, createdAt: Date.now() };
 
-  // ✅ Always write locally first — this makes the commit visible in-editor
   await db.putVersion({
     vid,
     pid: S.currentProject.pid,
@@ -4464,25 +4557,31 @@ async function createVersion(message) {
   renderSidebar();
   refreshInfoIfOpen();
 
-  // ✅ Best-effort server sync so the commit survives across devices
-  if (!S.isGuest && S.online && S.currentProject._server) {
-    try {
-      const res = await apiFetch(API_HOST + '?action=project/sync-back', {
-        method: 'POST',
-        body: JSON.stringify({
-          pid: S.currentProject.pid,
-          versions: { [vid]: versionData },
-        }),
-      });
-      if (!res.ok || !res.data?.success) {
-        console.warn('[Commit] server sync failed:', res.data?.error);
+  if (!S.isGuest && S.currentProject._server && !/^local_/.test(S.currentProject.pid)) {
+    if (S.online) {
+      try {
+        const res = await apiFetch(API_HOST + '?action=project/sync-back', {
+          method: 'POST',
+          body: JSON.stringify({
+            pid: S.currentProject.pid,
+            versions: { [vid]: versionData },
+          }),
+        });
+        if (!res.ok || !res.data?.success) {
+          console.warn('[Commit] server sync failed, queueing:', res.data?.error);
+          await enqueueCommitToServer(S.currentProject.pid, vid, versionData);
+        } else {
+          markSynced(S.currentProject.pid);
+        }
+      } catch (err) {
+        console.warn('[Commit] server sync error, queueing:', err);
+        await enqueueCommitToServer(S.currentProject.pid, vid, versionData);
       }
-    } catch (err) {
-      console.warn('[Commit] server sync error:', err);
+    } else {
+      await enqueueCommitToServer(S.currentProject.pid, vid, versionData);
     }
   }
 }
-
 
 // ═══════════════════════════════════════════════════════════
 // SYMBOLS / PREVIEW / SETUP / HOST
@@ -4771,26 +4870,24 @@ function applyGuestState() {
   }
 }
 
-async function hostProject(prefill = null) {
+async function hostProject() {
   if (S.isGuest) {
-    let deployMessage = 'Your project will be built and deployed to a live URL. Each deploy creates a snapshot that stays previewable.';
-if (prefill && prefill.summary) {
-  const changedCount = Array.isArray(prefill.changed) ? prefill.changed.length : 0;
-  deployMessage = prefill.summary
-    + (changedCount > 0 ? ` (${changedCount} file${changedCount === 1 ? '' : 's'} changed)` : '')
-    + '\n\n' + deployMessage;
-}
-
-const ok = await confirm({
-  title: 'Deploy project?',
-  message: deployMessage,
-  confirmLabel: 'Deploy', danger: false,
-});
-if (!ok) return;
-    
+    const ok = await confirm({
+      title: 'Sign in to deploy',
+      message: 'Deploying to a live URL needs an account. Sign in first.',
+      confirmLabel: 'Sign in', danger: false,
+    });
+    if (ok) {
+      window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
+    }
+    return;
   }
   if (!S.online) { toast('Requires internet', 'warning'); return; }
   if (!S.currentProject) { toast('No project', 'warning'); return; }
+  if (S.syncState === 'needs-pull') {
+    toast('Sync files first before deploying', 'warning', 4000);
+    return;
+  }
 
   const ok = await confirm({
     title: 'Deploy project?',
@@ -4808,7 +4905,6 @@ if (!ok) return;
     fileMap[f.path] = f.content;
   }
 
-  // Inject meta into index.html if present
   try {
     const meta = (await db.getProjectMeta(S.currentProject.pid)).meta || {};
     if (Object.keys(meta).length > 0 && fileMap['index.html']) {
@@ -4818,8 +4914,6 @@ if (!ok) return;
 
   toast('Deploying…', 'info', 1500);
 
-  // ✅ FIX: Single deploy call. No fragile pre-snapshot step.
-  // The server (handleDeploy) creates the deploy-kind version internally.
   const res = await apiFetch(API_HOST + '?action=deploy', {
     method: 'POST',
     body: JSON.stringify({ pid: S.currentProject.pid, files: fileMap }),
@@ -4834,7 +4928,6 @@ if (!ok) return;
     return;
   }
 
-  // Update local state immediately from response
   if (res.data.url) {
     S.currentProject.deployment = {
       url: res.data.url,
@@ -4854,7 +4947,8 @@ if (!ok) return;
     }
   }
 
-  // Best-effort confirmation poll
+  markSynced(S.currentProject.pid);
+
   let live = false;
   try {
     const st = await apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.currentProject.pid));
@@ -4875,14 +4969,16 @@ if (!ok) return;
     toast(`${res.data.filesSkipped} file${res.data.filesSkipped === 1 ? '' : 's'} skipped`, 'warning', 4000);
   }
 
-  setTimeout(() => {
-    loadDeploymentHistoryFor(S.currentProject.pid).then(() => refreshInfoIfOpen());
+  // Refresh cache and re-render deploy-related UI immediately
+  try {
+    await loadDeploymentHistoryFor(S.currentProject.pid);
+    refreshInfoIfOpen();
     updateBreadcrumb();
-  }, 1500);
+  } catch {}
 }
 
 // ═══════════════════════════════════════════════════════════
-// IMAGE HANDOFF — /tools navigation
+// IMAGE HANDOFF
 // ═══════════════════════════════════════════════════════════
 
 function navigateToImageGenerator(slot) {
@@ -4980,6 +5076,8 @@ function wireUI() {
 
   $('railProjects')?.addEventListener('click', openProjectsSheet);
   $('openProjectsBtn')?.addEventListener('click', openProjectsSheet);
+
+  $('syncBannerBtn')?.addEventListener('click', () => pullFromServerInEditor());
 
   window.addEventListener('popstate', () => {
     const urlPid = getPidFromUrl();
@@ -5083,11 +5181,11 @@ function wireUI() {
     }
     openSymbolsSheet();
   });
-  $('tbCommit')?.addEventListener('click', openCommitDialog);
+  $('tbCommit')?.addEventListener('click', () => openCommitDialog());
   $('tbPreview')?.addEventListener('click', launchPreview);
-  $('tbHost')?.addEventListener('click', hostProject);
-$('tbFoldAll')?.addEventListener('click', () => cm.view ? cm.foldAll() : toast('Open a file first', 'info'));
-$('tbUnfoldAll')?.addEventListener('click', () => cm.view ? cm.unfoldAll() : toast('Open a file first', 'info'));
+  $('tbHost')?.addEventListener('click', () => hostProject());
+  $('tbFoldAll')?.addEventListener('click', () => cm.view ? cm.foldAll() : toast('Open a file first', 'info'));
+  $('tbUnfoldAll')?.addEventListener('click', () => cm.view ? cm.unfoldAll() : toast('Open a file first', 'info'));
   $('symbolsClose')?.addEventListener('click', closeSymbolsSheet);
   $('previewFullClose')?.addEventListener('click', () => $('previewFullscreen').classList.remove('visible'));
   $('previewFullRefresh')?.addEventListener('click', () => openFullscreenPreview());
@@ -5198,12 +5296,20 @@ $('tbUnfoldAll')?.addEventListener('click', () => cm.view ? cm.unfoldAll() : toa
   const updateOnline = () => {
     S.online = navigator.onLine;
     $('offlineBanner')?.classList.toggle('visible', !S.online);
+    if (!S.online) {
+      if (S.syncState !== 'needs-pull') setSyncState('offline');
+      if (S.syncState === 'needs-pull') showSyncBanner(S.serverFileCount);
+    } else {
+      if (S.syncState === 'offline') setSyncState('synced');
+      if (S.syncState === 'needs-pull') showSyncBanner(S.serverFileCount);
+      flushCommitQueue().catch(() => {});
+    }
   };
   window.addEventListener('online', updateOnline);
   window.addEventListener('offline', updateOnline);
   updateOnline();
 
-    window.addEventListener('resize', () => {
+  window.addEventListener('resize', () => {
     if (window.innerWidth >= 1024) {
       $('sidebarBackdrop')?.classList.remove('open');
     } else {
@@ -5213,11 +5319,7 @@ $('tbUnfoldAll')?.addEventListener('click', () => cm.view ? cm.unfoldAll() : toa
   });
 
   setupPreviewConsole();
-
-  wireAIPanelButton();
 }
-
-
 
 // ═══════════════════════════════════════════════════════════
 // BOOT
@@ -5229,61 +5331,55 @@ async function boot() {
   readSession();
   applyGuestState();
 
-// Handle return from /tools for the create-project form
-if (handleNewProjectImageReturn()) {
-  // Returned true — form will reopen, skip the "image updated" toast
-} else {
-  // Handle return-from-tools when editing an existing project.
-  const bootParams = new URLSearchParams(location.search);
-  const generatedSlot = bootParams.get('generated');
-  const generatedUrl = bootParams.get('url');
+  if (handleNewProjectImageReturn()) {
+    // Handled
+  } else {
+    const bootParams = new URLSearchParams(location.search);
+    const generatedSlot = bootParams.get('generated');
+    const generatedUrl = bootParams.get('url');
 
-  if (generatedSlot) {
-    // Strip the return markers immediately so a refresh doesn't re-trigger.
-    const cleanUrl = new URL(location.href);
-    cleanUrl.searchParams.delete('generated');
-    cleanUrl.searchParams.delete('url');
-    try { history.replaceState(null, '', cleanUrl.toString()); } catch {}
+    if (generatedSlot) {
+      const cleanUrl = new URL(location.href);
+      cleanUrl.searchParams.delete('generated');
+      cleanUrl.searchParams.delete('url');
+      try { history.replaceState(null, '', cleanUrl.toString()); } catch {}
 
-    setTimeout(async () => {
-      toast(`Image updated — ${generatedSlot}`, 'success', 3000);
-
-      // If the project hasn't loaded yet (slow network, race), retry for
-      // up to ~2 seconds before giving up.
-      let attempts = 0;
-      const refresh = async () => {
-        if (!S.currentProject) {
-          if (attempts < 5) {
-            attempts++;
-            setTimeout(refresh, 400);
+      setTimeout(async () => {
+        toast(`Image updated — ${generatedSlot}`, 'success', 3000);
+        let attempts = 0;
+        const refresh = async () => {
+          if (!S.currentProject) {
+            if (attempts < 5) {
+              attempts++;
+              setTimeout(refresh, 400);
+              return;
+            }
+            console.warn('[Handoff] Project never loaded; cannot refresh icon');
             return;
           }
-          console.warn('[Handoff] Project never loaded; cannot refresh icon');
-          return;
-        }
-        try {
-          const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
-          if (res.ok && res.data?.success && res.data.project) {
-            const fresh = normalizeServerProject(res.data.project);
-            S.currentProject = { ...S.currentProject, ...fresh };
-            const local = await db.getProject(S.currentProject.pid);
-            if (local) {
-              await db.putProject({
-                ...local,
-                iconUrl: fresh.iconUrl || generatedUrl || local.iconUrl || null,
-                name: fresh.name,
-                updatedAt: fresh.updatedAt,
-              });
+          try {
+            const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
+            if (res.ok && res.data?.success && res.data.project) {
+              const fresh = normalizeServerProject(res.data.project);
+              S.currentProject = { ...S.currentProject, ...fresh };
+              const local = await db.getProject(S.currentProject.pid);
+              if (local) {
+                await db.putProject({
+                  ...local,
+                  iconUrl: fresh.iconUrl || generatedUrl || local.iconUrl || null,
+                  name: fresh.name,
+                  updatedAt: fresh.updatedAt,
+                });
+              }
+              updateBreadcrumb();
+              renderSidebar();
             }
-            updateBreadcrumb();
-            renderSidebar();
-          }
-        } catch {}
-      };
-      refresh();
-    }, 500);
+          } catch {}
+        };
+        refresh();
+      }, 500);
+    }
   }
-}
 
   loadPrefs();
   try { S.previewMode = localStorage.getItem(STORAGE.previewMode) || 'fullscreen'; } catch {}
@@ -5332,7 +5428,7 @@ if (handleNewProjectImageReturn()) {
     }).catch(() => {});
   }
 
-    setTimeout(() => {
+  setTimeout(() => {
     try {
       const raw = localStorage.getItem(STORAGE.pendingInsert);
       if (raw) {
@@ -5348,27 +5444,16 @@ if (handleNewProjectImageReturn()) {
     } catch {}
   }, 800);
 
-// Rehydrate the AI panel's pending badge for the loaded project.
-try {
-  if (aiPanel && S.currentProject) {
-    aiPanel.close();
-    aiPanel.open();
-  }
-} catch (e) {
-  // ignore
-}
+  // Flush queued commits on boot and re-flush on network recovery
+  flushCommitQueue().catch(() => {});
+  window.addEventListener('online', () => flushCommitQueue().catch(() => {}));
 
-// ─── OFFLINE-FIRST: auto-promote local projects ───────────────
-  // When the user opens the editor while signed in and online, any
-  // projects that were created offline (or as a guest, then signed in)
-  // get promoted to server projects in the background.
+  // Auto-promote local projects
   if (!S.isGuest && S.online) {
     import('/js/create-project.js').then(mod => {
       if (typeof mod.promoteQueuedLocalProjects === 'function') {
         mod.promoteQueuedLocalProjects().then(result => {
           if (result && result.promoted > 0) {
-            // Reload the recent-projects list so the sidebar reflects
-            // the new server pids instead of the old local_ ones.
             renderEmptyRecent().catch(() => {});
           }
         }).catch(() => {});
@@ -5376,8 +5461,6 @@ try {
     }).catch(() => {});
   }
 
-  // Also promote when the network comes back online mid-session.
-  // This fires after `boot()` returns, so we register it once at boot.
   window.addEventListener('online', () => {
     if (!S.isGuest) {
       import('/js/create-project.js').then(mod => {
@@ -5387,7 +5470,6 @@ try {
       }).catch(() => {});
     }
   });
-  // ─── END offline-first promotion ──────────────────────────────
 }
 
 boot().catch(err => {
