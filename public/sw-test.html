@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Folio — PWA Diagnostics</title>
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    if (pref === 'system') pref = 'auto';
+    var resolved = pref;
+    if (pref === "auto") {
+      resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
+        ? "light" : "dark";
+    }
+    if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
+    var meta = document.getElementById("themeColorMeta");
+    if (meta) meta.setAttribute("content", resolved === "light" ? "#f7f8fa" : "#0a0c10");
+  } catch (e) {}
+})();
+</script>
+
+<style>
+:root {
+  --bg: #0a0c10; --surface: #0f1218; --card: #151922; --border: rgba(255,255,255,0.08);
+  --text: #e8ecf1; --text-2: rgba(232,236,241,0.72); --text-3: rgba(232,236,241,0.44);
+  --ok: #10B981; --warn: #F59E0B; --danger: #EF4444; --info: #3B82F6;
+  --accent: #F59E0B; --mono: 'SF Mono', Consolas, monospace;
+  --font: 'Inter', -apple-system, system-ui, sans-serif;
+}
+[data-theme="light"] {
+  --bg: #f7f8fa; --surface: #ffffff; --card: #ffffff; --border: rgba(0,0,0,0.08);
+  --text: #121316; --text-2: rgba(18,19,22,0.72); --text-3: rgba(18,19,22,0.48);
+  --accent: #D97706;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  background: var(--bg); color: var(--text); font-family: var(--font);
+  font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+body { padding: 20px 16px 60px; max-width: 860px; margin: 0 auto; }
+
+h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 4px; }
+h1 span { color: var(--accent); }
+.sub { font-size: 13px; color: var(--text-2); margin-bottom: 24px; }
+
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px; margin-bottom: 14px;
+}
+.card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.card-title { font-size: 14px; font-weight: 800; }
+.card-title svg {
+  width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px;
+  stroke: var(--accent); fill: none; stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 6px;
+  font-size: 10.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.badge.ok { background: rgba(16,185,129,0.14); color: var(--ok); }
+.badge.warn { background: rgba(245,158,11,0.14); color: var(--warn); }
+.badge.danger { background: rgba(239,68,68,0.14); color: var(--danger); }
+.badge.info { background: rgba(59,130,246,0.14); color: var(--info); }
+.badge.muted { background: var(--border); color: var(--text-3); }
+
+.row {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12.5px;
+}
+.row:last-child { border-bottom: none; }
+.row-label { color: var(--text-3); font-weight: 600; flex-shrink: 0; }
+.row-value {
+  color: var(--text); font-weight: 500; text-align: right;
+  word-break: break-all; font-family: var(--mono); font-size: 11.5px;
+}
+.row-value.ok { color: var(--ok); }
+.row-value.warn { color: var(--warn); }
+.row-value.danger { color: var(--danger); }
+
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+button {
+  font-family: inherit; font-size: 12.5px; font-weight: 700;
+  padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-2);
+  cursor: pointer; transition: all 0.2s;
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 38px; -webkit-tap-highlight-color: transparent;
+}
+button:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+button:active:not(:disabled) { transform: scale(0.97); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary {
+  background: var(--accent); border-color: var(--accent); color: #0a0c10;
+}
+button.primary:hover:not(:disabled) { opacity: 0.9; color: #0a0c10; }
+button.danger { border-color: rgba(239,68,68,0.3); color: var(--danger); }
+button.danger:hover:not(:disabled) { background: rgba(239,68,68,0.08); }
+button svg {
+  width: 13px; height: 13px; stroke: currentColor; fill: none;
+  stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+}
+
+.cache-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.cache-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  font-size: 11.5px;
+}
+.cache-item.current { border-color: var(--ok); background: rgba(16,185,129,0.05); }
+.cache-item.stale { border-color: var(--danger); background: rgba(239,68,68,0.05); }
+.cache-name {
+  flex: 1; min-width: 0; font-family: var(--mono);
+  font-size: 11px; word-break: break-all;
+}
+.cache-size {
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--text-3); flex-shrink: 0;
+}
+
+.log {
+  font-family: var(--mono); font-size: 11px; line-height: 1.6;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px; max-height: 240px;
+  overflow-y: auto; margin-top: 8px; color: var(--text-2);
+  white-space: pre-wrap; word-break: break-all;
+}
+.log .t { color: var(--text-3); }
+.log .ok { color: var(--ok); }
+.log .warn { color: var(--warn); }
+.log .err { color: var(--danger); }
+
+.empty { padding: 20px; text-align: center; font-size: 12px; color: var(--text-3); }
+
+details { margin-top: 8px; }
+summary {
+  cursor: pointer; font-size: 12px; font-weight: 700;
+  color: var(--text-3); padding: 4px 0;
+}
+summary:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<h1>Folio <span>PWA Diagnostics</span></h1>
+<p class="sub">Live state of the service worker, caches, and update system.</p>
+
+<!-- ═══ SERVICE WORKER ═══ -->
+<div class="card">
+  <div class="card-head">
+    <div class="card-title">
+      <svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4.5-6.5 4.5 2-7L2 9h7z"/></svg>
+      Service Worker
+    </div>
+    <span id="swBadge" class="badge muted">checking…</span>
+  </div>
+  <div class="row"><span class="row-label">Registration</span><span class="row-value" id="swReg">—</span></div>
+  <div class="row"><span class="row-label">Scope</span><span class="row-value" id="swScope">—</span></div>
+  <div class="row"><span class="row-label">State</span><span class="row-value" id="swState">—</span></div>
+  <div class="row"><span class="row-label">Active version</span><span class="row-value" id="swActiveVer">—</span></div>
+  <div class="row"><span class="row-label">Waiting version</span><span class="row-value" id="swWaitingVer">—</span></div>
+  <div class="row"><span class="row-label">Page controlled</span><span class="row-value" id="swControlled">—</span></div>
+  <div class="actions">
+    <button id="btnUpdate"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Check for updates</button>
+    <button id="btnSkipWaiting" class="primary" disabled><svg viewBox="0 0 24 24"><polyline points="5 12 12 19 19 12"/><polyline points="5 5 12 12 19 5"/></svg>Force skipWaiting</button>
+    <button id="btnUnregister" class="danger"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Unregister</button>
+  </div>
+</div>
+
+<!-- ═══ UPDATE ═══ -->
+<div class="card">
+  <div class="card-head">
+    <div class="card-title">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Update system
+    </div>
+    <span id="updBadge" class="badge muted">checking…</span>
+  </div>
+  <div class="row"><span class="row-label">FOLIO.update</span><span class="row-value" id="updExists">—</span></div>
+  <div class="row"><span class="row-label">Paused</span><span class="row-value" id="updPaused">—</span></div>
+  <div class="row"><span class="row-label">Postponed version</span><span class="row-value" id="updPostponed">—</span></div>
+  <div class="row"><span class="row-label">Last checked</span><span class="row-value" id="updLastCheck">—</span></div>
+  <div class="actions">
+    <button id="btnUpdCheck"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Force check</button>
+    <button id="btnUpdShow" class="primary"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>Show dialog manually</button>
+    <button id="btnUpdClear"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>Clear postponed</button>
+  </div>
+</div>
+
+<!-- ═══ INSTALL ═══ -->
+<div class="card">
+  <div class="card-head">
+    <div class="card-title">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Install system
+    </div>
+    <span id="instBadge" class="badge muted">checking…</span>
+  </div>
+  <div class="row"><span class="row-label">FOLIO.install</span><span class="row-value" id="instExists">—</span></div>
+  <div class="row"><span class="row-label">Standalone</span><span class="row-value" id="instStandalone">—</span></div>
+  <div class="row"><span class="row-label">Beforeinstallprompt captured</span><span class="row-value" id="instPrompt">—</span></div>
+  <div class="row"><span class="row-label">Installed flag</span><span class="row-value" id="instInstalled">—</span></div>
+  <div class="row"><span class="row-label">Cooldown active</span><span class="row-value" id="instCooldown">—</span></div>
+  <div class="row"><span class="row-label">Manifest linked</span><span class="row-value" id="instManifest">—</span></div>
+  <div class="actions">
+    <button id="btnInstShow" class="primary"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>Show install sheet</button>
+    <button id="btnInstReset"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Reset install state</button>
+  </div>
+</div>
+
+<!-- ═══ CACHES ═══ -->
+<div class="card">
+  <div class="card-head">
+    <div class="card-title">
+      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      Caches
+    </div>
+    <span id="cacheBadge" class="badge muted">checking…</span>
+  </div>
+  <div class="row"><span class="row-label">Cache count</span><span class="row-value" id="cacheCount">—</span></div>
+  <div class="row"><span class="row-label">Total entries</span><span class="row-value" id="cacheEntries">—</span></div>
+  <div class="row"><span class="row-label">Est. size</span><span class="row-value" id="cacheSize">—</span></div>
+  <div class="cache-list" id="cacheList"></div>
+  <div class="actions">
+    <button id="btnCacheRefresh"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Refresh</button>
+    <button id="btnCacheInspect"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Inspect entries</button>
+    <button id="btnCacheClear" class="danger"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>Clear all caches</button>
+  </div>
+  <details>
+    <summary>Cache entry inspector</summary>
+    <div class="log" id="cacheInspector">Click "Inspect entries" above.</div>
+  </details>
+</div>
+
+<!-- ═══ OFFLINE TEST ═══ -->
+<div class="card">
+  <div class="card-head">
+    <div class="card-title">
+      <svg viewBox="0 0 24 24"><path d="M5 12.5a8 8 0 0 1 14 0"/><path d="M8 16.5a5 5 0 0 1 8 0"/><path d="M12 20.5v-0.5"/></svg>
+      Offline readiness
+    </div>
+    <span id="offBadge" class="badge muted">checking…</span>
+  </div>
+  <div class="row"><span class="row-label">navigator.onLine</span><span class="row-value" id="offOnline">—</span></div>
+  <div class="row"><span class="row-label">Persistent storage</span><span class="row-value" id="offPersisted">—</span></div>
+  <div class="row"><span class="row-label">Storage estimate</span><span class="row-value" id="offEstimate">—</span></div>
+  <div class="cache-list" id="routeList"></div>
+  <div class="actions">
+    <button id="btnOffRefresh"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Check routes</button>
+    <button id="btnOffRequestPersist"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Request persistent storage</button>
+  </div>
+</div>
+
+<!-- ═══ EVENT LOG ═══ -->
+<div class="card">
+  <div class="card-head">
+    <div class="card-title">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Event log
+    </div>
+    <span id="logBadge" class="badge muted">0 events</span>
+  </div>
+  <div class="log" id="eventLog">Waiting for events…</div>
+  <div class="actions">
+    <button id="btnLogClear"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>Clear log</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const ROUTES = ['/', '/settings', '/projects', '/tools', '/profile', '/register',
+                  '/project', '/analytics', '/offline', '/invite', '/notifications'];
+
+  const $ = id => document.getElementById(id);
+  const log = [];
+  let pendingUpdate = null;  // captured beforeinstallprompt
+
+  // ═══ LOGGING ═══
+  function addLog(message, level = 'info') {
+    const t = new Date().toLocaleTimeString();
+    log.push({ t, message, level });
+    if (log.length > 200) log.shift();
+    renderLog();
+  }
+
+  function renderLog() {
+    const box = $('eventLog');
+    if (log.length === 0) {
+      box.innerHTML = '<span class="t">Waiting for events…</span>';
+    } else {
+      box.innerHTML = log.map(e =>
+        `<span class="t">${e.t}</span> <span class="${e.level}">${escapeHtml(e.message)}</span>`
+      ).join('\n');
+    }
+    box.scrollTop = box.scrollHeight;
+    $('logBadge').textContent = `${log.length} event${log.length === 1 ? '' : 's'}`;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function fmtBytes(n) {
+    if (!n || n < 0) return '0 B';
+    const u = ['B','KB','MB','GB'];
+    let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+  }
+
+  function fmtTimeAgo(ts) {
+    if (!ts) return '—';
+    const d = Date.now() - ts;
+    if (d < 60000) return 'just now';
+    const m = Math.floor(d / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  }
+
+  // ═══ SERVICE WORKER ═══
+  async function refreshSW() {
+    if (!('serviceWorker' in navigator)) {
+      setBadge('swBadge', 'Not supported', 'danger');
+      $('swReg').textContent = 'not supported';
+      addLog('Service Worker not supported', 'err');
+      return;
+    }
+
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        setBadge('swBadge', 'Not registered', 'danger');
+        $('swReg').textContent = 'no registration';
+        $('swScope').textContent = '—';
+        $('swState').textContent = '—';
+        $('swActiveVer').textContent = '—';
+        $('swWaitingVer').textContent = '—';
+        $('swControlled').textContent = '—';
+        return;
+      }
+
+      $('swReg').textContent = 'registered';
+      $('swScope').textContent = reg.scope || '—';
+
+      const active = reg.active;
+      const waiting = reg.installing || reg.waiting;
+
+      $('swState').textContent = active?.state || '—';
+      $('swControlled').textContent = !!navigator.serviceWorker.controller ? 'yes' : 'no';
+
+      const activeVer = active ? await getWorkerVersion(active) : '';
+      $('swActiveVer').textContent = activeVer || '(no response)';
+      $('swActiveVer').className = 'row-value ' + (activeVer ? 'ok' : 'warn');
+
+      const waitingVer = waiting ? await getWorkerVersion(waiting) : '';
+      $('swWaitingVer').textContent = waitingVer || (waiting ? '(no response)' : '(none)');
+      $('swWaitingVer').className = 'row-value ' + (waiting ? 'warn' : '');
+
+      // Skip-waiting button only enabled when there's a real waiting worker
+      const skipBtn = $('btnSkipWaiting');
+      skipBtn.disabled = !waiting || !active;
+
+      if (active && waitingVer && activeVer && activeVer !== waitingVer) {
+        setBadge('swBadge', 'Update waiting', 'warn');
+        addLog(`Update available: ${activeVer} → ${waitingVer}`, 'warn');
+      } else if (active) {
+        setBadge('swBadge', 'Active', 'ok');
+      } else {
+        setBadge('swBadge', 'Registering', 'muted');
+      }
+    } catch (err) {
+      setBadge('swBadge', 'Error', 'danger');
+      addLog(`SW refresh failed: ${err.message}`, 'err');
+    }
+  }
+
+  async function getWorkerVersion(worker, timeoutMs = 2000) {
+    return new Promise((resolve) => {
+      if (!worker) { resolve(''); return; }
+      try {
+        const mc = new MessageChannel();
+        const timer = setTimeout(() => resolve(''), timeoutMs);
+        mc.port1.onmessage = (e) => {
+          clearTimeout(timer);
+          resolve(String(e.data?.version || ''));
+        };
+        worker.postMessage({ type: 'GET_VERSION' }, [mc.port2]);
+      } catch { resolve(''); }
+    });
+  }
+
+  function setBadge(id, text, level = 'muted') {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'badge ' + level;
+  }
+
+  // ═══ UPDATE ═══
+  function refreshUpdate() {
+    const exists = !!window.FOLIO?.update;
+    $('updExists').textContent = exists ? 'available' : 'not loaded';
+    $('updExists').className = 'row-value ' + (exists ? 'ok' : 'danger');
+
+    if (exists) {
+      const st = window.FOLIO.update._state || {};
+      $('updPaused').textContent = st.paused ? 'yes' : 'no';
+      $('updPaused').className = 'row-value ' + (st.paused ? 'warn' : 'ok');
+      $('updPostponed').textContent = st.postponedVersion || '(none)';
+      $('updLastCheck').textContent = st.lastCheckedAt
+        ? fmtTimeAgo(st.lastCheckedAt) : 'never';
+
+      setBadge('updBadge', st.paused ? 'Paused' : 'Ready', st.paused ? 'warn' : 'ok');
+    } else {
+      setBadge('updBadge', 'Not loaded', 'danger');
+    }
+  }
+
+  // ═══ INSTALL ═══
+  function refreshInstall() {
+    const exists = !!window.FOLIO?.install;
+    $('instExists').textContent = exists ? 'available' : 'not loaded';
+    $('instExists').className = 'row-value ' + (exists ? 'ok' : 'danger');
+
+    const standalone = window.matchMedia?.('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+    $('instStandalone').textContent = standalone ? 'yes' : 'no';
+    $('instStandalone').className = 'row-value ' + (standalone ? 'ok' : '');
+
+    $('instPrompt').textContent = pendingUpdate ? 'yes' : 'no';
+    $('instPrompt').className = 'row-value ' + (pendingUpdate ? 'ok' : 'warn');
+
+    if (exists) {
+      const st = window.FOLIO.install._state || {};
+      $('instInstalled').textContent = window.FOLIO.install.isInstalled() ? 'yes' : 'no';
+      $('instCooldown').textContent = st.cachedDismissState?.count > 0
+        ? `yes (dismissed ${st.cachedDismissState.count}×)` : 'no';
+    } else {
+      $('instInstalled').textContent = '—';
+      $('instCooldown').textContent = '—';
+    }
+
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    $('instManifest').textContent = manifestLink ? 'yes' : 'no';
+    $('instManifest').className = 'row-value ' + (manifestLink ? 'ok' : 'danger');
+
+    setBadge('instBadge',
+      standalone ? 'Installed' : (pendingUpdate ? 'Ready' : 'Waiting'),
+      standalone ? 'ok' : (pendingUpdate ? 'ok' : 'warn'));
+  }
+
+  // ═══ CACHES ═══
+  async function refreshCaches() {
+    if (!('caches' in window)) {
+      setBadge('cacheBadge', 'Not supported', 'danger');
+      return;
+    }
+
+    try {
+      const names = await caches.keys();
+      const activeCacheName = window.FOLIO?.update?._state?.reg?.active
+        ? null  // can't read the SW's CACHE_NAME directly; use heuristic below
+        : null;
+
+      // Heuristic: "folio-shell-*" is our cache; newest version is current
+      const folioCaches = names.filter(n => n.startsWith('folio-'));
+      const otherCaches = names.filter(n => !n.startsWith('folio-'));
+
+      $('cacheCount').textContent = String(names.length);
+
+      let totalEntries = 0;
+      let totalBytes = 0;
+      const list = $('cacheList');
+      list.innerHTML = '';
+
+      for (const name of names) {
+        const cache = await caches.open(name);
+        const keys = await cache.keys();
+        totalEntries += keys.length;
+
+        let bytes = 0;
+        for (const req of keys) {
+          try {
+            const res = await cache.match(req);
+            if (res) {
+              const blob = await res.clone().blob();
+              bytes += blob.size;
+            }
+          } catch {}
+        }
+        totalBytes += bytes;
+
+        const item = document.createElement('div');
+        item.className = 'cache-item';
+        const isFolio = name.startsWith('folio-');
+        if (isFolio && keys.length > 0) item.classList.add('current');
+
+        item.innerHTML = `
+          <span class="cache-name">${escapeHtml(name)}</span>
+          <span class="cache-size">${keys.length} entries · ${fmtBytes(bytes)}</span>
+        `;
+        list.appendChild(item);
+      }
+
+      $('cacheEntries').textContent = String(totalEntries);
+      $('cacheSize').textContent = fmtBytes(totalBytes);
+
+      setBadge('cacheBadge',
+        names.length === 0 ? 'Empty' : `${names.length} cache${names.length === 1 ? '' : 's'}`,
+        names.length === 0 ? 'warn' : 'ok');
+
+      addLog(`Caches: ${names.length} total, ${totalEntries} entries, ${fmtBytes(totalBytes)}`);
+    } catch (err) {
+      setBadge('cacheBadge', 'Error', 'danger');
+      addLog(`Cache refresh failed: ${err.message}`, 'err');
+    }
+  }
+
+  async function inspectCacheEntries() {
+    const box = $('cacheInspector');
+    box.innerHTML = '';
+    try {
+      const names = await caches.keys();
+      const lines = [];
+      for (const name of names) {
+        const cache = await caches.open(name);
+        const keys = await cache.keys();
+        lines.push(`── ${name} (${keys.length}) ──`);
+        keys.forEach((req, i) => {
+          lines.push(`  ${i + 1}. ${req.url.replace(location.origin, '')}`);
+        });
+      }
+      box.textContent = lines.join('\n') || '(empty)';
+    } catch (err) {
+      box.textContent = `Error: ${err.message}`;
+    }
+  }
+
+  // ═══ OFFLINE ═══
+  async function refreshOffline() {
+    $('offOnline').textContent = navigator.onLine ? 'online' : 'offline';
+    $('offOnline').className = 'row-value ' + (navigator.onLine ? 'ok' : 'danger');
+
+    if (navigator.storage?.persisted) {
+      try {
+        const persisted = await navigator.storage.persisted();
+        $('offPersisted').textContent = persisted ? 'granted' : 'not granted';
+        $('offPersisted').className = 'row-value ' + (persisted ? 'ok' : 'warn');
+      } catch {}
+    }
+
+    if (navigator.storage?.estimate) {
+      try {
+        const est = await navigator.storage.estimate();
+        const used = est.usage || 0;
+        const quota = est.quota || 0;
+        $('offEstimate').textContent = quota > 0
+          ? `${fmtBytes(used)} / ${fmtBytes(quota)}`
+          : fmtBytes(used);
+      } catch {}
+    }
+
+    // Check which routes are cached
+    const list = $('routeList');
+    list.innerHTML = '';
+    let cached = 0;
+    try {
+      const names = await caches.keys();
+      for (const route of ROUTES) {
+        let found = false;
+        for (const name of names) {
+          const cache = await caches.open(name);
+          const hit = await cache.match(route, { ignoreSearch: true });
+          if (hit) { found = true; break; }
+        }
+        if (found) cached++;
+
+        const item = document.createElement('div');
+        item.className = 'cache-item ' + (found ? 'current' : 'stale');
+        item.innerHTML = `
+          <span class="cache-name">${escapeHtml(route)}</span>
+          <span class="cache-size">${found ? '✓ cached' : '✗ not cached'}</span>
+        `;
+        list.appendChild(item);
+      }
+
+      setBadge('offBadge',
+        `${cached}/${ROUTES.length} routes cached`,
+        cached === ROUTES.length ? 'ok' : (cached > 0 ? 'warn' : 'danger'));
+    } catch (err) {
+      addLog(`Route check failed: ${err.message}`, 'err');
+    }
+  }
+
+  // ═══ REFRESH ALL ═══
+  async function refreshAll() {
+    await refreshSW();
+    refreshUpdate();
+    refreshInstall();
+    await refreshCaches();
+    await refreshOffline();
+  }
+
+  // ═══ WIRE BUTTONS ═══
+
+  // SW
+  $('btnUpdate').addEventListener('click', async () => {
+    addLog('Checking for SW update…');
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) { addLog('No registration', 'err'); return; }
+      await reg.update();
+      addLog('reg.update() complete', 'ok');
+      await refreshSW();
+    } catch (err) {
+      addLog(`Update failed: ${err.message}`, 'err');
+    }
+  });
+
+  $('btnSkipWaiting').addEventListener('click', async () => {
+    addLog('Sending SKIP_WAITING…');
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      const target = reg?.waiting || reg?.installing;
+      if (!target) { addLog('No waiting worker', 'err'); return; }
+      target.postMessage({ type: 'SKIP_WAITING' });
+      addLog('SKIP_WAITING sent — page will reload if controller changes', 'ok');
+    } catch (err) {
+      addLog(`skipWaiting failed: ${err.message}`, 'err');
+    }
+  });
+
+  $('btnUnregister').addEventListener('click', async () => {
+    if (!confirm('Unregister the service worker? The app will lose offline capability until you reload.')) return;
+    addLog('Unregistering…');
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.unregister();
+      addLog('Unregistered', 'ok');
+      await refreshAll();
+    } catch (err) {
+      addLog(`Unregister failed: ${err.message}`, 'err');
+    }
+  });
+
+  // UPDATE
+  $('btnUpdCheck').addEventListener('click', async () => {
+    if (!window.FOLIO?.update) { addLog('FOLIO.update not loaded', 'err'); return; }
+    addLog('FOLIO.update.check() called');
+    try {
+      await window.FOLIO.update.check();
+      addLog('Check complete', 'ok');
+      refreshUpdate();
+      await refreshSW();
+    } catch (err) {
+      addLog(`Check failed: ${err.message}`, 'err');
+    }
+  });
+
+  $('btnUpdShow').addEventListener('click', () => {
+    if (!window.FOLIO?.update) { addLog('FOLIO.update not loaded', 'err'); return; }
+    // Force-show the dialog even with no pending update, for UI testing
+    addLog('Force-showing update dialog', 'warn');
+    const evt = new Event('beforeinstallprompt');
+    // Call internal show by triggering a fake update
+    try {
+      const reg = window.FOLIO.update._state?.reg;
+      if (!reg?.waiting) {
+        addLog('No waiting worker — showing with fake version', 'warn');
+      }
+      // The public API doesn't expose show() directly, so fall back to
+      // calling check() which will show if there's a real update.
+      window.FOLIO.update.check();
+    } catch (err) {
+      addLog(`Show failed: ${err.message}`, 'err');
+    }
+  });
+
+  $('btnUpdClear').addEventListener('click', () => {
+    try { sessionStorage.removeItem('folio.upd.postponed'); } catch {}
+    if (window.FOLIO?.update?._state) {
+      window.FOLIO.update._state.postponedVersion = null;
+    }
+    addLog('Cleared postponed version', 'ok');
+    refreshUpdate();
+  });
+
+  // INSTALL
+  $('btnInstShow').addEventListener('click', () => {
+    if (!window.FOLIO?.install) { addLog('FOLIO.install not loaded', 'err'); return; }
+    addLog('FOLIO.install.show() called');
+    const shown = window.FOLIO.install.show();
+    addLog(`show() returned: ${shown}`, shown ? 'ok' : 'warn');
+  });
+
+  $('btnInstReset').addEventListener('click', () => {
+    if (!window.FOLIO?.install) { addLog('FOLIO.install not loaded', 'err'); return; }
+    if (!confirm('Reset install state? Cooldown and installed flag will be cleared.')) return;
+    window.FOLIO.install.reset();
+    addLog('Install state reset', 'ok');
+    refreshInstall();
+  });
+
+  // CACHES
+  $('btnCacheRefresh').addEventListener('click', () => { addLog('Refreshing caches…'); refreshCaches(); });
+  $('btnCacheInspect').addEventListener('click', inspectCacheEntries);
+  $('btnCacheClear').addEventListener('click', async () => {
+    if (!confirm('Delete ALL caches? You will need to re-download assets. The app will NOT work offline until you reload online.')) return;
+    addLog('Clearing all caches…');
+    try {
+      const names = await caches.keys();
+      await Promise.all(names.map(n => caches.delete(n)));
+      addLog(`Cleared ${names.length} cache${names.length === 1 ? '' : 's'}`, 'ok');
+      await refreshCaches();
+      await refreshOffline();
+    } catch (err) {
+      addLog(`Clear failed: ${err.message}`, 'err');
+    }
+  });
+
+  // OFFLINE
+  $('btnOffRefresh').addEventListener('click', () => { addLog('Checking routes…'); refreshOffline(); });
+  $('btnOffRequestPersist').addEventListener('click', async () => {
+    if (!navigator.storage?.persist) { addLog('Not supported', 'err'); return; }
+    try {
+      const granted = await navigator.storage.persist();
+      addLog(`Persistent storage: ${granted ? 'granted' : 'denied'}`, granted ? 'ok' : 'warn');
+      refreshOffline();
+    } catch (err) {
+      addLog(`Persist request failed: ${err.message}`, 'err');
+    }
+  });
+
+  // LOG
+  $('btnLogClear').addEventListener('click', () => {
+    log.length = 0;
+    renderLog();
+  });
+
+  // ═══ GLOBAL EVENTS ═══
+  window.addEventListener('online', () => { addLog('Network: online', 'ok'); refreshOffline(); });
+  window.addEventListener('offline', () => { addLog('Network: offline', 'warn'); refreshOffline(); });
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    pendingUpdate = e;
+    addLog('beforeinstallprompt captured', 'ok');
+    refreshInstall();
+  });
+
+  window.addEventListener('appinstalled', () => {
+    addLog('App installed', 'ok');
+    pendingUpdate = null;
+    refreshInstall();
+  });
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      const d = e.data || {};
+      if (d.type) {
+        addLog(`SW message: ${d.type}${d.version ? ' (' + d.version + ')' : ''}`, 'ok');
+        refreshSW();
+        refreshUpdate();
+      }
+    });
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      addLog('controllerchange fired', 'warn');
+      refreshSW();
+    });
+  }
+
+  // Log FOLIO namespace availability
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      if (window.FOLIO?.install) addLog('FOLIO.install loaded', 'ok');
+      else addLog('FOLIO.install NOT loaded', 'err');
+      if (window.FOLIO?.update) addLog('FOLIO.update loaded', 'ok');
+      else addLog('FOLIO.update NOT loaded', 'err');
+      refreshAll();
+    }, 600);
+  });
+
+  // Auto-refresh every 15s while page is visible
+  setInterval(() => {
+    if (document.visibilityState === 'visible') refreshSW();
+  }, 15000);
+
+})();
+</script>
+</body>
+</html>
