@@ -2,19 +2,9 @@
 // Folio — Service Worker
 // ============================================================
 
-// ── Date-based versioning ───────────────────────────────────
-// Format: YYYY-MM-DD-<n>
-//   Increment <n> for same-day deploys; bump date on a new day.
-//   ✅ MUST bump this on every deploy of sw.js, otherwise the browser
-//      installs the new worker but caches into the same CACHE_NAME,
-//      causing mixed stale/fresh state.
 const CACHE_VERSION = '2026-10-25-1';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
-
-// ✅ FIX: How long network-first navigation will wait before falling
-// back to cache. Without this, slow networks make every nav hang.
-const NAV_TIMEOUT_MS = 3500;
 
 // Cross-origin hosts we allow through the fetch handler so we can
 // cache them for offline use.
@@ -27,37 +17,52 @@ const CDN_HOSTS = new Set([
 ]);
 
 // ── Pre-cache list ──────────────────────────────────────────
-// ✅ FIX: verify every entry actually exists on the server. Anything
-// that 404s wastes install bandwidth. If you've renamed a page,
-// update this list or remove it.
+// ✅ IMPORTANT: With `cleanUrls: true` in vercel.json, users NEVER
+// request `/settings.html` — they request `/settings`, and Vercel
+// rewrites internally. So we MUST pre-cache the clean URLs, not
+// just the .html variants. Otherwise the first offline visit to
+// any page falls through to /offline.html.
 const CACHED_FILES = [
-  // ── HTML pages ──────────────────────────────────────────
+  // ── HTML clean URLs (what the user actually navigates to) ──
   '/',
+  '/settings',
+  '/projects',
+  '/tools',
+  '/profile',
+  '/register',
+  '/project',
+  '/analytics',
+  '/offline',
+  '/invite',
+  '/notifications',
+
+  // ── HTML .html fallbacks (needed for offline rewrites + direct URL) ──
   '/index.html',
-  '/invite.html',
-  '/app.css',
-  '/project.css',
-  '/register.html',
-  '/profile.html',
-  '/project.html',
+  '/settings.html',
   '/projects.html',
   '/tools.html',
-  '/settings.html',
+  '/profile.html',
+  '/register.html',
+  '/project.html',
   '/analytics.html',
   '/offline.html',
+  '/invite.html',
   '/notifications.html',
 
-  // ── PWA metadata ────────────────────────────────────────
+  // ── CSS ────────────────────────────────────────────────────
+  '/app.css',
+  '/project.css',
+
+  // ── PWA metadata ───────────────────────────────────────────
   '/manifest.json',
 
-  // ── Icons ───────────────────────────────────────────────
-  '/icons/icon.jpg',
+  // ── Icons ──────────────────────────────────────────────────
   '/icons/icon-144.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/notif.png',
 
-  // ── Screenshots ─────────────────────────────────────────
+  // ── Screenshots ────────────────────────────────────────────
   '/screenshots/screenshot1.png',
   '/screenshots/screenshot2.png',
   '/screenshots/screenshot3.png',
@@ -65,15 +70,13 @@ const CACHED_FILES = [
   '/screenshots/screenshot5.png',
   '/screenshots/screenshot6.png',
 
-  // ── Scripts ─────────────────────────────────────────────
+  // ── Scripts ────────────────────────────────────────────────
   '/install.js',
-  '/js/ai.js',
-  '/js/create-project.js',
   '/update.js',
   '/fcm-client.js',
   '/notifications.js',
 
-  // ── CodeMirror via deno.land ────────────────────────────
+  // ── CodeMirror via deno.land ───────────────────────────────
   'https://deno.land/x/codemirror_esm@v6.0.1/esm/codemirror/dist/index.js',
   'https://deno.land/x/codemirror_esm@v6.0.1/esm/view/dist/index.js',
   'https://deno.land/x/codemirror_esm@v6.0.1/esm/state/dist/index.js',
@@ -158,20 +161,10 @@ self.addEventListener('install', (event) => {
 
     console.log(`[Folio SW] install complete — bulk=${bulkOk} fetched=${fetched} missed=${missed}`);
 
-    // ── FIX ──
-    // Intentionally do NOT broadcast SW_UPDATE_AVAILABLE from install.
-    // The previous implementation broadcast on every install, which caused
-    // update.js to pop the "Update available" dialog repeatedly (once per
-    // install, and again each time update.js's polling ran).
-    //
-    // Detection of a waiting worker is now handled exclusively by
-    // update.js's checkNow() (which runs on boot, on focus, on online,
-    // and every 5 min). checkNow() correctly respects the user's postpone.
-    //
-    // We also intentionally do NOT call self.skipWaiting() — the new worker
-    // must stay in "waiting" so update.js can detect a real update and let
-    // the user choose when to apply it. skipWaiting() is sent by update.js
-    // when the user taps "Update now".
+    // Intentionally do NOT broadcast SW_UPDATE_AVAILABLE here.
+    // update.js handles that via reg.waiting polling.
+    // Also intentionally do NOT call skipWaiting() — the new worker
+    // must stay in "waiting" so update.js can let the user apply it.
   })());
 });
 
@@ -214,24 +207,32 @@ self.addEventListener('fetch', (event) => {
 
   if (shouldBypass(url, req)) return;
 
-  const isNav = req.mode === 'navigate' ||
-    (req.headers.get('accept') || '').includes('text/html');
+  try {
+    const isNav = req.mode === 'navigate' ||
+      (req.headers.get('accept') || '').includes('text/html');
 
-  if (isNav) {
-    const isShell = SHELL_ROUTES.has(url.pathname);
-    if (isShell) {
-      event.respondWith(cacheFirstShell(req));
-    } else {
-      event.respondWith(networkFirstNav(req));
+    if (isNav) {
+      const isShell = SHELL_ROUTES.has(url.pathname);
+      if (isShell) {
+        event.respondWith(cacheFirstShell(req));
+      } else {
+        event.respondWith(networkFirstNav(req));
+      }
+      return;
     }
-    return;
-  }
 
-  event.respondWith(staleWhileRevalidate(req));
+    event.respondWith(staleWhileRevalidate(req));
+  } catch (err) {
+    // A synchronous throw here would fall back to the browser's
+    // own network attempt → Chrome's generic offline page.
+    // Return a proper offline response instead.
+    try {
+      event.respondWith(offlinePage(req));
+    } catch {}
+  }
 });
 
 // ✅ Shell pages (/, /index.html) — cache-first with silent background update.
-// Returns cached immediately if available; refreshes in the background.
 async function cacheFirstShell(req) {
   let cached =
     await caches.match(req, { ignoreSearch: true }) ||
@@ -253,19 +254,15 @@ async function cacheFirstShell(req) {
   }
 }
 
-// ✅ FIX: network-first with a timeout so slow networks fall back to cache
-// in ~3.5s instead of hanging indefinitely. Also caches the response and
-// checks content-type before serving.
+// ✅ FIX: no more race timeout. The previous NAV_TIMEOUT_MS = 3500
+// killed successful fetches on slow networks, causing "offline while
+// online" and Chrome's generic error page. Now we wait for fetch,
+// fall back to cache only on real failure.
 async function networkFirstNav(req) {
   const cachedPromise = caches.match(req, { ignoreSearch: true });
 
   try {
-    const res = await Promise.race([
-      fetch(req),
-      new Promise((_, rej) =>
-        setTimeout(() => rej(new Error('NAV_TIMEOUT')), NAV_TIMEOUT_MS)
-      ),
-    ]);
+    const res = await fetch(req);
 
     if (res && res.ok && (res.headers.get('content-type') || '').includes('text/html')) {
       const copy = res.clone();
@@ -304,10 +301,6 @@ async function staleWhileRevalidate(req) {
   const accept = req.headers.get('accept') || '';
   if (accept.includes('text/html')) return offlinePage(req);
 
-  // ✅ FIX: return a stub body + clearer status so debugging is easier.
-  // Previously this returned an empty 200/404, which made JS module import
-  // failures look like a "failed to fetch dynamically imported module"
-  // with no body — very hard to diagnose.
   try {
     const url = new URL(req.url);
     const isJs = /\.m?js$/i.test(url.pathname);
@@ -353,10 +346,6 @@ async function offlinePage(req) {
   const cachedPlain = await caches.match('/offline.html');
   if (cachedPlain) return cachedPlain;
 
-  // ✅ FIX: add Cache-Control: no-store so no layer ever caches this
-  // dynamically-generated response. Previously there was no cache header,
-  // which meant a heuristic cache could serve this "you're offline" page
-  // even after the user came back online.
   return new Response(
     '<!doctype html><meta charset=utf-8><title>Offline — Folio</title>' +
     '<meta name="theme-color" content="#0a0c10">' +
@@ -388,7 +377,7 @@ async function offlinePage(req) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// Message bus
+// Message bus  (UNCHANGED — keep exactly as before)
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('message', (event) => {
   const data = event.data;
@@ -422,10 +411,6 @@ self.addEventListener('message', (event) => {
       event.waitUntil((async () => {
         let count = 0;
         try {
-          // ✅ FIX: open at version 3 to match app.js's DB_VERSION.
-          // Previously opened 'folio' at v2, which failed with a
-          // VersionError (DB already at v3) and silently returned 0.
-          // Now the sync queue count actually reflects reality.
           const req = indexedDB.open('folio', 3);
           const conn = await new Promise((res, rej) => {
             req.onsuccess = () => res(req.result);
@@ -520,9 +505,8 @@ self.addEventListener('message', (event) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Push — FCM data messages (Web Push path is kept as fallback)
+// Push — FCM data messages  (UNCHANGED)
 // ═══════════════════════════════════════════════════════════
-
 function normalizePushPayload(raw) {
   if (!raw || typeof raw !== 'object') {
     return {
@@ -601,7 +585,7 @@ self.addEventListener('push', (event) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Notification click — focus existing tab or open new
+// Notification click  (UNCHANGED)
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
@@ -620,7 +604,6 @@ self.addEventListener('notificationclick', (event) => {
 
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 
-    // First pass: exact path match
     for (const c of clients) {
       try {
         const cUrl = new URL(c.url);
@@ -636,7 +619,6 @@ self.addEventListener('notificationclick', (event) => {
       } catch {}
     }
 
-    // Second pass: any Folio tab open → navigate it
     for (const c of clients) {
       try {
         const cUrl = new URL(c.url);
@@ -656,7 +638,7 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Notification close — analytics hook
+// Notification close  (UNCHANGED)
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('notificationclose', (event) => {
   try {
@@ -671,8 +653,7 @@ self.addEventListener('notificationclose', (event) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Push subscription change — Web Push fallback only.
-// FCM handles token rotation in firebase-messaging-sw.js.
+// Push subscription change  (UNCHANGED)
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('pushsubscriptionchange', (event) => {
   event.waitUntil((async () => {
@@ -685,8 +666,6 @@ self.addEventListener('pushsubscriptionchange', (event) => {
       if (!newSub) return;
 
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      // ✅ FIX: await all broadcasts. Previously these were fire-and-forget,
-      // which could be dropped if the SW gets terminated right after.
       await Promise.allSettled(
         clients.map(c => {
           try {
