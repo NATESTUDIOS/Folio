@@ -4,7 +4,7 @@
 //  ────────────────────────────────────────────────────────────────
 //  This module provides ALL the plumbing ai.html needs. It does not
 //  render any UI chrome, inject styles, or manage the DOM beyond the
-//  helpers exposed below. ai-page.js (the page controller) consumes
+//  helpers exposed below. ai.html (the page controller) consumes
 //  these exports and builds the interface.
 //
 //  Storage contract (matches index.html and project.html exactly):
@@ -27,6 +27,11 @@
 //
 //    • Result cache  → in-memory Map, 10min TTL, 40 entries
 //
+//    • Versions      → IDB 'versions' store, key vid
+//                      shape: { vid, pid, message, files, createdAt,
+//                      kind: null | 'deploy' }
+//                      Same store, same shape as index.html / project.html.
+//
 //  Server contract (api/ai.js):
 //
 //    POST /api/ai { task, pid?, payload }
@@ -42,7 +47,7 @@
 //      'deployDraft' → 'writeDeploy'
 //
 //  No DOM. No CSS. No global listeners. Every function is pure or
-//  storage-bound. ai-page.js wires events.
+//  storage-bound. ai.html wires events.
 // ═══════════════════════════════════════════════════════════════════
 
 "use strict";
@@ -54,6 +59,7 @@
 const API_BASE = (typeof window !== "undefined" && window.FOLIO_API_BASE)
   || "https://foliostudios.vercel.app/api";
 const API_AI = API_BASE + "/ai";
+const API_HOST = API_BASE + "/host";
 
 const NOTES_PATH = "notes.json";
 const NOTES_MAX_COUNT = 200;
@@ -72,13 +78,15 @@ const MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.mi
 const KATEX_CSS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
 const KATEX_JS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js";
 
-// Guest-allowable tasks (mirrors server GUEST_ALLOWED_TASKS)
+// Guest-allowable tasks (mirrors api/ai.js GUEST_ALLOWED_TASKS)
 const GUEST_TASKS = new Set([
   "explain", "logExplain", "metatags", "brainstorm", "diagram",
 ]);
 
-// Host tasks (server HOST_TASKS)
-const HOST_TASKS = new Set(["readProject", "commitChanges", "writeDeploy"]);
+// Host tasks (mirror of server HOST_TASKS; client uses 'commitDraft' /
+// 'deployDraft' names, which the server aliases to commitChanges /
+// writeDeploy).
+const HOST_TASKS = new Set(["readProject", "commitChanges", "writeDeploy", "commitDraft", "deployDraft"]);
 
 // Tasks whose artifacts are worth staging for later accept
 const APPLY_TASKS = new Set([
@@ -88,34 +96,32 @@ const APPLY_TASKS = new Set([
 
 // =========================================================================
 // TASK METADATA
-// Mirrors api/ai.js TASK_LIMITS exactly. Weights are used by the page to
-// show "· N credits" next to expensive tasks and by the HUD to project
-// budget impact. Labels use plain language (non-technical user facing).
+// Mirrors api/ai.js TASK_LIMITS. Labels use plain language (non-technical).
 // =========================================================================
 
 const TASK_META = {
-  explain:       { label: "What does this do?",  sub: "explain",       group: "Understand", weight: 1, requiresPid: false, requiresEditor: false, writes: false },
-  debug:         { label: "Find bugs",           sub: "debug",         group: "Fix",        weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
-  codefix:       { label: "Fix this",            sub: "codefix",       group: "Fix",        weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
-  optimize:      { label: "Make it faster",      sub: "optimize",      group: "Fix",        weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
-  suggest:       { label: "Suggest next line",   sub: "suggest",       group: "Complete",   weight: 1, requiresPid: false, requiresEditor: false, writes: true  },
-  brainstorm:    { label: "Brainstorm ideas",    sub: "brainstorm",    group: "Design",     weight: 2, requiresPid: false, requiresEditor: false, writes: false },
-  metatags:      { label: "SEO tags",            sub: "metatags",      group: "Content",    weight: 1, requiresPid: false, requiresEditor: false, writes: false },
-  scaffold:      { label: "Build starter",       sub: "scaffold",      group: "Build",      weight: 8, requiresPid: false, requiresEditor: false, writes: true  },
-  docs:          { label: "Write documentation", sub: "docs",          group: "Document",   weight: 8, requiresPid: false, requiresEditor: false, writes: true  },
-  findFn:        { label: "Find a function",     sub: "findFn",        group: "Refactor",   weight: 5, requiresPid: false, requiresEditor: false, writes: true  },
-  commitMsg:     { label: "Write commit message",sub: "commitMsg",     group: "Meta",       weight: 1, requiresPid: false, requiresEditor: false, writes: false },
-  logExplain:    { label: "Explain this error",  sub: "logExplain",    group: "Debug",      weight: 1, requiresPid: false, requiresEditor: false, writes: false },
-  diagram:       { label: "Draw a diagram",      sub: "diagram",       group: "Understand", weight: 2, requiresPid: false, requiresEditor: false, writes: false },
-  simulate:      { label: "Trace step-by-step",  sub: "simulate",      group: "Understand", weight: 3, requiresPid: false, requiresEditor: false, writes: false },
-  designExplain: { label: "Explain architecture",sub: "designExplain", group: "Understand", weight: 6, requiresPid: false, requiresEditor: false, writes: false },
-  translate:     { label: "Translate",           sub: "translate",     group: "Convert",    weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
-  docstrings:    { label: "Add comments",        sub: "docstrings",    group: "Document",   weight: 1, requiresPid: false, requiresEditor: false, writes: true  },
-  struggle:      { label: "Find weak spots",     sub: "struggle",      group: "Diagnose",   weight: 4, requiresPid: false, requiresEditor: false, writes: false },
+  explain:       { label: "What does this do?",   sub: "explain",       group: "Understand", weight: 1, requiresPid: false, requiresEditor: false, writes: false },
+  debug:         { label: "Find bugs",            sub: "debug",         group: "Fix",        weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
+  codefix:       { label: "Fix this",             sub: "codefix",       group: "Fix",        weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
+  optimize:      { label: "Make it faster",       sub: "optimize",      group: "Fix",        weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
+  suggest:       { label: "Suggest next line",    sub: "suggest",       group: "Complete",   weight: 1, requiresPid: false, requiresEditor: false, writes: true  },
+  brainstorm:    { label: "Brainstorm ideas",     sub: "brainstorm",    group: "Design",     weight: 2, requiresPid: false, requiresEditor: false, writes: false },
+  metatags:      { label: "SEO tags",             sub: "metatags",      group: "Content",    weight: 1, requiresPid: false, requiresEditor: false, writes: false },
+  scaffold:      { label: "Build starter",        sub: "scaffold",      group: "Build",      weight: 8, requiresPid: false, requiresEditor: false, writes: true  },
+  docs:          { label: "Write documentation",  sub: "docs",          group: "Document",   weight: 8, requiresPid: false, requiresEditor: false, writes: true  },
+  findFn:        { label: "Find a function",      sub: "findFn",        group: "Refactor",   weight: 5, requiresPid: false, requiresEditor: false, writes: true  },
+  commitMsg:     { label: "Write commit message", sub: "commitMsg",     group: "Meta",       weight: 1, requiresPid: false, requiresEditor: false, writes: false },
+  logExplain:    { label: "Explain this error",   sub: "logExplain",    group: "Debug",      weight: 1, requiresPid: false, requiresEditor: false, writes: false },
+  diagram:       { label: "Draw a diagram",       sub: "diagram",       group: "Understand", weight: 2, requiresPid: false, requiresEditor: false, writes: false },
+  simulate:      { label: "Trace step-by-step",   sub: "simulate",      group: "Understand", weight: 3, requiresPid: false, requiresEditor: false, writes: false },
+  designExplain: { label: "Explain architecture", sub: "designExplain", group: "Understand", weight: 6, requiresPid: false, requiresEditor: false, writes: false },
+  translate:     { label: "Translate",            sub: "translate",     group: "Convert",    weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
+  docstrings:    { label: "Add comments",         sub: "docstrings",    group: "Document",   weight: 1, requiresPid: false, requiresEditor: false, writes: true  },
+  struggle:      { label: "Find weak spots",      sub: "struggle",      group: "Diagnose",   weight: 4, requiresPid: false, requiresEditor: false, writes: false },
   audit:         { label: "Check accessibility & security", sub: "audit", group: "Secure",   weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
-  readProject:   { label: "Summarize project",   sub: "readProject",   group: "Host",       weight: 5, requiresPid: true,  requiresEditor: true,  writes: false },
-  commitDraft:   { label: "Draft commit",        sub: "commitDraft",   group: "Host",       weight: 2, requiresPid: true,  requiresEditor: true,  writes: false, alias: "commitChanges" },
-  deployDraft:   { label: "Draft deploy",        sub: "deployDraft",   group: "Host",       weight: 2, requiresPid: true,  requiresEditor: true,  writes: false, alias: "writeDeploy"   },
+  readProject:   { label: "Summarize project",    sub: "readProject",   group: "Host",       weight: 5, requiresPid: true,  requiresEditor: true,  writes: false },
+  commitDraft:   { label: "Draft commit",         sub: "commitDraft",   group: "Host",       weight: 2, requiresPid: true,  requiresEditor: true,  writes: false, alias: "commitChanges" },
+  deployDraft:   { label: "Draft deploy",         sub: "deployDraft",   group: "Host",       weight: 2, requiresPid: true,  requiresEditor: true,  writes: false, alias: "writeDeploy"   },
 };
 
 // =========================================================================
@@ -257,37 +263,6 @@ export function writeResultCache(pid, task, payload, value) {
 
 // =========================================================================
 // AI STATE (projectMeta.ai namespace)
-//
-// Shape:
-//   {
-//     version: 1,
-//     lastUpdated: number,
-//     runs: [ AiRun ],          // last AI_RUNS_MAX, newest first
-//     pending: [ PendingItem ], // staged artifacts, oldest first
-//     quota: { ... } | null,    // mirror of last server response
-//   }
-//
-// AiRun:
-//   {
-//     id, task, pid, file, scope, createdAt,
-//     text, artifacts,
-//     usage: { promptTokens, completionTokens, totalTokens,
-//              promptWords, completionWords, totalWords },
-//     quota: { wordsUsed, wordsLimit, creditsUsed, creditsLimit, resetAt },
-//     cached: boolean,
-//     accepted: [artifactIndex],
-//     rejected: [artifactIndex],
-//     noteId: string | null,   // set when user saved / edited a note from this run
-//   }
-//
-// PendingItem:
-//   {
-//     id, runId, artifactIndex, artifact, kind, task, createdAt,
-//   }
-//
-// The deps object must provide:
-//   deps.idb.getProjectMeta(pid)   → Promise<meta>
-//   deps.idb.setProjectMeta(pid, patch) → Promise<void>
 // =========================================================================
 
 function blankAiState() {
@@ -505,13 +480,6 @@ export async function writeNotes(pid, data, deps) {
   return { version: data.version || 1, notes: data.notes };
 }
 
-/**
- * Save or update a note that came from an AI run.
- * If sourceRunId matches an existing note, it is updated in place.
- * Otherwise a new note is created.
- *
- * Returns { note, isNew }.
- */
 export async function saveAiNote(pid, { sourceRunId, sourceTask, sourceFile, title, body, color = "amber" }, deps) {
   const data = await readNotes(pid, deps);
   let note = null;
@@ -563,17 +531,6 @@ export async function deleteNote(pid, noteId, deps) {
 // TASK DISPATCH
 // =========================================================================
 
-/**
- * POST /api/ai with the given task. Never throws — always returns
- * { ok, status, data, headers }. Failure cases are encoded in `ok`
- * and `data.error`.
- *
- * The caller is responsible for translating `data.quota` into storage
- * (writeQuotaCache) and for persisting the run into projectMeta.ai.
- *
- * `deps.apiFetch` is optional; if omitted, a default fetch implementation
- * that reads `localStorage['folio.session']` for the Bearer token is used.
- */
 export async function runTask({ task, pid = null, payload = {}, signal = null, deps = {} } = {}) {
   if (!task) {
     return { ok: false, status: 0, data: { success: false, error: "Missing task" }, headers: null };
@@ -651,12 +608,6 @@ async function writeFileContent(pid, path, content, idb) {
   catch { return false; }
 }
 
-/**
- * Apply a `diff` artifact. Verifies `old` is still present in the file
- * before writing — stale patches are rejected.
- *
- * Returns { ok, path, replaced, error }.
- */
 export async function applyPatch({ artifact, pid, deps = {} } = {}) {
   if (!artifact || artifact.type !== "diff") {
     return { ok: false, error: "Not a diff artifact" };
@@ -689,10 +640,6 @@ export async function applyPatch({ artifact, pid, deps = {} } = {}) {
   return { ok: true, path: artifact.file, replaced: false };
 }
 
-/**
- * Apply a `files` artifact (multiple files at once). Partial success is
- * possible. Returns { ok, results, okCount, total }.
- */
 export async function applyFiles({ artifact, pid, deps = {} } = {}) {
   if (!artifact || artifact.type !== "files") {
     return { ok: false, error: "Not a files artifact" };
@@ -822,10 +769,6 @@ function stripFences(s) {
     .trim();
 }
 
-/**
- * Render markdown to HTML. Placeholders for Mermaid, KaTeX, and flowtable
- * are emitted with data-* attributes; hydrateMarkdown fills them in.
- */
 export function renderMarkdown(text) {
   let src = String(text ?? "");
 
@@ -970,11 +913,6 @@ export function renderMarkdown(text) {
   return out.join("\n");
 }
 
-/**
- * Fill in Mermaid / KaTeX / flowtable placeholders produced by renderMarkdown.
- * Fails silently and leaves the fallback <pre> in place when a lazy
- * dependency can't be fetched (offline first load).
- */
 export async function hydrateMarkdown(root) {
   if (!root) return;
 
@@ -1054,9 +992,6 @@ function renderFlowtable(spec) {
 
 // =========================================================================
 // ARTIFACT RENDERERS
-//
-// Each renderer returns a DOM node. All nodes use class names defined in
-// ai.css. ai-page.js appends these nodes to the result container.
 // =========================================================================
 
 function el(tag, attrs = {}, ...children) {
@@ -1364,16 +1299,6 @@ function renderProjectSummary(artifact) {
   return wrap;
 }
 
-/**
- * Render an array of artifacts into `root`. Each artifact gets its own
- * card. Order is preserved. opts callbacks:
- *   onAccept(artifact, index)
- *   onReject(artifact, index)
- *   onPrefillCommit(prefill)
- *   onPrefillDeploy(prefill)
- *   onOpenFile(path, line)
- *   task: task id (used for json artifact hinting)
- */
 export function renderArtifacts(root, artifacts, opts = {}) {
   if (!root) return;
   const list = Array.isArray(artifacts) ? artifacts : [];
@@ -1424,7 +1349,7 @@ export function renderArtifacts(root, artifacts, opts = {}) {
 }
 
 // =========================================================================
-// USAGE / QUOTA FORMATTING (used by ai-page.js HUD and footer)
+// USAGE / QUOTA FORMATTING
 // =========================================================================
 
 export function formatCompact(n) {
@@ -1450,12 +1375,442 @@ export function formatRelativeReset(resetAt) {
 }
 
 // =========================================================================
+// ▓▓▓ NEW EXPORTS FOR COMPARE + COMMIT (Batch 2/3) ▓▓▓
+// =========================================================================
+//
+// The following three exports are used by ai.html's Compare view and
+// New Commit view (Phases 5–6). They are additive — the existing exports
+// above continue to work unchanged. None of these functions touch the
+// DOM, CSS, or global state. They only read/write IndexedDB through
+// `deps.idb` and issue best-effort server calls through `deps.apiFetch`.
+//
+//   diffFiles(oldFiles, newFiles)
+//     Pure function. Computes a structured per-file line diff with hunks.
+//
+//   getCommitBaseline(pid, deps)
+//     Reads the newest user-commit snapshot from the versions store
+//     (kind !== 'deploy'). Returns { [path]: content } or {} if none.
+//
+//   commitVersion(pid, { message, files }, deps)
+//     Writes a version record to IDB, best-effort syncs to server, and
+//     enqueues on failure. Returns { ok, vid, synced } or { ok:false }.
+
+// ── diffFiles ────────────────────────────────────────────────────────
+//   Line-level LCS producing hunks per file.
+//   oldFiles, newFiles: { [path: string]: string }
+//   Returns:
+//     {
+//       files: [
+//         {
+//           path,
+//           status: 'added' | 'removed' | 'modified' | 'unchanged',
+//           old, new,
+//           hunks: [{ oldStart, oldEnd, newStart, newEnd,
+//                     lines: [{ type: 'eq'|'add'|'rem', text }] }],
+//           stats: { added, removed },
+//         },
+//       ],
+//       stats: { filesChanged, added, removed },
+//     }
+//
+//   Hunks are grouped: contiguous runs of non-equal lines plus 3 lines
+//   of surrounding context, matching unified-diff conventions. Empty maps
+//   and missing keys are handled. If either side is binary-ish (contains
+//   null bytes) we skip the LCS and mark the file as fully changed.
+
+const DIFF_CONTEXT_LINES = 3;
+
+function _splitLines(s) {
+  // Preserve trailing newline semantics: "a\nb\n" -> ["a","b",""]
+  return String(s || "").split("\n");
+}
+
+function _looksBinary(s) {
+  if (!s) return false;
+  for (let i = 0; i < s.length && i < 4096; i++) {
+    if (s.charCodeAt(i) === 0) return true;
+  }
+  return false;
+}
+
+// LCS-based diff opcodes, returning [{type:'eq'|'add'|'rem', text}]
+function _diffLineOps(oldLines, newLines) {
+  const n = oldLines.length;
+  const m = newLines.length;
+
+  // Fast paths
+  if (n === 0 && m === 0) return [];
+  if (n === 0) return newLines.map(t => ({ type: "add", text: t }));
+  if (m === 0) return oldLines.map(t => ({ type: "rem", text: t }));
+
+  // Trim shared prefix/suffix for speed on large files
+  let prefix = 0;
+  while (prefix < n && prefix < m && oldLines[prefix] === newLines[prefix]) prefix++;
+  let suffix = 0;
+  while (
+    suffix < n - prefix &&
+    suffix < m - prefix &&
+    oldLines[n - 1 - suffix] === newLines[m - 1 - suffix]
+  ) suffix++;
+
+  const a = oldLines.slice(prefix, n - suffix);
+  const b = newLines.slice(prefix, m - suffix);
+
+  const an = a.length;
+  const bn = b.length;
+
+  // Guard against pathological memory use for very large diffs.
+  // Fall back to "everything changed" beyond a threshold.
+  const MAX_CELLS = 4_000_000; // ~4M cells ≈ 32MB Int32
+  if (an * bn > MAX_CELLS) {
+    const ops = [];
+    for (let i = 0; i < prefix; i++) ops.push({ type: "eq", text: oldLines[i] });
+    for (const t of a) ops.push({ type: "rem", text: t });
+    for (const t of b) ops.push({ type: "add", text: t });
+    for (let i = 0; i < suffix; i++) ops.push({ type: "eq", text: oldLines[n - suffix + i] });
+    return ops;
+  }
+
+  // LCS DP over the middle region
+  const dp = new Array(an + 1);
+  for (let i = 0; i <= an; i++) {
+    dp[i] = new Int32Array(bn + 1);
+  }
+  for (let i = an - 1; i >= 0; i--) {
+    for (let j = bn - 1; j >= 0; j--) {
+      if (a[i] === b[j]) dp[i][j] = dp[i + 1][j + 1] + 1;
+      else dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const ops = [];
+  for (let i = 0; i < prefix; i++) ops.push({ type: "eq", text: oldLines[i] });
+
+  let i = 0, j = 0;
+  while (i < an && j < bn) {
+    if (a[i] === b[j]) { ops.push({ type: "eq", text: a[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { ops.push({ type: "rem", text: a[i] }); i++; }
+    else { ops.push({ type: "add", text: b[j] }); j++; }
+  }
+  while (i < an) { ops.push({ type: "rem", text: a[i] }); i++; }
+  while (j < bn) { ops.push({ type: "add", text: b[j] }); j++; }
+
+  for (let k = 0; k < suffix; k++) ops.push({ type: "eq", text: oldLines[n - suffix + k] });
+
+  return ops;
+}
+
+// Group flat ops into hunks with context
+function _buildHunks(ops) {
+  if (!ops.length) return [];
+
+  const hunks = [];
+  let current = null;
+  let oldIdx = 1, newIdx = 1; // 1-based line numbers
+  let pendingEq = [];
+
+  const flush = () => {
+    if (current && (current.hasChange || current.lines.length)) {
+      hunks.push(current);
+    }
+    current = null;
+    pendingEq = [];
+  };
+
+  const ensureHunk = (leadingEq, startOld, startNew) => {
+    if (current) return current;
+    current = {
+      oldStart: startOld,
+      oldEnd: startOld,
+      newStart: startNew,
+      newEnd: startNew,
+      lines: [],
+      hasChange: false,
+    };
+    // Prepend any context we held back
+    for (const t of leadingEq) current.lines.push({ type: "eq", text: t });
+    current.oldEnd = current.oldStart + leadingEq.length;
+    current.newEnd = current.newStart + leadingEq.length;
+    return current;
+  };
+
+  for (const op of ops) {
+    if (op.type === "eq") {
+      if (!current) {
+        pendingEq.push(op.text);
+        if (pendingEq.length > DIFF_CONTEXT_LINES) pendingEq.shift();
+        oldIdx++; newIdx++;
+        continue;
+      }
+      // inside a hunk — keep appending equal lines
+      current.lines.push({ type: "eq", text: op.text });
+      current.oldEnd++;
+      current.newEnd++;
+      // If we've accumulated enough trailing equal lines, close the hunk.
+      let trailingEq = 0;
+      for (let k = current.lines.length - 1; k >= 0; k--) {
+        if (current.lines[k].type === "eq") trailingEq++;
+        else break;
+      }
+      if (trailingEq >= DIFF_CONTEXT_LINES * 2) {
+        // Trim back to DIFF_CONTEXT_LINES
+        while (trailingEq > DIFF_CONTEXT_LINES) {
+          current.lines.pop();
+          current.oldEnd--;
+          current.newEnd--;
+          trailingEq--;
+        }
+        // Hold the context for the next hunk
+        pendingEq = current.lines.slice(-DIFF_CONTEXT_LINES).map(l => l.text);
+        flush();
+      }
+      oldIdx++; newIdx++;
+    } else {
+      const leading = pendingEq.slice();
+      const startOld = op.type === "rem" ? oldIdx : oldIdx;
+      const startNew = op.type === "add" ? newIdx : newIdx;
+      ensureHunk(leading, startOld - leading.length, startNew - leading.length);
+      pendingEq = [];
+      current.lines.push({ type: op.type, text: op.text });
+      current.hasChange = true;
+      if (op.type === "rem") { current.oldEnd++; oldIdx++; }
+      else { current.newEnd++; newIdx++; }
+    }
+  }
+
+  // Close trailing hunk if it has changes
+  if (current) {
+    if (!current.hasChange) {
+      // Drop hunks that ended up containing only context
+      current = null;
+    } else {
+      flush();
+    }
+  }
+
+  return hunks;
+}
+
+export function diffFiles(oldFiles, newFiles) {
+  const oldMap = (oldFiles && typeof oldFiles === "object") ? oldFiles : {};
+  const newMap = (newFiles && typeof newFiles === "object") ? newFiles : {};
+
+  const paths = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
+  const sortedPaths = Array.from(paths).sort();
+
+  const files = [];
+  let totalAdded = 0;
+  let totalRemoved = 0;
+  let filesChanged = 0;
+
+  for (const path of sortedPaths) {
+    const inOld = Object.prototype.hasOwnProperty.call(oldMap, path);
+    const inNew = Object.prototype.hasOwnProperty.call(newMap, path);
+    const oldContent = inOld ? String(oldMap[path] ?? "") : "";
+    const newContent = inNew ? String(newMap[path] ?? "") : "";
+
+    // Fast path: identical
+    if (inOld && inNew && oldContent === newContent) {
+      files.push({
+        path,
+        status: "unchanged",
+        old: oldContent,
+        new: newContent,
+        hunks: [],
+        stats: { added: 0, removed: 0 },
+      });
+      continue;
+    }
+
+    // Added / removed
+    if (!inOld && inNew) {
+      const lines = _splitLines(newContent);
+      const hunks = [{
+        oldStart: 0, oldEnd: 0,
+        newStart: 1, newEnd: lines.length,
+        lines: lines.map(t => ({ type: "add", text: t })),
+        hasChange: true,
+      }];
+      const removedCount = lines.length ? lines.length : 0;
+      files.push({
+        path,
+        status: "added",
+        old: "",
+        new: newContent,
+        hunks,
+        stats: { added: removedCount, removed: 0 },
+      });
+      totalAdded += removedCount;
+      filesChanged++;
+      continue;
+    }
+    if (inOld && !inNew) {
+      const lines = _splitLines(oldContent);
+      const hunks = [{
+        oldStart: 1, oldEnd: lines.length,
+        newStart: 0, newEnd: 0,
+        lines: lines.map(t => ({ type: "rem", text: t })),
+        hasChange: true,
+      }];
+      const addedCount = lines.length ? lines.length : 0;
+      files.push({
+        path,
+        status: "removed",
+        old: oldContent,
+        new: "",
+        hunks,
+        stats: { added: 0, removed: addedCount },
+      });
+      totalRemoved += addedCount;
+      filesChanged++;
+      continue;
+    }
+
+    // Modified — binary guard
+    if (_looksBinary(oldContent) || _looksBinary(newContent)) {
+      files.push({
+        path,
+        status: "modified",
+        old: oldContent,
+        new: newContent,
+        hunks: [],
+        stats: { added: 0, removed: 0 },
+        binary: true,
+      });
+      filesChanged++;
+      continue;
+    }
+
+    const oldLines = _splitLines(oldContent);
+    const newLines = _splitLines(newContent);
+    const ops = _diffLineOps(oldLines, newLines);
+    const hunks = _buildHunks(ops);
+
+    let added = 0, removed = 0;
+    for (const op of ops) {
+      if (op.type === "add") added++;
+      else if (op.type === "rem") removed++;
+    }
+
+    files.push({
+      path,
+      status: "modified",
+      old: oldContent,
+      new: newContent,
+      hunks,
+      stats: { added, removed },
+    });
+    totalAdded += added;
+    totalRemoved += removed;
+    filesChanged++;
+  }
+
+  return {
+    files,
+    stats: { filesChanged, added: totalAdded, removed: totalRemoved },
+  };
+}
+
+// ── getCommitBaseline ────────────────────────────────────────────────
+//   Reads the newest version from the versions store that isn't a
+//   deploy snapshot (kind !== 'deploy'). Returns its files map, or {}.
+export async function getCommitBaseline(pid, deps = {}) {
+  if (!pid) return {};
+  const idb = deps.idb;
+  if (!idb || typeof idb.listVersions !== "function") return {};
+  try {
+    const versions = await idb.listVersions(pid);
+    if (!Array.isArray(versions) || versions.length === 0) return {};
+    // listVersions is expected to be sorted newest first (matches
+    // project.html's IDB.listVersions).
+    const userCommit = versions.find(v => v && v.kind !== "deploy" && v.files && typeof v.files === "object");
+    return userCommit ? { ...userCommit.files } : {};
+  } catch {
+    return {};
+  }
+}
+
+// ── commitVersion ────────────────────────────────────────────────────
+//   Writes a version to IDB, then best-effort syncs to the server via
+//   project/sync-back (same shape as index.html / project.html). On
+//   failure, enqueues to syncQueue with type 'version-commit'.
+//
+//   The vid is `v_<ts>_<rand>` so it never collides with a concurrent
+//   commit from index.html (which uses `v_<ts>`).
+export async function commitVersion(pid, { message, files } = {}, deps = {}) {
+  if (!pid) return { ok: false, error: "Missing pid" };
+  const idb = deps.idb;
+  if (!idb || typeof idb.putVersion !== "function") {
+    return { ok: false, error: "Storage unavailable" };
+  }
+  if (!files || typeof files !== "object") {
+    return { ok: false, error: "Missing files" };
+  }
+
+  const vid = "v_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+  const cleanMessage = String(message || "").trim() || "commit";
+  const versionData = {
+    vid,
+    pid,
+    message: cleanMessage,
+    files: { ...files },
+    createdAt: Date.now(),
+    kind: null, // null = user commit; 'deploy' = deploy snapshot
+  };
+
+  // Always write locally first — never lose the commit if the server
+  // call fails.
+  try {
+    await idb.putVersion(versionData);
+  } catch (err) {
+    return { ok: false, error: String(err?.message || "Could not write version") };
+  }
+
+  // Best-effort server sync
+  let synced = false;
+  const apiFetch = deps.apiFetch;
+  if (apiFetch && isOnline() && !String(pid).startsWith("local_")) {
+    try {
+      const res = await apiFetch(API_HOST + "?action=project/sync-back", {
+        method: "POST",
+        body: JSON.stringify({
+          pid,
+          versions: {
+            [vid]: {
+              message: cleanMessage,
+              files: versionData.files,
+              createdAt: versionData.createdAt,
+            },
+          },
+        }),
+      });
+      if (res && res.ok && res.data && res.data.success) {
+        synced = true;
+      }
+    } catch {
+      synced = false;
+    }
+  }
+
+  // Enqueue for later if the server didn't take it and we're not a
+  // local-only project. Queue flush is owned by index.html / project.html.
+  if (!synced && !String(pid).startsWith("local_") && idb && typeof idb.enqueueSync === "function") {
+    try {
+      await idb.enqueueSync(pid, "version-commit", { vid, data: versionData });
+    } catch {}
+  }
+
+  return { ok: true, vid, synced };
+}
+
+// =========================================================================
 // EXPORTS
 // =========================================================================
 
 export {
   API_BASE,
   API_AI,
+  API_HOST,
   NOTES_PATH,
   NOTES_MAX_COUNT,
   NOTES_MAX_BODY_BYTES,
