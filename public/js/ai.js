@@ -1,187 +1,760 @@
 // js/ai.js
 // ═══════════════════════════════════════════════════════════════════
-//  Folio AI — complete client module (v2, matches api/ai.js word+credit)
+//  Folio AI — page-support module for ai.html
 //  ────────────────────────────────────────────────────────────────
-//  One file. Everything the AI needs on the client.
+//  This module provides ALL the plumbing ai.html needs. It does not
+//  render any UI chrome, inject styles, or manage the DOM beyond the
+//  helpers exposed below. ai-page.js (the page controller) consumes
+//  these exports and builds the interface.
 //
-//  Contract with api/ai.js (server):
+//  Storage contract (matches index.html and project.html exactly):
+//
+//    • Notes         → IDB 'files' store, key [pid, 'notes.json']
+//                      shape: { version: 1, notes: [ { id, title, body,
+//                      color, pinned, createdAt, updatedAt,
+//                      sourceRunId?, sourceTask?, sourceFile? } ] }
+//                      Hidden from the file tree via isSystemFile().
+//                      Syncs through project/sync-back like any file.
+//
+//    • AI runs       → IDB 'projectMeta' store, key pid, field .ai
+//                      shape: { version: 1, runs: [...], pending: [...],
+//                      quota: {...}, lastUpdated }
+//                      Local-only. Does not sync. Does not count toward
+//                      project storage. Invisible to the editor.
+//
+//    • Quota mirror  → localStorage 'folio.ai.quota' (fast path for the
+//                      HUD before any call has fired this session)
+//
+//    • Result cache  → in-memory Map, 10min TTL, 40 entries
+//
+//  Server contract (api/ai.js):
+//
 //    POST /api/ai { task, pid?, payload }
-//      → { success, task, text, artifacts, usage, guest, cached, quota, rateLimit }
-//    usage:  { promptTokens, completionTokens, totalTokens,
-//              promptWords, completionWords, totalWords }
-//    quota:  { wordsUsed, wordsLimit, creditsUsed, creditsLimit, resetAt }
-//    errors: { success:false, error, scope: "words"|"credits"|"per_task"|"global",
-//              limit, used, resetAt, retryAfter }
+//      success → { success, task, text, artifacts, usage, guest, cached,
+//                  quota: { wordsUsed, wordsLimit, creditsUsed,
+//                          creditsLimit, resetAt },
+//                  rateLimit: { limit, remaining, reset } }
+//      failure → { success: false, error, scope, limit, used, resetAt,
+//                  retryAfter, guest }
 //
-//  Task name mapping (client label → server task id):
-//    "commitDraft"  → "commitChanges"
-//    "deployDraft"  → "writeDeploy"
-//    (other tasks are identical)
+//  Client → server task alias (server task names differ for host tasks):
+//      'commitDraft' → 'commitChanges'
+//      'deployDraft' → 'writeDeploy'
 //
-//  Offline-first:
-//    • All rendering works offline once lazy assets are cached by the SW.
-//    • Pending proposals persist in sessionStorage keyed on pid.
-//    • Quota HUD shows live words + credits remaining.
-//
-//  Safety invariant:
-//    This module NEVER calls /api/host?action=deploy or project/sync-back.
-//    It prefills the existing dialogs. AI drafts text only.
+//  No DOM. No CSS. No global listeners. Every function is pure or
+//  storage-bound. ai-page.js wires events.
 // ═══════════════════════════════════════════════════════════════════
 
 "use strict";
 
-// ─────────────────────────────────────────────────────────────────────
+// =========================================================================
 // CONFIG
-// ─────────────────────────────────────────────────────────────────────
+// =========================================================================
 
 const API_BASE = (typeof window !== "undefined" && window.FOLIO_API_BASE)
   || "https://foliostudios.vercel.app/api";
 const API_AI = API_BASE + "/ai";
 
+const NOTES_PATH = "notes.json";
+const NOTES_MAX_COUNT = 200;
+const NOTES_MAX_BODY_BYTES = 200 * 1024;
+
+const AI_STATE_VERSION = 1;
+const AI_RUNS_MAX = 50;
+const AI_PENDING_TTL_MS = 24 * 60 * 60 * 1000;
+
+const RESULT_CACHE_MAX = 40;
+const RESULT_CACHE_TTL_MS = 10 * 60 * 1000;
+const QUOTA_STORAGE_KEY = "folio.ai.quota";
+
+// Lazy asset URLs — Mermaid and KaTeX load only when a placeholder exists.
 const MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js";
 const KATEX_CSS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
 const KATEX_JS = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js";
 
-const RESULT_CACHE_MAX = 40;
-const RESULT_CACHE_TTL_MS = 10 * 60 * 1000;
-const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
-const PENDING_STORAGE_PREFIX = "folio.ai.pending.";
-const QUOTA_CACHE_KEY = "folio.ai.quota";
+// Guest-allowable tasks (mirrors server GUEST_ALLOWED_TASKS)
+const GUEST_TASKS = new Set([
+  "explain", "logExplain", "metatags", "brainstorm", "diagram",
+]);
 
-// Task gating
-const GUEST_TASKS = new Set(["explain", "logExplain", "metatags", "brainstorm", "diagram"]);
+// Host tasks (server HOST_TASKS)
 const HOST_TASKS = new Set(["readProject", "commitChanges", "writeDeploy"]);
+
+// Tasks whose artifacts are worth staging for later accept
 const APPLY_TASKS = new Set([
   "debug", "codefix", "optimize", "suggest", "docstrings", "audit",
   "scaffold", "translate", "findFn",
 ]);
 
-// Client-side "commitDraft"/"deployDraft" → server task id
-const TASK_ALIAS = {
-  commitDraft: "commitChanges",
-  deployDraft: "writeDeploy",
-};
+// =========================================================================
+// TASK METADATA
+// Mirrors api/ai.js TASK_LIMITS exactly. Weights are used by the page to
+// show "· N credits" next to expensive tasks and by the HUD to project
+// budget impact. Labels use plain language (non-technical user facing).
+// =========================================================================
 
-// Server-side task metadata, mirrored from TASK_LIMITS (weights only).
-// These are display hints; the server enforces the real limits.
 const TASK_META = {
-  explain:       { label: "Explain",          group: "Understand", weight: 1, requiresPid: false },
-  debug:         { label: "Debug",            group: "Fix",        weight: 3, requiresPid: false },
-  codefix:       { label: "Fix",              group: "Fix",        weight: 3, requiresPid: false },
-  optimize:      { label: "Optimize",         group: "Improve",    weight: 3, requiresPid: false },
-  suggest:       { label: "Suggest",          group: "Complete",   weight: 1, requiresPid: false },
-  brainstorm:    { label: "Brainstorm",       group: "Design",     weight: 2, requiresPid: false },
-  metatags:      { label: "Meta tags",        group: "Content",    weight: 1, requiresPid: false },
-  scaffold:      { label: "Scaffold",         group: "Build",      weight: 8, requiresPid: false },
-  docs:          { label: "Docs",             group: "Document",   weight: 8, requiresPid: false },
-  findFn:        { label: "Find fn",          group: "Refactor",   weight: 5, requiresPid: false },
-  commitMsg:     { label: "Commit msg",       group: "Meta",       weight: 1, requiresPid: false },
-  logExplain:    { label: "Explain log",      group: "Debug",      weight: 1, requiresPid: false },
-  diagram:       { label: "Diagram",          group: "Understand", weight: 2, requiresPid: false },
-  simulate:      { label: "Simulate",         group: "Understand", weight: 3, requiresPid: false },
-  designExplain: { label: "Architecture",     group: "Understand", weight: 6, requiresPid: false },
-  translate:     { label: "Translate",        group: "Convert",    weight: 3, requiresPid: false },
-  docstrings:    { label: "Docstrings",       group: "Document",   weight: 1, requiresPid: false },
-  struggle:      { label: "Struggle",         group: "Diagnose",   weight: 4, requiresPid: false },
-  audit:         { label: "Audit",            group: "Secure",     weight: 3, requiresPid: false },
-  readProject:   { label: "Project summary",  group: "Host",       weight: 5, requiresPid: true },
-  commitDraft:   { label: "Commit draft",     group: "Host",       weight: 2, requiresPid: true, alias: "commitChanges" },
-  deployDraft:   { label: "Deploy draft",     group: "Host",       weight: 2, requiresPid: true, alias: "writeDeploy" },
+  explain:       { label: "What does this do?",  sub: "explain",       group: "Understand", weight: 1, requiresPid: false, requiresEditor: false, writes: false },
+  debug:         { label: "Find bugs",           sub: "debug",         group: "Fix",        weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
+  codefix:       { label: "Fix this",            sub: "codefix",       group: "Fix",        weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
+  optimize:      { label: "Make it faster",      sub: "optimize",      group: "Fix",        weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
+  suggest:       { label: "Suggest next line",   sub: "suggest",       group: "Complete",   weight: 1, requiresPid: false, requiresEditor: false, writes: true  },
+  brainstorm:    { label: "Brainstorm ideas",    sub: "brainstorm",    group: "Design",     weight: 2, requiresPid: false, requiresEditor: false, writes: false },
+  metatags:      { label: "SEO tags",            sub: "metatags",      group: "Content",    weight: 1, requiresPid: false, requiresEditor: false, writes: false },
+  scaffold:      { label: "Build starter",       sub: "scaffold",      group: "Build",      weight: 8, requiresPid: false, requiresEditor: false, writes: true  },
+  docs:          { label: "Write documentation", sub: "docs",          group: "Document",   weight: 8, requiresPid: false, requiresEditor: false, writes: true  },
+  findFn:        { label: "Find a function",     sub: "findFn",        group: "Refactor",   weight: 5, requiresPid: false, requiresEditor: false, writes: true  },
+  commitMsg:     { label: "Write commit message",sub: "commitMsg",     group: "Meta",       weight: 1, requiresPid: false, requiresEditor: false, writes: false },
+  logExplain:    { label: "Explain this error",  sub: "logExplain",    group: "Debug",      weight: 1, requiresPid: false, requiresEditor: false, writes: false },
+  diagram:       { label: "Draw a diagram",      sub: "diagram",       group: "Understand", weight: 2, requiresPid: false, requiresEditor: false, writes: false },
+  simulate:      { label: "Trace step-by-step",  sub: "simulate",      group: "Understand", weight: 3, requiresPid: false, requiresEditor: false, writes: false },
+  designExplain: { label: "Explain architecture",sub: "designExplain", group: "Understand", weight: 6, requiresPid: false, requiresEditor: false, writes: false },
+  translate:     { label: "Translate",           sub: "translate",     group: "Convert",    weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
+  docstrings:    { label: "Add comments",        sub: "docstrings",    group: "Document",   weight: 1, requiresPid: false, requiresEditor: false, writes: true  },
+  struggle:      { label: "Find weak spots",     sub: "struggle",      group: "Diagnose",   weight: 4, requiresPid: false, requiresEditor: false, writes: false },
+  audit:         { label: "Check accessibility & security", sub: "audit", group: "Secure",   weight: 3, requiresPid: false, requiresEditor: false, writes: true  },
+  readProject:   { label: "Summarize project",   sub: "readProject",   group: "Host",       weight: 5, requiresPid: true,  requiresEditor: true,  writes: false },
+  commitDraft:   { label: "Draft commit",        sub: "commitDraft",   group: "Host",       weight: 2, requiresPid: true,  requiresEditor: true,  writes: false, alias: "commitChanges" },
+  deployDraft:   { label: "Draft deploy",        sub: "deployDraft",   group: "Host",       weight: 2, requiresPid: true,  requiresEditor: true,  writes: false, alias: "writeDeploy"   },
 };
 
-// ─────────────────────────────────────────────────────────────────────
-// TINY UTILS
-// ─────────────────────────────────────────────────────────────────────
-
-function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
-}
+// =========================================================================
+// UTILITY
+// =========================================================================
 
 function nowMs() { return Date.now(); }
+
 function uid(prefix = "a") {
   return prefix + "_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
 }
-function debounce(fn, ms) {
-  let t;
-  return function (...args) {
-    clearTimeout(t);
-    t = setTimeout(() => fn.apply(this, args), ms);
-  };
-}
+
 function estimateSize(v) {
   if (typeof v === "string") return v.length;
   try { return JSON.stringify(v).length; } catch { return 0; }
 }
+
+function countWords(text) {
+  if (!text) return 0;
+  const m = String(text).match(/\S+/g);
+  return m ? m.length : 0;
+}
+
+function canonicalize(v) {
+  if (v === null || typeof v !== "object") return v;
+  if (Array.isArray(v)) return v.map(canonicalize);
+  const out = {};
+  for (const k of Object.keys(v).sort()) out[k] = canonicalize(v[k]);
+  return out;
+}
+
+function hashString(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36);
+}
+
 function isOnline() {
   try { return navigator.onLine !== false; } catch { return true; }
 }
 
-function el(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v == null || v === false) continue;
-    if (k === "class") node.className = v;
-    else if (k === "style" && typeof v === "object") Object.assign(node.style, v);
-    else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
-    else if (k === "dataset" && typeof v === "object") Object.assign(node.dataset, v);
-    else if (v === true) node.setAttribute(k, "");
-    else node.setAttribute(k, v);
-  }
-  for (const c of children.flat()) {
-    if (c == null || c === false) continue;
-    node.appendChild(typeof c === "string" || typeof c === "number"
-      ? document.createTextNode(String(c)) : c);
-  }
-  return node;
+// =========================================================================
+// TASK LOOKUP
+// =========================================================================
+
+export function getTaskMeta(task) {
+  return TASK_META[task] || null;
 }
 
-function svgIcon(name, size = 14, sw = 2.2) {
-  const paths = {
-    alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
-    check: '<polyline points="20 6 9 17 4 12"/>',
-    x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
-    refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
-    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
-    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
-    copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-    external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
-    code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
-    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
-    lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
-    wifiOff: '<line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>',
-    sparkles: '<path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/>',
-    chevronDown: '<polyline points="6 9 12 15 18 9"/>',
-    chevronRight: '<polyline points="9 18 15 12 9 6"/>',
-    play: '<polygon points="5 3 19 12 5 21 5 3"/>',
-    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
-    gitCommit: '<circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/>',
-    rocket: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>',
-    chart: '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
-    database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
-    eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
-    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
-    layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
-    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
-    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
-    coins: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
+export function listTasks() {
+  return Object.entries(TASK_META).map(([id, meta]) => ({ id, ...meta }));
+}
+
+export function listTaskGroups() {
+  const groups = new Map();
+  for (const [id, meta] of Object.entries(TASK_META)) {
+    if (!groups.has(meta.group)) groups.set(meta.group, []);
+    groups.get(meta.group).push({ id, ...meta });
+  }
+  return Array.from(groups.entries()).map(([name, tasks]) => ({ name, tasks }));
+}
+
+export function isGuestTask(task) {
+  return GUEST_TASKS.has(task);
+}
+
+export function isHostTask(task) {
+  if (HOST_TASKS.has(task)) return true;
+  const meta = TASK_META[task];
+  return !!(meta && meta.alias && HOST_TASKS.has(meta.alias));
+}
+
+export function isTaskAvailable(task, { online = isOnline(), guest = false, role = "owner" } = {}) {
+  const meta = TASK_META[task];
+  if (!meta) return false;
+  if (!online) return false;
+  if (guest && !GUEST_TASKS.has(task)) return false;
+  if (meta.requiresEditor && role !== "owner" && role !== "editor") return false;
+  return true;
+}
+
+// =========================================================================
+// QUOTA CACHE (localStorage mirror)
+// =========================================================================
+
+export function readQuotaCache() {
+  try {
+    const raw = localStorage.getItem(QUOTA_STORAGE_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== "object") return null;
+    if (v.resetAt && new Date(v.resetAt).getTime() < Date.now()) {
+      localStorage.removeItem(QUOTA_STORAGE_KEY);
+      return null;
+    }
+    return v;
+  } catch { return null; }
+}
+
+export function writeQuotaCache(quota) {
+  if (!quota) return;
+  try { localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(quota)); } catch {}
+}
+
+export function clearQuotaCache() {
+  try { localStorage.removeItem(QUOTA_STORAGE_KEY); } catch {}
+}
+
+// =========================================================================
+// RESULT CACHE (in-memory, per page load)
+// =========================================================================
+
+const RESULT_CACHE = new Map();
+
+function resultCacheKey(pid, task, payload) {
+  const raw = JSON.stringify({ pid: pid || null, task, payload: canonicalize(payload || {}) });
+  return hashString(raw);
+}
+
+export function readResultCache(pid, task, payload) {
+  const key = resultCacheKey(pid, task, payload);
+  const entry = RESULT_CACHE.get(key);
+  if (!entry) return null;
+  if (nowMs() - entry.at > RESULT_CACHE_TTL_MS) {
+    RESULT_CACHE.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+export function writeResultCache(pid, task, payload, value) {
+  const key = resultCacheKey(pid, task, payload);
+  if (RESULT_CACHE.size >= RESULT_CACHE_MAX) {
+    const first = RESULT_CACHE.keys().next().value;
+    if (first) RESULT_CACHE.delete(first);
+  }
+  RESULT_CACHE.set(key, { value, at: nowMs() });
+}
+
+// =========================================================================
+// AI STATE (projectMeta.ai namespace)
+//
+// Shape:
+//   {
+//     version: 1,
+//     lastUpdated: number,
+//     runs: [ AiRun ],          // last AI_RUNS_MAX, newest first
+//     pending: [ PendingItem ], // staged artifacts, oldest first
+//     quota: { ... } | null,    // mirror of last server response
+//   }
+//
+// AiRun:
+//   {
+//     id, task, pid, file, scope, createdAt,
+//     text, artifacts,
+//     usage: { promptTokens, completionTokens, totalTokens,
+//              promptWords, completionWords, totalWords },
+//     quota: { wordsUsed, wordsLimit, creditsUsed, creditsLimit, resetAt },
+//     cached: boolean,
+//     accepted: [artifactIndex],
+//     rejected: [artifactIndex],
+//     noteId: string | null,   // set when user saved / edited a note from this run
+//   }
+//
+// PendingItem:
+//   {
+//     id, runId, artifactIndex, artifact, kind, task, createdAt,
+//   }
+//
+// The deps object must provide:
+//   deps.idb.getProjectMeta(pid)   → Promise<meta>
+//   deps.idb.setProjectMeta(pid, patch) → Promise<void>
+// =========================================================================
+
+function blankAiState() {
+  return {
+    version: AI_STATE_VERSION,
+    lastUpdated: nowMs(),
+    runs: [],
+    pending: [],
+    quota: null,
   };
-  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ""}</svg>`;
 }
 
-// ─────────────────────────────────────────────────────────────────────
+function normalizeAiState(raw) {
+  if (!raw || typeof raw !== "object") return blankAiState();
+  const runs = Array.isArray(raw.runs) ? raw.runs : [];
+  const pending = Array.isArray(raw.pending) ? raw.pending : [];
+  const cutoff = nowMs() - AI_PENDING_TTL_MS;
+  return {
+    version: AI_STATE_VERSION,
+    lastUpdated: raw.lastUpdated || nowMs(),
+    runs: runs
+      .filter(r => r && typeof r === "object" && r.id && r.task)
+      .slice(0, AI_RUNS_MAX)
+      .map(r => ({
+        id: r.id,
+        task: r.task,
+        pid: r.pid || null,
+        file: r.file || null,
+        scope: r.scope || "file",
+        createdAt: r.createdAt || nowMs(),
+        text: r.text || "",
+        artifacts: Array.isArray(r.artifacts) ? r.artifacts : [],
+        usage: r.usage || null,
+        quota: r.quota || null,
+        cached: !!r.cached,
+        accepted: Array.isArray(r.accepted) ? r.accepted : [],
+        rejected: Array.isArray(r.rejected) ? r.rejected : [],
+        noteId: r.noteId || null,
+      })),
+    pending: pending
+      .filter(p => p && typeof p === "object" && p.id && p.runId && (p.createdAt || 0) > cutoff)
+      .map(p => ({
+        id: p.id,
+        runId: p.runId,
+        artifactIndex: Number(p.artifactIndex) || 0,
+        artifact: p.artifact || null,
+        kind: p.kind || (p.artifact?.type || "unknown"),
+        task: p.task || null,
+        createdAt: p.createdAt || nowMs(),
+      })),
+    quota: raw.quota && typeof raw.quota === "object" ? raw.quota : null,
+  };
+}
+
+export async function readAiState(pid, deps) {
+  if (!pid) return blankAiState();
+  try {
+    const meta = await deps.idb.getProjectMeta(pid);
+    return normalizeAiState(meta?.ai);
+  } catch {
+    return blankAiState();
+  }
+}
+
+export async function writeAiState(pid, state, deps) {
+  if (!pid) throw new Error("writeAiState: missing pid");
+  const normalized = normalizeAiState(state);
+  normalized.lastUpdated = nowMs();
+  await deps.idb.setProjectMeta(pid, { ai: normalized });
+  return normalized;
+}
+
+export async function patchAiState(pid, patch, deps) {
+  const current = await readAiState(pid, deps);
+  const next = { ...current, ...patch };
+  return writeAiState(pid, next, deps);
+}
+
+export async function appendAiRun(pid, run, deps) {
+  const state = await readAiState(pid, deps);
+  const normalized = {
+    id: run.id || uid("run"),
+    task: run.task,
+    pid,
+    file: run.file || null,
+    scope: run.scope || "file",
+    createdAt: run.createdAt || nowMs(),
+    text: run.text || "",
+    artifacts: Array.isArray(run.artifacts) ? run.artifacts : [],
+    usage: run.usage || null,
+    quota: run.quota || null,
+    cached: !!run.cached,
+    accepted: [],
+    rejected: [],
+    noteId: null,
+  };
+  state.runs.unshift(normalized);
+  if (state.runs.length > AI_RUNS_MAX) state.runs = state.runs.slice(0, AI_RUNS_MAX);
+  if (run.quota) state.quota = run.quota;
+  await writeAiState(pid, state, deps);
+  return normalized;
+}
+
+export async function removeAiRun(pid, runId, deps) {
+  const state = await readAiState(pid, deps);
+  state.runs = state.runs.filter(r => r.id !== runId);
+  state.pending = state.pending.filter(p => p.runId !== runId);
+  await writeAiState(pid, state, deps);
+  return state;
+}
+
+export async function updateAiRun(pid, runId, patch, deps) {
+  const state = await readAiState(pid, deps);
+  const idx = state.runs.findIndex(r => r.id === runId);
+  if (idx < 0) return null;
+  state.runs[idx] = { ...state.runs[idx], ...patch };
+  await writeAiState(pid, state, deps);
+  return state.runs[idx];
+}
+
+export async function stageArtifactsFromRun(pid, run, deps) {
+  const state = await readAiState(pid, deps);
+  const stageable = ["diff", "files"];
+  const added = [];
+  for (let i = 0; i < (run.artifacts || []).length; i++) {
+    const a = run.artifacts[i];
+    if (!a || !stageable.includes(a.type)) continue;
+    const item = {
+      id: uid("pend"),
+      runId: run.id,
+      artifactIndex: i,
+      artifact: a,
+      kind: a.type,
+      task: run.task,
+      createdAt: nowMs(),
+    };
+    state.pending.push(item);
+    added.push(item);
+  }
+  if (added.length) await writeAiState(pid, state, deps);
+  return added;
+}
+
+export async function removePendingItem(pid, pendingId, deps) {
+  const state = await readAiState(pid, deps);
+  state.pending = state.pending.filter(p => p.id !== pendingId);
+  await writeAiState(pid, state, deps);
+  return state;
+}
+
+export async function clearPending(pid, deps) {
+  const state = await readAiState(pid, deps);
+  state.pending = [];
+  await writeAiState(pid, state, deps);
+  return state;
+}
+
+export async function markRunArtifactAccepted(pid, runId, artifactIndex, deps) {
+  const state = await readAiState(pid, deps);
+  const run = state.runs.find(r => r.id === runId);
+  if (!run) return null;
+  if (!run.accepted.includes(artifactIndex)) run.accepted.push(artifactIndex);
+  run.rejected = run.rejected.filter(i => i !== artifactIndex);
+  state.pending = state.pending.filter(
+    p => !(p.runId === runId && p.artifactIndex === artifactIndex)
+  );
+  await writeAiState(pid, state, deps);
+  return run;
+}
+
+export async function markRunArtifactRejected(pid, runId, artifactIndex, deps) {
+  const state = await readAiState(pid, deps);
+  const run = state.runs.find(r => r.id === runId);
+  if (!run) return null;
+  if (!run.rejected.includes(artifactIndex)) run.rejected.push(artifactIndex);
+  run.accepted = run.accepted.filter(i => i !== artifactIndex);
+  state.pending = state.pending.filter(
+    p => !(p.runId === runId && p.artifactIndex === artifactIndex)
+  );
+  await writeAiState(pid, state, deps);
+  return run;
+}
+
+// =========================================================================
+// NOTES (notes.json file — the canonical store)
+// =========================================================================
+
+export async function readNotes(pid, deps) {
+  if (!pid) return { version: 1, notes: [] };
+  try {
+    const file = await deps.idb.getFile(pid, NOTES_PATH);
+    const content = typeof file === "string" ? file : (file?.content || "");
+    if (!content) return { version: 1, notes: [] };
+    const parsed = JSON.parse(content);
+    if (!parsed || !Array.isArray(parsed.notes)) return { version: 1, notes: [] };
+    return { version: parsed.version || 1, notes: parsed.notes };
+  } catch {
+    return { version: 1, notes: [] };
+  }
+}
+
+export async function writeNotes(pid, data, deps) {
+  if (!pid) throw new Error("writeNotes: missing pid");
+  if (!data || !Array.isArray(data.notes)) throw new Error("writeNotes: invalid data");
+  if (data.notes.length > NOTES_MAX_COUNT) {
+    throw new Error(`Too many notes (max ${NOTES_MAX_COUNT}).`);
+  }
+  for (const n of data.notes) {
+    if (estimateSize(n.body || "") > NOTES_MAX_BODY_BYTES) {
+      throw new Error(`Note "${n.title || "Untitled"}" is too large.`);
+    }
+  }
+  const json = JSON.stringify({ version: data.version || 1, notes: data.notes }, null, 2);
+  await deps.idb.putFile(pid, NOTES_PATH, json);
+  return { version: data.version || 1, notes: data.notes };
+}
+
+/**
+ * Save or update a note that came from an AI run.
+ * If sourceRunId matches an existing note, it is updated in place.
+ * Otherwise a new note is created.
+ *
+ * Returns { note, isNew }.
+ */
+export async function saveAiNote(pid, { sourceRunId, sourceTask, sourceFile, title, body, color = "amber" }, deps) {
+  const data = await readNotes(pid, deps);
+  let note = null;
+  let isNew = false;
+
+  if (sourceRunId) {
+    note = data.notes.find(n => n.sourceRunId === sourceRunId) || null;
+  }
+
+  if (note) {
+    note.title = title ?? note.title;
+    note.body = body ?? note.body;
+    note.color = color || note.color || "amber";
+    note.updatedAt = nowMs();
+  } else {
+    note = {
+      id: uid("note"),
+      title: title || "AI note",
+      body: body || "",
+      color: color || "amber",
+      pinned: false,
+      createdAt: nowMs(),
+      updatedAt: nowMs(),
+      sourceRunId: sourceRunId || null,
+      sourceTask: sourceTask || null,
+      sourceFile: sourceFile || null,
+    };
+    data.notes.push(note);
+    isNew = true;
+  }
+
+  await writeNotes(pid, data, deps);
+
+  if (sourceRunId) {
+    await updateAiRun(pid, sourceRunId, { noteId: note.id }, deps).catch(() => {});
+  }
+
+  return { note, isNew };
+}
+
+export async function deleteNote(pid, noteId, deps) {
+  const data = await readNotes(pid, deps);
+  data.notes = data.notes.filter(n => n.id !== noteId);
+  await writeNotes(pid, data, deps);
+  return data;
+}
+
+// =========================================================================
+// TASK DISPATCH
+// =========================================================================
+
+/**
+ * POST /api/ai with the given task. Never throws — always returns
+ * { ok, status, data, headers }. Failure cases are encoded in `ok`
+ * and `data.error`.
+ *
+ * The caller is responsible for translating `data.quota` into storage
+ * (writeQuotaCache) and for persisting the run into projectMeta.ai.
+ *
+ * `deps.apiFetch` is optional; if omitted, a default fetch implementation
+ * that reads `localStorage['folio.session']` for the Bearer token is used.
+ */
+export async function runTask({ task, pid = null, payload = {}, signal = null, deps = {} } = {}) {
+  if (!task) {
+    return { ok: false, status: 0, data: { success: false, error: "Missing task" }, headers: null };
+  }
+  const meta = TASK_META[task];
+  if (!meta) {
+    return { ok: false, status: 0, data: { success: false, error: `Unknown task: ${task}` }, headers: null };
+  }
+  if (meta.requiresPid && !pid) {
+    return { ok: false, status: 0, data: { success: false, error: "Missing project id" }, headers: null };
+  }
+  if (!isOnline()) {
+    return { ok: false, status: 0, data: { success: false, error: "Offline" }, headers: null };
+  }
+
+  const serverTask = meta.alias || task;
+  const fetchImpl = deps.apiFetch
+    || (typeof window !== "undefined" && typeof window.apiFetch === "function" ? window.apiFetch : null)
+    || defaultFetch;
+
+  try {
+    const res = await fetchImpl(API_AI, {
+      method: "POST",
+      body: JSON.stringify({ task: serverTask, pid: pid || null, payload }),
+      signal: signal || undefined,
+    });
+
+    if (res?.data?.quota) writeQuotaCache(res.data.quota);
+
+    if (!res.ok && res.data && res.data.scope) {
+      res.data.quotaExceeded = ["words", "credits", "global", "per_task"].includes(res.data.scope);
+    }
+
+    return res;
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      return { ok: false, status: 0, data: { success: false, error: "Cancelled" }, headers: null };
+    }
+    return { ok: false, status: 0, data: { success: false, error: String(err?.message || "Network error") }, headers: null };
+  }
+}
+
+async function defaultFetch(url, opts = {}) {
+  const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+  try {
+    const session = localStorage.getItem("folio.session");
+    if (session) headers["Authorization"] = `Bearer ${session}`;
+  } catch {}
+  try {
+    const res = await fetch(url, { ...opts, headers });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, data, headers: res.headers };
+  } catch (err) {
+    return { ok: false, status: 0, data: { success: false, error: String(err?.message || "Network error") }, headers: null };
+  }
+}
+
+// =========================================================================
+// APPLY PATCH / FILES
+// =========================================================================
+
+async function readFileContent(pid, path, idb) {
+  if (!idb || typeof idb.getFile !== "function") return null;
+  try {
+    const f = await idb.getFile(pid, path);
+    if (f == null) return null;
+    return typeof f === "string" ? f : (f.content || "");
+  } catch { return null; }
+}
+
+async function writeFileContent(pid, path, content, idb) {
+  if (!idb || typeof idb.putFile !== "function") return false;
+  try { await idb.putFile(pid, path, content); return true; }
+  catch { return false; }
+}
+
+/**
+ * Apply a `diff` artifact. Verifies `old` is still present in the file
+ * before writing — stale patches are rejected.
+ *
+ * Returns { ok, path, replaced, error }.
+ */
+export async function applyPatch({ artifact, pid, deps = {} } = {}) {
+  if (!artifact || artifact.type !== "diff") {
+    return { ok: false, error: "Not a diff artifact" };
+  }
+  if (!pid) return { ok: false, error: "Missing pid" };
+  if (!artifact.file) return { ok: false, error: "Missing file path" };
+
+  const idb = deps.idb;
+  const current = await readFileContent(pid, artifact.file, idb);
+  if (current == null) {
+    return { ok: false, error: `File not found: ${artifact.file}` };
+  }
+
+  if (!artifact.old) {
+    if (deps.replaceAll !== true) {
+      return { ok: false, error: "Empty <old> — pass replaceAll to replace whole file" };
+    }
+    const written = await writeFileContent(pid, artifact.file, artifact.new || "", idb);
+    if (!written) return { ok: false, error: "Write failed" };
+    return { ok: true, path: artifact.file, replaced: true };
+  }
+
+  if (!current.includes(artifact.old)) {
+    return { ok: false, error: "Patch is stale — the file changed since the AI ran" };
+  }
+
+  const updated = current.replace(artifact.old, artifact.new || "");
+  const written = await writeFileContent(pid, artifact.file, updated, idb);
+  if (!written) return { ok: false, error: "Write failed" };
+  return { ok: true, path: artifact.file, replaced: false };
+}
+
+/**
+ * Apply a `files` artifact (multiple files at once). Partial success is
+ * possible. Returns { ok, results, okCount, total }.
+ */
+export async function applyFiles({ artifact, pid, deps = {} } = {}) {
+  if (!artifact || artifact.type !== "files") {
+    return { ok: false, error: "Not a files artifact" };
+  }
+  if (!pid) return { ok: false, error: "Missing pid" };
+  if (!Array.isArray(artifact.files)) {
+    return { ok: false, error: "Invalid files artifact" };
+  }
+
+  const idb = deps.idb;
+  const results = [];
+  for (const f of artifact.files) {
+    if (!f || typeof f.path !== "string" || typeof f.content !== "string") {
+      results.push({ path: f?.path || "(unknown)", ok: false, error: "Invalid entry" });
+      continue;
+    }
+    const written = await writeFileContent(pid, f.path, f.content, idb);
+    results.push({
+      path: f.path,
+      ok: written,
+      error: written ? null : "Write failed",
+    });
+  }
+  const okCount = results.filter(r => r.ok).length;
+  return { ok: okCount > 0, results, okCount, total: results.length };
+}
+
+// =========================================================================
+// HOST PREFILL HELPERS
+// =========================================================================
+
+export function prefillCommit({ artifact } = {}) {
+  if (!artifact || artifact.type !== "commitDraft") return null;
+  const parts = [artifact.message || ""];
+  if (artifact.body) parts.push("", artifact.body);
+  return {
+    message: parts.join("\n").trim(),
+    changed: Array.isArray(artifact.changed) ? artifact.changed : [],
+  };
+}
+
+export function prefillDeploy({ artifact } = {}) {
+  if (!artifact || artifact.type !== "deployDraft") return null;
+  return {
+    summary: artifact.summary || "Deploy",
+    changed: Array.isArray(artifact.changed) ? artifact.changed : [],
+    sinceDeploymentId: artifact.sinceDeploymentId || null,
+  };
+}
+
+// =========================================================================
 // LAZY ASSET LOADERS
-// ─────────────────────────────────────────────────────────────────────
+// =========================================================================
 
 let _mermaidPromise = null;
 let _mermaidReady = false;
 
-function ensureMermaid() {
-  if (_mermaidReady) return Promise.resolve(window.mermaid || null);
+async function ensureMermaid() {
+  if (_mermaidReady) return window.mermaid || null;
   if (_mermaidPromise) return _mermaidPromise;
   _mermaidPromise = import(/* @vite-ignore */ MERMAID_URL)
-    .then((mod) => {
+    .then(mod => {
       const m = mod.default || mod;
       if (typeof m.initialize === "function") {
         try {
@@ -198,9 +771,8 @@ function ensureMermaid() {
       _mermaidReady = true;
       return m;
     })
-    .catch((err) => {
+    .catch(() => {
       _mermaidPromise = null;
-      console.warn("[ai] mermaid load failed:", err?.message);
       return null;
     });
   return _mermaidPromise;
@@ -209,57 +781,51 @@ function ensureMermaid() {
 let _katexPromise = null;
 let _katexReady = false;
 
-function ensureKaTeX() {
-  if (_katexReady) return Promise.resolve(window.katex || null);
+async function ensureKaTeX() {
+  if (_katexReady) return window.katex || null;
   if (_katexPromise) return _katexPromise;
   _katexPromise = (async () => {
     if (!document.querySelector(`link[href="${KATEX_CSS}"]`)) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
       link.href = KATEX_CSS;
-      link.onerror = () => {};
       document.head.appendChild(link);
     }
-    return import(/* @vite-ignore */ KATEX_JS).then((mod) => {
+    return import(/* @vite-ignore */ KATEX_JS).then(mod => {
       const k = mod.default || mod;
       window.katex = k;
       _katexReady = true;
       return k;
     });
-  })().catch((err) => {
+  })().catch(() => {
     _katexPromise = null;
-    console.warn("[ai] katex load failed:", err?.message);
     return null;
   });
   return _katexPromise;
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// QUOTA CACHE (mirror of last server response, per page)
-// ─────────────────────────────────────────────────────────────────────
-
-function quotaLoad() {
-  try {
-    const raw = localStorage.getItem(QUOTA_CACHE_KEY);
-    if (!raw) return null;
-    const v = JSON.parse(raw);
-    if (!v || typeof v !== "object") return null;
-    return v;
-  } catch { return null; }
-}
-
-function quotaSave(q) {
-  try { localStorage.setItem(QUOTA_CACHE_KEY, JSON.stringify(q)); } catch {}
-}
-
-function quotaClear() {
-  try { localStorage.removeItem(QUOTA_CACHE_KEY); } catch {}
-}
-
-// ─────────────────────────────────────────────────────────────────────
+// =========================================================================
 // MARKDOWN RENDERER
-// ─────────────────────────────────────────────────────────────────────
+// =========================================================================
 
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function stripFences(s) {
+  return String(s || "")
+    .replace(/^\uFEFF/, "")
+    .replace(/^\s*```[a-zA-Z0-9_-]*\s*\n/, "")
+    .replace(/\n\s*```\s*$/, "")
+    .trim();
+}
+
+/**
+ * Render markdown to HTML. Placeholders for Mermaid, KaTeX, and flowtable
+ * are emitted with data-* attributes; hydrateMarkdown fills them in.
+ */
 export function renderMarkdown(text) {
   let src = String(text ?? "");
 
@@ -286,18 +852,14 @@ export function renderMarkdown(text) {
 
   const lines = src.split("\n");
   const out = [];
-  let inUl = false;
-  let inOl = false;
-  let inBq = false;
-  let inTable = false;
-  let tableAligns = [];
-  let tableHeaderHtml = "";
+  let inUl = false, inOl = false, inBq = false;
+  let inTable = false, tableAligns = [];
 
   const closeUl = () => { if (inUl) { out.push("</ul>"); inUl = false; } };
   const closeOl = () => { if (inOl) { out.push("</ol>"); inOl = false; } };
   const closeBq = () => { if (inBq) { out.push("</blockquote>"); inBq = false; } };
   const closeTable = () => {
-    if (inTable) { out.push("</tbody></table>"); inTable = false; tableAligns = []; tableHeaderHtml = ""; }
+    if (inTable) { out.push("</tbody></table>"); inTable = false; tableAligns = []; }
   };
   const closeAll = () => { closeUl(); closeOl(); closeBq(); closeTable(); };
 
@@ -335,8 +897,7 @@ export function renderMarkdown(text) {
     const h = raw.match(/^(#{1,6})\s+(.*)$/);
     if (h) {
       closeAll();
-      const lvl = h[1].length;
-      out.push(`<h${lvl}>${inline(h[2])}</h${lvl}>`);
+      out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`);
       continue;
     }
 
@@ -353,7 +914,7 @@ export function renderMarkdown(text) {
       closeOl(); closeTable();
       if (!inUl) { out.push('<ul class="task-list">'); inUl = true; }
       const checked = task[1].toLowerCase() === "x";
-      out.push(`<li class="task-item${checked ? " done" : ""}"><span class="task-box" aria-hidden="true">${checked ? "✓" : ""}</span>${inline(task[2])}</li>`);
+      out.push(`<li class="task-item${checked ? " done" : ""}"><span class="task-box">${checked ? "✓" : ""}</span>${inline(task[2])}</li>`);
       continue;
     } else if (inUl && !/^\s*[-*]\s+/.test(raw)) {
       closeUl();
@@ -379,15 +940,14 @@ export function renderMarkdown(text) {
 
     if (/^\s*\|.*\|\s*$/.test(raw) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
       closeAll();
-      const headers = raw.split("|").slice(1, -1).map((c) => c.trim());
-      tableAligns = lines[i + 1].split("|").slice(1, -1).map((c) => {
+      const headers = raw.split("|").slice(1, -1).map(c => c.trim());
+      tableAligns = lines[i + 1].split("|").slice(1, -1).map(c => {
         const t = c.trim();
         if (t.startsWith(":") && t.endsWith(":")) return "center";
         if (t.endsWith(":")) return "right";
         return "left";
       });
-      tableHeaderHtml = `<thead><tr>${headers.map((h, idx) => `<th style="text-align:${tableAligns[idx] || "left"}">${inline(h)}</th>`).join("")}</tr></thead>`;
-      out.push(`<table class="ai-table">${tableHeaderHtml}<tbody>`);
+      out.push(`<table class="ai-table"><thead><tr>${headers.map((h, idx) => `<th style="text-align:${tableAligns[idx] || "left"}">${inline(h)}</th>`).join("")}</tr></thead><tbody>`);
       inTable = true;
       i++;
       continue;
@@ -395,7 +955,7 @@ export function renderMarkdown(text) {
 
     if (inTable) {
       if (/^\s*\|.*\|\s*$/.test(raw)) {
-        const cells = raw.split("|").slice(1, -1).map((c) => c.trim());
+        const cells = raw.split("|").slice(1, -1).map(c => c.trim());
         out.push(`<tr>${cells.map((c, idx) => `<td style="text-align:${tableAligns[idx] || "left"}">${inline(c)}</td>`).join("")}</tr>`);
         continue;
       } else {
@@ -410,7 +970,12 @@ export function renderMarkdown(text) {
   return out.join("\n");
 }
 
-export async function hydrateMarkdown(root, opts = {}) {
+/**
+ * Fill in Mermaid / KaTeX / flowtable placeholders produced by renderMarkdown.
+ * Fails silently and leaves the fallback <pre> in place when a lazy
+ * dependency can't be fetched (offline first load).
+ */
+export async function hydrateMarkdown(root) {
   if (!root) return;
 
   const diagrams = root.querySelectorAll('[data-diagram="mermaid"]:not([data-hydrated])');
@@ -427,9 +992,6 @@ export async function hydrateMarkdown(root, opts = {}) {
           const { svg } = await m.render(id, src);
           node.innerHTML = svg;
           node.classList.add("ai-diagram-rendered");
-          if (typeof opts.onDiagramRendered === "function") {
-            try { opts.onDiagramRendered(node, src); } catch {}
-          }
         } catch (err) {
           node.classList.add("ai-diagram-error");
           node.setAttribute("title", String(err?.message || err));
@@ -440,7 +1002,7 @@ export async function hydrateMarkdown(root, opts = {}) {
     }
   }
 
-  const maths = root.querySelectorAll('[data-math]:not([data-hydrated])');
+  const maths = root.querySelectorAll("[data-math]:not([data-hydrated])");
   if (maths.length) {
     const k = await ensureKaTeX();
     if (k) {
@@ -451,7 +1013,7 @@ export async function hydrateMarkdown(root, opts = {}) {
         try {
           k.render(src, node, { displayMode: display, throwOnError: false });
           node.classList.add("ai-math-rendered");
-        } catch (err) {
+        } catch {
           node.classList.add("ai-math-error");
         }
       }
@@ -460,7 +1022,7 @@ export async function hydrateMarkdown(root, opts = {}) {
     }
   }
 
-  const flowtables = root.querySelectorAll('[data-flowtable]:not([data-hydrated])');
+  const flowtables = root.querySelectorAll("[data-flowtable]:not([data-hydrated])");
   if (flowtables.length) {
     for (const node of flowtables) {
       node.setAttribute("data-hydrated", "1");
@@ -468,7 +1030,7 @@ export async function hydrateMarkdown(root, opts = {}) {
         const spec = JSON.parse(node.getAttribute("data-flowtable") || "{}");
         node.innerHTML = renderFlowtable(spec);
         node.classList.add("ai-flowtable-rendered");
-      } catch (err) {
+      } catch {
         node.classList.add("ai-flowtable-error");
       }
     }
@@ -482,253 +1044,47 @@ function renderFlowtable(spec) {
   const cols = Array.isArray(spec.columns) && spec.columns.length
     ? spec.columns
     : ["Step", "Condition", "Action", "Next"];
-  const head = `<thead><tr>${cols.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>`;
+  const head = `<thead><tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>`;
   const rows = spec.rows.map((r, i) => {
     const cells = Array.isArray(r) ? r : [];
-    return `<tr class="ft-row ft-row-${i % 2 ? "alt" : "base"}">${cells.map((c) => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`;
+    return `<tr class="ft-row ft-row-${i % 2 ? "alt" : "base"}">${cells.map(c => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`;
   }).join("");
   return `<div class="ai-flowtable-wrap"><table class="ai-flowtable">${head}<tbody>${rows}</tbody></table></div>`;
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// RESULT CACHE
-// ─────────────────────────────────────────────────────────────────────
-
-const RESULT_CACHE = new Map();
-
-function cacheKey(pid, task, hash) {
-  return `${pid || "none"}::${task}::${hash || ""}`;
-}
-function cacheGet(key) {
-  const e = RESULT_CACHE.get(key);
-  if (!e) return null;
-  if (nowMs() - e.at > RESULT_CACHE_TTL_MS) { RESULT_CACHE.delete(key); return null; }
-  return e.value;
-}
-function cacheSet(key, value) {
-  if (RESULT_CACHE.size >= RESULT_CACHE_MAX) {
-    const first = RESULT_CACHE.keys().next().value;
-    if (first) RESULT_CACHE.delete(first);
-  }
-  RESULT_CACHE.set(key, { value, at: nowMs() });
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// PENDING STORAGE
-// ─────────────────────────────────────────────────────────────────────
-
-function pendingKey(pid) { return PENDING_STORAGE_PREFIX + (pid || "none"); }
-
-function pendingLoad(pid) {
-  try {
-    const raw = sessionStorage.getItem(pendingKey(pid));
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    const cutoff = nowMs() - PENDING_TTL_MS;
-    return arr.filter((p) => p && typeof p === "object" && (p.createdAt || 0) > cutoff);
-  } catch { return []; }
-}
-
-function pendingSave(pid, list) {
-  try { sessionStorage.setItem(pendingKey(pid), JSON.stringify(list)); } catch {}
-}
-
-function pendingAdd(pid, entry) {
-  const list = pendingLoad(pid);
-  list.push(entry);
-  pendingSave(pid, list);
-  return list;
-}
-
-function pendingRemove(pid, id) {
-  const list = pendingLoad(pid).filter((p) => p.id !== id);
-  pendingSave(pid, list);
-  return list;
-}
-
-function pendingClear(pid) {
-  try { sessionStorage.removeItem(pendingKey(pid)); } catch {}
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// TASK DISPATCHER
-// ─────────────────────────────────────────────────────────────────────
-
-/**
- * POST /api/ai. Returns { ok, status, data, headers }.
- * `data` now includes `quota` on success and `scope`/`limit`/`used`/`resetAt`
- * on failure. Errors are turned into a `quotaExceeded` flag for the UI.
- */
-export async function runTask({ task, pid = null, payload = {}, signal = null, deps = {} } = {}) {
-  if (!task) return { ok: false, status: 0, data: { success: false, error: "Missing task" }, headers: null };
-  const meta = TASK_META[task];
-  if (!meta) return { ok: false, status: 0, data: { success: false, error: `Unknown task: ${task}` }, headers: null };
-  if (meta.requiresPid && !pid) {
-    return { ok: false, status: 0, data: { success: false, error: `Task "${task}" requires a project` }, headers: null };
-  }
-  if (!isOnline()) {
-    return { ok: false, status: 0, data: { success: false, error: "Offline — AI tasks need a connection" }, headers: null };
-  }
-  const fetchImpl = deps.apiFetch
-    || (typeof window.apiFetch === "function" ? window.apiFetch : null)
-    || defaultApiFetch;
-
-  const serverTask = meta.alias || task;
-
-  try {
-    const res = await fetchImpl(API_AI, {
-      method: "POST",
-      body: JSON.stringify({ task: serverTask, pid: pid || null, payload }),
-      signal: signal || undefined,
-    });
-
-    // Cache + quota mirror on any response that carries `quota`
-    if (res?.data?.quota) {
-      quotaSave(res.data.quota);
-    }
-
-    // If the server rejected due to quota, mark it so the panel can render
-    // a "quota exhausted" banner instead of the generic error card.
-    if (!res.ok && res.data && res.data.scope && /words|credits|global|per_task/.test(res.data.scope)) {
-      res.data.quotaExceeded = true;
-    }
-
-    return res;
-  } catch (err) {
-    if (err?.name === "AbortError") {
-      return { ok: false, status: 0, data: { success: false, error: "Cancelled" }, headers: null };
-    }
-    return { ok: false, status: 0, data: { success: false, error: String(err?.message || "Network error") }, headers: null };
-  }
-}
-
-async function defaultApiFetch(url, opts = {}) {
-  const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
-  try {
-    const session = localStorage.getItem("folio.session");
-    if (session) headers["Authorization"] = `Bearer ${session}`;
-  } catch {}
-  try {
-    const res = await fetch(url, { ...opts, headers });
-    let data = {};
-    try { data = await res.json(); } catch {}
-    return { ok: res.ok, status: res.status, data, headers: res.headers };
-  } catch (err) {
-    return { ok: false, status: 0, data: { success: false, error: String(err?.message || "Network error") }, headers: null };
-  }
-}
-
-export function isTaskAvailable(task, { online = isOnline(), guest = true } = {}) {
-  const meta = TASK_META[task];
-  if (!meta) return false;
-  if (!online) return false;
-  if (guest && !GUEST_TASKS.has(task)) return false;
-  return true;
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// APPLY PATCH
-// ─────────────────────────────────────────────────────────────────────
-
-async function readFileImpl(pid, path, idb) {
-  if (idb && typeof idb.getFile === "function") {
-    try {
-      const f = await idb.getFile(pid, path);
-      if (!f) return null;
-      return typeof f === "string" ? f : (f.content || "");
-    } catch {}
-  }
-  return null;
-}
-
-async function writeFileImpl(pid, path, content, idb) {
-  if (idb && typeof idb.putFile === "function") {
-    try { await idb.putFile(pid, path, content); return true; } catch {}
-  }
-  return false;
-}
-
-export async function applyPatch({ artifact, pid, deps = {} } = {}) {
-  if (!artifact || artifact.type !== "diff") return { ok: false, error: "Not a diff artifact" };
-  if (!pid) return { ok: false, error: "Missing pid" };
-
-  const current = await readFileImpl(pid, artifact.file, deps.idb);
-  if (current == null) return { ok: false, error: `File not found: ${artifact.file}` };
-
-  if (!artifact.old) {
-    if (deps.replaceAll === true) {
-      const written = await writeFileImpl(pid, artifact.file, artifact.new || "", deps.idb);
-      if (!written) return { ok: false, error: "Write failed" };
-      return { ok: true, path: artifact.file, replaced: true };
-    }
-    return { ok: false, error: "Empty <old> — pass replaceAll to whole-file replace" };
-  }
-
-  if (!current.includes(artifact.old)) {
-    return { ok: false, error: "Patch is stale — the file changed since the AI ran" };
-  }
-
-  const updated = current.replace(artifact.old, artifact.new || "");
-  const written = await writeFileImpl(pid, artifact.file, updated, deps.idb);
-  if (!written) return { ok: false, error: "Write failed" };
-  return { ok: true, path: artifact.file, replaced: false };
-}
-
-export async function applyFiles({ artifact, pid, deps = {} } = {}) {
-  if (!artifact || artifact.type !== "files") return { ok: false, error: "Not a files artifact" };
-  if (!pid) return { ok: false, error: "Missing pid" };
-  if (!Array.isArray(artifact.files)) return { ok: false, error: "Invalid files artifact" };
-
-  const results = [];
-  for (const f of artifact.files) {
-    if (!f?.path || typeof f.content !== "string") {
-      results.push({ path: f?.path || "(unknown)", ok: false, error: "Invalid entry" });
-      continue;
-    }
-    const written = await writeFileImpl(pid, f.path, f.content, deps.idb);
-    results.push({ path: f.path, ok: written, error: written ? null : "Write failed" });
-  }
-  const ok = results.some((r) => r.ok);
-  return { ok, results, okCount: results.filter((r) => r.ok).length, total: results.length };
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// HOST PREFILL HELPERS
-// ─────────────────────────────────────────────────────────────────────
-
-export function prefillCommit({ artifact } = {}) {
-  if (!artifact || artifact.type !== "commitDraft") return null;
-  const parts = [artifact.message];
-  if (artifact.body) parts.push("", artifact.body);
-  return {
-    message: parts.join("\n").trim(),
-    changed: Array.isArray(artifact.changed) ? artifact.changed : [],
-  };
-}
-
-export function prefillDeploy({ artifact } = {}) {
-  if (!artifact || artifact.type !== "deployDraft") return null;
-  return {
-    summary: artifact.summary || "Deploy",
-    changed: Array.isArray(artifact.changed) ? artifact.changed : [],
-    sinceDeploymentId: artifact.sinceDeploymentId || null,
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────
+// =========================================================================
 // ARTIFACT RENDERERS
-// ─────────────────────────────────────────────────────────────────────
+//
+// Each renderer returns a DOM node. All nodes use class names defined in
+// ai.css. ai-page.js appends these nodes to the result container.
+// =========================================================================
 
-function severityMeta(sev) {
-  switch ((sev || "").toLowerCase()) {
-    case "error": return { icon: "alert", cls: "error", label: "ERROR" };
-    case "warning": return { icon: "alert", cls: "warning", label: "WARN" };
-    default: return { icon: "info", cls: "info", label: "INFO" };
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k === "style" && typeof v === "object") Object.assign(node.style, v);
+    else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
+    else if (k === "dataset" && typeof v === "object") Object.assign(node.dataset, v);
+    else if (v === true) node.setAttribute(k, "");
+    else node.setAttribute(k, v);
   }
+  for (const c of children.flat()) {
+    if (c == null || c === false) continue;
+    node.appendChild(typeof c === "string" || typeof c === "number"
+      ? document.createTextNode(String(c)) : c);
+  }
+  return node;
 }
 
-function renderFindings(root, artifact) {
+function severityBadge(sev) {
+  const s = (sev || "info").toLowerCase();
+  const label = s === "error" ? "ERROR" : s === "warning" ? "WARN" : "INFO";
+  return el("span", { class: `finding-sev finding-sev-${s}` }, label);
+}
+
+function renderFindings(artifact) {
   const wrap = el("div", { class: "ai-findings" });
   const items = Array.isArray(artifact.findings) ? artifact.findings : [];
   if (!items.length) {
@@ -736,10 +1092,9 @@ function renderFindings(root, artifact) {
     return wrap;
   }
   for (const f of items) {
-    const m = severityMeta(f.severity);
-    wrap.appendChild(el("div", { class: `finding finding-${m.cls}` },
+    wrap.appendChild(el("div", { class: "finding" },
       el("div", { class: "finding-head" },
-        el("span", { class: "finding-sev" }, m.label),
+        severityBadge(f.severity),
         f.file ? el("span", { class: "finding-loc" }, f.file + (f.line ? ":" + f.line : "")) : null,
       ),
       el("div", { class: "finding-title" }, f.title || ""),
@@ -749,8 +1104,8 @@ function renderFindings(root, artifact) {
   return wrap;
 }
 
-function renderDiff(root, artifact, opts) {
-  const wrap = el("div", { class: "ai-diff", dataset: { file: artifact.file || "" } });
+function renderDiff(artifact, opts = {}) {
+  const wrap = el("div", { class: "ai-diff" });
   wrap.appendChild(el("div", { class: "diff-head" },
     el("span", { class: "diff-file" }, artifact.file || "diff"),
     el("span", { class: "diff-hint" }, "old → new"),
@@ -758,46 +1113,78 @@ function renderDiff(root, artifact, opts) {
 
   const oldLines = String(artifact.old || "").split("\n");
   const newLines = String(artifact.new || "").split("\n");
-  const body = el("pre", { class: "diff-body" });
   const max = Math.max(oldLines.length, newLines.length);
+
+  let added = 0, removed = 0;
+
+  const grid = el("div", { class: "diff-grid" });
+  const oldCol = el("div", { class: "diff-col diff-col-old" });
+  const newCol = el("div", { class: "diff-col diff-col-new" });
+
+  oldCol.appendChild(el("div", { class: "diff-col-head" }, "Old"));
+  newCol.appendChild(el("div", { class: "diff-col-head" }, "New"));
+
   for (let i = 0; i < max; i++) {
     const o = oldLines[i];
     const n = newLines[i];
-    if (o === n) {
-      body.appendChild(el("div", { class: "diff-row diff-eq" },
+    const same = o === n;
+
+    if (same) {
+      oldCol.appendChild(el("div", { class: "diff-row diff-eq" },
         el("span", { class: "diff-sign" }, " "),
         el("span", { class: "diff-line" }, o ?? ""),
       ));
+      newCol.appendChild(el("div", { class: "diff-row diff-eq" },
+        el("span", { class: "diff-sign" }, " "),
+        el("span", { class: "diff-line" }, n ?? ""),
+      ));
     } else {
       if (o !== undefined && o !== "") {
-        body.appendChild(el("div", { class: "diff-row diff-del" },
+        removed++;
+        oldCol.appendChild(el("div", { class: "diff-row diff-del" },
           el("span", { class: "diff-sign" }, "−"),
           el("span", { class: "diff-line" }, o),
         ));
+      } else {
+        oldCol.appendChild(el("div", { class: "diff-row diff-empty" }, ""));
       }
       if (n !== undefined && n !== "") {
-        body.appendChild(el("div", { class: "diff-row diff-add" },
+        added++;
+        newCol.appendChild(el("div", { class: "diff-row diff-add" },
           el("span", { class: "diff-sign" }, "+"),
           el("span", { class: "diff-line" }, n),
         ));
+      } else {
+        newCol.appendChild(el("div", { class: "diff-row diff-empty" }, ""));
       }
     }
   }
-  wrap.appendChild(body);
+
+  grid.appendChild(oldCol);
+  grid.appendChild(newCol);
+  wrap.appendChild(grid);
+
+  wrap.appendChild(el("div", { class: "diff-stats" },
+    el("span", {}, `${added + removed} change${added + removed === 1 ? "" : "s"}`),
+    el("span", { class: "diff-stat-add" }, `+${added}`),
+    el("span", { class: "diff-stat-del" }, `−${removed}`),
+  ));
 
   const actions = el("div", { class: "diff-actions" });
-  actions.appendChild(el("button", { class: "btn btn-sm btn-primary", type: "button", onclick: () => {
-    if (typeof opts.onAccept === "function") opts.onAccept(artifact);
-  } }, "Accept patch"));
-  actions.appendChild(el("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => {
-    if (typeof opts.onReject === "function") opts.onReject(artifact);
-  } }, "Reject"));
+  actions.appendChild(el("button", {
+    class: "btn btn-primary btn-sm", type: "button",
+    onclick: () => opts.onAccept?.(artifact),
+  }, "Accept patch"));
+  actions.appendChild(el("button", {
+    class: "btn btn-ghost btn-sm", type: "button",
+    onclick: () => opts.onReject?.(artifact),
+  }, "Reject"));
   wrap.appendChild(actions);
 
   return wrap;
 }
 
-function renderFiles(root, artifact, opts) {
+function renderFiles(artifact, opts = {}) {
   const wrap = el("div", { class: "ai-files" });
   const files = Array.isArray(artifact.files) ? artifact.files : [];
   if (!files.length) {
@@ -823,26 +1210,31 @@ function renderFiles(root, artifact, opts) {
   wrap.appendChild(list);
 
   const actions = el("div", { class: "diff-actions" });
-  actions.appendChild(el("button", { class: "btn btn-sm btn-primary", type: "button", onclick: () => {
-    if (typeof opts.onAccept === "function") opts.onAccept(artifact);
-  } }, `Accept all ${files.length} files`));
-  actions.appendChild(el("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => {
-    if (typeof opts.onReject === "function") opts.onReject(artifact);
-  } }, "Reject"));
+  actions.appendChild(el("button", {
+    class: "btn btn-primary btn-sm", type: "button",
+    onclick: () => opts.onAccept?.(artifact),
+  }, `Accept all ${files.length} files`));
+  actions.appendChild(el("button", {
+    class: "btn btn-ghost btn-sm", type: "button",
+    onclick: () => opts.onReject?.(artifact),
+  }, "Reject"));
   wrap.appendChild(actions);
-
   return wrap;
 }
 
-function renderMentions(root, artifact) {
+function renderMentions(artifact, opts = {}) {
   const wrap = el("div", { class: "ai-mentions" });
   const items = Array.isArray(artifact.mentions) ? artifact.mentions : [];
-  if (!items.length) { wrap.appendChild(el("div", { class: "ai-empty" }, "No mentions.")); return wrap; }
+  if (!items.length) {
+    wrap.appendChild(el("div", { class: "ai-empty" }, "No mentions."));
+    return wrap;
+  }
   for (const m of items) {
     wrap.appendChild(el("button", {
       class: "mention",
       type: "button",
       dataset: { file: m.file || "", line: String(m.line || 0) },
+      onclick: () => opts.onOpenFile?.(m.file, m.line),
     },
       el("span", { class: "mention-file" }, m.file || ""),
       el("span", { class: "mention-line" }, ":" + (m.line || "?")),
@@ -853,10 +1245,13 @@ function renderMentions(root, artifact) {
   return wrap;
 }
 
-function renderConcepts(root, artifact) {
+function renderConcepts(artifact) {
   const wrap = el("div", { class: "ai-concepts" });
   const items = Array.isArray(artifact.concepts) ? artifact.concepts : [];
-  if (!items.length) { wrap.appendChild(el("div", { class: "ai-empty" }, "No concepts.")); return wrap; }
+  if (!items.length) {
+    wrap.appendChild(el("div", { class: "ai-empty" }, "No concepts."));
+    return wrap;
+  }
   for (const c of items) {
     wrap.appendChild(el("div", { class: "concept" },
       el("div", { class: "concept-kind" }, c.kind || ""),
@@ -867,10 +1262,13 @@ function renderConcepts(root, artifact) {
   return wrap;
 }
 
-function renderSteps(root, artifact, opts) {
+function renderSteps(artifact) {
   const wrap = el("div", { class: "ai-steps" });
   const steps = Array.isArray(artifact.steps) ? artifact.steps : [];
-  if (!steps.length) { wrap.appendChild(el("div", { class: "ai-empty" }, "No steps.")); return wrap; }
+  if (!steps.length) {
+    wrap.appendChild(el("div", { class: "ai-empty" }, "No steps."));
+    return wrap;
+  }
   for (const s of steps) {
     const row = el("div", { class: "step-row" });
     row.appendChild(el("span", { class: "step-num" }, String(s.n || "?")));
@@ -878,18 +1276,23 @@ function renderSteps(root, artifact, opts) {
     const body = el("div", { class: "step-body" });
     if (s.note) body.appendChild(el("div", { class: "step-note" }, s.note));
     if (s.state) body.appendChild(el("pre", { class: "step-state" }, JSON.stringify(s.state, null, 2)));
-    if (s.return !== undefined) body.appendChild(el("div", { class: "step-return" }, "returns " + JSON.stringify(s.return)));
+    if (s.return !== undefined) {
+      body.appendChild(el("div", { class: "step-return" }, "returns " + JSON.stringify(s.return)));
+    }
     row.appendChild(body);
     wrap.appendChild(row);
   }
   return wrap;
 }
 
-function renderTree(root, artifact) {
+function renderTree(artifact) {
   const wrap = el("div", { class: "ai-tree" });
-  if (!artifact.root) { wrap.appendChild(el("div", { class: "ai-empty" }, "No tree data.")); return wrap; }
+  if (!artifact.root) {
+    wrap.appendChild(el("div", { class: "ai-empty" }, "No tree data."));
+    return wrap;
+  }
   const build = (node, depth) => {
-    const li = el("li", { class: `tree-node-${depth}` });
+    const li = el("li", { class: `tree-node-depth-${depth}` });
     li.appendChild(el("span", { class: "tree-label" }, node.label || ""));
     const children = Array.isArray(node.children) ? node.children : [];
     if (children.length) {
@@ -905,55 +1308,47 @@ function renderTree(root, artifact) {
   return wrap;
 }
 
-function renderJson(root, artifact, opts) {
+function renderJson(artifact, opts = {}) {
   const wrap = el("div", { class: "ai-json" });
   wrap.appendChild(el("pre", { class: "json-body" }, JSON.stringify(artifact.data, null, 2)));
-  if (opts?.task) wrap.setAttribute("data-task", opts.task);
+  if (opts.task) wrap.setAttribute("data-task", opts.task);
   return wrap;
 }
 
-function renderCommitDraft(root, artifact, opts) {
+function renderCommitDraft(artifact, opts = {}) {
   const wrap = el("div", { class: "ai-commit-draft" });
-  wrap.appendChild(el("div", { class: "draft-icon" }, svgIcon("gitCommit", 18, 2.2)));
-  wrap.appendChild(el("div", { class: "draft-message" }, artifact.message || ""));
+  wrap.appendChild(el("div", { class: "draft-title" }, artifact.message || ""));
   if (artifact.body) wrap.appendChild(el("pre", { class: "draft-body" }, artifact.body));
   if (Array.isArray(artifact.changed) && artifact.changed.length) {
     wrap.appendChild(el("div", { class: "draft-changed" },
       el("span", { class: "draft-changed-label" }, "Files:"),
-      ...artifact.changed.map((p) => el("code", { class: "draft-changed-file" }, p)),
+      ...artifact.changed.map(p => el("code", { class: "draft-changed-file" }, p)),
     ));
   }
   wrap.appendChild(el("button", {
-    class: "btn btn-sm btn-primary",
-    type: "button",
-    onclick: () => {
-      if (typeof opts.onPrefillCommit === "function") opts.onPrefillCommit(prefillCommit({ artifact }));
-    },
+    class: "btn btn-primary btn-sm", type: "button",
+    onclick: () => opts.onPrefillCommit?.(prefillCommit({ artifact })),
   }, "Use this message"));
   return wrap;
 }
 
-function renderDeployDraft(root, artifact, opts) {
+function renderDeployDraft(artifact, opts = {}) {
   const wrap = el("div", { class: "ai-deploy-draft" });
-  wrap.appendChild(el("div", { class: "draft-icon" }, svgIcon("rocket", 18, 2.2)));
-  wrap.appendChild(el("div", { class: "draft-summary" }, artifact.summary || "Deploy"));
+  wrap.appendChild(el("div", { class: "draft-title" }, artifact.summary || "Deploy"));
   if (Array.isArray(artifact.changed) && artifact.changed.length) {
     wrap.appendChild(el("div", { class: "draft-changed" },
       el("span", { class: "draft-changed-label" }, "Changed:"),
-      ...artifact.changed.map((p) => el("code", { class: "draft-changed-file" }, p)),
+      ...artifact.changed.map(p => el("code", { class: "draft-changed-file" }, p)),
     ));
   }
   wrap.appendChild(el("button", {
-    class: "btn btn-sm btn-primary",
-    type: "button",
-    onclick: () => {
-      if (typeof opts.onPrefillDeploy === "function") opts.onPrefillDeploy(prefillDeploy({ artifact }));
-    },
+    class: "btn btn-primary btn-sm", type: "button",
+    onclick: () => opts.onPrefillDeploy?.(prefillDeploy({ artifact })),
   }, "Use this summary"));
   return wrap;
 }
 
-function renderProjectSummary(root, artifact) {
+function renderProjectSummary(artifact) {
   const wrap = el("div", { class: "ai-project-summary" });
   const insights = Array.isArray(artifact.insights) ? artifact.insights : [];
   if (insights.length) {
@@ -969,24 +1364,39 @@ function renderProjectSummary(root, artifact) {
   return wrap;
 }
 
+/**
+ * Render an array of artifacts into `root`. Each artifact gets its own
+ * card. Order is preserved. opts callbacks:
+ *   onAccept(artifact, index)
+ *   onReject(artifact, index)
+ *   onPrefillCommit(prefill)
+ *   onPrefillDeploy(prefill)
+ *   onOpenFile(path, line)
+ *   task: task id (used for json artifact hinting)
+ */
 export function renderArtifacts(root, artifacts, opts = {}) {
   if (!root) return;
   const list = Array.isArray(artifacts) ? artifacts : [];
-  for (const a of list) {
-    if (!a || !a.type) continue;
+  list.forEach((a, index) => {
+    if (!a || !a.type) return;
     let node = null;
+    const optsWithIndex = {
+      ...opts,
+      onAccept: (art) => opts.onAccept?.(art, index),
+      onReject: (art) => opts.onReject?.(art, index),
+    };
     switch (a.type) {
-      case "findings":      node = renderFindings(root, a); break;
-      case "diff":          node = renderDiff(root, a, opts); break;
-      case "files":         node = renderFiles(root, a, opts); break;
-      case "mentions":      node = renderMentions(root, a); break;
-      case "concepts":      node = renderConcepts(root, a); break;
-      case "steps":         node = renderSteps(root, a, opts); break;
-      case "tree":          node = renderTree(root, a); break;
-      case "json":          node = renderJson(root, a, { ...opts, task: a.task || opts.task }); break;
-      case "commitDraft":   node = renderCommitDraft(root, a, opts); break;
-      case "deployDraft":   node = renderDeployDraft(root, a, opts); break;
-      case "projectSummary": node = renderProjectSummary(root, a); break;
+      case "findings":       node = renderFindings(a); break;
+      case "diff":           node = renderDiff(a, optsWithIndex); break;
+      case "files":          node = renderFiles(a, optsWithIndex); break;
+      case "mentions":       node = renderMentions(a, opts); break;
+      case "concepts":       node = renderConcepts(a); break;
+      case "steps":          node = renderSteps(a); break;
+      case "tree":           node = renderTree(a); break;
+      case "json":           node = renderJson(a, { task: a.task || opts.task }); break;
+      case "commitDraft":    node = renderCommitDraft(a, opts); break;
+      case "deployDraft":    node = renderDeployDraft(a, opts); break;
+      case "projectSummary": node = renderProjectSummary(a); break;
       case "mermaid":
       case "mindmap":
         node = el("div", { class: "ai-diagram", dataset: { diagram: "mermaid", source: a.source || "" } },
@@ -1004,564 +1414,32 @@ export function renderArtifacts(root, artifacts, opts = {}) {
           el("pre", null, JSON.stringify(a, null, 2)),
         );
     }
-    if (node) root.appendChild(node);
-  }
-  Promise.resolve().then(() => hydrateMarkdown(root, opts)).catch(() => {});
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// INLINE CONTEXT MENU
-// ─────────────────────────────────────────────────────────────────────
-
-const CONTEXT_MENU_ITEMS = [
-  { id: "explain",    label: "Explain selection" },
-  { id: "codefix",    label: "Fix selection" },
-  { id: "optimize",   label: "Optimize selection" },
-  { id: "docstrings", label: "Add docstrings" },
-  { id: "audit",      label: "Audit for issues" },
-  { id: "diagram",    label: "Diagram this" },
-  { id: "simulate",   label: "Simulate with inputs…" },
-];
-
-export function openContextMenu({ x = 0, y = 0, context = {}, onRun, deps = {} } = {}) {
-  document.querySelectorAll(".ai-context-menu").forEach((m) => m.remove());
-
-  const menu = el("div", { class: "ai-context-menu", role: "menu" });
-  const guest = !hasSession();
-
-  for (const item of CONTEXT_MENU_ITEMS) {
-    const meta = TASK_META[item.id];
-    const available = meta && isTaskAvailable(item.id, { online: isOnline(), guest });
-    const row = el("button", {
-      class: `ai-context-item${available ? "" : " disabled"}`,
-      type: "button",
-      role: "menuitem",
-      title: available ? item.label : "Requires sign-in or connection",
-      onclick: () => {
-        if (!available) return;
-        close();
-        if (typeof onRun === "function") onRun(item.id, context);
-      },
-    },
-      svgIcon(item.id === "diagram" ? "layers" : item.id === "simulate" ? "play" : "sparkles", 14, 2.2),
-      el("span", null, item.label),
-    );
-    menu.appendChild(row);
-  }
-
-  menu.style.position = "fixed";
-  menu.style.top = Math.max(0, y) + "px";
-  menu.style.left = Math.max(0, x) + "px";
-  menu.style.zIndex = "9999";
-  menu.style.minWidth = "200px";
-  document.body.appendChild(menu);
-
-  requestAnimationFrame(() => {
-    const r = menu.getBoundingClientRect();
-    if (r.right > window.innerWidth - 8) {
-      menu.style.left = Math.max(8, window.innerWidth - r.width - 8) + "px";
-    }
-    if (r.bottom > window.innerHeight - 8) {
-      menu.style.top = Math.max(8, window.innerHeight - r.height - 8) + "px";
+    if (node) {
+      if (!node.dataset.artifactIndex) node.dataset.artifactIndex = String(index);
+      root.appendChild(node);
     }
   });
 
-  const onDocClick = (e) => {
-    if (!menu.contains(e.target)) close();
-  };
-  const onKey = (e) => {
-    if (e.key === "Escape") { e.preventDefault(); close(); }
-  };
-
-  let closed = false;
-  function close() {
-    if (closed) return;
-    closed = true;
-    try { menu.remove(); } catch {}
-    document.removeEventListener("mousedown", onDocClick, true);
-    document.removeEventListener("keydown", onKey);
-  }
-
-  setTimeout(() => {
-    document.addEventListener("mousedown", onDocClick, true);
-    document.addEventListener("keydown", onKey);
-  }, 0);
-
-  return { close };
+  Promise.resolve().then(() => hydrateMarkdown(root)).catch(() => {});
 }
 
-function hasSession() {
-  try { return !!localStorage.getItem("folio.session"); } catch { return false; }
-}
+// =========================================================================
+// USAGE / QUOTA FORMATTING (used by ai-page.js HUD and footer)
+// =========================================================================
 
-// ─────────────────────────────────────────────────────────────────────
-// AI PANEL
-// ─────────────────────────────────────────────────────────────────────
-
-const STATE = {
-  mounted: null,
-  root: null,
-  activeTask: "explain",
-  scope: "file",
-  running: false,
-  abort: null,
-  lastResult: null,
-  pending: [],
-  pendingBadgeRefresh: null,
-};
-
-export function createAIPanel({ mount, deps = {} } = {}) {
-  if (!mount) throw new Error("createAIPanel: mount is required");
-
-  if (STATE.mounted && STATE.mounted === mount && STATE.root && mount.contains(STATE.root)) {
-    STATE.deps = deps;
-    refreshContext(deps);
-    renderPendingBadge();
-    renderQuotaHud();
-    return {
-      unmount: () => doUnmount(),
-      open: () => ensureVisible(true),
-      close: () => ensureVisible(false),
-    };
-  }
-
-  if (STATE.mounted && STATE.mounted !== mount) doUnmount();
-
-  STATE.mounted = mount;
-  STATE.deps = deps;
-  STATE.activeTask = "explain";
-  STATE.scope = "file";
-  STATE.running = false;
-  STATE.abort = null;
-  STATE.lastResult = null;
-
-  const root = el("div", { class: "ai-panel" });
-  mount.appendChild(root);
-  STATE.root = root;
-
-  root.innerHTML = `
-    <div class="ai-panel-head">
-      <div class="ai-panel-title">
-        <span class="ai-panel-icon">${svgIcon("sparkles", 14, 2.2)}</span>
-        <span>Lens</span>
-        <span class="ai-pending-badge" hidden>0</span>
-      </div>
-      <div class="ai-panel-actions">
-        <button type="button" class="ai-panel-btn" data-ai-action="pending" title="Pending proposals">
-          ${svgIcon("clock", 13, 2.2)}
-        </button>
-        <button type="button" class="ai-panel-btn" data-ai-action="clear" title="Clear result">
-          ${svgIcon("trash", 13, 2.2)}
-        </button>
-      </div>
-    </div>
-    <div class="ai-quota-hud" data-ai-quota hidden></div>
-    <div class="ai-panel-body">
-      <div class="ai-task-row">
-        <label class="ai-label">Task</label>
-        <select class="ai-task-select" data-ai-select="task"></select>
-      </div>
-      <div class="ai-scope-row">
-        <label class="ai-label">Scope</label>
-        <div class="ai-radio-group">
-          <label class="ai-radio"><input type="radio" name="ai-scope" value="file" checked><span>File</span></label>
-          <label class="ai-radio"><input type="radio" name="ai-scope" value="selection"><span>Selection</span></label>
-        </div>
-      </div>
-      <div class="ai-hint" data-ai-hint hidden></div>
-      <div class="ai-run-row">
-        <button type="button" class="ai-run-btn" data-ai-action="run">
-          ${svgIcon("play", 13, 2.4)}
-          <span>Run</span>
-        </button>
-      </div>
-      <div class="ai-result" data-ai-result hidden></div>
-      <div class="ai-pending" data-ai-pending hidden></div>
-    </div>
-  `;
-
-  populateTaskSelect(root);
-  wirePanel(root, deps);
-  refreshContext(deps);
-  renderPendingBadge();
-  renderQuotaHud();
-
-  function ensureVisible(visible) {
-    if (!root.isConnected) return;
-    root.style.display = visible ? "" : "none";
-  }
-
-  function doUnmount() {
-    try { STATE.abort?.abort?.(); } catch {}
-    try { root.remove(); } catch {}
-    if (STATE.mounted === mount) {
-      STATE.mounted = null;
-      STATE.root = null;
-    }
-  }
-
-  return {
-    unmount: doUnmount,
-    open: () => ensureVisible(true),
-    close: () => ensureVisible(false),
-  };
-}
-
-function populateTaskSelect(root) {
-  const sel = root.querySelector('[data-ai-select="task"]');
-  if (!sel) return;
-  const groups = {};
-  for (const [id, meta] of Object.entries(TASK_META)) {
-    if (!groups[meta.group]) groups[meta.group] = [];
-    groups[meta.group].push({ id, meta });
-  }
-  sel.innerHTML = "";
-  const online = isOnline();
-  const guest = !hasSession();
-  for (const [groupName, items] of Object.entries(groups)) {
-    const og = document.createElement("optgroup");
-    og.label = groupName;
-    for (const item of items) {
-      const opt = document.createElement("option");
-      opt.value = item.id;
-      const available = isTaskAvailable(item.id, { online, guest });
-      const cost = item.meta.weight > 1 ? ` · ${item.meta.weight} credits` : "";
-      opt.textContent = item.meta.label + cost + (available ? "" : " (unavailable)");
-      if (!available) opt.disabled = true;
-      og.appendChild(opt);
-    }
-    sel.appendChild(og);
-  }
-  sel.value = STATE.activeTask;
-  const selected = sel.querySelector(`option[value="${STATE.activeTask}"]`);
-  if (selected?.disabled) {
-    const firstAvailable = Array.from(sel.options).find((o) => !o.disabled);
-    if (firstAvailable) { sel.value = firstAvailable.value; STATE.activeTask = firstAvailable.value; }
-  }
-}
-
-function wirePanel(root, deps) {
-  const sel = root.querySelector('[data-ai-select="task"]');
-  if (sel) {
-    sel.addEventListener("change", () => {
-      STATE.activeTask = sel.value;
-      updateScopeVisibility();
-      updateHint();
-    });
-  }
-
-  root.querySelectorAll('input[name="ai-scope"]').forEach((r) => {
-    r.addEventListener("change", () => {
-      if (r.checked) STATE.scope = r.value;
-      updateHint();
-    });
-  });
-
-  root.querySelector('[data-ai-action="run"]')?.addEventListener("click", () => runCurrent(deps));
-  root.querySelector('[data-ai-action="clear"]')?.addEventListener("click", () => clearResult());
-  root.querySelector('[data-ai-action="pending"]')?.addEventListener("click", () => togglePendingView());
-
-  updateScopeVisibility();
-  updateHint();
-}
-
-function updateScopeVisibility() {
-  if (!STATE.root) return;
-  const scopeRow = STATE.root.querySelector(".ai-scope-row");
-  const meta = TASK_META[STATE.activeTask];
-  const pidOnly = meta?.requiresPid;
-  if (scopeRow) scopeRow.style.display = pidOnly ? "none" : "";
-}
-
-function updateHint() {
-  if (!STATE.root) return;
-  const hint = STATE.root.querySelector("[data-ai-hint]");
-  if (!hint) return;
-  const online = isOnline();
-  const guest = !hasSession();
-  const task = STATE.activeTask;
-
-  hint.hidden = true;
-  hint.className = "ai-hint";
-
-  if (!online) {
-    hint.hidden = false;
-    hint.classList.add("ai-hint-offline");
-    hint.innerHTML = `${svgIcon("wifiOff", 12, 2.2)} <span>Offline — AI tasks need a connection. Staged proposals remain available below.</span>`;
-    return;
-  }
-
-  if (guest && !GUEST_TASKS.has(task)) {
-    hint.hidden = false;
-    hint.classList.add("ai-hint-guest");
-    hint.innerHTML = `${svgIcon("lock", 12, 2.2)} <span>Guest — sign in to unlock this task.</span>`;
-    return;
-  }
-
-  if (STATE.scope === "selection" && !getCurrentSelection(STATE.deps)) {
-    hint.hidden = false;
-    hint.classList.add("ai-hint-info");
-    hint.innerHTML = `<span>Select text in the editor first to scope to selection.</span>`;
-    return;
-  }
-}
-
-function getCurrentSelection(deps) {
-  try {
-    const ctx = deps?.context?.() || {};
-    return ctx.selection || "";
-  } catch { return ""; }
-}
-
-function refreshContext(deps) {
-  STATE.deps = deps;
-  updateHint();
-}
-
-// ── Quota HUD ─────────────────────────────────────────────────────────
-
-function renderQuotaHud() {
-  if (!STATE.root) return;
-  const hud = STATE.root.querySelector("[data-ai-quota]");
-  if (!hud) return;
-  const q = quotaLoad();
-  if (!q || (q.wordsLimit == null && q.creditsLimit == null)) {
-    hud.hidden = true;
-    return;
-  }
-  const words = q.wordsUsed != null ? q.wordsUsed : 0;
-  const credits = q.creditsUsed != null ? q.creditsUsed : 0;
-  const wordsPct = q.wordsLimit ? Math.min(100, Math.round((words / q.wordsLimit) * 100)) : 0;
-  const creditsPct = q.creditsLimit ? Math.min(100, Math.round((credits / q.creditsLimit) * 100)) : 0;
-
-  hud.hidden = false;
-  hud.innerHTML = "";
-  hud.appendChild(el("div", { class: "quota-bar", title: `${words.toLocaleString()} / ${q.wordsLimit?.toLocaleString?.() || "?"} words` },
-    el("span", { class: "quota-icon" }, svgIcon("file", 11, 2.2)),
-    el("div", { class: "quota-track" },
-      el("div", { class: "quota-fill quota-fill-words", style: { width: wordsPct + "%" } }),
-    ),
-    el("span", { class: "quota-text" },
-      `${formatCompact(words)} / ${formatCompact(q.wordsLimit)} words`,
-    ),
-  ));
-  hud.appendChild(el("div", { class: "quota-bar", title: `${credits} / ${q.creditsLimit ?? "?"} credits` },
-    el("span", { class: "quota-icon" }, svgIcon("coins", 11, 2.2)),
-    el("div", { class: "quota-track" },
-      el("div", { class: "quota-fill quota-fill-credits", style: { width: creditsPct + "%" } }),
-    ),
-    el("span", { class: "quota-text" },
-      `${formatCompact(credits)} / ${formatCompact(q.creditsLimit)} credits`,
-    ),
-  ));
-}
-
-function formatCompact(n) {
+export function formatCompact(n) {
   const v = Number(n);
-  if (!Number.isFinite(v)) return "?";
-  if (v >= 100000) return (v / 1000).toFixed(0) + "k";
-  if (v >= 1000) return (v / 1000).toFixed(1) + "k";
+  if (!Number.isFinite(v)) return "—";
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + "M";
+  if (v >= 10_000) return Math.round(v / 1000) + "k";
+  if (v >= 1_000) return (v / 1000).toFixed(1) + "k";
   return String(v);
 }
 
-// ── Run ───────────────────────────────────────────────────────────────
-
-async function runCurrent(deps) {
-  if (STATE.running) return;
-
-  const online = isOnline();
-  const guest = !hasSession();
-  const task = STATE.activeTask;
-
-  if (!online) { showResultError("Offline — AI tasks need a connection."); return; }
-  if (guest && !GUEST_TASKS.has(task)) { showResultError("Sign in to unlock this task."); return; }
-
-  let ctx;
-  try { ctx = deps?.context?.() || {}; }
-  catch { showResultError("Could not read editor context."); return; }
-
-  const pid = ctx.pid || null;
-  const meta = TASK_META[task];
-
-  if (meta.requiresPid && !pid) { showResultError("Open a project first."); return; }
-
-  const payload = {};
-  if (["explain","debug","codefix","optimize","suggest","docstrings","audit","diagram","simulate"].includes(task)) {
-    if (!ctx.activeFile) { showResultError("No file open."); return; }
-    payload.file = ctx.activeFile;
-    if (STATE.scope === "selection" && ctx.selection) {
-      payload.selection = ctx.selection;
-      payload.content = ctx.content || "";
-    } else {
-      payload.content = ctx.content || "";
-    }
-  } else if (task === "brainstorm") {
-    payload.name = ctx.projectName || "";
-    payload.description = ctx.projectDescription || "";
-    payload.fileList = Array.isArray(ctx.files) ? ctx.files.map((f) => f.path) : [];
-  } else if (task === "metatags") {
-    payload.name = ctx.projectName || "";
-    payload.description = ctx.projectDescription || "";
-    payload.indexExcerpt = extractHtmlExcerpt(ctx);
-  } else if (task === "scaffold") {
-    payload.name = ctx.projectName || "Untitled";
-    payload.description = ctx.projectDescription || "";
-    payload.concept = "";
-    payload.stack = "html+css+js";
-  } else if (task === "docs") {
-    payload.name = ctx.projectName || "Untitled";
-    payload.description = ctx.projectDescription || "";
-    payload.files = filesToMap(ctx.files);
-  } else if (task === "findFn") {
-    const fnName = await promptFnName();
-    if (!fnName) return;
-    payload.fnName = fnName;
-    payload.files = filesToMap(ctx.files);
-  } else if (task === "commitMsg") {
-    payload.diff = ctx.diff || "";
-  } else if (task === "logExplain") {
-    payload.log = ctx.log || "";
-  } else if (task === "designExplain") {
-    payload.files = filesToMap(ctx.files);
-    payload.focus = ctx.focus || "";
-  } else if (task === "translate") {
-    if (!ctx.selection && !ctx.content) { showResultError("No code to translate."); return; }
-    payload.code = ctx.selection || ctx.content || "";
-    payload.from = ctx.activeFile ? (ctx.activeFile.split(".").pop() || "unknown") : "unknown";
-    payload.to = await promptTargetLanguage();
-    if (!payload.to) return;
-  } else if (task === "struggle") {
-    payload.files = filesToMap(ctx.files);
-  } else if (task === "readProject" || task === "commitDraft" || task === "deployDraft") {
-    // pid-only — payload is empty
-  }
-
-  STATE.running = true;
-  const abort = new AbortController();
-  STATE.abort = abort;
-  setRunningUI(true);
-  showResultLoading(task);
-
-  try {
-    const res = await runTask({ task, pid, payload, signal: abort.signal, deps });
-    if (!res.ok || !res.data?.success) {
-      if (res.data?.quotaExceeded) {
-        showQuotaError(res.data);
-        return;
-      }
-      const errMsg = res.data?.error || `AI error (${res.status || "network"})`;
-      showResultError(errMsg);
-      return;
-    }
-    STATE.lastResult = res.data;
-    showResult(task, res.data);
-    renderQuotaHud();
-    if (APPLY_TASKS.has(task)) {
-      stageArtifacts(pid, task, res.data.artifacts || []);
-    }
-  } catch (err) {
-    if (err?.name === "AbortError") showResultError("Cancelled.");
-    else showResultError(err?.message || "AI call failed.");
-  } finally {
-    STATE.running = false;
-    STATE.abort = null;
-    setRunningUI(false);
-  }
-}
-
-function filesToMap(files) {
-  if (!Array.isArray(files)) return {};
-  const out = {};
-  for (const f of files) {
-    if (f && f.path && typeof f.content === "string") out[f.path] = f.content;
-  }
-  return out;
-}
-
-function extractHtmlExcerpt(ctx) {
-  const files = Array.isArray(ctx.files) ? ctx.files : [];
-  const index = files.find((f) => /(^|\/)index\.html?$/i.test(f.path || ""));
-  if (index) return String(index.content || "").slice(0, 4000);
-  const first = files.find((f) => /\.html?$/i.test(f.path || ""));
-  return first ? String(first.content || "").slice(0, 4000) : "";
-}
-
-function promptFnName() {
-  return new Promise((resolve) => {
-    const name = window.prompt("Function name to find?");
-    resolve(name ? name.trim() : null);
-  });
-}
-
-function promptTargetLanguage() {
-  return new Promise((resolve) => {
-    const target = window.prompt("Target language? (e.g. python, rust, go)", "python");
-    resolve(target ? target.trim().toLowerCase() : null);
-  });
-}
-
-// ── Result UI ─────────────────────────────────────────────────────────
-
-function setRunningUI(running) {
-  if (!STATE.root) return;
-  const btn = STATE.root.querySelector('[data-ai-action="run"]');
-  if (!btn) return;
-  btn.disabled = running;
-  btn.classList.toggle("running", running);
-  btn.querySelector("span").textContent = running ? "Running…" : "Run";
-}
-
-function showResultLoading(task) {
-  if (!STATE.root) return;
-  const box = STATE.root.querySelector("[data-ai-result]");
-  if (!box) return;
-  box.hidden = false;
-  box.innerHTML = `<div class="ai-loading">
-    <div class="ai-spinner"></div>
-    <div class="ai-loading-text">Running ${escapeHtml(TASK_META[task]?.label || task)}…</div>
-  </div>`;
-}
-
-function showResultError(message) {
-  if (!STATE.root) return;
-  const box = STATE.root.querySelector("[data-ai-result]");
-  if (!box) return;
-  box.hidden = false;
-  box.innerHTML = `<div class="ai-error">
-    ${svgIcon("alert", 14, 2.4)}
-    <div>${escapeHtml(message)}</div>
-  </div>`;
-}
-
-function showQuotaError(data) {
-  if (!STATE.root) return;
-  const box = STATE.root.querySelector("[data-ai-result]");
-  if (!box) return;
-  box.hidden = false;
-
-  const scopeLabel = data.scope === "words"
-    ? "Word quota"
-    : data.scope === "credits"
-    ? "Credit quota"
-    : data.scope === "global"
-    ? "Global limit"
-    : "Per-task limit";
-
-  const reset = data.resetAt ? new Date(data.resetAt) : null;
-  const resetLabel = reset ? `Resets ${formatRelative(reset)}` : "";
-
-  box.innerHTML = `<div class="ai-quota-error">
-    ${svgIcon("coins", 14, 2.4)}
-    <div>
-      <div class="ai-quota-error-title">${escapeHtml(scopeLabel)} reached</div>
-      <div class="ai-quota-error-body">${escapeHtml(data.error || "")}</div>
-      ${resetLabel ? `<div class="ai-quota-error-reset">${escapeHtml(resetLabel)}</div>` : ""}
-    </div>
-  </div>`;
-}
-
-function formatRelative(date) {
-  const ms = date.getTime() - Date.now();
+export function formatRelativeReset(resetAt) {
+  if (!resetAt) return "";
+  const ms = new Date(resetAt).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return "";
   if (ms <= 0) return "now";
   const mins = Math.round(ms / 60000);
   if (mins < 60) return `in ${mins}m`;
@@ -1571,589 +1449,20 @@ function formatRelative(date) {
   return `in ${days}d`;
 }
 
-function showResult(task, data) {
-  if (!STATE.root) return;
-  const box = STATE.root.querySelector("[data-ai-result]");
-  if (!box) return;
-  box.hidden = false;
-  box.innerHTML = "";
+// =========================================================================
+// EXPORTS
+// =========================================================================
 
-  if (data.text) {
-    const md = el("div", { class: "ai-markdown" });
-    md.innerHTML = renderMarkdown(data.text);
-    box.appendChild(md);
-    hydrateMarkdown(md);
-  }
-
-  if (Array.isArray(data.artifacts) && data.artifacts.length) {
-    const artifactsBox = el("div", { class: "ai-artifacts" });
-    renderArtifacts(artifactsBox, data.artifacts, {
-      onAccept: (artifact) => handleArtifactAccept(task, artifact, data),
-      onReject: (artifact) => handleArtifactReject(task, artifact),
-      onPrefillCommit: (prefill) => {
-        if (typeof STATE.deps?.onPrefillCommit === "function") STATE.deps.onPrefillCommit(prefill);
-        else if (typeof STATE.deps?.openCommitDialog === "function") STATE.deps.openCommitDialog(prefill);
-      },
-      onPrefillDeploy: (prefill) => {
-        if (typeof STATE.deps?.onPrefillDeploy === "function") STATE.deps.onPrefillDeploy(prefill);
-        else if (typeof STATE.deps?.deployNow === "function") STATE.deps.deployNow(prefill);
-      },
-    });
-    box.appendChild(artifactsBox);
-  }
-
-  // Usage footer — words first (user-facing), tokens second (diagnostic)
-  if (data.usage) {
-    const u = data.usage;
-    const footer = el("div", { class: "ai-usage" });
-
-    if (u.totalWords != null) {
-      footer.appendChild(el("span", null, `${u.promptWords || 0}w in · ${u.completionWords || 0}w out`));
-    }
-    if (data.cached) footer.appendChild(el("span", { class: "usage-cached" }, "cached"));
-    if (data.rateLimit) {
-      const rl = data.rateLimit;
-      if (rl.remaining != null && rl.limit != null) {
-        footer.appendChild(el("span", null, `calls: ${rl.remaining}/${rl.limit}`));
-      }
-    }
-    if (data.quota) {
-      const q = data.quota;
-      footer.appendChild(el("span", null,
-        `credits: ${q.creditsUsed ?? 0}/${q.creditsLimit ?? "?"}`,
-      ));
-    }
-    // Show token counts as a dim secondary line
-    if (u.totalTokens) {
-      footer.appendChild(el("span", { class: "usage-tokens" }, `${u.totalTokens}t`));
-    }
-    box.appendChild(footer);
-  }
-}
-
-function clearResult() {
-  if (!STATE.root) return;
-  const box = STATE.root.querySelector("[data-ai-result]");
-  if (!box) return;
-  box.hidden = true;
-  box.innerHTML = "";
-  STATE.lastResult = null;
-}
-
-// ── Pending ───────────────────────────────────────────────────────────
-
-function stageArtifacts(pid, task, artifacts) {
-  if (!pid) return;
-  const entries = [];
-  for (const a of artifacts) {
-    if (!a || !a.type) continue;
-    if (["diff", "files"].includes(a.type)) {
-      entries.push({
-        id: uid("p"),
-        kind: a.type,
-        task,
-        artifact: a,
-        createdAt: nowMs(),
-      });
-    }
-  }
-  if (!entries.length) return;
-  let list = pendingLoad(pid);
-  list = list.concat(entries);
-  pendingSave(pid, list);
-  STATE.pending = list;
-  renderPendingBadge();
-}
-
-async function handleArtifactAccept(task, artifact, data) {
-  const deps = STATE.deps;
-  const ctx = (() => { try { return deps?.context?.() || {}; } catch { return {}; } })();
-  const pid = ctx.pid;
-  if (!pid) { toastInDeps("Open a project first", "warning"); return; }
-  if (!deps?.idb) { toastInDeps("Local storage unavailable — cannot apply", "error"); return; }
-
-  if (artifact.type === "diff") {
-    const result = await applyPatch({ artifact, pid, deps });
-    if (!result.ok) { toastInDeps(result.error || "Patch failed", "error"); return; }
-    toastInDeps(`Applied ${artifact.file}`, "success");
-    if (typeof deps?.onOpenFile === "function") deps.onOpenFile(artifact.file);
-    prunePendingByArtifact(pid, artifact);
-  } else if (artifact.type === "files") {
-    const result = await applyFiles({ artifact, pid, deps });
-    if (!result.ok) { toastInDeps("Some files failed to write", "error"); return; }
-    toastInDeps(`Wrote ${result.okCount}/${result.total} files`, "success");
-    prunePendingByArtifact(pid, artifact);
-  }
-}
-
-function handleArtifactReject(task, artifact) {
-  const deps = STATE.deps;
-  const ctx = (() => { try { return deps?.context?.() || {}; } catch { return {}; } })();
-  const pid = ctx.pid;
-  if (pid) prunePendingByArtifact(pid, artifact);
-  toastInDeps("Rejected", "info");
-}
-
-function prunePendingByArtifact(pid, artifact) {
-  if (!pid) return;
-  const list = pendingLoad(pid).filter((p) => {
-    if (!p || p.kind !== artifact.type) return true;
-    if (p.artifact?.file !== artifact.file) return true;
-    if (p.artifact?.old !== artifact.old) return true;
-    return false;
-  });
-  pendingSave(pid, list);
-  STATE.pending = list;
-  renderPendingBadge();
-}
-
-function renderPendingBadge() {
-  if (!STATE.root) return;
-  const badge = STATE.root.querySelector(".ai-pending-badge");
-  if (!badge) return;
-  const deps = STATE.deps;
-  const ctx = (() => { try { return deps?.context?.() || {}; } catch { return {}; } })();
-  const pid = ctx.pid;
-  const count = pid ? pendingLoad(pid).length : 0;
-  STATE.pending = pid ? pendingLoad(pid) : [];
-  if (count > 0) {
-    badge.hidden = false;
-    badge.textContent = String(count);
-  } else {
-    badge.hidden = true;
-  }
-}
-
-function togglePendingView() {
-  if (!STATE.root) return;
-  const box = STATE.root.querySelector("[data-ai-pending]");
-  if (!box) return;
-  if (box.hidden) { renderPendingView(box); box.hidden = false; }
-  else { box.hidden = true; box.innerHTML = ""; }
-}
-
-function renderPendingView(box) {
-  box.innerHTML = "";
-  const deps = STATE.deps;
-  const ctx = (() => { try { return deps?.context?.() || {}; } catch { return {}; } })();
-  const pid = ctx.pid;
-  if (!pid) {
-    box.appendChild(el("div", { class: "ai-empty" }, "Open a project to see staged proposals."));
-    return;
-  }
-  const list = pendingLoad(pid);
-  if (!list.length) {
-    box.appendChild(el("div", { class: "ai-empty" }, "No staged proposals."));
-    return;
-  }
-  const header = el("div", { class: "pending-head" },
-    el("span", null, `${list.length} staged`),
-    el("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => {
-      pendingClear(pid);
-      STATE.pending = [];
-      renderPendingBadge();
-      renderPendingView(box);
-    } }, "Clear all"),
-  );
-  box.appendChild(header);
-
-  for (const entry of list) {
-    const row = el("div", { class: "pending-row" },
-      el("div", { class: "pending-meta" },
-        el("span", { class: "pending-task" }, TASK_META[entry.task]?.label || entry.task),
-        el("span", { class: "pending-kind" }, entry.kind),
-        el("span", { class: "pending-file" }, entry.artifact?.file || `${(entry.artifact?.files || []).length} files`),
-      ),
-      el("div", { class: "pending-actions" },
-        el("button", { class: "btn btn-sm btn-primary", type: "button", onclick: async () => {
-          await handleArtifactAccept(entry.task, entry.artifact, STATE.lastResult);
-          renderPendingView(box);
-        } }, "Accept"),
-        el("button", { class: "btn btn-sm btn-ghost", type: "button", onclick: () => {
-          pendingRemove(pid, entry.id);
-          STATE.pending = pendingLoad(pid);
-          renderPendingBadge();
-          renderPendingView(box);
-        } }, "Discard"),
-      ),
-    );
-    box.appendChild(row);
-  }
-}
-
-function toastInDeps(msg, type = "info") {
-  try {
-    if (typeof STATE.deps?.toast === "function") { STATE.deps.toast(msg, type); return; }
-    if (typeof window.toast === "function") { window.toast(msg, type); return; }
-    console.log(`[ai:${type}]`, msg);
-  } catch {}
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// OFFLINE / ONLINE EVENTS
-// ─────────────────────────────────────────────────────────────────────
-
-if (typeof window !== "undefined") {
-  window.addEventListener("online", () => {
-    if (STATE.root) { populateTaskSelect(STATE.root); updateHint(); renderQuotaHud(); }
-  });
-  window.addEventListener("offline", () => {
-    if (STATE.root) updateHint();
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// STYLES
-// ─────────────────────────────────────────────────────────────────────
-
-const STYLE_ID = "folio-ai-styles";
-
-function injectStyles() {
-  if (typeof document === "undefined") return;
-  if (document.getElementById(STYLE_ID)) return;
-
-  const css = `
-/* ── Panel ───────────────────────────────────────────── */
-.ai-panel {
-  display: flex; flex-direction: column;
-  font-family: var(--font, 'Inter', system-ui, sans-serif);
-  color: var(--theme-text, #e8ecf1);
-  min-height: 0; min-width: 0;
-  height: 100%;
-}
-.ai-panel-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--theme-divider, rgba(255,255,255,0.08));
-  flex-shrink: 0;
-}
-.ai-panel-title {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 800;
-  letter-spacing: 0.3px; text-transform: uppercase;
-  color: var(--theme-text, #e8ecf1);
-}
-.ai-panel-icon { color: var(--theme-primary, #F59E0B); display: inline-flex; }
-.ai-pending-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 18px; height: 16px; padding: 0 5px;
-  border-radius: 8px;
-  background: var(--theme-primary, #F59E0B);
-  color: #0a0c10;
-  font-size: 9.5px; font-weight: 800;
-  letter-spacing: 0;
-}
-.ai-panel-actions { display: flex; gap: 2px; }
-.ai-panel-btn {
-  width: 26px; height: 26px; border-radius: 6px;
-  background: transparent;
-  color: var(--theme-text-tertiary, rgba(232,236,241,0.44));
-  display: flex; align-items: center; justify-content: center;
-  border: none; cursor: pointer;
-  transition: all 0.15s ease;
-}
-.ai-panel-btn:hover { color: var(--theme-text, #e8ecf1); background: var(--theme-glass-bg, rgba(255,255,255,0.05)); }
-
-/* ── Quota HUD ───────────────────────────────────────── */
-.ai-quota-hud {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--theme-divider, rgba(255,255,255,0.08));
-  flex-shrink: 0;
-  background: var(--theme-glass-bg, rgba(255,255,255,0.02));
-}
-.quota-bar { display: flex; align-items: center; gap: 6px; font-size: 10px; }
-.quota-icon { color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); display: inline-flex; flex-shrink: 0; }
-.quota-track {
-  flex: 1; height: 4px; border-radius: 2px;
-  background: var(--theme-glass-bg, rgba(255,255,255,0.06));
-  overflow: hidden;
-}
-.quota-fill { height: 100%; border-radius: 2px; transition: width 0.3s ease; }
-.quota-fill-words { background: var(--theme-primary, #F59E0B); }
-.quota-fill-credits { background: var(--theme-success, #10B981); }
-.quota-text {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 9.5px; font-weight: 600;
-  color: var(--theme-text-tertiary, rgba(232,236,241,0.44));
-  white-space: nowrap; flex-shrink: 0;
-}
-
-.ai-panel-body {
-  flex: 1; min-height: 0; overflow-y: auto;
-  padding: 10px 12px;
-  display: flex; flex-direction: column; gap: 10px;
-}
-.ai-label {
-  font-size: 10px; font-weight: 700;
-  color: var(--theme-text-tertiary, rgba(232,236,241,0.44));
-  text-transform: uppercase; letter-spacing: 0.4px;
-  margin-bottom: 3px;
-  display: block;
-}
-.ai-task-row { display: flex; flex-direction: column; }
-.ai-task-select {
-  width: 100%; padding: 6px 8px;
-  background: var(--input-bg, rgba(26,31,42,0.88));
-  border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08));
-  border-radius: 6px;
-  color: var(--theme-text, #e8ecf1);
-  font-size: 12px; font-family: inherit;
-  outline: none;
-}
-.ai-task-select:focus { border-color: var(--theme-primary, #F59E0B); }
-
-.ai-scope-row { display: flex; flex-direction: column; }
-.ai-radio-group { display: flex; gap: 4px; }
-.ai-radio {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 8px; border-radius: 5px;
-  background: var(--theme-glass-bg, rgba(255,255,255,0.05));
-  border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08));
-  font-size: 11px; font-weight: 600;
-  color: var(--theme-text-secondary, rgba(232,236,241,0.72));
-  cursor: pointer;
-}
-.ai-radio input { accent-color: var(--theme-primary, #F59E0B); margin: 0; }
-.ai-radio:has(input:checked) {
-  background: var(--theme-primary-soft, rgba(245,158,11,0.14));
-  color: var(--theme-primary, #F59E0B);
-  border-color: var(--theme-primary, #F59E0B);
-}
-
-.ai-hint {
-  display: flex; align-items: flex-start; gap: 6px;
-  padding: 7px 9px; border-radius: 6px;
-  font-size: 11px; line-height: 1.4;
-  border: 1px solid transparent;
-}
-.ai-hint svg { flex-shrink: 0; margin-top: 1px; }
-.ai-hint-offline { background: var(--theme-warning-soft, rgba(217,119,6,0.14)); color: var(--theme-warning, #D97706); border-color: rgba(217,119,6,0.3); }
-.ai-hint-guest { background: var(--theme-primary-soft, rgba(245,158,11,0.14)); color: var(--theme-primary, #F59E0B); border-color: rgba(245,158,11,0.3); }
-.ai-hint-info { background: var(--theme-glass-bg, rgba(255,255,255,0.05)); color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-
-.ai-run-row { display: flex; }
-.ai-run-btn {
-  flex: 1; padding: 8px 12px;
-  border-radius: 7px;
-  background: var(--theme-primary, #F59E0B);
-  color: #0a0c10;
-  font-size: 12px; font-weight: 800;
-  letter-spacing: 0.2px;
-  border: none; cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  transition: all 0.15s ease;
-}
-.ai-run-btn:hover:not(:disabled) { background: var(--theme-primary-hover, #fbbf24); }
-.ai-run-btn:disabled { opacity: 0.6; cursor: progress; }
-.ai-run-btn.running svg { animation: ai-spin 0.9s linear infinite; }
-@keyframes ai-spin { to { transform: rotate(360deg); } }
-
-.ai-result { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-.ai-loading {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px; border-radius: 7px;
-  background: var(--theme-glass-bg, rgba(255,255,255,0.05));
-  font-size: 11.5px;
-  color: var(--theme-text-tertiary, rgba(232,236,241,0.44));
-}
-.ai-spinner {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid rgba(245,158,11,0.3);
-  border-top-color: var(--theme-primary, #F59E0B);
-  animation: ai-spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-.ai-error {
-  display: flex; align-items: flex-start; gap: 8px;
-  padding: 10px; border-radius: 7px;
-  background: var(--theme-danger-soft, rgba(239,68,68,0.12));
-  color: var(--theme-danger, #EF4444);
-  font-size: 12px; line-height: 1.4;
-}
-.ai-error svg { flex-shrink: 0; margin-top: 1px; }
-
-/* ── Quota error card ───────────────────────────────── */
-.ai-quota-error {
-  display: flex; align-items: flex-start; gap: 8px;
-  padding: 10px; border-radius: 7px;
-  background: var(--theme-warning-soft, rgba(217,119,6,0.14));
-  color: var(--theme-warning, #D97706);
-  font-size: 12px; line-height: 1.4;
-  border: 1px solid rgba(217,119,6,0.3);
-}
-.ai-quota-error svg { flex-shrink: 0; margin-top: 1px; }
-.ai-quota-error-title { font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
-.ai-quota-error-body { font-size: 11.5px; opacity: 0.9; }
-.ai-quota-error-reset { font-size: 10.5px; margin-top: 4px; opacity: 0.75; font-family: var(--font-mono, ui-monospace, monospace); }
-
-/* ── Markdown output ─────────────────────────────────── */
-.ai-markdown { font-size: 12.5px; line-height: 1.6; color: var(--theme-text-secondary, rgba(232,236,241,0.72)); word-wrap: break-word; overflow-wrap: anywhere; }
-.ai-markdown h1, .ai-markdown h2, .ai-markdown h3,
-.ai-markdown h4, .ai-markdown h5, .ai-markdown h6 { color: var(--theme-text, #e8ecf1); font-weight: 800; letter-spacing: -0.2px; margin: 10px 0 4px; }
-.ai-markdown h1 { font-size: 16px; }
-.ai-markdown h2 { font-size: 14px; }
-.ai-markdown h3 { font-size: 13px; }
-.ai-markdown p { margin: 4px 0; }
-.ai-markdown ul, .ai-markdown ol { margin: 4px 0; padding-left: 18px; }
-.ai-markdown li { margin: 2px 0; }
-.ai-markdown code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; padding: 1px 4px; border-radius: 3px; background: var(--theme-glass-bg, rgba(255,255,255,0.05)); }
-.ai-markdown pre { padding: 10px; border-radius: 6px; background: var(--theme-glass-bg, rgba(255,255,255,0.05)); overflow-x: auto; font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; line-height: 1.5; }
-.ai-markdown pre code { padding: 0; background: none; }
-.ai-markdown a { color: var(--theme-primary, #F59E0B); text-decoration: underline; }
-.ai-markdown strong { color: var(--theme-text, #e8ecf1); font-weight: 700; }
-.ai-markdown hr { border: 0; border-top: 1px solid var(--theme-divider, rgba(255,255,255,0.08)); margin: 10px 0; }
-.ai-markdown blockquote { border-left: 3px solid var(--theme-primary, #F59E0B); padding-left: 10px; margin: 6px 0; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-.ai-markdown table.ai-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 11.5px; }
-.ai-markdown table.ai-table th, .ai-markdown table.ai-table td { border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08)); padding: 4px 8px; }
-.ai-markdown table.ai-table th { background: var(--theme-glass-bg, rgba(255,255,255,0.05)); font-weight: 700; }
-.ai-markdown .task-list { list-style: none; padding-left: 0; }
-.ai-markdown .task-item { display: flex; gap: 6px; align-items: flex-start; }
-.ai-markdown .task-item .task-box { flex-shrink: 0; width: 13px; height: 13px; margin-top: 3px; border-radius: 3px; border: 1.5px solid var(--theme-card-border, rgba(255,255,255,0.08)); display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; }
-.ai-markdown .task-item.done .task-box { background: var(--theme-primary, #F59E0B); color: #0a0c10; border-color: var(--theme-primary, #F59E0B); }
-
-/* ── Diagrams / Math / Flowtable ─────────────────────── */
-.ai-diagram, .ai-math, .ai-flowtable { margin: 8px 0; padding: 8px; border-radius: 6px; background: var(--theme-glass-bg, rgba(255,255,255,0.05)); overflow: auto; }
-.ai-diagram pre, .ai-math pre, .ai-flowtable pre { margin: 0; padding: 0; background: none; font-size: 10.5px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-.ai-diagram-rendered svg { max-width: 100%; height: auto; display: block; }
-.ai-diagram-error::after { content: "Diagram could not be rendered"; display: block; font-size: 10.5px; color: var(--theme-danger, #EF4444); margin-top: 4px; }
-.ai-diagram-offline::after { content: "Diagram requires connection (first load)"; display: block; font-size: 10.5px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); margin-top: 4px; }
-.ai-math-rendered .katex { font-size: 13px; }
-.ai-flowtable-wrap { overflow-x: auto; }
-.ai-flowtable { width: 100%; border-collapse: collapse; font-size: 11px; background: transparent; }
-.ai-flowtable th, .ai-flowtable td { padding: 5px 8px; border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08)); text-align: left; }
-.ai-flowtable th { background: var(--theme-glass-bg, rgba(255,255,255,0.05)); font-weight: 700; }
-.ai-flowtable .ft-row-alt td { background: rgba(255,255,255,0.02); }
-
-/* ── Artifact cards ──────────────────────────────────── */
-.ai-artifacts { display: flex; flex-direction: column; gap: 8px; }
-.ai-findings, .ai-files, .ai-mentions, .ai-concepts, .ai-steps, .ai-tree, .ai-json, .ai-diff,
-.ai-commit-draft, .ai-deploy-draft, .ai-project-summary, .ai-unknown {
-  padding: 8px; border-radius: 7px;
-  background: var(--theme-glass-bg, rgba(255,255,255,0.05));
-  border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08));
-  font-size: 11.5px;
-}
-.ai-empty { font-size: 11px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); font-style: italic; }
-
-.finding { padding: 6px 0; border-bottom: 1px solid var(--theme-divider, rgba(255,255,255,0.08)); }
-.finding:last-child { border-bottom: none; }
-.finding-head { display: flex; gap: 6px; align-items: center; font-size: 10px; font-weight: 800; }
-.finding-sev { padding: 1px 5px; border-radius: 3px; letter-spacing: 0.4px; }
-.finding-error .finding-sev { background: var(--theme-danger-soft, rgba(239,68,68,0.12)); color: var(--theme-danger, #EF4444); }
-.finding-warning .finding-sev { background: var(--theme-warning-soft, rgba(217,119,6,0.14)); color: var(--theme-warning, #D97706); }
-.finding-info .finding-sev { background: var(--theme-primary-soft, rgba(245,158,11,0.14)); color: var(--theme-primary, #F59E0B); }
-.finding-loc { font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-.finding-title { font-size: 12px; font-weight: 700; margin-top: 3px; color: var(--theme-text, #e8ecf1); }
-.finding-detail { font-size: 11px; line-height: 1.5; color: var(--theme-text-secondary, rgba(232,236,241,0.72)); margin-top: 2px; }
-
-.diff-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 4px; border-bottom: 1px solid var(--theme-divider, rgba(255,255,255,0.08)); margin-bottom: 4px; }
-.diff-file { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; font-weight: 700; }
-.diff-hint { font-size: 9.5px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-.diff-body { padding: 4px 0; margin: 0; background: transparent; font-family: var(--font-mono, ui-monospace, monospace); font-size: 10.5px; line-height: 1.4; overflow-x: auto; }
-.diff-row { display: flex; gap: 4px; padding: 0 2px; }
-.diff-sign { flex-shrink: 0; width: 12px; font-weight: 800; }
-.diff-eq .diff-sign { color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-.diff-del { background: rgba(239,68,68,0.1); color: #ef9a9a; }
-.diff-del .diff-sign { color: var(--theme-danger, #EF4444); }
-.diff-add { background: rgba(16,185,129,0.1); color: #a7f3d0; }
-.diff-add .diff-sign { color: var(--theme-success, #10B981); }
-.diff-actions { display: flex; gap: 6px; margin-top: 6px; }
-
-.files-head { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); margin-bottom: 4px; }
-.files-list { display: flex; flex-direction: column; gap: 6px; }
-.file-row { padding: 6px 0; border-bottom: 1px solid var(--theme-divider, rgba(255,255,255,0.08)); }
-.file-row:last-child { border-bottom: none; }
-.file-row-head { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 2px; }
-.file-path { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; font-weight: 700; color: var(--theme-primary, #F59E0B); }
-.file-bytes { font-size: 10px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-.file-preview { padding: 5px 6px; margin: 0; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 10.5px; font-family: var(--font-mono, ui-monospace, monospace); line-height: 1.4; max-height: 120px; overflow-y: auto; white-space: pre-wrap; }
-
-.mention { display: block; width: 100%; text-align: left; padding: 6px 8px; border-radius: 5px; background: transparent; border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08)); color: inherit; font-family: inherit; font-size: 11px; margin-bottom: 4px; cursor: pointer; transition: background 0.15s ease; }
-.mention:hover { background: var(--theme-glass-bg, rgba(255,255,255,0.05)); }
-.mention-file { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 700; color: var(--theme-primary, #F59E0B); }
-.mention-line { color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); font-family: var(--font-mono, ui-monospace, monospace); }
-.mention-kind { margin-left: 4px; font-size: 9px; padding: 1px 5px; border-radius: 3px; background: var(--theme-glass-bg, rgba(255,255,255,0.05)); color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-.mention-context { display: block; margin-top: 2px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.concept { padding: 6px 0; border-bottom: 1px solid var(--theme-divider, rgba(255,255,255,0.08)); }
-.concept:last-child { border-bottom: none; }
-.concept-kind { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--theme-primary, #F59E0B); font-weight: 800; }
-.concept-title { font-size: 12.5px; font-weight: 700; margin: 2px 0; }
-.concept-detail { font-size: 11px; line-height: 1.5; color: var(--theme-text-secondary, rgba(232,236,241,0.72)); }
-
-.step-row { display: grid; grid-template-columns: 20px 40px 1fr; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--theme-divider, rgba(255,255,255,0.08)); }
-.step-row:last-child { border-bottom: none; }
-.step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--theme-primary-soft, rgba(245,158,11,0.14)); color: var(--theme-primary, #F59E0B); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; }
-.step-line { font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); padding-top: 4px; }
-.step-body { min-width: 0; }
-.step-note { font-size: 11px; color: var(--theme-text, #e8ecf1); }
-.step-state { margin: 2px 0 0; padding: 4px 6px; border-radius: 4px; background: rgba(0,0,0,0.2); font-size: 10px; font-family: var(--font-mono, ui-monospace, monospace); line-height: 1.4; max-height: 120px; overflow: auto; }
-.step-return { font-size: 10.5px; color: var(--theme-success, #10B981); font-family: var(--font-mono, ui-monospace, monospace); margin-top: 2px; }
-
-.tree-root { list-style: none; padding-left: 0; margin: 0; }
-.tree-root ul { list-style: none; padding-left: 14px; border-left: 1px dashed var(--theme-divider, rgba(255,255,255,0.08)); margin-left: 4px; }
-.tree-label { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; color: var(--theme-text, #e8ecf1); }
-.tree-node-0 > .tree-label { color: var(--theme-primary, #F59E0B); font-weight: 700; }
-
-.json-body { margin: 0; padding: 4px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 10.5px; font-family: var(--font-mono, ui-monospace, monospace); line-height: 1.4; max-height: 200px; overflow: auto; }
-
-.ai-commit-draft, .ai-deploy-draft { display: flex; flex-direction: column; gap: 6px; }
-.draft-icon { color: var(--theme-primary, #F59E0B); }
-.draft-message { font-size: 12px; font-weight: 700; color: var(--theme-text, #e8ecf1); }
-.draft-summary { font-size: 12px; color: var(--theme-text, #e8ecf1); }
-.draft-body { margin: 0; padding: 6px; border-radius: 4px; background: rgba(0,0,0,0.2); font-size: 11px; font-family: var(--font-mono, ui-monospace, monospace); white-space: pre-wrap; max-height: 160px; overflow: auto; }
-.draft-changed { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.draft-changed-label { font-size: 10px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); text-transform: uppercase; letter-spacing: 0.3px; }
-.draft-changed-file { font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; padding: 1px 5px; border-radius: 3px; background: var(--theme-glass-bg, rgba(255,255,255,0.05)); }
-
-.ai-project-summary { display: flex; flex-direction: column; gap: 6px; }
-.summary-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--theme-primary, #F59E0B); font-weight: 800; }
-.summary-insights { margin: 0; padding-left: 16px; font-size: 11.5px; line-height: 1.5; }
-.summary-arch { margin: 0; font-size: 11.5px; line-height: 1.55; color: var(--theme-text-secondary, rgba(232,236,241,0.72)); }
-
-.ai-usage { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid var(--theme-divider, rgba(255,255,255,0.08)); font-size: 10px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); font-family: var(--font-mono, ui-monospace, monospace); }
-.usage-cached { color: var(--theme-success, #10B981); font-weight: 700; }
-.usage-tokens { opacity: 0.6; }
-
-/* ── Pending ─────────────────────────────────────────── */
-.ai-pending { margin-top: 6px; padding: 8px; border-radius: 7px; background: var(--theme-glass-bg, rgba(255,255,255,0.05)); border: 1px solid var(--theme-card-border, rgba(255,255,255,0.08)); }
-.pending-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 11px; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-.pending-row { display: flex; justify-content: space-between; gap: 6px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--theme-divider, rgba(255,255,255,0.08)); }
-.pending-row:last-child { border-bottom: none; }
-.pending-meta { display: flex; gap: 4px; flex-wrap: wrap; font-size: 10.5px; align-items: center; }
-.pending-task { padding: 1px 5px; border-radius: 3px; background: var(--theme-primary-soft, rgba(245,158,11,0.14)); color: var(--theme-primary, #F59E0B); font-weight: 700; }
-.pending-kind { color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-.pending-file { font-family: var(--font-mono, ui-monospace, monospace); color: var(--theme-text-secondary, rgba(232,236,241,0.72)); font-size: 10px; }
-.pending-actions { display: flex; gap: 3px; }
-
-/* ── Context menu ────────────────────────────────────── */
-.ai-context-menu { background: var(--theme-surface-card-solid, #151922); border: 1px solid var(--theme-glass-border, rgba(255,255,255,0.09)); border-radius: 8px; padding: 4px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); font-family: var(--font, 'Inter', system-ui, sans-serif); font-size: 12px; }
-.ai-context-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border-radius: 5px; background: transparent; border: none; color: var(--theme-text, #e8ecf1); font-family: inherit; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; transition: background 0.1s ease; }
-.ai-context-item:hover:not(.disabled) { background: var(--theme-primary-soft, rgba(245,158,11,0.14)); color: var(--theme-primary, #F59E0B); }
-.ai-context-item.disabled { opacity: 0.45; cursor: not-allowed; }
-.ai-context-item svg { flex-shrink: 0; }
-
-/* ── Small-button base ───────────────────────────────── */
-.ai-panel .btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 5px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; border: 1px solid transparent; cursor: pointer; transition: all 0.15s ease; font-family: inherit; }
-.ai-panel .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.ai-panel .btn-primary { background: var(--theme-primary, #F59E0B); color: #0a0c10; }
-.ai-panel .btn-primary:hover:not(:disabled) { background: var(--theme-primary-hover, #fbbf24); }
-.ai-panel .btn-ghost { background: transparent; color: var(--theme-text-tertiary, rgba(232,236,241,0.44)); }
-.ai-panel .btn-ghost:hover:not(:disabled) { color: var(--theme-text, #e8ecf1); background: var(--theme-glass-bg, rgba(255,255,255,0.05)); }
-.ai-panel .btn-sm { padding: 4px 8px; font-size: 10.5px; }
-.ai-panel .btn svg { width: 11px; height: 11px; flex-shrink: 0; }
-  `;
-  const style = document.createElement("style");
-  style.id = STYLE_ID;
-  style.textContent = css;
-  document.head.appendChild(style);
-}
-
-if (typeof document !== "undefined") {
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", injectStyles);
-  } else {
-    injectStyles();
-  }
-}
+export {
+  API_BASE,
+  API_AI,
+  NOTES_PATH,
+  NOTES_MAX_COUNT,
+  NOTES_MAX_BODY_BYTES,
+  AI_RUNS_MAX,
+  AI_PENDING_TTL_MS,
+  GUEST_TASKS,
+  HOST_TASKS,
+  APPLY_TASKS,
+  TASK_META,
+};
