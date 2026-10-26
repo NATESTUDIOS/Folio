@@ -49,89 +49,61 @@
 </head>
 <body>
 
-<div class="app-shell ai-shell" id="aiShell">
+<div class="ai-app" id="aiApp">
 
-  <!-- HEADER -->
-  <header class="header ai-header" id="aiHeader">
-    <a class="header-back" id="btnBack" href="/project" aria-label="Back to project">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-    </a>
-    <button class="header-identity" id="headerIdentity" type="button" aria-label="Switch project">
-      <div class="header-project-icon project-icon-box" id="headerProjectIcon">—</div>
-      <div class="header-identity-text">
-        <h1 class="header-title" id="headerProjectName">Loading…</h1>
-        <div class="header-sub" id="headerProjectSub"></div>
-      </div>
-      <span class="header-edit-badge" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-      </span>
+  <!-- ═══════════════ HEADER ═══════════════ -->
+  <header class="ai-header" id="aiHeader">
+    <button class="ai-rail-toggle" id="railToggle" aria-label="Toggle sidebar" title="Toggle sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
-    <div class="header-actions">
-      <button class="header-btn" id="btnAskAI" type="button" title="Ask AI (⌘K)">
+
+    <button class="ai-header-identity" id="headerIdentity" type="button" aria-label="Switch project">
+      <div class="ai-header-icon" id="headerIcon">—</div>
+      <div class="ai-header-text">
+        <h1 class="ai-header-title" id="headerTitle">Loading…</h1>
+        <div class="ai-header-sub" id="headerSub"></div>
+      </div>
+    </button>
+
+    <div class="ai-header-actions">
+      <button class="ai-header-btn ai-header-btn-primary" id="btnAskAI" type="button" title="Ask AI (⌘K)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
-        <span class="lbl">Ask AI</span>
+        <span>Ask AI</span>
       </button>
-      <button class="header-btn icon" id="btnNewProject" aria-label="New project" title="New project">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      </button>
-      <button class="header-btn icon" id="btnMore" aria-label="More" title="More">
+      <button class="ai-header-btn" id="btnMore" aria-label="More" title="More">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
       </button>
     </div>
   </header>
 
-  <!-- MODE BANNER -->
-  <div class="mode-banner" id="modeBanner" hidden>
+  <!-- ═══════════════ MODE BANNER ═══════════════ -->
+  <div class="ai-banner" id="modeBanner" hidden>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span class="mb-text" id="modeBannerText"></span>
-    <button class="mb-action" id="modeBannerAction" type="button">Sync</button>
+    <span class="ai-banner-text" id="modeBannerText"></span>
+    <button class="ai-banner-action" id="modeBannerAction" type="button">Sync</button>
   </div>
 
-  <!-- BODY — rail + main area + drawer -->
+  <!-- ═══════════════ BODY ═══════════════ -->
   <div class="ai-body" id="aiBody">
 
-    <!-- RAIL -->
-    <nav class="ai-rail" id="aiRail" aria-label="Sections">
-      <button class="rail-btn" data-rail="files" aria-label="Files" title="Files">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-      </button>
-      <button class="rail-btn" data-rail="search" aria-label="Search" title="Search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      </button>
-      <button class="rail-btn" data-rail="docs" aria-label="Documentation" title="Docs">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-      </button>
-      <button class="rail-btn" data-rail="history" aria-label="History" title="AI history">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      </button>
-      <button class="rail-btn" data-rail="commits" aria-label="Commits" title="Commits">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/></svg>
-      </button>
-      <button class="rail-btn" data-rail="notes" aria-label="Notes" title="Notes">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-      </button>
-      <button class="rail-btn" data-rail="info" aria-label="Info" title="Info">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-      </button>
-    </nav>
+    <!-- SIDEBAR -->
+    <aside class="sb" id="sb" aria-label="Sidebar">
+      <header class="sb-header">
+        <span class="sb-title" id="sbTitle">Files</span>
+        <button class="sb-close" id="sbClose" aria-label="Close">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </header>
+      <nav class="sb-tabs" id="sbTabs" role="tablist"></nav>
+      <div class="sb-body" id="sbBody"></div>
+    </aside>
+    <div class="sb-backdrop" id="sbBackdrop"></div>
 
     <!-- MAIN AREA -->
     <main class="ai-main" id="aiMain">
-      <!-- Each section is a pane, only one visible at a time -->
-      <section class="ai-section" data-section="files" hidden>
+      <!-- Files -->
+      <section class="ai-view" data-view="files" hidden>
         <div class="files-layout">
-          <aside class="files-pane" id="filesPane">
-            <div class="files-pane-head">
-              <span class="pane-title">Files</span>
-              <button class="icon-btn" id="btnFilesReload" aria-label="Reload" title="Reload">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              </button>
-            </div>
-            <div class="files-pane-filter">
-              <input class="input" id="filesFilter" type="search" placeholder="Filter files…">
-            </div>
-            <div class="files-tree" id="filesTree"></div>
-          </aside>
           <div class="editor-pane" id="editorPane">
             <div class="editor-tabs" id="editorTabs" style="display:none;"></div>
             <div class="editor-container" id="editorContainer"></div>
@@ -140,7 +112,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               </div>
               <div class="editor-empty-title">No file open</div>
-              <div class="editor-empty-desc">Pick a file from the left to start editing.</div>
+              <div class="editor-empty-desc">Pick a file from the sidebar to start editing.</div>
             </div>
             <div class="editor-loading" id="editorLoading" hidden>
               <div class="spinner"></div>
@@ -150,15 +122,52 @@
         </div>
       </section>
 
-      <section class="ai-section" data-section="search" hidden></section>
-      <section class="ai-section" data-section="docs" hidden></section>
-      <section class="ai-section" data-section="history" hidden></section>
-      <section class="ai-section" data-section="commits" hidden></section>
-      <section class="ai-section" data-section="notes" hidden></section>
-      <section class="ai-section" data-section="info" hidden></section>
+      <!-- Docs -->
+      <section class="ai-view" data-view="docs" hidden>
+        <div class="docs-layout">
+          <div class="docs-main">
+            <div class="docs-head">
+              <div class="docs-active-file">
+                <span id="docsActivePath">—</span>
+              </div>
+              <div class="docs-mode-switch" role="radiogroup">
+                <button type="button" data-mode="edit" class="active">Edit</button>
+                <button type="button" data-mode="preview">Preview</button>
+                <button type="button" data-mode="focus">Focus</button>
+              </div>
+              <button class="btn btn-primary btn-sm" id="docsSave" type="button" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Save
+              </button>
+            </div>
+            <div class="docs-toolbar" id="docsToolbar"></div>
+            <div class="docs-panes" id="docsPanes" data-mode="edit">
+              <div class="docs-pane">
+                <textarea class="docs-source" id="docsSource" spellcheck="false" placeholder="Start writing markdown…"></textarea>
+              </div>
+              <div class="docs-pane">
+                <div class="docs-preview ai-markdown" id="docsPreview"></div>
+              </div>
+            </div>
+            <div class="docs-review" id="docsReview" hidden></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- History -->
+      <section class="ai-view" data-view="history" hidden></section>
+
+      <!-- Commits -->
+      <section class="ai-view" data-view="commits" hidden></section>
+
+      <!-- Notes -->
+      <section class="ai-view" data-view="notes" hidden></section>
+
+      <!-- Info -->
+      <section class="ai-view" data-view="info" hidden></section>
     </main>
 
-    <!-- ASK AI DRAWER -->
+    <!-- AI DRAWER -->
     <aside class="ai-drawer" id="aiDrawer" aria-label="Ask AI">
       <div class="ai-drawer-head">
         <div class="ai-drawer-title">
@@ -177,13 +186,10 @@
             <button class="scope-btn" data-scope="file" type="button" aria-pressed="false">File</button>
             <button class="scope-btn" data-scope="selection" type="button" aria-pressed="false">Selection</button>
           </div>
-
           <div class="task-picker">
             <select class="select" id="taskSelect" aria-label="Task"></select>
           </div>
-
           <div class="ai-info-bar" id="infoBar" hidden></div>
-
           <button class="ai-run-btn" id="btnRun" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             <span id="btnRunLabel">Run</span>
@@ -214,8 +220,8 @@
     <div class="ai-drawer-backdrop" id="drawerBackdrop"></div>
   </div>
 
-  <!-- STATUS BAR -->
-  <footer class="ai-status-bar" id="statusBar">
+  <!-- ═══════════════ STATUS BAR ═══════════════ -->
+  <footer class="ai-status" id="statusBar">
     <div class="ai-status-left">
       <span id="statusFile">—</span>
       <span class="ai-status-sep">·</span>
@@ -231,14 +237,14 @@
   </footer>
 </div>
 
-<!-- CONFIRM DIALOG -->
-<div class="sheet" id="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
-  <div class="sheet-handle"></div>
-  <div class="sheet-body" style="padding:20px 16px;text-align:center;">
+<!-- ═══════════════ CONFIRM DIALOG ═══════════════ -->
+<div class="ai-sheet" id="confirmDialog" role="alertdialog" aria-modal="true">
+  <div class="ai-sheet-handle"></div>
+  <div class="ai-sheet-body" style="padding:20px 16px;text-align:center;">
     <div class="confirm-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     </div>
-    <h2 class="sheet-title" id="confirmTitle" style="margin-bottom:6px;">Confirm</h2>
+    <h2 class="ai-sheet-title" id="confirmTitle" style="margin-bottom:6px;">Confirm</h2>
     <p class="confirm-message" id="confirmMessage">Are you sure?</p>
     <div class="confirm-actions">
       <button class="btn btn-secondary" id="confirmCancel" type="button">Cancel</button>
@@ -247,23 +253,23 @@
   </div>
 </div>
 
-<!-- PENDING SHEET -->
-<div class="sheet" id="pendingSheet" role="dialog" aria-modal="true" aria-labelledby="pendingTitle">
-  <div class="sheet-handle"></div>
-  <div class="sheet-header">
-    <h2 class="sheet-title" id="pendingTitle">Staged proposals</h2>
-    <button class="sheet-close" id="pendingClose" aria-label="Close">
+<!-- ═══════════════ PENDING SHEET ═══════════════ -->
+<div class="ai-sheet" id="pendingSheet" role="dialog" aria-modal="true">
+  <div class="ai-sheet-handle"></div>
+  <div class="ai-sheet-header">
+    <h2 class="ai-sheet-title" id="pendingTitle">Staged proposals</h2>
+    <button class="ai-sheet-close" id="pendingClose" aria-label="Close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
-  <div class="sheet-body" id="pendingBody"></div>
+  <div class="ai-sheet-body" id="pendingBody"></div>
 </div>
 
-<!-- OVERLAYS -->
-<div class="backdrop" id="backdrop"></div>
-<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+<!-- ═══════════════ OVERLAYS ═══════════════ -->
+<div class="ai-backdrop" id="backdrop"></div>
+<div class="ai-toast-container" id="toastContainer" aria-live="polite"></div>
 
-<!-- EMPTY STATE -->
+<!-- ═══════════════ EMPTY STATE ═══════════════ -->
 <div class="empty-project-state hidden" id="emptyState" role="dialog" aria-modal="true">
   <div class="empty-project-card">
     <div class="empty-project-icon">
@@ -278,7 +284,7 @@
   </div>
 </div>
 
-<!-- SVG SPRITE -->
+<!-- ═══════════════ SVG SPRITE ═══════════════ -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <symbol id="i-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
@@ -320,12 +326,14 @@
     <symbol id="i-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></symbol>
     <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
     <symbol id="i-droplet" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></symbol>
+    <symbol id="i-git-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/></symbol>
   </defs>
 </svg>
 
 <script type="module">
 // ═══════════════════════════════════════════════════════════════════
 //  ai.html — AI Project Hub
+//  Layout: header / [sidebar + main + drawer] / status
 // ═══════════════════════════════════════════════════════════════════
 
 import {
@@ -370,9 +378,8 @@ const DEFAULT_PROJECT_STORAGE_LIMIT = 10 * 1024 * 1024;
 const STORAGE = {
   session: "folio.session",
   user: "folio.user",
-  lastProject: "folio.lastProject",
   lastFile: "folio.ai.lastFile",
-  lastRail: "folio.ai.lastRail",
+  lastTab: "folio.ai.lastTab",
   sidebarOpen: "folio.ai.sidebarOpen",
   task: "folio.ai.lastTask",
   docsMode: "folio.docs.mode",
@@ -389,7 +396,6 @@ const AVATAR_GRADIENTS = [
 
 const DOCS_PATH_RE = /(^docs\/|^README\.md$|\.mdx?$|\.markdown$)/i;
 
-// Tasks available in the Ask AI drawer, grouped and gated by scope
 const ASK_TASKS = {
   project: ["designExplain", "brainstorm", "scaffold", "struggle", "findFn"],
   file: [
@@ -409,7 +415,6 @@ const STATE = {
   activeFile: null,
   openFiles: [],
   dirtyFiles: new Set(),
-  selection: "",
 
   session: null,
   user: null,
@@ -417,16 +422,13 @@ const STATE = {
   online: navigator.onLine,
   syncState: "unknown",
 
-  activeRail: "files",
-  sidebarOpen: false,   // default closed — restored from localStorage
+  activeTab: "files",
 
-  // Ask AI drawer
   aiOpen: false,
   scope: "file",
   activeTask: "explain",
   running: false,
   abort: null,
-  lastRun: null,
 
   aiState: null,
   notes: { version: 1, notes: [] },
@@ -442,10 +444,9 @@ const STATE = {
   docsDirty: false,
   docsMode: "edit",
   docsSaveTimer: null,
-  docsReviewOpen: false,
 };
 
-// ─── DOM / utils ─────────────────────────────────────────────────
+// ─── DOM utilities ──────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
 
@@ -469,10 +470,9 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-function svg(name, size = 14) {
+function icon(name, size = 12) {
   const NS = "http://www.w3.org/2000/svg";
   const s = document.createElementNS(NS, "svg");
-  s.setAttribute("viewBox", "0 0 24 24");
   s.setAttribute("width", String(size));
   s.setAttribute("height", String(size));
   s.setAttribute("fill", "none");
@@ -487,7 +487,7 @@ function svg(name, size = 14) {
   return s;
 }
 
-function svgString(name, size = 14) {
+function iconHTML(name, size = 12) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 }
 
@@ -662,10 +662,10 @@ async function apiFetch(url, opts = {}) {
   }
 }
 
-// ─── Toast / Confirm ─────────────────────────────────────────────
+// ─── Toast / confirm ────────────────────────────────────────────
 
 function toast(message, type = "info", duration = 2400) {
-  const node = el("div", { class: `toast ${type}` }, el("span", {}, message));
+  const node = el("div", { class: `ai-toast ai-toast-${type}` }, el("span", {}, message));
   $("toastContainer").appendChild(node);
   requestAnimationFrame(() => node.classList.add("show"));
   setTimeout(() => {
@@ -699,7 +699,7 @@ function resolveConfirm(value) {
 }
 
 function anySheetOpen() {
-  return !!document.querySelector(".sheet.open");
+  return !!document.querySelector(".ai-sheet.open");
 }
 
 // ─── CodeMirror ──────────────────────────────────────────────────
@@ -759,17 +759,13 @@ const cm = {
         ".cm-gutters": { fontSize: "11px" },
       }),
       m.EditorView.updateListener.of((update) => {
-        if (update.docChanged) {
-          markDirty();
-          scheduleAutosave();
-        }
+        if (update.docChanged) { markDirty(); scheduleAutosave(); }
       }),
     ];
     if (langExt) extensions.push(langExt);
 
     const state = m.EditorState.create({ doc: content || "", extensions });
     STATE.editorView = new m.EditorView({ state, parent: container });
-    requestAnimationFrame(() => updateStatusBar());
   },
 
   getContent() { return STATE.editorView?.state.doc.toString() || ""; },
@@ -794,9 +790,7 @@ function markDirty() {
 function scheduleAutosave() {
   if (STATE.editorDirtyTimer) clearTimeout(STATE.editorDirtyTimer);
   STATE.editorDirtyTimer = setTimeout(() => {
-    if (STATE.activeFile && STATE.dirtyFiles.has(STATE.activeFile)) {
-      saveActiveFile({ silent: true });
-    }
+    if (STATE.activeFile && STATE.dirtyFiles.has(STATE.activeFile)) saveActiveFile({ silent: true });
   }, 2000);
 }
 
@@ -850,6 +844,121 @@ function buildCreateProjectDeps() {
   };
 }
 
+// ─── Sidebar controller ─────────────────────────────────────────
+
+class Sidebar {
+  constructor(opts) {
+    this.root = $(opts.id || "sb");
+    this.tabsEl = $("sbTabs");
+    this.bodyEl = $("sbBody");
+    this.titleEl = $("sbTitle");
+    this.backdropEl = $("sbBackdrop");
+    this.closeBtn = $("sbClose");
+
+    this.panels = opts.panels || [];
+    this.current = opts.initial || this.panels[0]?.id;
+    this.isOpen = false;
+    this.ctx = opts.ctx || {};
+    this._token = 0;
+
+    this._bind();
+    this.render();
+  }
+
+  open(panel) {
+    if (panel) this.current = panel;
+    this.isOpen = true;
+    this.root.classList.add("open");
+    if (this.backdropEl && window.innerWidth < 1024) this.backdropEl.classList.add("open");
+    this.render();
+  }
+
+  close() {
+    this.isOpen = false;
+    this.root.classList.remove("open");
+    this.backdropEl?.classList.remove("open");
+  }
+
+  toggle(panel) {
+    this.isOpen ? this.close() : this.open(panel);
+  }
+
+  switchTo(panel) {
+    if (!this.panels.find(p => p.id === panel)) return;
+    this.current = panel;
+    STATE.activeTab = panel;
+    try { localStorage.setItem(STORAGE.lastTab, panel); } catch {}
+    this.render();
+    showMainView(panel);
+  }
+
+  refresh() { this.render(); }
+
+  _bind() {
+    this.closeBtn?.addEventListener("click", () => this.close());
+    this.backdropEl?.addEventListener("click", () => this.close());
+
+    window.addEventListener("resize", () => {
+      if (window.innerWidth >= 1024) {
+        this.backdropEl?.classList.remove("open");
+      } else if (this.isOpen) {
+        this.backdropEl?.classList.add("open");
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.isOpen && window.innerWidth < 1024) {
+        this.close();
+      }
+    });
+  }
+
+  render() {
+    if (!this.tabsEl || !this.bodyEl) return;
+    const token = ++this._token;
+
+    this.tabsEl.innerHTML = "";
+    for (const panel of this.panels) {
+      const btn = document.createElement("button");
+      btn.className = "sb-tab" + (panel.id === this.current ? " active" : "");
+      btn.type = "button";
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", panel.id === this.current);
+      btn.textContent = panel.label;
+      btn.addEventListener("click", () => this.switchTo(panel.id));
+      this.tabsEl.appendChild(btn);
+    }
+
+    const cur = this.panels.find(p => p.id === this.current);
+    if (this.titleEl) this.titleEl.textContent = cur?.label || "Panel";
+
+    this.bodyEl.innerHTML = "";
+    this.bodyEl.scrollTop = 0;
+    if (!cur || typeof cur.render !== "function") return;
+
+    const self = this;
+    Promise.resolve()
+      .then(() => cur.render(self.bodyEl, self.ctx))
+      .catch(err => {
+        if (token !== self._token) return;
+        console.error("[Sidebar] render failed:", err);
+        self.bodyEl.innerHTML = "";
+        self.bodyEl.appendChild(self._empty("Panel failed to load", String(err?.message || err)));
+      });
+  }
+
+  _empty(title, desc) {
+    const wrap = el("div", { class: "sb-empty" });
+    wrap.innerHTML = `
+      <div class="sb-empty-title">${escapeHtml(title || "")}</div>
+      ${desc ? `<div class="sb-empty-desc">${escapeHtml(desc)}</div>` : ""}
+    `;
+    return wrap;
+  }
+}
+
+let sidebar = null;
+
 // ─── Boot ────────────────────────────────────────────────────────
 
 async function boot() {
@@ -865,12 +974,6 @@ async function boot() {
 
   if (handleNewProjectImageReturn()) return;
 
-  // Restore sidebar state — fix the auto-open bug
-  const savedSidebar = localStorage.getItem(STORAGE.sidebarOpen);
-  STATE.sidebarOpen = savedSidebar === null
-    ? window.innerWidth >= 1024
-    : savedSidebar === "true";
-
   wireStaticListeners();
   wireEmptyState();
 
@@ -883,18 +986,24 @@ async function boot() {
 
   hideEmptyState();
   mountHeader();
-  mountRail();
+  mountRailToggle();
+  wireDrawer();
+  wireDocs();
+  mountSidebar();
 
+  // Restore last tab
+  let lastTab = "files";
   try {
-    const lastRail = localStorage.getItem(STORAGE.lastRail);
-    if (lastRail && ["files","search","docs","history","commits","notes","info"].includes(lastRail)) {
-      STATE.activeRail = lastRail;
+    const saved = localStorage.getItem(STORAGE.lastTab);
+    if (saved && ["files","docs","history","commits","notes","info"].includes(saved)) {
+      lastTab = saved;
     }
   } catch {}
 
-  renderRail();
-  switchRail(STATE.activeRail);
+  showMainView(lastTab);
+  sidebar.switchTo(lastTab);
 
+  // Open last file
   let toOpen = null;
   try {
     const lastFile = localStorage.getItem(STORAGE.lastFile + "." + STATE.pid);
@@ -908,7 +1017,6 @@ async function boot() {
   }
   if (toOpen) await openFile(toOpen);
 
-  wireDrawer();
   updateStatusBar();
   renderModeBanner();
 
@@ -941,14 +1049,14 @@ async function openProjectPicker() {
   try { projects = await idb.listProjects(); } catch {}
   projects.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-  const sheet = el("div", { class: "sheet open", style: { zIndex: "3100" } });
+  const sheet = el("div", { class: "ai-sheet open", style: { zIndex: "3100" } });
   sheet.innerHTML = `
-    <div class="sheet-handle"></div>
-    <div class="sheet-header">
-      <h2 class="sheet-title">Choose a project</h2>
-      <button class="sheet-close" data-close aria-label="Close" type="button">${svgString("x", 14)}</button>
+    <div class="ai-sheet-handle"></div>
+    <div class="ai-sheet-header">
+      <h2 class="ai-sheet-title">Choose a project</h2>
+      <button class="ai-sheet-close" data-close aria-label="Close" type="button">${iconHTML("x", 14)}</button>
     </div>
-    <div class="sheet-body" id="pickerBody"></div>
+    <div class="ai-sheet-body" id="pickerBody"></div>
   `;
   document.body.appendChild(sheet);
   $("backdrop").classList.add("visible");
@@ -956,7 +1064,7 @@ async function openProjectPicker() {
   const body = sheet.querySelector("#pickerBody");
 
   if (!projects.length) {
-    body.innerHTML = `<div class="empty-state"><div class="empty-state-title">No projects yet</div></div>`;
+    body.innerHTML = `<div class="sb-empty"><div class="sb-empty-title">No projects yet</div></div>`;
   } else {
     for (const p of projects) {
       const row = el("button", {
@@ -1011,16 +1119,9 @@ function wireStaticListeners() {
 
   document.addEventListener("keydown", (e) => {
     const mod = e.metaKey || e.ctrlKey;
-
-    if (mod && e.key === "Enter" && STATE.aiOpen && !$("btnRun").disabled) {
-      e.preventDefault(); runCurrentTask(); return;
-    }
-    if (mod && e.key.toLowerCase() === "s") {
-      e.preventDefault(); saveActiveFile(); return;
-    }
-    if (mod && e.key.toLowerCase() === "k") {
-      e.preventDefault(); toggleDrawer(); return;
-    }
+    if (mod && e.key === "Enter" && STATE.aiOpen && !$("btnRun").disabled) { e.preventDefault(); runCurrentTask(); return; }
+    if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveActiveFile(); return; }
+    if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); toggleDrawer(); return; }
     if (e.key === "Escape") {
       if ($("confirmDialog").classList.contains("open")) { resolveConfirm(false); return; }
       if ($("pendingSheet").classList.contains("open")) { closePendingSheet(); return; }
@@ -1041,9 +1142,7 @@ function wireStaticListeners() {
   });
   window.addEventListener("beforeunload", (e) => {
     if (STATE.activeFile && STATE.dirtyFiles.has(STATE.activeFile)) saveActiveFile({ silent: true }).catch(() => {});
-    if (STATE.dirtyFiles.size > 0 || (STATE.docsDirty)) {
-      e.preventDefault(); e.returnValue = ""; return "";
-    }
+    if (STATE.dirtyFiles.size > 0 || STATE.docsDirty) { e.preventDefault(); e.returnValue = ""; return ""; }
   });
 }
 
@@ -1052,7 +1151,6 @@ function wireStaticListeners() {
 async function loadProject() {
   let project = null;
   try { project = await idb.getProject(STATE.pid); } catch {}
-
   if (!project && STATE.session && STATE.online && !/^local_/.test(STATE.pid)) {
     const res = await apiFetch(API_HOST + "?action=projects/get&pid=" + encodeURIComponent(STATE.pid));
     if (res.ok && res.data?.success) {
@@ -1062,10 +1160,8 @@ async function loadProject() {
   }
   if (!project) { STATE.project = null; return; }
   STATE.project = project;
-
   try { STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path)); }
   catch { STATE.files = []; }
-
   if (STATE.syncState === "unknown") {
     if (/^local_/.test(STATE.pid)) STATE.syncState = "local";
     else if (!STATE.online) STATE.syncState = "cached";
@@ -1098,26 +1194,30 @@ function mountHeader() {
   if (headerMounted) { renderHeader(); return; }
   headerMounted = true;
 
-  $("btnBack").href = "/project?pid=" + encodeURIComponent(STATE.pid);
   $("headerIdentity").addEventListener("click", openProjectPicker);
   $("btnAskAI").addEventListener("click", toggleDrawer);
-  $("btnNewProject").addEventListener("click", () => createNewProject());
   $("btnMore").addEventListener("click", openMoreMenu);
 
   renderHeader();
 }
 
+function mountRailToggle() {
+  $("railToggle").addEventListener("click", () => {
+    sidebar.toggle();
+  });
+}
+
 function renderHeader() {
-  $("headerProjectName").textContent = STATE.project?.name || "Untitled";
+  $("headerTitle").textContent = STATE.project?.name || "Untitled";
   const parts = [];
   if (STATE.syncState === "local") parts.push("Local");
   else if (STATE.syncState === "cached" || !STATE.online) parts.push("Cached");
   else if (STATE.isGuest) parts.push("Guest");
   else parts.push("Synced");
   parts.push(`${STATE.files.length} file${STATE.files.length === 1 ? "" : "s"}`);
-  $("headerProjectSub").textContent = parts.join(" · ");
+  $("headerSub").textContent = parts.join(" · ");
 
-  const iconEl = $("headerProjectIcon");
+  const iconEl = $("headerIcon");
   iconEl.innerHTML = "";
   if (STATE.project.iconUrl) {
     const img = document.createElement("img"); img.src = STATE.project.iconUrl; img.alt = "";
@@ -1136,18 +1236,17 @@ function openMoreMenu() {
     { label: "Project dashboard", icon: "external", action: () => { location.href = "/project?pid=" + encodeURIComponent(STATE.pid); } },
     { label: "Clear staged", icon: "trash", danger: true, action: () => confirmClearPending() },
   ];
-  const sheet = el("div", { class: "sheet open", style: { zIndex: "3100" } });
+  const sheet = el("div", { class: "ai-sheet open", style: { zIndex: "3100" } });
   sheet.innerHTML = `
-    <div class="sheet-handle"></div>
-    <div class="sheet-header">
-      <h2 class="sheet-title">More</h2>
-      <button class="sheet-close" data-close aria-label="Close" type="button">${svgString("x", 14)}</button>
+    <div class="ai-sheet-handle"></div>
+    <div class="ai-sheet-header">
+      <h2 class="ai-sheet-title">More</h2>
+      <button class="ai-sheet-close" data-close aria-label="Close" type="button">${iconHTML("x", 14)}</button>
     </div>
-    <div class="sheet-body" id="menuBody"></div>
+    <div class="ai-sheet-body" id="menuBody"></div>
   `;
   document.body.appendChild(sheet);
   $("backdrop").classList.add("visible");
-
   const body = sheet.querySelector("#menuBody");
   for (const it of items) {
     body.appendChild(el("button", {
@@ -1161,143 +1260,137 @@ function openMoreMenu() {
         fontSize: "13px", fontFamily: "inherit",
       },
       onclick: () => { close(); setTimeout(it.action, 80); },
-    }, svg(it.icon, 14), el("span", {}, it.label)));
+    }, icon(it.icon, 14), el("span", {}, it.label)));
   }
   function close() { sheet.remove(); $("backdrop").classList.remove("visible"); }
   sheet.querySelector("[data-close]").addEventListener("click", close);
   sheet.addEventListener("click", (e) => { if (e.target === sheet) close(); });
 }
 
-// ─── Rail / sections ────────────────────────────────────────────
+// ─── Main views ──────────────────────────────────────────────────
 
-function mountRail() {
-  document.querySelectorAll(".rail-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const rail = btn.dataset.rail;
-      if (rail === STATE.activeRail && STATE.sidebarOpen) {
-        setSidebarOpen(false);
-      } else {
-        setSidebarOpen(true);
-        switchRail(rail);
-      }
-    });
+function showMainView(view) {
+  document.querySelectorAll(".ai-view").forEach(sec => {
+    sec.hidden = sec.dataset.view !== view;
   });
-  $("statusPending").addEventListener("click", openPendingSheet);
+  if (view === "files") renderEditorTabs();
+  else if (view === "docs") renderDocsView();
+  else if (view === "history") renderHistoryView();
+  else if (view === "commits") renderCommitsView();
+  else if (view === "notes") renderNotesView();
+  else if (view === "info") renderInfoView();
 }
+// ─── Sidebar mount ──────────────────────────────────────────────
 
-function renderRail() {
-  document.querySelectorAll(".rail-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.rail === STATE.activeRail);
+function mountSidebar() {
+  const panels = [
+    { id: "files", label: "Files", render: renderFilesPanel },
+    { id: "docs", label: "Docs", render: renderDocsPanel },
+    { id: "history", label: "History", render: renderHistoryPanel },
+    { id: "commits", label: "Commits", render: renderCommitsPanel },
+    { id: "notes", label: "Notes", render: renderNotesPanel },
+    { id: "info", label: "Info", render: renderInfoPanel },
+  ];
+
+  sidebar = new Sidebar({
+    id: "sb",
+    panels,
+    initial: "files",
+    ctx: { STATE, idb, toast },
   });
-}
 
-function setSidebarOpen(open) {
-  STATE.sidebarOpen = open;
-  try { localStorage.setItem(STORAGE.sidebarOpen, String(open)); } catch {}
-  $("aiBody").classList.toggle("sidebar-open", open);
-  renderRail();
-}
-
-function switchRail(rail) {
-  if (!["files","search","docs","history","commits","notes","info"].includes(rail)) return;
-  STATE.activeRail = rail;
-  try { localStorage.setItem(STORAGE.lastRail, rail); } catch {}
-
-  document.querySelectorAll(".ai-section").forEach(sec => {
-    sec.hidden = sec.dataset.section !== rail;
-  });
-  renderRail();
-
-  const section = document.querySelector(`.ai-section[data-section="${rail}"]`);
-  if (section) renderSection(rail, section);
-}
-
-function renderSection(rail, section) {
-  if (rail !== "files") {
-    section.innerHTML = "";
-  }
-  switch (rail) {
-    case "files": return renderFilesSection(section);
-    case "search": return renderSearchSection(section);
-    case "docs": return renderDocsSection(section);
-    case "history": return renderHistorySection(section);
-    case "commits": return renderCommitsSection(section);
-    case "notes": return renderNotesSection(section);
-    case "info": return renderInfoSection(section);
+  // Desktop: sidebar open by default (docked). Mobile: closed.
+  if (window.innerWidth >= 1024) {
+    sidebar.open("files");
   }
 }
 
-// ─── Files section ───────────────────────────────────────────────
+// ─── Files panel (sidebar) ──────────────────────────────────────
 
-function renderFilesSection(section) {
-  // The HTML markup is static — the pane already exists
-  // Refresh the tree and tabs
-  renderFilesTree();
-  renderEditorTabs();
-  wireFilesSection();
-}
+function renderFilesPanel(root) {
+  root.innerHTML = "";
 
-let filesSectionWired = false;
-function wireFilesSection() {
-  const filter = $("filesFilter");
-  const reload = $("btnFilesReload");
-  if (!filter || !reload) return;   // markup not ready
-  if (filter.dataset.wired === "1") return;
-  filter.dataset.wired = "1";
+  // Pinned project
+  const totalBytes = STATE.files.reduce((s, f) => s + estimateSize(f.content || ""), 0);
+  const limit = STATE.project.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+  const pct = Math.min(100, (totalBytes / limit) * 100);
+  const barClass = pct > 90 ? "danger" : pct > 70 ? "warn" : "";
 
-  filter.addEventListener("input", debounce((e) => {
+  const pinned = el("div", { class: "sb-pinned" });
+  const pinnedIcon = el("div", { class: "sb-pinned-icon" });
+  if (STATE.project.iconUrl) {
+    const img = document.createElement("img"); img.src = STATE.project.iconUrl; img.alt = "";
+    pinnedIcon.appendChild(img);
+  } else {
+    pinnedIcon.textContent = getInitials(STATE.project.name);
+    pinnedIcon.style.background = getAvatarColor(STATE.project.name);
+    pinnedIcon.style.color = "#0a0c10";
+  }
+  pinned.appendChild(pinnedIcon);
+
+  const pinnedInfo = el("div", { class: "sb-pinned-info" });
+  pinnedInfo.appendChild(el("div", { class: "sb-pinned-name" }, STATE.project.name || "Untitled"));
+  const bar = el("div", { class: "sb-storage-mini" });
+  bar.appendChild(el("div", { class: `sb-storage-mini-fill ${barClass}`, style: { width: pct + "%" } }));
+  pinnedInfo.appendChild(bar);
+  pinnedInfo.appendChild(el("div", { class: "sb-storage-label" }, `${formatBytes(totalBytes)} / ${formatBytes(limit)}`));
+  pinned.appendChild(pinnedInfo);
+  root.appendChild(pinned);
+
+  // Section header
+  const section = el("div", { class: "sb-section" },
+    el("span", {}, `Files (${STATE.files.length})`),
+    el("div", { class: "sb-section-actions" },
+      el("button", { class: "sb-icon-btn", title: "New file", type: "button", onclick: createNewFile }, icon("plus", 12)),
+      el("button", { class: "sb-icon-btn", title: "Reload", type: "button", onclick: reloadFiles }, icon("refresh", 12)),
+    )
+  );
+  root.appendChild(section);
+
+  // Filter input
+  const filter = el("input", {
+  class: "sb-filter", type: "search", placeholder: "Filter files…",
+  value: STATE.fileFilter,
+  oninput: debounce((e) => {
     STATE.fileFilter = e.target.value.toLowerCase();
-    renderFilesTree();
-  }, 120));
+    renderFilesPanel(root);
+  }, 120),
+});
+  root.appendChild(filter);
 
-  reload.addEventListener("click", async () => {
-    try { STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path)); }
-    catch {}
-    renderFilesTree();
-    renderHeader();
-  });
-}
+  // Tree
+  const tree = el("div");
+  root.appendChild(tree);
 
-function renderFilesTree() {
-  const tree = $("filesTree");
-  if (!tree) return;
-  tree.innerHTML = "";
-
-  const files = STATE.fileFilter
+  const allFiles = STATE.fileFilter
     ? STATE.files.filter(f => f.path.toLowerCase().includes(STATE.fileFilter))
     : STATE.files;
 
-  if (!files.length) {
-    tree.innerHTML = `<div class="empty-state"><div class="empty-state-title">No files</div></div>`;
+  if (!allFiles.length) {
+    root.appendChild(el("div", { class: "sb-empty" },
+      el("div", { class: "sb-empty-title" }, STATE.fileFilter ? "No matches" : "No files yet"),
+      el("div", { class: "sb-empty-desc" }, STATE.fileFilter ? "Try a different search." : "Create a file to get started."),
+    ));
     return;
   }
 
-  const root = { children: {}, files: [] };
-  for (const f of files) {
-    const parts = f.path.split("/");
-    let node = root;
-    for (let i = 0; i < parts.length - 1; i++) {
-      if (!node.children[parts[i]]) node.children[parts[i]] = { children: {}, files: [], path: parts.slice(0, i + 1).join("/") };
-      node = node.children[parts[i]];
-    }
-    node.files.push({ name: parts[parts.length - 1], path: f.path });
-  }
+  const treeData = buildTree(allFiles.map(f => f.path));
 
   const renderNode = (node, depth) => {
     for (const [name, child] of Object.entries(node.children).sort(([a], [b]) => a.localeCompare(b))) {
       const expanded = STATE.expandedFolders.has(child.path) || !!STATE.fileFilter;
       const row = el("div", {
-        class: `tree-row ${expanded ? "expanded" : ""}`,
+        class: `sb-tree-node ${expanded ? "expanded" : ""}`,
         style: { "--depth": String(depth) },
         onclick: () => {
           if (STATE.expandedFolders.has(child.path)) STATE.expandedFolders.delete(child.path);
           else STATE.expandedFolders.add(child.path);
-          renderFilesTree();
+          renderFilesPanel(root);
         },
       },
-        el("span", { class: "tree-chev" }, svg("chevron-right", 10)),
-        el("span", { class: "tree-icon" }, svg(expanded ? "folder-open" : "folder", 12)),
-        el("span", { class: "tree-name" }, name),
+        el("span", { class: "sb-tree-chevron" }, icon("chevron-right", 9)),
+        el("span", { class: "sb-tree-icon" }, icon(expanded ? "folder-open" : "folder", 12)),
+        el("span", { class: "sb-tree-name" }, name),
       );
       tree.appendChild(row);
       if (expanded) renderNode(child, depth + 1);
@@ -1305,27 +1398,79 @@ function renderFilesTree() {
     for (const file of node.files.sort((a, b) => a.name.localeCompare(b.name))) {
       const active = STATE.activeFile === file.path;
       const row = el("div", {
-        class: `tree-row ${active ? "active" : ""}`,
+        class: `sb-tree-node ${active ? "active" : ""}`,
         style: { "--depth": String(depth) },
         onclick: () => openFile(file.path),
-        oncontextmenu: (e) => {
-          e.preventDefault();
-          openFileContextMenu(e, file.path);
-        },
+        oncontextmenu: (e) => { e.preventDefault(); openFileContextMenu(e, file.path); },
       },
-        el("span", { class: "tree-chev" }),
-        el("span", { class: "tree-icon" }, svg(fileIconName(file.path), 12)),
-        el("span", { class: "tree-name", title: file.path }, file.name),
+        el("span", { class: "sb-tree-chevron" }),
+        el("span", { class: "sb-tree-icon" }, icon(fileIconName(file.path), 12)),
+        el("span", { class: "sb-tree-name", title: file.path }, file.name),
+        el("div", { class: "sb-tree-actions" },
+          el("button", {
+            class: "sb-icon-btn danger", type: "button", title: "Delete",
+            onclick: (e) => { e.stopPropagation(); deleteFileConfirm(file.path); },
+          }, icon("trash", 10)),
+        ),
       );
       tree.appendChild(row);
     }
   };
-  renderNode(root, 0);
+
+  renderNode(treeData, 0);
+}
+
+function buildTree(paths) {
+  const root = { children: {}, files: [] };
+  for (const path of paths) {
+    const parts = path.split("/");
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!node.children[parts[i]]) node.children[parts[i]] = { children: {}, files: [], path: parts.slice(0, i + 1).join("/") };
+      node = node.children[parts[i]];
+    }
+    node.files.push({ name: parts[parts.length - 1], path });
+  }
+  return root;
+}
+
+async function reloadFiles() {
+  try { STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path)); } catch {}
+  renderFilesPanel($("sbBody"));
+  renderHeader();
+}
+
+async function createNewFile() {
+  const name = window.prompt("New file path (e.g. index.html):");
+  if (!name) return;
+  const path = name.trim();
+  if (!path) return;
+  const existing = await idb.getFile(STATE.pid, path);
+  if (existing) { toast("File exists", "warning"); return; }
+  await idb.putFile(STATE.pid, path, "");
+  STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path));
+  renderFilesPanel($("sbBody"));
+  await openFile(path);
+}
+
+async function deleteFileConfirm(path) {
+  const ok = await confirmDialog({ title: `Delete ${path.split("/").pop()}?`, message: "This cannot be undone.", confirmLabel: "Delete", danger: true });
+  if (!ok) return;
+  await idb.deleteFile(STATE.pid, path);
+  STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path));
+  if (STATE.activeFile === path) {
+    STATE.activeFile = null;
+    cm.destroy();
+    $("editorContainer").innerHTML = "";
+    $("editorEmpty").style.display = "";
+    renderEditorTabs();
+  }
+  renderFilesPanel($("sbBody"));
+  toast("Deleted", "info");
 }
 
 function openFileContextMenu(e, path) {
   document.querySelectorAll(".ctx-menu").forEach(m => m.remove());
-
   const tasks = [
     { id: "explain", label: "Explain" },
     { id: "debug", label: "Find bugs" },
@@ -1336,7 +1481,6 @@ function openFileContextMenu(e, path) {
     { id: "diagram", label: "Diagram" },
     { id: "simulate", label: "Simulate" },
   ];
-
   const menu = el("div", { class: "ctx-menu", style: {
     position: "fixed", top: e.clientY + "px", left: e.clientX + "px",
     background: "var(--theme-surface-card-solid)",
@@ -1345,7 +1489,6 @@ function openFileContextMenu(e, path) {
     boxShadow: "var(--shadow-menu)", minWidth: "180px",
     fontFamily: "var(--font-sans)",
   }});
-
   for (const t of tasks) {
     menu.appendChild(el("button", {
       type: "button",
@@ -1366,9 +1509,8 @@ function openFileContextMenu(e, path) {
         if (path !== STATE.activeFile) openFile(path);
         openDrawer();
       },
-    }, svg("sparkles", 12), el("span", {}, t.label)));
+    }, icon("sparkles", 12), el("span", {}, t.label)));
   }
-
   document.body.appendChild(menu);
   setTimeout(() => {
     document.addEventListener("click", function close(ev) {
@@ -1377,14 +1519,14 @@ function openFileContextMenu(e, path) {
   }, 0);
 }
 
+// ─── Editor ──────────────────────────────────────────────────────
+
 async function openFile(path) {
   if (!STATE.project) return;
   if (STATE.activeFile === path && STATE.editorView) return;
-
   if (STATE.activeFile && STATE.dirtyFiles.has(STATE.activeFile) && STATE.activeFile !== path) {
     await saveActiveFile({ silent: true });
   }
-
   const file = await idb.getFile(STATE.pid, path);
   if (!file) { toast("File not found", "error"); return; }
   if (!isTextFile(path)) { toast("Binary preview not supported", "info"); return; }
@@ -1393,22 +1535,20 @@ async function openFile(path) {
   STATE.activeFile = path;
   try { localStorage.setItem(STORAGE.lastFile + "." + STATE.pid, path); } catch {}
 
-  const empty = $("editorEmpty");
-  const loading = $("editorLoading");
-  if (empty) empty.style.display = "none";
-  if (loading) loading.hidden = false;
+  $("editorEmpty").style.display = "none";
+  $("editorLoading").hidden = false;
 
   try {
     $("editorContainer").innerHTML = "";
     await cm.mount($("editorContainer"), file.content || "", path);
-    if (loading) loading.hidden = true;
+    $("editorLoading").hidden = true;
     renderEditorTabs();
     updateStatusBar();
+    if (sidebar) renderFilesPanel($("sbBody"));
   } catch (err) {
     console.error("[openFile]", err);
-    if (loading) loading.hidden = true;
-    if (empty) empty.style.display = "";
-    toast("Editor failed to load", "error");
+    $("editorLoading").hidden = true;
+    $("editorEmpty").style.display = "";
   }
 }
 
@@ -1440,7 +1580,7 @@ function renderEditorTabs() {
   for (const path of STATE.openFiles) {
     const active = path === STATE.activeFile;
     const dirty = STATE.dirtyFiles.has(path);
-    tabs.appendChild(el("button", {
+    const tab = el("button", {
       class: `editor-tab ${active ? "active" : ""}`,
       type: "button",
       onclick: () => openFile(path),
@@ -1448,12 +1588,11 @@ function renderEditorTabs() {
       el("span", { class: "editor-tab-name" }, path.split("/").pop()),
       dirty ? el("span", { class: "editor-tab-dot" }) : null,
       el("button", {
-        class: "editor-tab-close",
-        type: "button",
-        "aria-label": "Close",
+        class: "editor-tab-close", type: "button", "aria-label": "Close",
         onclick: (e) => { e.stopPropagation(); closeFile(path); },
-      }, svg("x", 10)),
-    ));
+      }, icon("x", 10)),
+    );
+    tabs.appendChild(tab);
   }
 }
 
@@ -1478,155 +1617,65 @@ async function closeFile(path) {
   updateStatusBar();
 }
 
-// ─── Search section ──────────────────────────────────────────────
+// ─── Docs panel (sidebar) ──────────────────────────────────────
 
-function renderSearchSection(section) {
-  section.innerHTML = "";
-  const wrap = el("div", { class: "section-pad" });
-  const input = el("input", { class: "input", type: "search", placeholder: "Search across all files…" });
-  wrap.appendChild(input);
-  const summary = el("div", { class: "search-summary" });
-  wrap.appendChild(summary);
-  const results = el("div", { class: "search-results" });
-  results.innerHTML = `<div class="empty-state"><div class="empty-state-title">Type to search</div><div class="empty-state-desc">Find text across the project.</div></div>`;
-  wrap.appendChild(results);
-  section.appendChild(wrap);
+function renderDocsPanel(root) {
+  root.innerHTML = "";
+  const docs = STATE.files.filter(f => isDocsFile(f.path));
 
-  input.addEventListener("input", debounce(async (e) => {
-    const q = e.target.value.trim();
-    if (!q) {
-      results.innerHTML = `<div class="empty-state"><div class="empty-state-title">Type to search</div></div>`;
-      summary.textContent = "";
-      return;
-    }
-    const lower = q.toLowerCase();
-    results.innerHTML = "";
-    summary.textContent = "";
-    let total = 0, fileCount = 0;
-    for (const file of STATE.files) {
-      if (!isTextFile(file.path)) continue;
-      const lines = String(file.content || "").split("\n");
-      const hits = [];
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].toLowerCase().includes(lower)) hits.push({ line: i + 1, text: lines[i] });
-      }
-      if (!hits.length) continue;
-      fileCount++;
-      total += hits.length;
+  const section = el("div", { class: "sb-section" },
+    el("span", {}, `Docs (${docs.length})`),
+    el("div", { class: "sb-section-actions" },
+      el("button", { class: "sb-icon-btn", title: "New doc", type: "button", onclick: createNewDoc }, icon("plus", 12)),
+    )
+  );
+  root.appendChild(section);
 
-      const block = el("div", { class: "search-file-block" });
-      block.appendChild(el("div", { class: "search-file-head" },
-        svg(fileIconName(file.path), 11),
-        el("span", { class: "search-file-path" }, file.path),
-        el("span", { class: "search-file-count" }, String(hits.length)),
-      ));
-      for (const h of hits.slice(0, 5)) {
-        block.appendChild(el("div", {
-          class: "search-hit",
-          onclick: async () => {
-            switchRail("files");
-            await openFile(file.path);
-            setTimeout(() => jumpToLine(h.line), 50);
-          },
-        },
-          el("span", { class: "search-line-num" }, String(h.line)),
-          el("span", { class: "search-line-text" }, h.text.slice(0, 120)),
-        ));
-      }
-      results.appendChild(block);
-    }
-    summary.textContent = total ? `${total} matches in ${fileCount} file${fileCount === 1 ? "" : "s"}` : "No matches";
-  }, 200));
+  if (!docs.length) {
+    root.appendChild(el("div", { class: "sb-empty" },
+      el("div", { class: "sb-empty-title" }, "No docs yet"),
+      el("div", { class: "sb-empty-desc" }, "Create a doc or generate from code."),
+      el("button", { class: "sb-btn sb-btn-primary", type: "button", onclick: createNewDoc }, "New doc"),
+    ));
+    return;
+  }
+
+  for (const d of docs) {
+    const active = STATE.docsActivePath === d.path;
+    root.appendChild(el("div", {
+      class: `sb-tree-node ${active ? "active" : ""}`,
+      onclick: () => { loadDoc(d.path); if (STATE.activeTab !== "docs") sidebar.switchTo("docs"); },
+    },
+      el("span", { class: "sb-tree-icon" }, icon(fileIconName(d.path), 12)),
+      el("span", { class: "sb-tree-name" }, d.path),
+    ));
+  }
+
+  root.appendChild(el("button", {
+    class: "sb-btn sb-btn-secondary", type: "button",
+    style: { width: "100%", marginTop: "8px" },
+    onclick: () => { openGeneratePanel(); if (STATE.activeTab !== "docs") sidebar.switchTo("docs"); },
+  }, icon("sparkles", 12), " Generate from code"));
 }
 
-async function jumpToLine(line) {
-  if (!STATE.editorView) return;
-  try {
-    const ln = Math.max(1, Math.min(line, STATE.editorView.state.doc.lines));
-    const lineObj = STATE.editorView.state.doc.line(ln);
-    STATE.editorView.dispatch({ selection: { anchor: lineObj.from }, scrollIntoView: true });
-    STATE.editorView.focus();
-  } catch {}
-}
+// ─── Docs view (main) ──────────────────────────────────────────
 
-// ─── Docs section ────────────────────────────────────────────────
-
-function renderDocsSection(section) {
-  section.innerHTML = "";
-
-  const layout = el("div", { class: "docs-layout" });
-
-  // Sidebar
-  const sidebar = el("aside", { class: "docs-side" });
-  const sideHead = el("div", { class: "docs-side-head" },
-    el("span", { class: "pane-title" }, "Docs"),
-    el("button", { class: "icon-btn", type: "button", title: "New doc", onclick: () => createNewDoc() }, svg("plus", 13)),
-  );
-  sidebar.appendChild(sideHead);
-  const sideList = el("div", { class: "docs-side-list" });
-  sidebar.appendChild(sideList);
-  const sideFooter = el("div", { class: "docs-side-footer" },
-    el("button", {
-      class: "btn btn-secondary btn-block btn-sm", type: "button",
-      onclick: () => openGeneratePanel(section),
-    }, svg("sparkles", 12), " Generate from code"),
-  );
-  sidebar.appendChild(sideFooter);
-  layout.appendChild(sidebar);
-
-  // Main
-  const main = el("div", { class: "docs-main" });
-  const head = el("div", { class: "docs-head" });
-  const active = el("button", { class: "docs-active-file", type: "button" },
-    el("span", { id: "docsActivePath" }, "—"),
-    svg("chevron-down", 10),
-  );
-  head.appendChild(active);
-  const modeSwitch = el("div", { class: "docs-mode-switch" },
-    el("button", { type: "button", "data-mode": "edit", class: "active" }, "Edit"),
-    el("button", { type: "button", "data-mode": "preview" }, "Preview"),
-    el("button", { type: "button", "data-mode": "focus" }, "Focus"),
-  );
-  head.appendChild(modeSwitch);
-  const saveBtn = el("button", {
-    class: "btn btn-primary btn-sm", type: "button", id: "docsSave", disabled: true,
-    onclick: () => saveDoc(),
-  }, svg("check", 11), " Save");
-  head.appendChild(saveBtn);
-  main.appendChild(head);
-
-  const toolbar = el("div", { class: "docs-toolbar", id: "docsToolbar" });
-  main.appendChild(toolbar);
-
-  const panes = el("div", { class: "docs-panes", id: "docsPanes", dataset: { mode: "edit" } });
-  const source = el("textarea", { class: "docs-source", id: "docsSource", spellcheck: "false", placeholder: "Start writing markdown…" });
-  const preview = el("div", { class: "docs-preview ai-markdown", id: "docsPreview" });
-  panes.appendChild(el("div", { class: "docs-pane docs-pane-source" }, source));
-  panes.appendChild(el("div", { class: "docs-pane docs-pane-preview" }, preview));
-  main.appendChild(panes);
-
-  const review = el("div", { class: "docs-review", id: "docsReview", hidden: true });
-  main.appendChild(review);
-
-  layout.appendChild(main);
-  section.appendChild(layout);
-
-  // Wire
-  modeSwitch.querySelectorAll("button").forEach(btn => {
-    btn.addEventListener("click", () => setDocsMode(btn.dataset.mode));
-  });
-
-  source.addEventListener("input", () => {
+function wireDocs() {
+  $("docsSave").addEventListener("click", () => saveDoc());
+  $("docsSource").addEventListener("input", () => {
     STATE.docsDirty = true;
     updateDocsSaveState();
     if (STATE.docsSaveTimer) clearTimeout(STATE.docsSaveTimer);
     STATE.docsSaveTimer = setTimeout(() => saveDoc(), 800);
     scheduleDocsPreview();
   });
-
-  renderDocsToolbar();
-  renderDocsFileList();
-  loadActiveDocIntoPanes();
+  document.querySelectorAll(".docs-mode-switch button").forEach(btn => {
+    btn.addEventListener("click", () => setDocsMode(btn.dataset.mode));
+  });
+  try {
+    const mode = localStorage.getItem(STORAGE.docsMode);
+    if (mode && ["edit","preview","focus"].includes(mode)) STATE.docsMode = mode;
+  } catch {}
 }
 
 const scheduleDocsPreview = debounce(() => {
@@ -1636,6 +1685,23 @@ const scheduleDocsPreview = debounce(() => {
   preview.innerHTML = renderMarkdown(source.value);
   hydrateMarkdown(preview).catch(() => {});
 }, 150);
+
+function renderDocsView() {
+  renderDocsToolbar();
+  setDocsMode(STATE.docsMode);
+  const docs = STATE.files.filter(f => isDocsFile(f.path));
+  if (!docs.length) {
+    $("docsSource").value = "";
+    $("docsPreview").innerHTML = `<div class="sb-empty"><div class="sb-empty-title">No docs yet</div><div class="sb-empty-desc">Click New doc or Generate from code.</div></div>`;
+    $("docsActivePath").textContent = "—";
+    updateDocsSaveState();
+    return;
+  }
+  const active = STATE.docsActivePath && docs.find(d => d.path === STATE.docsActivePath)
+    ? STATE.docsActivePath
+    : docs[0].path;
+  loadDoc(active);
+}
 
 function renderDocsToolbar() {
   const tools = [
@@ -1663,7 +1729,7 @@ function renderDocsToolbar() {
       class: "docs-toolbar-btn", type: "button", "aria-label": t.icon, title: t.icon,
       onmousedown: (e) => e.preventDefault(),
       onclick: () => applyDocFormat(t),
-    }, svg(t.icon, 13)));
+    }, icon(t.icon, 13)));
   }
 }
 
@@ -1708,43 +1774,6 @@ function applyDocFormat(action) {
   STATE.docsSaveTimer = setTimeout(() => saveDoc(), 800);
 }
 
-function renderDocsFileList() {
-  const list = document.querySelector(".docs-side-list");
-  if (!list) return;
-  list.innerHTML = "";
-  const docs = STATE.files.filter(f => isDocsFile(f.path)).sort((a, b) => a.path.localeCompare(b.path));
-  if (!docs.length) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-state-title" style="font-size:11px">No docs yet</div></div>`;
-    return;
-  }
-  for (const d of docs) {
-    const active = STATE.docsActivePath === d.path;
-    list.appendChild(el("button", {
-      class: `docs-file-row ${active ? "active" : ""}`,
-      type: "button",
-      onclick: () => loadDoc(d.path),
-    }, svg(fileIconName(d.path), 12), el("span", {}, d.path)));
-  }
-}
-
-async function loadActiveDocIntoPanes() {
-  const docs = STATE.files.filter(f => isDocsFile(f.path));
-  if (!docs.length) {
-    const src = $("docsSource");
-    const preview = $("docsPreview");
-    const path = $("docsActivePath");
-    if (src) src.value = "";
-    if (preview) preview.innerHTML = `<div class="empty-state"><div class="empty-state-title">No docs yet</div><div class="empty-state-desc">Click "New doc" or "Generate from code".</div></div>`;
-    if (path) path.textContent = "—";
-    updateDocsSaveState();
-    return;
-  }
-  const active = STATE.docsActivePath && docs.find(d => d.path === STATE.docsActivePath)
-    ? STATE.docsActivePath
-    : docs[0].path;
-  await loadDoc(active);
-}
-
 async function loadDoc(path) {
   if (STATE.docsDirty && STATE.docsActivePath && STATE.docsActivePath !== path) await saveDoc();
   if (STATE.docsSaveTimer) { clearTimeout(STATE.docsSaveTimer); STATE.docsSaveTimer = null; }
@@ -1764,8 +1793,8 @@ async function loadDoc(path) {
     preview.innerHTML = renderMarkdown(file.content || "");
     hydrateMarkdown(preview).catch(() => {});
   }
-  renderDocsFileList();
   updateDocsSaveState();
+  if (STATE.activeTab === "docs") renderDocsPanel($("sbBody"));
 }
 
 function updateDocsSaveState() {
@@ -1782,7 +1811,6 @@ async function saveDoc() {
     STATE.docsDirty = false;
     updateDocsSaveState();
     STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path));
-    renderDocsFileList();
   } catch (err) {
     console.error("[docs save]", err);
     toast("Save failed", "error");
@@ -1791,6 +1819,7 @@ async function saveDoc() {
 
 function setDocsMode(mode) {
   STATE.docsMode = mode;
+  try { localStorage.setItem(STORAGE.docsMode, mode); } catch {}
   const panes = $("docsPanes");
   if (panes) panes.dataset.mode = mode;
   document.querySelectorAll(".docs-mode-switch button").forEach(btn => {
@@ -1807,17 +1836,17 @@ async function createNewDoc() {
   if (existing) { toast("Doc exists", "warning"); return; }
   await idb.putFile(STATE.pid, path, `# ${path.split("/").pop().replace(/\.mdx?$/, "")}\n\n`);
   STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path));
-  renderDocsFileList();
+  renderDocsPanel($("sbBody"));
   await loadDoc(path);
+  if (STATE.activeTab !== "docs") sidebar.switchTo("docs");
   toast("Created " + path, "success");
 }
 
-// ─── Generate docs panel (inline review) ─────────────────────────
+// ─── Generate docs ─────────────────────────────────────────────
 
-function openGeneratePanel(section) {
+function openGeneratePanel() {
   const review = $("docsReview");
   if (!review) return;
-
   const panes = $("docsPanes");
   const head = document.querySelector(".docs-head");
   const toolbar = $("docsToolbar");
@@ -1832,27 +1861,27 @@ function openGeneratePanel(section) {
       <h3 style="margin:0 0 6px;font-size:15px;font-weight:800;">Generate documentation</h3>
       <p style="margin:0 0 16px;font-size:12px;color:var(--theme-text-tertiary);">AI reads your code and drafts documentation.</p>
 
-      <div class="sheet-section-title">Scope</div>
-      <label class="sheet-radio" style="margin-bottom:6px;">
+      <div class="ai-sheet-section-title">Scope</div>
+      <label class="ai-sheet-radio" style="margin-bottom:6px;">
         <input type="radio" name="genScope" value="all" checked>
         <span>Entire project (${STATE.files.length} files)</span>
       </label>
-      <label class="sheet-radio" style="margin-bottom:16px;">
+      <label class="ai-sheet-radio" style="margin-bottom:16px;">
         <input type="radio" name="genScope" value="code">
         <span>Code files only</span>
       </label>
 
-      <div class="sheet-section-title">Style</div>
-      <label class="sheet-radio" style="margin-bottom:6px;">
+      <div class="ai-sheet-section-title">Style</div>
+      <label class="ai-sheet-radio" style="margin-bottom:6px;">
         <input type="radio" name="genStyle" value="thorough" checked>
         <span>Thorough</span>
       </label>
-      <label class="sheet-radio" style="margin-bottom:16px;">
+      <label class="ai-sheet-radio" style="margin-bottom:16px;">
         <input type="radio" name="genStyle" value="minimal">
         <span>Minimal</span>
       </label>
 
-      <div class="sheet-actions" style="display:flex;gap:8px;">
+      <div class="ai-sheet-actions" style="display:flex;gap:8px;">
         <button class="btn btn-secondary" type="button" id="genCancel">Cancel</button>
         <button class="btn btn-primary" type="button" id="genRun" style="flex:1;">Generate</button>
       </div>
@@ -1895,28 +1924,20 @@ async function runGenerateInline(closeCb) {
       },
       deps: { idb, apiFetch },
     });
-
     if (!res.ok || !res.data?.success) {
       toast(res.data?.error || "Generation failed", "error");
       closeCb(); return;
     }
-
     const artifacts = (res.data.artifacts || []).filter(a => a.type === "files");
     if (!artifacts.length) { toast("No files returned", "warning"); closeCb(); return; }
-
     const run = await appendAiRun(STATE.pid, {
       task: "docs", pid: STATE.pid, file: null, scope: "project",
-      text: res.data.text,
-      artifacts: res.data.artifacts,
-      usage: res.data.usage,
-      quota: res.data.quota,
-      cached: !!res.data.cached,
+      text: res.data.text, artifacts: res.data.artifacts,
+      usage: res.data.usage, quota: res.data.quota, cached: !!res.data.cached,
     }, { idb });
-
     if (res.data.quota) { writeQuotaCache(res.data.quota); renderQuotaHud(); }
     STATE.aiState = await readAiState(STATE.pid, { idb });
     updateStatusBar();
-
     renderDocsReview(artifacts, run, closeCb);
   } catch (err) {
     console.error("[docs generate]", err);
@@ -1928,8 +1949,8 @@ async function runGenerateInline(closeCb) {
 function renderDocsReview(artifacts, run, closeCb) {
   const review = $("docsReview");
   review.hidden = false;
-
   review.innerHTML = "";
+
   review.appendChild(el("div", { class: "section-pad", style: { padding: "20px" } },
     el("h3", { style: { margin: "0 0 6px", fontSize: "15px", fontWeight: "800" } }, "Generated documentation"),
     el("p", { style: { margin: "0 0 16px", fontSize: "12px", color: "var(--theme-text-tertiary)" } }, "Review and accept what you want to keep."),
@@ -1948,7 +1969,7 @@ function renderDocsReview(artifacts, run, closeCb) {
         el("button", { class: "btn btn-primary btn-sm", type: "button", onclick: async () => {
           await idb.putFile(STATE.pid, f.path, f.content || "");
           STATE.files = (await idb.listFiles(STATE.pid) || []).filter(x => !isSystemFile(x.path));
-          renderDocsFileList();
+          renderDocsPanel($("sbBody"));
           toast(`Saved ${f.path}`, "success");
           closeCb();
           await loadDoc(f.path);
@@ -1972,7 +1993,7 @@ function renderDocsReview(artifacts, run, closeCb) {
   }
   review.appendChild(list);
 
-  const footer = el("div", { class: "docs-review-footer", style: { padding: "16px 20px", display: "flex", gap: "8px", justifyContent: "flex-end" } },
+  review.appendChild(el("div", { class: "docs-review-footer", style: { padding: "16px 20px", display: "flex", gap: "8px", justifyContent: "flex-end" } },
     el("button", { class: "btn btn-secondary", type: "button", onclick: closeCb }, "Close"),
     el("button", { class: "btn btn-primary", type: "button", onclick: async () => {
       let count = 0;
@@ -1983,31 +2004,60 @@ function renderDocsReview(artifacts, run, closeCb) {
         }
       }
       STATE.files = (await idb.listFiles(STATE.pid) || []).filter(x => !isSystemFile(x.path));
-      renderDocsFileList();
+      renderDocsPanel($("sbBody"));
       toast(`Saved ${count} doc${count === 1 ? "" : "s"}`, "success");
       closeCb();
     }}, "Accept all"),
-  );
-  review.appendChild(footer);
+  ));
 }
 
-// ─── History section ─────────────────────────────────────────────
+// ─── History ────────────────────────────────────────────────────
 
-function renderHistorySection(section) {
+function renderHistoryPanel(root) {
+  root.innerHTML = "";
+  const runs = STATE.aiState?.runs || [];
+  const section = el("div", { class: "sb-section" }, el("span", {}, `Runs (${runs.length})`));
+  root.appendChild(section);
+
+  if (!runs.length) {
+    root.appendChild(el("div", { class: "sb-empty" },
+      el("div", { class: "sb-empty-title" }, "No runs yet"),
+      el("div", { class: "sb-empty-desc" }, "Your AI runs will appear here."),
+    ));
+    return;
+  }
+
+  for (const r of runs.slice(0, 30)) {
+    const meta = getTaskMeta(r.task) || { label: r.task };
+    root.appendChild(el("div", {
+      class: `sb-tree-node ${STATE.activeTab === "history" && r.id === STATE.lastRun?.id ? "active" : ""}`,
+      onclick: () => openRunInline(r),
+    },
+      el("span", { class: "sb-tree-icon" }, icon("sparkles", 12)),
+      el("div", { style: { flex: "1", minWidth: "0" } },
+        el("div", { style: { fontSize: "11.5px", fontWeight: "700", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, meta.label),
+        el("div", { style: { fontSize: "10px", color: "var(--theme-text-tertiary)", marginTop: "1px" } }, relativeTime(r.createdAt)),
+      ),
+    ));
+  }
+}
+
+function renderHistoryView() {
+  const section = document.querySelector('.ai-view[data-view="history"]');
+  if (!section) return;
   section.innerHTML = "";
+  const runs = STATE.aiState?.runs || [];
   const wrap = el("div", { class: "section-pad" });
   wrap.appendChild(el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0 0 16px" } }, "AI history"));
 
-  const runs = STATE.aiState?.runs || [];
   if (!runs.length) {
-    wrap.appendChild(el("div", { class: "empty-state" },
-      el("div", { class: "empty-state-title" }, "No runs yet"),
-      el("div", { class: "empty-state-desc" }, "Your AI runs will appear here."),
+    wrap.appendChild(el("div", { class: "sb-empty" },
+      el("div", { class: "sb-empty-title" }, "No runs yet"),
+      el("div", { class: "sb-empty-desc" }, "Your AI runs will appear here."),
     ));
     section.appendChild(wrap);
     return;
   }
-
   for (const r of runs.slice(0, 50)) {
     const meta = getTaskMeta(r.task) || { label: r.task };
     wrap.appendChild(el("div", {
@@ -2026,26 +2076,22 @@ function renderHistorySection(section) {
 }
 
 function openRunInline(run) {
-  const section = document.querySelector(`.ai-section[data-section="${STATE.activeRail}"]`);
+  STATE.lastRun = run;
+  if (STATE.activeTab !== "history") sidebar.switchTo("history");
+  const section = document.querySelector('.ai-view[data-view="history"]');
   if (!section) return;
-
   section.innerHTML = "";
   const wrap = el("div", { class: "section-pad" });
   wrap.appendChild(el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" } },
-    el("button", {
-      class: "btn btn-ghost btn-sm", type: "button",
-      onclick: () => renderHistorySection(section),
-    }, svg("chevron-left", 12), " Back"),
+    el("button", { class: "btn btn-ghost btn-sm", type: "button", onclick: () => renderHistoryView() }, icon("chevron-left", 12), " Back"),
     el("span", { style: { fontSize: "11px", color: "var(--theme-text-tertiary)", fontFamily: "var(--font-mono)" } }, relativeTime(run.createdAt)),
   ));
-
   if (run.text) {
     const md = el("div", { class: "ai-markdown" });
     md.innerHTML = renderMarkdown(run.text);
     wrap.appendChild(md);
     hydrateMarkdown(md).catch(() => {});
   }
-
   if (Array.isArray(run.artifacts) && run.artifacts.length) {
     const arts = el("div", { class: "ai-artifacts" });
     wrap.appendChild(arts);
@@ -2053,35 +2099,62 @@ function openRunInline(run) {
       task: run.task,
       onAccept: (artifact, idx) => handleAccept(artifact, idx, run),
       onReject: (artifact, idx) => handleReject(artifact, idx, run),
-      onOpenFile: (path, line) => { switchRail("files"); openFile(path).then(() => { if (line) jumpToLine(line); }); },
+      onOpenFile: (path, line) => { switchToFiles(); openFile(path); },
     });
   }
-
   section.appendChild(wrap);
 }
 
-// ─── Commits section ────────────────────────────────────────────
+// ─── Commits ────────────────────────────────────────────────────
 
-async function renderCommitsSection(section) {
+async function renderCommitsPanel(root) {
+  root.innerHTML = "";
+  let versions = [];
+  try { versions = await idb.listVersions(STATE.pid); } catch {}
+  const section = el("div", { class: "sb-section" }, el("span", {}, `Commits (${versions.length})`));
+  root.appendChild(section);
+
+  if (!versions.length) {
+    root.appendChild(el("div", { class: "sb-empty" },
+      el("div", { class: "sb-empty-title" }, "No commits yet"),
+      el("div", { class: "sb-empty-desc" }, "Commits from the dashboard appear here."),
+    ));
+    return;
+  }
+  for (const v of versions.slice(0, 30)) {
+    root.appendChild(el("div", {
+      class: "sb-tree-node",
+      onclick: () => { if (STATE.activeTab !== "commits") sidebar.switchTo("commits"); },
+    },
+      el("span", { class: "sb-tree-icon" }, icon("git-commit", 12)),
+      el("div", { style: { flex: "1", minWidth: "0" } },
+        el("div", { style: { fontSize: "11.5px", fontWeight: "700", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, v.message || "Untitled"),
+        el("div", { style: { fontSize: "10px", color: "var(--theme-text-tertiary)", marginTop: "1px" } }, relativeTime(v.createdAt)),
+      ),
+    ));
+  }
+}
+
+async function renderCommitsView() {
+  const section = document.querySelector('.ai-view[data-view="commits"]');
+  if (!section) return;
   section.innerHTML = "";
   const wrap = el("div", { class: "section-pad" });
-
   const header = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" } },
     el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0" } }, "Commits"),
     el("button", {
       class: "btn btn-primary btn-sm", type: "button",
       onclick: () => draftCommitMessage(),
-    }, svg("sparkles", 12), " Draft message"),
+    }, icon("sparkles", 12), " Draft message"),
   );
   wrap.appendChild(header);
 
   let versions = [];
   try { versions = await idb.listVersions(STATE.pid); } catch {}
-
   if (!versions.length) {
-    wrap.appendChild(el("div", { class: "empty-state" },
-      el("div", { class: "empty-state-title" }, "No commits yet"),
-      el("div", { class: "empty-state-desc" }, "Commits made from the project dashboard will appear here."),
+    wrap.appendChild(el("div", { class: "sb-empty" },
+      el("div", { class: "sb-empty-title" }, "No commits yet"),
+      el("div", { class: "sb-empty-desc" }, "Commits from the dashboard appear here."),
     ));
   } else {
     for (const v of versions) {
@@ -2090,8 +2163,7 @@ async function renderCommitsSection(section) {
           el("span", { class: "commit-row-msg" }, v.message || "Untitled"),
           el("span", { class: "commit-row-time" }, relativeTime(v.createdAt)),
         ),
-        el("div", { class: "commit-row-meta" },
-          `${Object.keys(v.files || {}).length} files`),
+        el("div", { class: "commit-row-meta" }, `${Object.keys(v.files || {}).length} files`),
       ));
     }
   }
@@ -2101,112 +2173,133 @@ async function renderCommitsSection(section) {
 async function draftCommitMessage() {
   toast("Drafting commit message…", "info");
   try {
-    const res = await runTask({
-      task: "commitMsg", pid: STATE.pid,
-      payload: { diff: "(see project files)" },
-      deps: { idb, apiFetch },
-    });
+    const res = await runTask({ task: "commitMsg", pid: STATE.pid, payload: { diff: "" }, deps: { idb, apiFetch } });
     if (!res.ok || !res.data?.success) { toast(res.data?.error || "Failed", "error"); return; }
-    toast("Message drafted — opening editor to prefill", "success");
     sessionStorage.setItem("folio.ai.prefillCommit", JSON.stringify({ message: res.data.text || "", changed: [] }));
+    toast("Opening editor…", "success");
     location.href = "/?pid=" + encodeURIComponent(STATE.pid);
   } catch (err) {
     toast(err.message || "Failed", "error");
   }
 }
 
-// ─── Notes section ──────────────────────────────────────────────
+// ─── Notes ──────────────────────────────────────────────────────
 
-async function renderNotesSection(section) {
-  section.innerHTML = "";
+async function renderNotesPanel(root) {
   await loadNotes();
+  root.innerHTML = "";
+  const notes = (STATE.notes.notes || []).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const section = el("div", { class: "sb-section" }, el("span", {}, `Notes (${notes.length})`));
+  root.appendChild(section);
+
+  if (!notes.length) {
+    root.appendChild(el("div", { class: "sb-empty" },
+      el("div", { class: "sb-empty-title" }, "No notes yet"),
+    ));
+    return;
+  }
+  for (const n of notes) {
+    root.appendChild(el("div", { class: "sb-tree-node" },
+      el("span", { class: "sb-tree-icon" }, icon("bookmark", 12)),
+      el("div", { style: { flex: "1", minWidth: "0" } },
+        el("div", { style: { fontSize: "11.5px", fontWeight: "700", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, n.title || "Untitled"),
+        el("div", { style: { fontSize: "10px", color: "var(--theme-text-tertiary)", marginTop: "1px" } }, relativeTime(n.updatedAt || n.createdAt || 0)),
+      ),
+    ));
+  }
+}
+
+function renderNotesView() {
+  const section = document.querySelector('.ai-view[data-view="notes"]');
+  if (!section) return;
+  section.innerHTML = "";
   const wrap = el("div", { class: "section-pad" });
   wrap.appendChild(el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0 0 16px" } }, "Notes"));
-
   const notes = (STATE.notes.notes || []).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   if (!notes.length) {
-    wrap.appendChild(el("div", { class: "empty-state" },
-      el("div", { class: "empty-state-title" }, "No notes yet"),
-      el("div", { class: "empty-state-desc" }, "Notes you save from AI runs will appear here."),
+    wrap.appendChild(el("div", { class: "sb-empty" },
+      el("div", { class: "sb-empty-title" }, "No notes yet"),
     ));
   } else {
     for (const n of notes) {
       wrap.appendChild(el("div", { class: "note-row" },
         el("div", { class: "note-row-title" }, n.title || "Untitled"),
-        el("div", { class: "note-row-meta" }, `${relativeTime(n.updatedAt || n.createdAt || 0)}${n.sourceTask ? " · " + n.sourceTask : ""}`),
+        el("div", { class: "note-row-meta" }, relativeTime(n.updatedAt || n.createdAt || 0)),
       ));
     }
   }
   section.appendChild(wrap);
 }
 
-// ─── Info section ───────────────────────────────────────────────
+// ─── Info ───────────────────────────────────────────────────────
 
-async function renderInfoSection(section) {
-  section.innerHTML = "";
-  const wrap = el("div", { class: "section-pad" });
-
-  const totalBytes = STATE.files.reduce((s, f) => s + estimateSize(f.content || ""), 0);
+function renderInfoPanel(root) {
+  root.innerHTML = "";
+  const files = STATE.files;
+  const totalBytes = files.reduce((s, f) => s + estimateSize(f.content || ""), 0);
   const limit = STATE.project.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
   const pct = Math.min(100, (totalBytes / limit) * 100);
 
-  let versions = [];
-  try { versions = await idb.listVersions(STATE.pid); } catch {}
+  const stats = el("div", { class: "sb-stats" },
+    el("div", { class: "sb-stat" },
+      el("div", { class: "sb-stat-label" }, "Files"),
+      el("div", { class: "sb-stat-value" }, String(files.length)),
+    ),
+    el("div", { class: "sb-stat" },
+      el("div", { class: "sb-stat-label" }, "Storage"),
+      el("div", { class: "sb-stat-value" }, formatBytes(totalBytes)),
+    ),
+  );
+  root.appendChild(stats);
 
+  const section = el("div", { class: "sb-section" }, el("span", {}, "Project"));
+  root.appendChild(section);
+
+  root.appendChild(el("div", { class: "sb-row" },
+    el("span", { class: "sb-row-icon" }, icon("info", 12)),
+    el("span", { class: "sb-row-name" }, "Name"),
+    el("span", { class: "sb-row-value" }, STATE.project.name || "Untitled"),
+  ));
+
+  const bar = el("div", { class: "sb-storage-mini", style: { marginTop: "8px" } });
+  bar.appendChild(el("div", { class: `sb-storage-mini-fill ${pct > 90 ? "danger" : pct > 70 ? "warn" : ""}`, style: { width: pct + "%" } }));
+  root.appendChild(bar);
+  root.appendChild(el("div", { class: "sb-storage-label", style: { marginTop: "4px" } }, `${formatBytes(totalBytes)} / ${formatBytes(limit)}`));
+}
+
+function renderInfoView() {
+  const section = document.querySelector('.ai-view[data-view="info"]');
+  if (!section) return;
+  section.innerHTML = "";
+  const wrap = el("div", { class: "section-pad" });
   wrap.appendChild(el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0 0 16px" } }, "Project"));
 
   const card = el("div", { class: "info-card" });
   card.appendChild(el("div", { class: "info-card-title" }, "Overview"));
   card.appendChild(el("div", { class: "info-card-row" }, el("span", {}, "Name"), el("span", {}, STATE.project.name || "Untitled")));
   card.appendChild(el("div", { class: "info-card-row" }, el("span", {}, "Files"), el("span", {}, String(STATE.files.length))));
-  card.appendChild(el("div", { class: "info-card-row" }, el("span", {}, "Commits"), el("span", {}, String(versions.length))));
   wrap.appendChild(card);
 
-  const storageCard = el("div", { class: "info-card" });
-  storageCard.appendChild(el("div", { class: "info-card-title" }, "Storage"));
-  storageCard.appendChild(el("div", { class: "info-card-row" },
-    el("span", {}, "Used"), el("span", {}, `${formatBytes(totalBytes)} / ${formatBytes(limit)}`)));
-  const bar = el("div", { class: "storage-bar" });
-  bar.appendChild(el("div", { class: "storage-bar-fill", style: { width: pct + "%" } }));
-  storageCard.appendChild(bar);
-  wrap.appendChild(storageCard);
-
-  // AI actions
   const aiCard = el("div", { class: "info-card" });
   aiCard.appendChild(el("div", { class: "info-card-title" }, "AI insights"));
   aiCard.appendChild(el("button", {
     class: "btn btn-secondary btn-block btn-sm", type: "button",
     style: { marginTop: "6px", marginBottom: "6px" },
     onclick: () => runProjectTask("readProject", aiResult),
-  }, svg("sparkles", 12), " Summarize project"));
+  }, icon("sparkles", 12), " Summarize project"));
   aiCard.appendChild(el("button", {
     class: "btn btn-secondary btn-block btn-sm", type: "button",
     style: { marginBottom: "6px" },
     onclick: () => runProjectTask("designExplain", aiResult),
-  }, svg("layers", 12), " Explain architecture"));
+  }, icon("layers", 12), " Explain architecture"));
   aiCard.appendChild(el("button", {
     class: "btn btn-secondary btn-block btn-sm", type: "button",
     onclick: () => runProjectTask("struggle", aiResult),
-  }, svg("alert", 12), " Find weak spots"));
+  }, icon("alert", 12), " Find weak spots"));
   wrap.appendChild(aiCard);
 
   const aiResult = el("div", { style: { marginTop: "16px" } });
   wrap.appendChild(aiResult);
-
-  if (STATE.project.deployment?.url) {
-    const dep = el("div", { class: "info-card" });
-    dep.appendChild(el("div", { class: "info-card-title" }, "Deployment"));
-    dep.appendChild(el("div", { class: "info-card-row" },
-      el("span", {}, "Status"), el("span", { style: { color: "var(--theme-success)" } }, "Live")));
-    dep.appendChild(el("a", {
-      class: "btn btn-secondary btn-sm btn-block",
-      href: STATE.project.deployment.url,
-      target: "_blank",
-      rel: "noopener",
-      style: { marginTop: "8px" },
-    }, svg("external", 11), " Open live site"));
-    wrap.appendChild(dep);
-  }
 
   section.appendChild(wrap);
 
@@ -2219,7 +2312,7 @@ async function renderInfoSection(section) {
       }
       const res = await runTask({ task, pid: STATE.pid, payload, deps: { idb, apiFetch } });
       if (!res.ok || !res.data?.success) {
-        resultEl.innerHTML = `<div class="ai-result-error">${svgString("alert", 14)} ${escapeHtml(res.data?.error || "Failed")}</div>`;
+        resultEl.innerHTML = `<div class="ai-result-error">${iconHTML("alert", 14)} ${escapeHtml(res.data?.error || "Failed")}</div>`;
         return;
       }
       resultEl.innerHTML = "";
@@ -2243,9 +2336,13 @@ async function renderInfoSection(section) {
       STATE.aiState = await readAiState(STATE.pid, { idb });
       updateStatusBar();
     } catch (err) {
-      resultEl.innerHTML = `<div class="ai-result-error">${svgString("alert", 14)} ${escapeHtml(err.message || "Failed")}</div>`;
+      resultEl.innerHTML = `<div class="ai-result-error">${iconHTML("alert", 14)} ${escapeHtml(err.message || "Failed")}</div>`;
     }
   }
+}
+
+function switchToFiles() {
+  if (STATE.activeTab !== "files") sidebar.switchTo("files");
 }
 
 // ─── AI drawer ──────────────────────────────────────────────────
@@ -2280,7 +2377,6 @@ function openDrawer() {
   $("aiDrawer").classList.add("open");
   $("drawerBackdrop").classList.add("visible");
 
-  // Default scope
   const sel = STATE.editorView ? cm.getSelection() : "";
   if (sel) STATE.scope = "selection";
   else if (STATE.activeFile) STATE.scope = "file";
@@ -2320,7 +2416,6 @@ function renderTaskPicker() {
   const select = $("taskSelect");
   select.innerHTML = "";
 
-  // Group by TASK_META group
   const groups = {};
   for (const id of allowed) {
     const meta = TASK_META[id];
@@ -2342,7 +2437,6 @@ function renderTaskPicker() {
     select.appendChild(og);
   }
 
-  // If current task isn't allowed, pick first
   if (!allowed.includes(STATE.activeTask) && allowed.length) {
     STATE.activeTask = allowed[0];
   }
@@ -2365,22 +2459,22 @@ function updateInfoBar() {
 
   if (exhausted) {
     bar.classList.add("error");
-    bar.innerHTML = `${svgString("clock", 12)} <span>Quota reached · resets ${formatRelativeReset(quota.resetAt)}</span>`;
+    bar.innerHTML = `${iconHTML("clock", 12)} <span>Quota reached · resets ${formatRelativeReset(quota.resetAt)}</span>`;
     return;
   }
   if (!STATE.online) {
     bar.classList.add("muted");
-    bar.innerHTML = `${svgString("wifi-off", 12)} <span>Offline</span>`;
+    bar.innerHTML = `${iconHTML("wifi-off", 12)} <span>Offline</span>`;
     return;
   }
   if (STATE.isGuest && !isGuestTask(STATE.activeTask)) {
     bar.classList.add("guest");
-    bar.innerHTML = `${svgString("lock", 12)} <span><a href="/register?next=${encodeURIComponent(location.pathname + location.search)}">Sign in</a> to unlock</span>`;
+    bar.innerHTML = `${iconHTML("lock", 12)} <span><a href="/register?next=${encodeURIComponent(location.pathname + location.search)}">Sign in</a> to unlock</span>`;
     return;
   }
   if (meta.writes) {
     bar.classList.add("warn");
-    bar.innerHTML = `${svgString("alert", 12)} <span>This will create a diff. Nothing saves until you accept.</span>`;
+    bar.innerHTML = `${iconHTML("alert", 12)} <span>This will create a diff. Nothing saves until you accept.</span>`;
     return;
   }
   if (STATE.scope === "selection" && !cm.getSelection()) {
@@ -2401,11 +2495,11 @@ function updateRunButtonState() {
   if (STATE.running) {
     btn.disabled = true;
     btn.classList.add("running");
-    btn.innerHTML = `${svgString("refresh", 14)}<span>Running…</span>`;
+    btn.innerHTML = `${iconHTML("refresh", 14)}<span>Running…</span>`;
     return;
   }
   btn.classList.remove("running");
-  btn.innerHTML = `${svgString("play", 14)}<span>Run</span>`;
+  btn.innerHTML = `${iconHTML("play", 14)}<span>Run</span>`;
 
   const meta = getTaskMeta(STATE.activeTask);
   const quota = readQuotaCache();
@@ -2441,13 +2535,11 @@ async function runCurrentTask() {
       signal: STATE.abort.signal,
       deps: { idb, apiFetch },
     });
-
     if (!res.ok || !res.data?.success) {
       if (res.data?.quotaExceeded) showResultError(res.data.error || "Quota exceeded");
       else showResultError(res.data?.error || `AI error (${res.status})`);
       return;
     }
-
     const run = await appendAiRun(STATE.pid, {
       task: STATE.activeTask, pid: STATE.pid,
       file: STATE.scope === "project" ? null : STATE.activeFile,
@@ -2469,7 +2561,7 @@ async function runCurrentTask() {
     }
 
     renderDrawerResult(res.data, run);
-    if (STATE.activeRail === "history") switchRail("history");
+    if (STATE.activeTab === "history") renderHistoryPanel($("sbBody"));
   } catch (err) {
     if (err?.name === "AbortError") showResultError("Cancelled");
     else showResultError(err?.message || "AI call failed");
@@ -2485,36 +2577,31 @@ function buildPayload() {
   const meta = getTaskMeta(STATE.activeTask);
   if (!meta) return null;
   const payload = {};
-
   const selection = STATE.editorView ? cm.getSelection() : "";
   const file = STATE.files.find(f => f.path === STATE.activeFile);
 
-  const needsProject = STATE.scope === "project";
-  const needsFile = STATE.scope === "file" || STATE.scope === "selection";
-
-  if (needsProject) {
+  if (STATE.scope === "project") {
     payload.name = STATE.project.name || "Untitled";
     payload.description = STATE.project.description || "";
     payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
-  } else if (needsFile) {
+  } else {
     if (!file) { toast("Open a file first", "warning"); return null; }
     payload.file = STATE.activeFile;
     payload.content = file.content || "";
     if (STATE.scope === "selection" && selection) payload.selection = selection;
   }
 
-  // Task-specific overrides
   if (STATE.activeTask === "findFn") {
     const name = window.prompt("Function name?");
     if (!name) return null;
     payload.fnName = name;
-    if (needsProject) payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
+    if (STATE.scope === "project") payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
   }
   if (STATE.activeTask === "translate") {
     const to = window.prompt("Target language?", "python");
     if (!to) return null;
     payload.to = to.toLowerCase();
-    if (needsProject) {
+    if (STATE.scope === "project") {
       payload.code = STATE.files.map(f => f.content).join("\n\n");
       payload.from = "mixed";
     } else {
@@ -2522,10 +2609,7 @@ function buildPayload() {
       payload.from = (STATE.activeFile.split(".").pop() || "unknown");
     }
   }
-  if (STATE.activeTask === "diagram") {
-    payload.kind = payload.kind || "flow";
-  }
-
+  if (STATE.activeTask === "diagram") payload.kind = payload.kind || "flow";
   return payload;
 }
 
@@ -2540,7 +2624,7 @@ function showResultError(message) {
   $("resultEmpty").hidden = true;
   $("resultLoading").hidden = true;
   $("resultContent").hidden = false;
-  $("resultContent").innerHTML = `<div class="ai-result-error">${svgString("alert", 14)} <span>${escapeHtml(message)}</span></div>`;
+  $("resultContent").innerHTML = `<div class="ai-result-error">${iconHTML("alert", 14)} <span>${escapeHtml(message)}</span></div>`;
 }
 
 function renderDrawerResult(data, run) {
@@ -2563,7 +2647,7 @@ function renderDrawerResult(data, run) {
       task: STATE.activeTask,
       onAccept: (artifact, idx) => handleAccept(artifact, idx, run),
       onReject: (artifact, idx) => handleReject(artifact, idx, run),
-      onOpenFile: (path, line) => { switchRail("files"); openFile(path).then(() => { if (line) jumpToLine(line); }); },
+      onOpenFile: (path, line) => { switchToFiles(); openFile(path); },
     });
   }
 
@@ -2589,7 +2673,7 @@ async function handleAccept(artifact, index, run) {
 
   try { STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path)); } catch {}
   if (artifact.file && STATE.activeFile === artifact.file) await openFile(artifact.file);
-  if (STATE.activeRail === "files") renderFilesTree();
+  if (STATE.activeTab === "files") renderFilesPanel($("sbBody"));
 
   toast(`Applied ${artifact.file || (artifact.files?.length + " files")}`, "success");
 }
@@ -2632,7 +2716,7 @@ function openPendingSheet() {
   const body = $("pendingBody");
   body.innerHTML = "";
   if (!pending.length) {
-    body.innerHTML = `<div class="empty-state"><div class="empty-state-title">No staged proposals</div></div>`;
+    body.innerHTML = `<div class="sb-empty"><div class="sb-empty-title">No staged proposals</div></div>`;
   } else {
     for (const item of pending) {
       const meta = getTaskMeta(item.task) || { label: item.task };
