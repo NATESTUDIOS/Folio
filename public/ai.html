@@ -66,7 +66,7 @@
     </button>
 
     <div class="ai-header-actions">
-      <button class="ai-header-btn ai-header-btn-primary" id="btnAskAI" type="button" title="Ask AI (⌘K)">
+      <button class="ai-header-btn ai-header-btn-primary" id="btnAskAI" type="button" title="Focus AI bar (⌘K)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
         <span>Ask AI</span>
       </button>
@@ -101,6 +101,29 @@
 
     <!-- MAIN AREA -->
     <main class="ai-main" id="aiMain">
+
+      <!-- AI COMMAND BAR -->
+      <div class="ai-commandbar" id="aiCommandBar">
+        <div class="ai-commandbar-row">
+          <span class="ai-commandbar-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
+          </span>
+          <input
+            type="text"
+            class="ai-commandbar-input"
+            id="aiCommandInput"
+            placeholder="Ask, or type @ to add a file…"
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <button class="ai-commandbar-submit" id="aiCommandSubmit" aria-label="Run" title="Run (⌘↵)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </button>
+        </div>
+        <div class="ai-commandbar-chips" id="aiCommandChips"></div>
+        <div class="ai-commandbar-suggest" id="aiCommandSuggest"></div>
+      </div>
+
       <!-- Files -->
       <section class="ai-view" data-view="files" hidden>
         <div class="files-layout">
@@ -181,14 +204,8 @@
 
       <div class="ai-drawer-body">
         <div class="ai-drawer-controls">
-          <div class="scope-picker" role="radiogroup" aria-label="Scope">
-            <button class="scope-btn" data-scope="project" type="button" aria-pressed="false">Project</button>
-            <button class="scope-btn" data-scope="file" type="button" aria-pressed="false">File</button>
-            <button class="scope-btn" data-scope="selection" type="button" aria-pressed="false">Selection</button>
-          </div>
-          <div class="task-picker">
-            <select class="select" id="taskSelect" aria-label="Task"></select>
-          </div>
+          <div class="ai-chips" id="drawerChips"></div>
+          <div class="ai-detected-task" id="drawerDetectedTask" hidden></div>
           <div class="ai-info-bar" id="infoBar" hidden></div>
           <button class="ai-run-btn" id="btnRun" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -202,7 +219,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
             </div>
             <div class="ai-result-empty-title">Ask anything</div>
-            <div class="ai-result-empty-hint">Pick a scope, a task, and run.</div>
+            <div class="ai-result-empty-hint">Type a prompt in the AI bar.</div>
           </div>
           <div class="ai-result-loading" id="resultLoading" hidden>
             <div class="spinner"></div>
@@ -237,7 +254,7 @@
   </footer>
 </div>
 
-<!-- ═══════════════ CONFIRM DIALOG ═══════════════ -->
+<!-- CONFIRM DIALOG -->
 <div class="ai-sheet" id="confirmDialog" role="alertdialog" aria-modal="true">
   <div class="ai-sheet-handle"></div>
   <div class="ai-sheet-body" style="padding:20px 16px;text-align:center;">
@@ -253,11 +270,11 @@
   </div>
 </div>
 
-<!-- ═══════════════ PENDING SHEET ═══════════════ -->
+<!-- PENDING SHEET -->
 <div class="ai-sheet" id="pendingSheet" role="dialog" aria-modal="true">
   <div class="ai-sheet-handle"></div>
   <div class="ai-sheet-header">
-    <h2 class="ai-sheet-title" id="pendingTitle">Staged proposals</h2>
+    <h2 class="ai-sheet-title">Staged proposals</h2>
     <button class="ai-sheet-close" id="pendingClose" aria-label="Close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
@@ -265,11 +282,23 @@
   <div class="ai-sheet-body" id="pendingBody"></div>
 </div>
 
-<!-- ═══════════════ OVERLAYS ═══════════════ -->
+<!-- OVERLAYS -->
 <div class="ai-backdrop" id="backdrop"></div>
 <div class="ai-toast-container" id="toastContainer" aria-live="polite"></div>
 
-<!-- ═══════════════ EMPTY STATE ═══════════════ -->
+<!-- @-PICKER POPOVER -->
+<div class="ai-at-popover" id="atPopover" hidden>
+  <div class="ai-at-popover-head">
+    <span>Add context</span>
+    <button type="button" class="ai-at-popover-close" id="atPopoverClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <input type="text" class="ai-at-popover-input" id="atPopoverFilter" placeholder="Filter files…" autocomplete="off" spellcheck="false">
+  <div class="ai-at-popover-list" id="atPopoverList"></div>
+</div>
+
+<!-- EMPTY STATE -->
 <div class="empty-project-state hidden" id="emptyState" role="dialog" aria-modal="true">
   <div class="empty-project-card">
     <div class="empty-project-icon">
@@ -284,7 +313,7 @@
   </div>
 </div>
 
-<!-- ═══════════════ SVG SPRITE ═══════════════ -->
+<!-- SVG SPRITE -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <symbol id="i-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
@@ -327,13 +356,13 @@
     <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
     <symbol id="i-droplet" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></symbol>
     <symbol id="i-git-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
   </defs>
 </svg>
 
 <script type="module">
 // ═══════════════════════════════════════════════════════════════════
-//  ai.html — AI Project Hub
-//  Layout: header / [sidebar + main + drawer] / status
+//  ai.html — AI Project Hub (command bar model)
 // ═══════════════════════════════════════════════════════════════════
 
 import {
@@ -381,8 +410,6 @@ const STORAGE = {
   lastFile: "folio.ai.lastFile",
   lastTab: "folio.ai.lastTab",
   sidebarOpen: "folio.ai.sidebarOpen",
-  task: "folio.ai.lastTask",
-  docsMode: "folio.docs.mode",
 };
 
 const AVATAR_GRADIENTS = [
@@ -396,17 +423,24 @@ const AVATAR_GRADIENTS = [
 
 const DOCS_PATH_RE = /(^docs\/|^README\.md$|\.mdx?$|\.markdown$)/i;
 
-const ASK_TASKS = {
-  project: ["designExplain", "brainstorm", "scaffold", "struggle", "findFn"],
-  file: [
-    "explain", "diagram", "simulate", "debug", "codefix", "optimize", "audit",
-    "suggest", "designExplain", "translate", "brainstorm", "scaffold", "findFn", "struggle",
-  ],
-  selection: [
-    "explain", "diagram", "simulate", "debug", "codefix", "optimize", "audit",
-    "suggest", "translate", "findFn",
-  ],
-};
+// Intent classifier — keyword → task mapping
+const INTENT_RULES = [
+  { task: "audit",      match: /\b(security|accessibility|a11y|vulnerab|audit)\b/i },
+  { task: "simulate",   match: /\b(trace|simulate|step through|walk through|execution)\b/i },
+  { task: "diagram",    match: /\b(diagram|draw|visualize|flowchart|visualize|visuali[sz]e)\b/i },
+  { task: "optimize",   match: /\b(faster|performance|optimi[sz]e|speed|efficien)\b/i },
+  { task: "codefix",    match: /\b(fix|correct|repair|patch)\b/i },
+  { task: "debug",      match: /\b(bug|broken|not working|error|throws|crash|fail)\b/i },
+  { task: "docstrings", match: /\b(docstring|jsdoc|add comments|document function)\b/i },
+  { task: "translate",  match: /\b(translate|convert to|port to)\b/i },
+  { task: "brainstorm", match: /\b(brainstorm|ideas|concepts|directions|suggest features)\b/i },
+  { task: "scaffold",   match: /\b(scaffold|starter|boilerplate|template|bootstrap)\b/i },
+  { task: "findFn",     match: /\b(find|locate|where is the function|search for the function)\b/i },
+  { task: "struggle",   match: /\b(weak|struggle|problem area|smell|refactor)\b/i },
+  { task: "docs",       match: /\b(documentation|write docs|generate docs)\b/i },
+  { task: "suggest",    match: /\b(suggest|next line|complete this|autocomplete)\b/i },
+  { task: "explain",    match: /\b(explain|what does|how does|walk me through|tell me about)\b/i },
+];
 
 const STATE = {
   pid: null,
@@ -425,8 +459,6 @@ const STATE = {
   activeTab: "files",
 
   aiOpen: false,
-  scope: "file",
-  activeTask: "explain",
   running: false,
   abort: null,
 
@@ -444,9 +476,16 @@ const STATE = {
   docsDirty: false,
   docsMode: "edit",
   docsSaveTimer: null,
+
+  chips: [],          // { type: 'file'|'project'|'folder'|'selection', value, label }
+  detectedTask: null,
+  prompt: "",
+  atOpen: false,
+  atFilter: "",
+  autoRun: false,
 };
 
-// ─── DOM utilities ──────────────────────────────────────────────
+// ─── DOM / utils ────────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
 
@@ -564,12 +603,32 @@ function formatBytes(n) {
   return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
 }
 
-function countWords(text) {
-  const m = String(text || "").match(/\S+/g);
-  return m ? m.length : 0;
+// ─── Intent classifier ──────────────────────────────────────────
+
+function classifyIntent(prompt, chips) {
+  const text = String(prompt || "").trim();
+
+  // Empty prompt with chips → decide based on what's chipped
+  if (!text) {
+    const hasProject = chips.some(c => c.type === "project");
+    const hasSelection = chips.some(c => c.type === "selection");
+    if (hasSelection) return "explain";
+    if (hasProject) return "explain";
+    return "explain";
+  }
+
+  for (const rule of INTENT_RULES) {
+    if (rule.match.test(text)) return rule.task;
+  }
+  return "explain";
 }
 
-// ─── IndexedDB ───────────────────────────────────────────────────
+function taskLabel(taskId) {
+  const meta = getTaskMeta(taskId);
+  return meta?.label || taskId;
+}
+
+// ─── IndexedDB ──────────────────────────────────────────────────
 
 let dbConn = null;
 
@@ -638,7 +697,7 @@ const idb = {
   },
 };
 
-// ─── Session / API ───────────────────────────────────────────────
+// ─── Session / API ──────────────────────────────────────────────
 
 function readSession() {
   try { STATE.session = localStorage.getItem(STORAGE.session); } catch {}
@@ -702,7 +761,7 @@ function anySheetOpen() {
   return !!document.querySelector(".ai-sheet.open");
 }
 
-// ─── CodeMirror ──────────────────────────────────────────────────
+// ─── CodeMirror ─────────────────────────────────────────────────
 
 const cm = {
   async loadModules() {
@@ -815,7 +874,7 @@ function updateStatusBar() {
   $("statusSync").textContent = sync;
 }
 
-// ─── create-project deps ─────────────────────────────────────────
+// ─── create-project deps ────────────────────────────────────────
 
 function buildCreateProjectDeps() {
   return {
@@ -959,7 +1018,7 @@ class Sidebar {
 
 let sidebar = null;
 
-// ─── Boot ────────────────────────────────────────────────────────
+// ─── Boot ───────────────────────────────────────────────────────
 
 async function boot() {
   readSession();
@@ -989,9 +1048,9 @@ async function boot() {
   mountRailToggle();
   wireDrawer();
   wireDocs();
+  wireCommandBar();
   mountSidebar();
 
-  // Restore last tab
   let lastTab = "files";
   try {
     const saved = localStorage.getItem(STORAGE.lastTab);
@@ -1003,7 +1062,6 @@ async function boot() {
   showMainView(lastTab);
   sidebar.switchTo(lastTab);
 
-  // Open last file
   let toOpen = null;
   try {
     const lastFile = localStorage.getItem(STORAGE.lastFile + "." + STATE.pid);
@@ -1042,7 +1100,7 @@ function wireEmptyState() {
   $("emptyNewProject").addEventListener("click", () => createNewProject());
 }
 
-// ─── Project picker ──────────────────────────────────────────────
+// ─── Project picker ─────────────────────────────────────────────
 
 async function openProjectPicker() {
   let projects = [];
@@ -1104,12 +1162,13 @@ async function openProjectPicker() {
   sheet.addEventListener("click", (e) => { if (e.target === sheet) close(); });
 }
 
-// ─── Static listeners ────────────────────────────────────────────
+// ─── Static listeners ───────────────────────────────────────────
 
 function wireStaticListeners() {
   $("confirmOk").addEventListener("click", () => resolveConfirm(true));
   $("confirmCancel").addEventListener("click", () => resolveConfirm(false));
   $("pendingClose").addEventListener("click", closePendingSheet);
+  $("atPopoverClose").addEventListener("click", closeAtPicker);
 
   $("backdrop").addEventListener("click", () => {
     if ($("confirmDialog").classList.contains("open")) { resolveConfirm(false); return; }
@@ -1119,12 +1178,19 @@ function wireStaticListeners() {
 
   document.addEventListener("keydown", (e) => {
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key === "Enter" && STATE.aiOpen && !$("btnRun").disabled) { e.preventDefault(); runCurrentTask(); return; }
+    if (mod && e.key === "Enter") {
+      const activeId = document.activeElement?.id;
+      if (activeId === "aiCommandInput" && !STATE.running) {
+        e.preventDefault(); submitCommand(); return;
+      }
+      if (STATE.aiOpen && !$("btnRun").disabled) { e.preventDefault(); runCurrentTask(); return; }
+    }
     if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveActiveFile(); return; }
-    if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); toggleDrawer(); return; }
+    if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); focusCommand(); return; }
     if (e.key === "Escape") {
       if ($("confirmDialog").classList.contains("open")) { resolveConfirm(false); return; }
       if ($("pendingSheet").classList.contains("open")) { closePendingSheet(); return; }
+      if (STATE.atOpen) { closeAtPicker(); return; }
       if (STATE.aiOpen) { closeDrawer(); return; }
     }
   });
@@ -1146,7 +1212,7 @@ function wireStaticListeners() {
   });
 }
 
-// ─── Data loaders ────────────────────────────────────────────────
+// ─── Data loaders ───────────────────────────────────────────────
 
 async function loadProject() {
   let project = null;
@@ -1186,7 +1252,7 @@ async function loadNotes() {
   } catch { STATE.notes = { version: 1, notes: [] }; }
 }
 
-// ─── Header ──────────────────────────────────────────────────────
+// ─── Header ─────────────────────────────────────────────────────
 
 let headerMounted = false;
 
@@ -1195,7 +1261,7 @@ function mountHeader() {
   headerMounted = true;
 
   $("headerIdentity").addEventListener("click", openProjectPicker);
-  $("btnAskAI").addEventListener("click", toggleDrawer);
+  $("btnAskAI").addEventListener("click", focusCommand);
   $("btnMore").addEventListener("click", openMoreMenu);
 
   renderHeader();
@@ -1267,7 +1333,7 @@ function openMoreMenu() {
   sheet.addEventListener("click", (e) => { if (e.target === sheet) close(); });
 }
 
-// ─── Main views ──────────────────────────────────────────────────
+// ─── Main views ─────────────────────────────────────────────────
 
 function showMainView(view) {
   document.querySelectorAll(".ai-view").forEach(sec => {
@@ -1280,6 +1346,7 @@ function showMainView(view) {
   else if (view === "notes") renderNotesView();
   else if (view === "info") renderInfoView();
 }
+
 // ─── Sidebar mount ──────────────────────────────────────────────
 
 function mountSidebar() {
@@ -1299,18 +1366,16 @@ function mountSidebar() {
     ctx: { STATE, idb, toast },
   });
 
-  // Desktop: sidebar open by default (docked). Mobile: closed.
   if (window.innerWidth >= 1024) {
     sidebar.open("files");
   }
 }
 
-// ─── Files panel (sidebar) ──────────────────────────────────────
+// ─── Files panel ────────────────────────────────────────────────
 
 function renderFilesPanel(root) {
   root.innerHTML = "";
 
-  // Pinned project
   const totalBytes = STATE.files.reduce((s, f) => s + estimateSize(f.content || ""), 0);
   const limit = STATE.project.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
   const pct = Math.min(100, (totalBytes / limit) * 100);
@@ -1337,7 +1402,6 @@ function renderFilesPanel(root) {
   pinned.appendChild(pinnedInfo);
   root.appendChild(pinned);
 
-  // Section header
   const section = el("div", { class: "sb-section" },
     el("span", {}, `Files (${STATE.files.length})`),
     el("div", { class: "sb-section-actions" },
@@ -1347,18 +1411,16 @@ function renderFilesPanel(root) {
   );
   root.appendChild(section);
 
-  // Filter input
   const filter = el("input", {
-  class: "sb-filter", type: "search", placeholder: "Filter files…",
-  value: STATE.fileFilter,
-  oninput: debounce((e) => {
-    STATE.fileFilter = e.target.value.toLowerCase();
-    renderFilesPanel(root);
-  }, 120),
-});
+    class: "sb-filter", type: "search", placeholder: "Filter files…",
+    value: STATE.fileFilter,
+    oninput: debounce((e) => {
+      STATE.fileFilter = e.target.value.toLowerCase();
+      renderFilesPanel(root);
+    }, 120),
+  });
   root.appendChild(filter);
 
-  // Tree
   const tree = el("div");
   root.appendChild(tree);
 
@@ -1407,6 +1469,14 @@ function renderFilesPanel(root) {
         el("span", { class: "sb-tree-icon" }, icon(fileIconName(file.path), 12)),
         el("span", { class: "sb-tree-name", title: file.path }, file.name),
         el("div", { class: "sb-tree-actions" },
+          el("button", {
+            class: "sb-icon-btn", type: "button", title: "Ask AI",
+            onclick: (e) => {
+              e.stopPropagation();
+              addChip({ type: "file", value: file.path, label: file.name });
+              focusCommand();
+            },
+          }, icon("sparkles", 10)),
           el("button", {
             class: "sb-icon-btn danger", type: "button", title: "Delete",
             onclick: (e) => { e.stopPropagation(); deleteFileConfirm(file.path); },
@@ -1471,6 +1541,7 @@ async function deleteFileConfirm(path) {
 
 function openFileContextMenu(e, path) {
   document.querySelectorAll(".ctx-menu").forEach(m => m.remove());
+
   const tasks = [
     { id: "explain", label: "Explain" },
     { id: "debug", label: "Find bugs" },
@@ -1481,6 +1552,7 @@ function openFileContextMenu(e, path) {
     { id: "diagram", label: "Diagram" },
     { id: "simulate", label: "Simulate" },
   ];
+
   const menu = el("div", { class: "ctx-menu", style: {
     position: "fixed", top: e.clientY + "px", left: e.clientX + "px",
     background: "var(--theme-surface-card-solid)",
@@ -1489,6 +1561,7 @@ function openFileContextMenu(e, path) {
     boxShadow: "var(--shadow-menu)", minWidth: "180px",
     fontFamily: "var(--font-sans)",
   }});
+
   for (const t of tasks) {
     menu.appendChild(el("button", {
       type: "button",
@@ -1504,13 +1577,17 @@ function openFileContextMenu(e, path) {
       onmouseout: (ev) => { ev.currentTarget.style.background = "transparent"; },
       onclick: () => {
         menu.remove();
-        STATE.activeTask = t.id;
-        STATE.scope = "file";
+        // Direct run — no drawer form
+        STATE.chips = [{ type: "file", value: path, label: path.split("/").pop() }];
+        STATE.prompt = `${{ explain: "Explain this file", debug: "Find bugs in this file", codefix: "Fix this file", optimize: "Optimize this file", audit: "Audit this file", docstrings: "Add docstrings to this file", diagram: "Draw a diagram of this file", simulate: "Simulate this file" }[t.id]}`;
+        STATE.detectedTask = t.id;
         if (path !== STATE.activeFile) openFile(path);
         openDrawer();
+        autoRunNow();
       },
     }, icon("sparkles", 12), el("span", {}, t.label)));
   }
+
   document.body.appendChild(menu);
   setTimeout(() => {
     document.addEventListener("click", function close(ev) {
@@ -1519,7 +1596,7 @@ function openFileContextMenu(e, path) {
   }, 0);
 }
 
-// ─── Editor ──────────────────────────────────────────────────────
+// ─── Editor ─────────────────────────────────────────────────────
 
 async function openFile(path) {
   if (!STATE.project) return;
@@ -1534,6 +1611,14 @@ async function openFile(path) {
   if (!STATE.openFiles.includes(path)) STATE.openFiles.push(path);
   STATE.activeFile = path;
   try { localStorage.setItem(STORAGE.lastFile + "." + STATE.pid, path); } catch {}
+
+  // Auto-chip the active file if it's not already chipped
+  if (!STATE.chips.some(c => c.type === "file" && c.value === path)) {
+    // Only auto-chip if no explicit chips and nothing else open
+    if (STATE.chips.length === 0) {
+      addChip({ type: "file", value: path, label: path.split("/").pop() }, { silent: true });
+    }
+  }
 
   $("editorEmpty").style.display = "none";
   $("editorLoading").hidden = false;
@@ -1617,7 +1702,7 @@ async function closeFile(path) {
   updateStatusBar();
 }
 
-// ─── Docs panel (sidebar) ──────────────────────────────────────
+// ─── Docs panel ─────────────────────────────────────────────────
 
 function renderDocsPanel(root) {
   root.innerHTML = "";
@@ -1654,11 +1739,18 @@ function renderDocsPanel(root) {
   root.appendChild(el("button", {
     class: "sb-btn sb-btn-secondary", type: "button",
     style: { width: "100%", marginTop: "8px" },
-    onclick: () => { openGeneratePanel(); if (STATE.activeTab !== "docs") sidebar.switchTo("docs"); },
+    onclick: () => {
+      STATE.prompt = "Generate documentation for this project";
+      STATE.chips = [{ type: "project", value: "*", label: "project" }];
+      STATE.detectedTask = "docs";
+      if (STATE.activeTab !== "docs") sidebar.switchTo("docs");
+      openDrawer();
+      autoRunNow();
+    },
   }, icon("sparkles", 12), " Generate from code"));
 }
 
-// ─── Docs view (main) ──────────────────────────────────────────
+// ─── Docs view ──────────────────────────────────────────────────
 
 function wireDocs() {
   $("docsSave").addEventListener("click", () => saveDoc());
@@ -1673,7 +1765,7 @@ function wireDocs() {
     btn.addEventListener("click", () => setDocsMode(btn.dataset.mode));
   });
   try {
-    const mode = localStorage.getItem(STORAGE.docsMode);
+    const mode = localStorage.getItem("folio.docs.mode");
     if (mode && ["edit","preview","focus"].includes(mode)) STATE.docsMode = mode;
   } catch {}
 }
@@ -1794,7 +1886,6 @@ async function loadDoc(path) {
     hydrateMarkdown(preview).catch(() => {});
   }
   updateDocsSaveState();
-  if (STATE.activeTab === "docs") renderDocsPanel($("sbBody"));
 }
 
 function updateDocsSaveState() {
@@ -1819,7 +1910,7 @@ async function saveDoc() {
 
 function setDocsMode(mode) {
   STATE.docsMode = mode;
-  try { localStorage.setItem(STORAGE.docsMode, mode); } catch {}
+  try { localStorage.setItem("folio.docs.mode", mode); } catch {}
   const panes = $("docsPanes");
   if (panes) panes.dataset.mode = mode;
   document.querySelectorAll(".docs-mode-switch button").forEach(btn => {
@@ -1842,175 +1933,6 @@ async function createNewDoc() {
   toast("Created " + path, "success");
 }
 
-// ─── Generate docs ─────────────────────────────────────────────
-
-function openGeneratePanel() {
-  const review = $("docsReview");
-  if (!review) return;
-  const panes = $("docsPanes");
-  const head = document.querySelector(".docs-head");
-  const toolbar = $("docsToolbar");
-
-  review.hidden = false;
-  if (panes) panes.hidden = true;
-  if (head) head.hidden = true;
-  if (toolbar) toolbar.hidden = true;
-
-  review.innerHTML = `
-    <div class="section-pad" style="padding:24px;">
-      <h3 style="margin:0 0 6px;font-size:15px;font-weight:800;">Generate documentation</h3>
-      <p style="margin:0 0 16px;font-size:12px;color:var(--theme-text-tertiary);">AI reads your code and drafts documentation.</p>
-
-      <div class="ai-sheet-section-title">Scope</div>
-      <label class="ai-sheet-radio" style="margin-bottom:6px;">
-        <input type="radio" name="genScope" value="all" checked>
-        <span>Entire project (${STATE.files.length} files)</span>
-      </label>
-      <label class="ai-sheet-radio" style="margin-bottom:16px;">
-        <input type="radio" name="genScope" value="code">
-        <span>Code files only</span>
-      </label>
-
-      <div class="ai-sheet-section-title">Style</div>
-      <label class="ai-sheet-radio" style="margin-bottom:6px;">
-        <input type="radio" name="genStyle" value="thorough" checked>
-        <span>Thorough</span>
-      </label>
-      <label class="ai-sheet-radio" style="margin-bottom:16px;">
-        <input type="radio" name="genStyle" value="minimal">
-        <span>Minimal</span>
-      </label>
-
-      <div class="ai-sheet-actions" style="display:flex;gap:8px;">
-        <button class="btn btn-secondary" type="button" id="genCancel">Cancel</button>
-        <button class="btn btn-primary" type="button" id="genRun" style="flex:1;">Generate</button>
-      </div>
-    </div>
-  `;
-
-  const close = () => {
-    review.hidden = true;
-    if (panes) panes.hidden = false;
-    if (head) head.hidden = false;
-    if (toolbar) toolbar.hidden = false;
-  };
-
-  $("genCancel").addEventListener("click", close);
-  $("genRun").addEventListener("click", () => runGenerateInline(close));
-}
-
-async function runGenerateInline(closeCb) {
-  const scope = document.querySelector('input[name="genScope"]:checked')?.value || "all";
-  const style = document.querySelector('input[name="genStyle"]:checked')?.value || "thorough";
-
-  const filesToSend = {};
-  for (const f of STATE.files) {
-    if (scope === "code" && !/\.(html?|css|js|mjs|jsx|tsx?|py|json)$/i.test(f.path)) continue;
-    filesToSend[f.path] = f.content || "";
-  }
-  if (!Object.keys(filesToSend).length) { toast("No files to analyze", "warning"); return; }
-
-  const review = $("docsReview");
-  review.innerHTML = `<div class="docs-review-loading"><div class="spinner"></div><div>Generating documentation…</div></div>`;
-
-  try {
-    const res = await runTask({
-      task: "docs", pid: STATE.pid,
-      payload: {
-        name: STATE.project.name || "Untitled",
-        description: STATE.project.description || "",
-        files: filesToSend,
-        _style: style,
-      },
-      deps: { idb, apiFetch },
-    });
-    if (!res.ok || !res.data?.success) {
-      toast(res.data?.error || "Generation failed", "error");
-      closeCb(); return;
-    }
-    const artifacts = (res.data.artifacts || []).filter(a => a.type === "files");
-    if (!artifacts.length) { toast("No files returned", "warning"); closeCb(); return; }
-    const run = await appendAiRun(STATE.pid, {
-      task: "docs", pid: STATE.pid, file: null, scope: "project",
-      text: res.data.text, artifacts: res.data.artifacts,
-      usage: res.data.usage, quota: res.data.quota, cached: !!res.data.cached,
-    }, { idb });
-    if (res.data.quota) { writeQuotaCache(res.data.quota); renderQuotaHud(); }
-    STATE.aiState = await readAiState(STATE.pid, { idb });
-    updateStatusBar();
-    renderDocsReview(artifacts, run, closeCb);
-  } catch (err) {
-    console.error("[docs generate]", err);
-    toast(err.message || "Generation failed", "error");
-    closeCb();
-  }
-}
-
-function renderDocsReview(artifacts, run, closeCb) {
-  const review = $("docsReview");
-  review.hidden = false;
-  review.innerHTML = "";
-
-  review.appendChild(el("div", { class: "section-pad", style: { padding: "20px" } },
-    el("h3", { style: { margin: "0 0 6px", fontSize: "15px", fontWeight: "800" } }, "Generated documentation"),
-    el("p", { style: { margin: "0 0 16px", fontSize: "12px", color: "var(--theme-text-tertiary)" } }, "Review and accept what you want to keep."),
-  ));
-
-  const list = el("div", { class: "docs-review-cards", style: { padding: "0 20px 20px" } });
-  const allFiles = artifacts.flatMap(a => a.files || []);
-  for (const f of allFiles) {
-    list.appendChild(el("div", { class: "docs-review-card" },
-      el("div", { class: "docs-review-card-head" },
-        el("code", { class: "docs-review-card-path" }, f.path),
-        el("span", { class: "docs-review-card-size" }, formatBytes(estimateSize(f.content || ""))),
-      ),
-      el("pre", { class: "docs-review-card-preview" }, (f.content || "").slice(0, 240) + ((f.content || "").length > 240 ? "\n…" : "")),
-      el("div", { class: "docs-review-card-actions" },
-        el("button", { class: "btn btn-primary btn-sm", type: "button", onclick: async () => {
-          await idb.putFile(STATE.pid, f.path, f.content || "");
-          STATE.files = (await idb.listFiles(STATE.pid) || []).filter(x => !isSystemFile(x.path));
-          renderDocsPanel($("sbBody"));
-          toast(`Saved ${f.path}`, "success");
-          closeCb();
-          await loadDoc(f.path);
-        }}, "Accept"),
-        el("button", { class: "btn btn-secondary btn-sm", type: "button", onclick: () => {
-          closeCb();
-          const src = $("docsSource");
-          const pathEl = $("docsActivePath");
-          STATE.docsActivePath = f.path;
-          STATE.docsDirty = true;
-          if (pathEl) pathEl.textContent = f.path;
-          if (src) src.value = f.content || "";
-          updateDocsSaveState();
-          setDocsMode("edit");
-        }}, "Edit"),
-        el("button", { class: "btn btn-ghost btn-sm", type: "button", onclick: (e) => {
-          e.currentTarget.closest(".docs-review-card").remove();
-        }}, "Reject"),
-      ),
-    ));
-  }
-  review.appendChild(list);
-
-  review.appendChild(el("div", { class: "docs-review-footer", style: { padding: "16px 20px", display: "flex", gap: "8px", justifyContent: "flex-end" } },
-    el("button", { class: "btn btn-secondary", type: "button", onclick: closeCb }, "Close"),
-    el("button", { class: "btn btn-primary", type: "button", onclick: async () => {
-      let count = 0;
-      for (const a of artifacts) {
-        for (const f of a.files || []) {
-          await idb.putFile(STATE.pid, f.path, f.content || "");
-          count++;
-        }
-      }
-      STATE.files = (await idb.listFiles(STATE.pid) || []).filter(x => !isSystemFile(x.path));
-      renderDocsPanel($("sbBody"));
-      toast(`Saved ${count} doc${count === 1 ? "" : "s"}`, "success");
-      closeCb();
-    }}, "Accept all"),
-  ));
-}
-
 // ─── History ────────────────────────────────────────────────────
 
 function renderHistoryPanel(root) {
@@ -2030,7 +1952,7 @@ function renderHistoryPanel(root) {
   for (const r of runs.slice(0, 30)) {
     const meta = getTaskMeta(r.task) || { label: r.task };
     root.appendChild(el("div", {
-      class: `sb-tree-node ${STATE.activeTab === "history" && r.id === STATE.lastRun?.id ? "active" : ""}`,
+      class: "sb-tree-node",
       onclick: () => openRunInline(r),
     },
       el("span", { class: "sb-tree-icon" }, icon("sparkles", 12)),
@@ -2076,7 +1998,6 @@ function renderHistoryView() {
 }
 
 function openRunInline(run) {
-  STATE.lastRun = run;
   if (STATE.activeTab !== "history") sidebar.switchTo("history");
   const section = document.querySelector('.ai-view[data-view="history"]');
   if (!section) return;
@@ -2144,7 +2065,13 @@ async function renderCommitsView() {
     el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0" } }, "Commits"),
     el("button", {
       class: "btn btn-primary btn-sm", type: "button",
-      onclick: () => draftCommitMessage(),
+      onclick: () => {
+        STATE.prompt = "Write a commit message for the current changes";
+        STATE.chips = [{ type: "project", value: "*", label: "project" }];
+        STATE.detectedTask = "commitMsg";
+        openDrawer();
+        autoRunNow();
+      },
     }, icon("sparkles", 12), " Draft message"),
   );
   wrap.appendChild(header);
@@ -2168,19 +2095,6 @@ async function renderCommitsView() {
     }
   }
   section.appendChild(wrap);
-}
-
-async function draftCommitMessage() {
-  toast("Drafting commit message…", "info");
-  try {
-    const res = await runTask({ task: "commitMsg", pid: STATE.pid, payload: { diff: "" }, deps: { idb, apiFetch } });
-    if (!res.ok || !res.data?.success) { toast(res.data?.error || "Failed", "error"); return; }
-    sessionStorage.setItem("folio.ai.prefillCommit", JSON.stringify({ message: res.data.text || "", changed: [] }));
-    toast("Opening editor…", "success");
-    location.href = "/?pid=" + encodeURIComponent(STATE.pid);
-  } catch (err) {
-    toast(err.message || "Failed", "error");
-  }
 }
 
 // ─── Notes ──────────────────────────────────────────────────────
@@ -2282,67 +2196,269 @@ function renderInfoView() {
 
   const aiCard = el("div", { class: "info-card" });
   aiCard.appendChild(el("div", { class: "info-card-title" }, "AI insights"));
+  const aiResult = el("div", { style: { marginTop: "12px" } });
+
   aiCard.appendChild(el("button", {
     class: "btn btn-secondary btn-block btn-sm", type: "button",
-    style: { marginTop: "6px", marginBottom: "6px" },
-    onclick: () => runProjectTask("readProject", aiResult),
+    style: { marginBottom: "6px" },
+    onclick: () => {
+      STATE.prompt = "Summarize this project";
+      STATE.chips = [{ type: "project", value: "*", label: "project" }];
+      STATE.detectedTask = "readProject";
+      openDrawer();
+      autoRunNow();
+    },
   }, icon("sparkles", 12), " Summarize project"));
   aiCard.appendChild(el("button", {
     class: "btn btn-secondary btn-block btn-sm", type: "button",
     style: { marginBottom: "6px" },
-    onclick: () => runProjectTask("designExplain", aiResult),
+    onclick: () => {
+      STATE.prompt = "Explain the architecture of this project";
+      STATE.chips = [{ type: "project", value: "*", label: "project" }];
+      STATE.detectedTask = "designExplain";
+      openDrawer();
+      autoRunNow();
+    },
   }, icon("layers", 12), " Explain architecture"));
   aiCard.appendChild(el("button", {
     class: "btn btn-secondary btn-block btn-sm", type: "button",
-    onclick: () => runProjectTask("struggle", aiResult),
+    onclick: () => {
+      STATE.prompt = "Find the weak spots in this code";
+      STATE.chips = [{ type: "project", value: "*", label: "project" }];
+      STATE.detectedTask = "struggle";
+      openDrawer();
+      autoRunNow();
+    },
   }, icon("alert", 12), " Find weak spots"));
   wrap.appendChild(aiCard);
-
-  const aiResult = el("div", { style: { marginTop: "16px" } });
   wrap.appendChild(aiResult);
 
   section.appendChild(wrap);
-
-  async function runProjectTask(task, resultEl) {
-    resultEl.innerHTML = `<div class="docs-review-loading"><div class="spinner"></div><div>Running…</div></div>`;
-    try {
-      const payload = { name: STATE.project.name, description: STATE.project.description || "" };
-      if (task !== "readProject") {
-        payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
-      }
-      const res = await runTask({ task, pid: STATE.pid, payload, deps: { idb, apiFetch } });
-      if (!res.ok || !res.data?.success) {
-        resultEl.innerHTML = `<div class="ai-result-error">${iconHTML("alert", 14)} ${escapeHtml(res.data?.error || "Failed")}</div>`;
-        return;
-      }
-      resultEl.innerHTML = "";
-      if (res.data.text) {
-        const md = el("div", { class: "ai-markdown" });
-        md.innerHTML = renderMarkdown(res.data.text);
-        resultEl.appendChild(md);
-        hydrateMarkdown(md).catch(() => {});
-      }
-      if (res.data.artifacts?.length) {
-        const arts = el("div", { class: "ai-artifacts" });
-        resultEl.appendChild(arts);
-        renderArtifacts(arts, res.data.artifacts, { task });
-      }
-      if (res.data.quota) writeQuotaCache(res.data.quota);
-      await appendAiRun(STATE.pid, {
-        task, pid: STATE.pid, file: null, scope: "project",
-        text: res.data.text, artifacts: res.data.artifacts,
-        usage: res.data.usage, quota: res.data.quota, cached: !!res.data.cached,
-      }, { idb });
-      STATE.aiState = await readAiState(STATE.pid, { idb });
-      updateStatusBar();
-    } catch (err) {
-      resultEl.innerHTML = `<div class="ai-result-error">${iconHTML("alert", 14)} ${escapeHtml(err.message || "Failed")}</div>`;
-    }
-  }
 }
 
 function switchToFiles() {
   if (STATE.activeTab !== "files") sidebar.switchTo("files");
+}
+
+// ─── Command bar ────────────────────────────────────────────────
+
+function wireCommandBar() {
+  const input = $("aiCommandInput");
+  const submit = $("aiCommandSubmit");
+
+  input.addEventListener("input", () => {
+    STATE.prompt = input.value;
+    updateCommandChips();
+    updateDetectedTask();
+    renderSuggestions();
+    if (input.value.includes("@")) openAtPicker();
+    else closeAtPicker();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submitCommand();
+    }
+  });
+
+  input.addEventListener("focus", () => {
+    renderSuggestions();
+  });
+
+  submit.addEventListener("click", submitCommand);
+
+  $("atPopoverFilter").addEventListener("input", () => {
+    STATE.atFilter = $("atPopoverFilter").value.toLowerCase();
+    renderAtList();
+  });
+
+  updateCommandChips();
+  updateDetectedTask();
+  renderSuggestions();
+}
+
+function focusCommand() {
+  $("aiCommandInput").focus();
+  $("aiCommandInput").select();
+}
+
+function submitCommand() {
+  if (STATE.running) return;
+  const input = $("aiCommandInput");
+  STATE.prompt = input.value.trim();
+  if (!STATE.prompt && STATE.chips.length === 0) {
+    toast("Type a prompt first", "warning");
+    return;
+  }
+  STATE.detectedTask = classifyIntent(STATE.prompt, STATE.chips);
+  openDrawer();
+  runCurrentTask();
+}
+
+function addChip(chip, opts = {}) {
+  const key = `${chip.type}:${chip.value || ""}`;
+  if (STATE.chips.some(c => `${c.type}:${c.value || ""}` === key)) return;
+  STATE.chips.push(chip);
+  if (!opts.silent) {
+    updateCommandChips();
+    updateDetectedTask();
+  }
+}
+
+function removeChip(chip) {
+  const key = `${chip.type}:${chip.value || ""}`;
+  STATE.chips = STATE.chips.filter(c => `${c.type}:${c.value || ""}` !== key);
+  updateCommandChips();
+  updateDetectedTask();
+}
+
+function updateCommandChips() {
+  const wrap = $("aiCommandChips");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (STATE.chips.length === 0) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  for (const chip of STATE.chips) {
+    wrap.appendChild(el("span", { class: "ai-chip", style: { display: "inline-flex" } },
+      el("span", { class: "ai-chip-icon" }, icon(chip.type === "project" ? "folder" : chip.type === "selection" ? "hash" : "file", 10)),
+      el("span", { class: "ai-chip-label" }, chip.label || chip.value || chip.type),
+      el("button", {
+        class: "ai-chip-remove", type: "button", "aria-label": "Remove",
+        onclick: (e) => { e.stopPropagation(); removeChip(chip); },
+      }, icon("x", 9)),
+    ));
+  }
+  wrap.appendChild(el("button", {
+    class: "ai-chip-add", type: "button", title: "Add context",
+    onclick: () => openAtPicker(),
+  }, icon("plus", 10), " Add"));
+}
+
+function updateDetectedTask() {
+  const labelEl = $("drawerDetectedTask");
+  if (!labelEl) return;
+  if (!STATE.prompt && STATE.chips.length === 0) {
+    labelEl.hidden = true;
+    return;
+  }
+  const task = classifyIntent(STATE.prompt, STATE.chips);
+  STATE.detectedTask = task;
+  labelEl.hidden = false;
+  labelEl.innerHTML = `${iconHTML("sparkles", 11)} <span>${escapeHtml(taskLabel(task))}</span>`;
+}
+
+const SUGGESTIONS = {
+  files: [
+    { label: "Explain this file", prompt: "Explain this file", task: "explain" },
+    { label: "Find bugs", prompt: "Find bugs in this file", task: "debug" },
+    { label: "Optimize", prompt: "Optimize this file", task: "optimize" },
+  ],
+  docs: [
+    { label: "Generate docs", prompt: "Generate documentation for this project", task: "docs" },
+    { label: "Improve this section", prompt: "Improve this section", task: "docs" },
+  ],
+  history: [],
+  commits: [
+    { label: "Draft commit message", prompt: "Write a commit message for the current changes", task: "commitMsg" },
+  ],
+  notes: [],
+  info: [
+    { label: "Summarize project", prompt: "Summarize this project", task: "readProject" },
+    { label: "Explain architecture", prompt: "Explain the architecture of this project", task: "designExplain" },
+  ],
+};
+
+function renderSuggestions() {
+  const wrap = $("aiCommandSuggest");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const focused = document.activeElement?.id === "aiCommandInput";
+  const hasValue = $("aiCommandInput").value.trim();
+  if (!focused || hasValue) {
+    wrap.hidden = true;
+    return;
+  }
+  const list = SUGGESTIONS[STATE.activeTab] || [];
+  if (!list.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  for (const s of list) {
+    wrap.appendChild(el("button", {
+      class: "ai-suggest-chip", type: "button",
+      onclick: () => {
+        $("aiCommandInput").value = s.prompt;
+        STATE.prompt = s.prompt;
+        STATE.detectedTask = s.task;
+        submitCommand();
+      },
+    }, icon("sparkles", 10), el("span", {}, s.label)));
+  }
+}
+
+// ─── @-picker ───────────────────────────────────────────────────
+
+function openAtPicker() {
+  const pop = $("atPopover");
+  if (!pop) return;
+  STATE.atOpen = true;
+  pop.hidden = false;
+  $("atPopoverFilter").value = "";
+  STATE.atFilter = "";
+  renderAtList();
+  setTimeout(() => $("atPopoverFilter").focus(), 30);
+}
+
+function closeAtPicker() {
+  const pop = $("atPopover");
+  if (!pop) return;
+  STATE.atOpen = false;
+  pop.hidden = true;
+}
+
+function renderAtList() {
+  const list = $("atPopoverList");
+  if (!list) return;
+  list.innerHTML = "";
+  const filter = STATE.atFilter;
+
+  // Whole project option
+  const projMatch = !filter || "project".includes(filter) || "whole".includes(filter);
+  if (projMatch) {
+    list.appendChild(el("button", {
+      class: "ai-at-item ai-at-item-project", type: "button",
+      onclick: () => { addChip({ type: "project", value: "*", label: "project" }); closeAtPicker(); focusCommand(); },
+    }, icon("folder", 12), el("span", {}, "Project (whole)"), el("span", { class: "ai-at-item-sub" }, "All files")));
+  }
+
+  // Files
+  const files = STATE.files.filter(f => !filter || f.path.toLowerCase().includes(filter));
+  for (const f of files.slice(0, 40)) {
+    list.appendChild(el("button", {
+      class: "ai-at-item", type: "button",
+      onclick: () => { addChip({ type: "file", value: f.path, label: f.path }); closeAtPicker(); focusCommand(); },
+    }, icon(fileIconName(f.path), 12), el("span", { class: "ai-at-item-path" }, f.path)));
+  }
+
+  // Selection option (if any)
+  if (STATE.editorView) {
+    const sel = cm.getSelection();
+    if (sel) {
+      const selMatch = !filter || "selection".includes(filter);
+      if (selMatch) {
+        list.appendChild(el("button", {
+          class: "ai-at-item ai-at-item-selection", type: "button",
+          onclick: () => { addChip({ type: "selection", value: "*", label: "selection" }); closeAtPicker(); focusCommand(); },
+        }, icon("hash", 12), el("span", {}, "Current selection"), el("span", { class: "ai-at-item-sub" }, `${sel.split("\n").length} lines`)));
+      }
+    }
+  }
+
+  if (!list.children.length) {
+    list.appendChild(el("div", { class: "ai-at-empty" }, "No matches"));
+  }
 }
 
 // ─── AI drawer ──────────────────────────────────────────────────
@@ -2350,40 +2466,15 @@ function switchToFiles() {
 function wireDrawer() {
   $("drawerClose").addEventListener("click", closeDrawer);
   $("drawerBackdrop").addEventListener("click", closeDrawer);
-
-  document.querySelectorAll(".scope-btn").forEach(btn => {
-    btn.addEventListener("click", () => setScope(btn.dataset.scope));
-  });
-
-  $("taskSelect").addEventListener("change", () => {
-    STATE.activeTask = $("taskSelect").value;
-    try { localStorage.setItem(STORAGE.task, STATE.activeTask); } catch {}
-    updateInfoBar();
-    updateRunButtonState();
-  });
-
   $("btnRun").addEventListener("click", runCurrentTask);
-
-  try {
-    const saved = localStorage.getItem(STORAGE.task);
-    if (saved && TASK_META[saved]) STATE.activeTask = saved;
-  } catch {}
 }
-
-function toggleDrawer() { STATE.aiOpen ? closeDrawer() : openDrawer(); }
 
 function openDrawer() {
   STATE.aiOpen = true;
   $("aiDrawer").classList.add("open");
   $("drawerBackdrop").classList.add("visible");
-
-  const sel = STATE.editorView ? cm.getSelection() : "";
-  if (sel) STATE.scope = "selection";
-  else if (STATE.activeFile) STATE.scope = "file";
-  else STATE.scope = "project";
-
-  renderScope();
-  renderTaskPicker();
+  renderDrawerChips();
+  updateDetectedTask();
   updateInfoBar();
   updateRunButtonState();
   renderQuotaHud();
@@ -2395,59 +2486,30 @@ function closeDrawer() {
   $("drawerBackdrop").classList.remove("visible");
 }
 
-function setScope(scope) {
-  STATE.scope = scope;
-  renderScope();
-  renderTaskPicker();
-  updateInfoBar();
-  updateRunButtonState();
-}
-
-function renderScope() {
-  document.querySelectorAll(".scope-btn").forEach(btn => {
-    const active = btn.dataset.scope === STATE.scope;
-    btn.classList.toggle("active", active);
-    btn.setAttribute("aria-pressed", active ? "true" : "false");
-  });
-}
-
-function renderTaskPicker() {
-  const allowed = ASK_TASKS[STATE.scope] || [];
-  const select = $("taskSelect");
-  select.innerHTML = "";
-
-  const groups = {};
-  for (const id of allowed) {
-    const meta = TASK_META[id];
-    if (!meta) continue;
-    if (!groups[meta.group]) groups[meta.group] = [];
-    groups[meta.group].push({ id, meta });
+function renderDrawerChips() {
+  const wrap = $("drawerChips");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (STATE.chips.length === 0) {
+    wrap.hidden = true;
+    return;
   }
-
-  for (const [groupName, items] of Object.entries(groups)) {
-    const og = document.createElement("optgroup");
-    og.label = groupName;
-    for (const { id, meta } of items) {
-      const opt = document.createElement("option");
-      opt.value = id;
-      const cost = meta.weight > 1 ? ` · ${meta.weight} credits` : "";
-      opt.textContent = meta.label + cost;
-      og.appendChild(opt);
-    }
-    select.appendChild(og);
+  wrap.hidden = false;
+  for (const chip of STATE.chips) {
+    wrap.appendChild(el("span", { class: "ai-chip" },
+      el("span", { class: "ai-chip-icon" }, icon(chip.type === "project" ? "folder" : chip.type === "selection" ? "hash" : "file", 10)),
+      el("span", { class: "ai-chip-label" }, chip.label || chip.value || chip.type),
+      el("button", {
+        class: "ai-chip-remove", type: "button", "aria-label": "Remove",
+        onclick: (e) => { e.stopPropagation(); removeChip(chip); renderDrawerChips(); },
+      }, icon("x", 9)),
+    ));
   }
-
-  if (!allowed.includes(STATE.activeTask) && allowed.length) {
-    STATE.activeTask = allowed[0];
-  }
-  if (allowed.includes(STATE.activeTask)) select.value = STATE.activeTask;
 }
 
 function updateInfoBar() {
   const bar = $("infoBar");
-  const meta = getTaskMeta(STATE.activeTask);
-  if (!meta) { bar.hidden = true; return; }
-
+  if (!bar) return;
   bar.className = "ai-info-bar";
   bar.hidden = false;
   bar.innerHTML = "";
@@ -2467,24 +2529,9 @@ function updateInfoBar() {
     bar.innerHTML = `${iconHTML("wifi-off", 12)} <span>Offline</span>`;
     return;
   }
-  if (STATE.isGuest && !isGuestTask(STATE.activeTask)) {
+  if (STATE.isGuest && STATE.detectedTask && !isGuestTask(STATE.detectedTask)) {
     bar.classList.add("guest");
     bar.innerHTML = `${iconHTML("lock", 12)} <span><a href="/register?next=${encodeURIComponent(location.pathname + location.search)}">Sign in</a> to unlock</span>`;
-    return;
-  }
-  if (meta.writes) {
-    bar.classList.add("warn");
-    bar.innerHTML = `${iconHTML("alert", 12)} <span>This will create a diff. Nothing saves until you accept.</span>`;
-    return;
-  }
-  if (STATE.scope === "selection" && !cm.getSelection()) {
-    bar.classList.add("muted");
-    bar.innerHTML = `<span>Select text in the editor first</span>`;
-    return;
-  }
-  if (STATE.scope === "file" && !STATE.activeFile) {
-    bar.classList.add("muted");
-    bar.innerHTML = `<span>Open a file to use this task</span>`;
     return;
   }
   bar.hidden = true;
@@ -2492,6 +2539,7 @@ function updateInfoBar() {
 
 function updateRunButtonState() {
   const btn = $("btnRun");
+  if (!btn) return;
   if (STATE.running) {
     btn.disabled = true;
     btn.classList.add("running");
@@ -2501,49 +2549,53 @@ function updateRunButtonState() {
   btn.classList.remove("running");
   btn.innerHTML = `${iconHTML("play", 14)}<span>Run</span>`;
 
-  const meta = getTaskMeta(STATE.activeTask);
   const quota = readQuotaCache();
   const exhausted = quota &&
     ((quota.wordsUsed ?? 0) >= (quota.wordsLimit ?? Infinity)
      || (quota.creditsUsed ?? 0) >= (quota.creditsLimit ?? Infinity));
-  const selection = STATE.editorView ? cm.getSelection() : "";
+  btn.disabled = !STATE.online || exhausted || STATE.running || !STATE.prompt && STATE.chips.length === 0;
+}
 
-  btn.disabled =
-    !meta || !STATE.online || exhausted ||
-    (STATE.isGuest && !isGuestTask(STATE.activeTask)) ||
-    (STATE.scope === "file" && !STATE.activeFile) ||
-    (STATE.scope === "selection" && !selection);
+async function autoRunNow() {
+  await runCurrentTask();
 }
 
 async function runCurrentTask() {
   if (STATE.running) return;
-  const meta = getTaskMeta(STATE.activeTask);
-  if (!meta) return;
+  if (!STATE.prompt && STATE.chips.length === 0) {
+    toast("Type a prompt first", "warning");
+    return;
+  }
 
-  const selection = STATE.editorView ? cm.getSelection() : "";
-  const payload = buildPayload();
+  const task = STATE.detectedTask || classifyIntent(STATE.prompt, STATE.chips);
+  const payload = buildPayload(task);
   if (!payload) return;
 
   STATE.running = true;
   STATE.abort = new AbortController();
   updateRunButtonState();
-  showResultLoading(`Running ${meta.label}…`);
+  showResultLoading(`Running ${taskLabel(task)}…`);
 
   try {
     const res = await runTask({
-      task: STATE.activeTask, pid: STATE.pid, payload,
+      task, pid: STATE.pid, payload,
       signal: STATE.abort.signal,
       deps: { idb, apiFetch },
     });
+
     if (!res.ok || !res.data?.success) {
       if (res.data?.quotaExceeded) showResultError(res.data.error || "Quota exceeded");
       else showResultError(res.data?.error || `AI error (${res.status})`);
       return;
     }
+
+    const fileChips = STATE.chips.filter(c => c.type === "file").map(c => c.value);
+    const primaryFile = fileChips[0] || null;
+
     const run = await appendAiRun(STATE.pid, {
-      task: STATE.activeTask, pid: STATE.pid,
-      file: STATE.scope === "project" ? null : STATE.activeFile,
-      scope: STATE.scope,
+      task, pid: STATE.pid,
+      file: primaryFile,
+      scope: STATE.chips.some(c => c.type === "project") ? "project" : STATE.chips.some(c => c.type === "selection") ? "selection" : "file",
       text: res.data.text,
       artifacts: res.data.artifacts || [],
       usage: res.data.usage || null,
@@ -2573,43 +2625,94 @@ async function runCurrentTask() {
   }
 }
 
-function buildPayload() {
-  const meta = getTaskMeta(STATE.activeTask);
-  if (!meta) return null;
+function buildPayload(task) {
   const payload = {};
-  const selection = STATE.editorView ? cm.getSelection() : "";
-  const file = STATE.files.find(f => f.path === STATE.activeFile);
+  const meta = getTaskMeta(task);
+  if (!meta) return null;
 
-  if (STATE.scope === "project") {
+  const fileChips = STATE.chips.filter(c => c.type === "file");
+  const hasProject = STATE.chips.some(c => c.type === "project");
+  const hasSelection = STATE.chips.some(c => c.type === "selection");
+
+  // Selection
+  if (hasSelection && STATE.editorView) {
+    const sel = cm.getSelection();
+    if (sel) {
+      payload.selection = sel;
+      const file = STATE.files.find(f => f.path === STATE.activeFile);
+      payload.content = file?.content || "";
+      payload.file = STATE.activeFile;
+    }
+  }
+
+  // File chips
+  if (fileChips.length && !hasSelection) {
+    const primary = fileChips[0].value;
+    const primaryFile = STATE.files.find(f => f.path === primary);
+    if (primaryFile) {
+      payload.file = primary;
+      payload.content = primaryFile.content || "";
+    }
+    if (fileChips.length > 1) {
+      payload.files = Object.fromEntries(
+        fileChips
+          .map(c => STATE.files.find(f => f.path === c.value))
+          .filter(Boolean)
+          .map(f => [f.path, f.content])
+      );
+    }
+  }
+
+  // Whole project
+  if (hasProject) {
     payload.name = STATE.project.name || "Untitled";
     payload.description = STATE.project.description || "";
     payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
-  } else {
-    if (!file) { toast("Open a file first", "warning"); return null; }
-    payload.file = STATE.activeFile;
-    payload.content = file.content || "";
-    if (STATE.scope === "selection" && selection) payload.selection = selection;
   }
 
-  if (STATE.activeTask === "findFn") {
+  // No chips at all → fall back to current file or project based on task
+  if (!fileChips.length && !hasProject && !hasSelection) {
+    const projectTasks = new Set(["readProject", "designExplain", "brainstorm", "scaffold", "struggle", "findFn", "docs"]);
+    if (projectTasks.has(task)) {
+      payload.name = STATE.project.name || "Untitled";
+      payload.description = STATE.project.description || "";
+      payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
+    } else if (STATE.activeFile) {
+      const f = STATE.files.find(x => x.path === STATE.activeFile);
+      if (f) {
+        payload.file = f.path;
+        payload.content = f.content || "";
+      }
+    }
+  }
+
+  // Task-specific extras
+  if (task === "findFn") {
     const name = window.prompt("Function name?");
     if (!name) return null;
     payload.fnName = name;
-    if (STATE.scope === "project") payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
+    if (!payload.files) payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
   }
-  if (STATE.activeTask === "translate") {
+  if (task === "translate") {
     const to = window.prompt("Target language?", "python");
     if (!to) return null;
     payload.to = to.toLowerCase();
-    if (STATE.scope === "project") {
-      payload.code = STATE.files.map(f => f.content).join("\n\n");
-      payload.from = "mixed";
-    } else {
-      payload.code = (STATE.scope === "selection" && selection) ? selection : file?.content || "";
-      payload.from = (STATE.activeFile.split(".").pop() || "unknown");
-    }
+    payload.code = payload.selection || payload.content || STATE.files.map(f => f.content).join("\n\n");
+    payload.from = payload.file ? (payload.file.split(".").pop() || "unknown") : "mixed";
   }
-  if (STATE.activeTask === "diagram") payload.kind = payload.kind || "flow";
+  if (task === "diagram") {
+    payload.kind = payload.kind || "flow";
+  }
+  if (task === "commitMsg") {
+    const diff = window.prompt("Paste the diff or leave blank for project diff:");
+    payload.diff = diff || "";
+  }
+  if (task === "logExplain") {
+    const log = window.prompt("Paste the log:");
+    if (!log) return null;
+    payload.log = log;
+  }
+
   return payload;
 }
 
@@ -2644,7 +2747,7 @@ function renderDrawerResult(data, run) {
     const arts = el("div", { class: "ai-artifacts" });
     $("resultContent").appendChild(arts);
     renderArtifacts(arts, data.artifacts, {
-      task: STATE.activeTask,
+      task: run.task,
       onAccept: (artifact, idx) => handleAccept(artifact, idx, run),
       onReject: (artifact, idx) => handleReject(artifact, idx, run),
       onOpenFile: (path, line) => { switchToFiles(); openFile(path); },
