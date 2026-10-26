@@ -2,7 +2,7 @@
 // Folio — Service Worker
 // ============================================================
 
-const CACHE_VERSION = '2026-10-25-2';
+const CACHE_VERSION = '2026-10-26-1';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 const CACHE_BUILT_AT = Date.now();
 
@@ -17,11 +17,6 @@ const CDN_HOSTS = new Set([
 ]);
 
 // ── Pre-cache list ──────────────────────────────────────────
-// ✅ IMPORTANT: With `cleanUrls: true` in vercel.json, users NEVER
-// request `/settings.html` — they request `/settings`, and Vercel
-// rewrites internally. So we MUST pre-cache the clean URLs, not
-// just the .html variants. Otherwise the first offline visit to
-// any page falls through to /offline.html.
 const CACHED_FILES = [
   // ── HTML clean URLs (what the user actually navigates to) ──
   '/',
@@ -78,7 +73,7 @@ const CACHED_FILES = [
   '/fcm-client.js',
   '/notifications.js',
   '/js/ai.js',
-  '/js/create-project',
+  '/js/create-project.js',
 
   // ── CodeMirror via deno.land ───────────────────────────────
   'https://deno.land/x/codemirror_esm@v6.0.1/esm/codemirror/dist/index.js',
@@ -126,6 +121,39 @@ function shouldBypass(url, request) {
   return false;
 }
 
+// ── Content-type sanity check ──────────────────────────────
+// Guards against Vercel rewrite collisions that would otherwise
+// poison the cache with JSON under an HTML URL.
+function expectedContentTypesFor(url) {
+  let path;
+  try {
+    path = new URL(url, self.location.origin).pathname;
+  } catch {
+    return null;
+  }
+  const m = path.match(/\.([a-z0-9]+)$/i);
+  const ext = m ? m[1].toLowerCase() : '';
+
+  if (ext === 'js') return ['javascript', 'ecmascript'];
+  if (ext === 'css') return ['text/css'];
+  if (ext === 'json' || ext === 'webmanifest') return ['json', 'manifest'];
+  if (ext === 'png') return ['image/png'];
+  if (ext === 'ico') return ['image/x-icon', 'image/vnd.microsoft.icon'];
+  if (ext === 'html') return ['text/html'];
+  if (ext === 'txt') return ['text/plain'];
+  if (ext === 'xml') return ['xml'];
+  // No extension → almost certainly an HTML page (clean URL)
+  if (!ext) return ['text/html'];
+  return null;
+}
+
+function contentTypeOk(url, res) {
+  const expected = expectedContentTypesFor(url);
+  if (!expected) return true;
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  return expected.some(t => ct.includes(t));
+}
+
 // ═══════════════════════════════════════════════════════════
 // Install
 // ═══════════════════════════════════════════════════════════
@@ -134,28 +162,31 @@ self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
 
-    let bulkOk = false;
-    try {
-      const sameOrigin = CACHED_FILES.filter(f => f.startsWith('/'));
-      await cache.addAll(sameOrigin);
-      bulkOk = true;
-    } catch (err) {
-      console.warn('[Folio SW] bulk addAll failed, falling back to per-file', err);
-    }
-
     let fetched = 0, missed = 0;
+
     await Promise.allSettled(
       CACHED_FILES.map(async (url) => {
         try {
           if (await cache.match(url)) { fetched++; return; }
+
           const res = await fetch(url, { cache: 'no-store' });
-          if (res.ok) {
-            await cache.put(url, res);
-            fetched++;
-          } else {
+          if (!res.ok) {
             console.warn(`[Folio SW] skip ${url} (${res.status})`);
             missed++;
+            return;
           }
+
+          if (!contentTypeOk(url, res)) {
+            console.error(
+              `[Folio SW] BAD CONTENT-TYPE ${url} → ${res.headers.get('content-type')} ` +
+              `(likely a Vercel rewrite collision; not caching)`
+            );
+            missed++;
+            return;
+          }
+
+          await cache.put(url, res);
+          fetched++;
         } catch (err) {
           console.warn(`[Folio SW] miss ${url}`, err);
           missed++;
@@ -163,12 +194,10 @@ self.addEventListener('install', (event) => {
       })
     );
 
-    console.log(`[Folio SW] install complete — bulk=${bulkOk} fetched=${fetched} missed=${missed}`);
+    console.log(`[Folio SW] install complete — fetched=${fetched} missed=${missed}`);
 
-    // Intentionally do NOT broadcast SW_UPDATE_AVAILABLE here.
-    // update.js handles that via reg.waiting polling.
-    // Also intentionally do NOT call skipWaiting() — the new worker
-    // must stay in "waiting" so update.js can let the user apply it.
+    // Intentionally do NOT call skipWaiting() — the new worker must
+    // stay in "waiting" so update.js can let the user apply it.
   })());
 });
 
@@ -218,18 +247,15 @@ self.addEventListener('fetch', (event) => {
     if (isNav) {
       const isShell = SHELL_ROUTES.has(url.pathname);
       if (isShell) {
-        event.respondWith(cacheFirstShell(req));
+        event.respondWith(cacheFirstShell(req, event));
       } else {
-        event.respondWith(networkFirstNav(req));
+        event.respondWith(networkFirstNav(req, event));
       }
       return;
     }
 
-    event.respondWith(staleWhileRevalidate(req));
+    event.respondWith(staleWhileRevalidate(req, event));
   } catch (err) {
-    // A synchronous throw here would fall back to the browser's
-    // own network attempt → Chrome's generic offline page.
-    // Return a proper offline response instead.
     try {
       event.respondWith(offlinePage(req));
     } catch {}
@@ -237,17 +263,18 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ✅ Shell pages (/, /index.html) — cache-first with silent background update.
-async function cacheFirstShell(req) {
+async function cacheFirstShell(req, event) {
   let cached =
     await caches.match(req, { ignoreSearch: true }) ||
     await caches.match('/') ||
     await caches.match('/index.html');
 
-  fetch(req).then(res => {
+  const bgUpdate = fetch(req).then(res => {
     if (res && res.ok) {
-      caches.open(CACHE_NAME).then(c => c.put(req, res.clone())).catch(() => {});
+      return caches.open(CACHE_NAME).then(c => c.put(req, res.clone()));
     }
   }).catch(() => {});
+  if (event && event.waitUntil) event.waitUntil(bgUpdate);
 
   if (cached) return cached;
 
@@ -258,11 +285,9 @@ async function cacheFirstShell(req) {
   }
 }
 
-// ✅ FIX: no more race timeout. The previous NAV_TIMEOUT_MS = 3500
-// killed successful fetches on slow networks, causing "offline while
-// online" and Chrome's generic error page. Now we wait for fetch,
+// ✅ network-first for non-shell navs. No timeout: wait for fetch,
 // fall back to cache only on real failure.
-async function networkFirstNav(req) {
+async function networkFirstNav(req, event) {
   const cachedPromise = caches.match(req, { ignoreSearch: true });
 
   try {
@@ -270,7 +295,8 @@ async function networkFirstNav(req) {
 
     if (res && res.ok && (res.headers.get('content-type') || '').includes('text/html')) {
       const copy = res.clone();
-      caches.open(CACHE_NAME).then(c => c.put(req, copy)).catch(() => {});
+      const bgPut = caches.open(CACHE_NAME).then(c => c.put(req, copy)).catch(() => {});
+      if (event && event.waitUntil) event.waitUntil(bgPut);
     }
     return res;
   } catch (err) {
@@ -280,7 +306,7 @@ async function networkFirstNav(req) {
   }
 }
 
-async function staleWhileRevalidate(req) {
+async function staleWhileRevalidate(req, event) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(req, { ignoreSearch: true });
 
@@ -291,11 +317,15 @@ async function staleWhileRevalidate(req) {
         const allowed =
           url.origin === self.location.origin ||
           CDN_HOSTS.has(url.hostname);
-        if (allowed) cache.put(req, res.clone()).catch(() => {});
+        if (allowed && contentTypeOk(req.url, res)) {
+          return cache.put(req, res.clone()).catch(() => {});
+        }
       } catch {}
     }
     return res;
   }).catch(() => null);
+
+  if (event && event.waitUntil) event.waitUntil(network.catch(() => {}));
 
   if (cached) return cached;
 
@@ -381,7 +411,7 @@ async function offlinePage(req) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// Message bus  (UNCHANGED — keep exactly as before)
+// Message bus  (UNCHANGED)
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('message', (event) => {
   const data = event.data;
