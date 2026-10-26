@@ -35,6 +35,7 @@ const CACHED_FILES = [
   '/offline',
   '/invite',
   '/notifications',
+  '/ai',
 
   // ── HTML .html fallbacks (needed for offline rewrites + direct URL) ──
   '/index.html',
@@ -52,6 +53,7 @@ const CACHED_FILES = [
   // ── CSS ────────────────────────────────────────────────────
   '/css/app.css',
   '/css/project.css',
+  '/css/ai.css',
 
   // ── PWA metadata ───────────────────────────────────────────
   '/manifest.json',
