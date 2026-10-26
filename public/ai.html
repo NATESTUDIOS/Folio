@@ -1,0 +1,2725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<title>AI — Folio</title>
+<meta name="theme-color" content="#0a0c10" id="themeColorMeta">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="robots" content="noindex">
+
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png" id="pageFavicon">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script>
+(function () {
+  try {
+    var pref = localStorage.getItem("folio.theme") || "dark";
+    var resolved = pref;
+    if (pref === "auto" || pref === "system") {
+      resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+    }
+    if (resolved === "light") document.documentElement.setAttribute("data-theme", "light");
+    else document.documentElement.removeAttribute("data-theme");
+    if (localStorage.getItem("folio.reducedMotion") === "true") {
+      document.documentElement.setAttribute("data-reduced-motion", "true");
+    }
+    var meta = document.getElementById("themeColorMeta");
+    if (meta) meta.setAttribute("content", resolved === "light" ? "#f7f8fa" : "#0a0c10");
+  } catch (e) {}
+})();
+</script>
+
+<script type="importmap">
+{
+  "imports": {
+    "codemirror/": "https://deno.land/x/codemirror_esm@v6.0.1/esm/"
+  }
+}
+</script>
+
+<link rel="stylesheet" href="/css/ai.css">
+</head>
+<body>
+
+<div class="app-shell ai-shell" id="aiShell">
+
+  <!-- HEADER -->
+  <header class="header ai-header" id="aiHeader">
+    <a class="header-back" id="btnBack" href="/project" aria-label="Back to project">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </a>
+    <button class="header-identity" id="headerIdentity" type="button" aria-label="Switch project">
+      <div class="header-project-icon project-icon-box" id="headerProjectIcon">—</div>
+      <div class="header-identity-text">
+        <h1 class="header-title" id="headerProjectName">Loading…</h1>
+        <div class="header-sub" id="headerProjectSub"></div>
+      </div>
+      <span class="header-edit-badge" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </span>
+    </button>
+    <div class="header-actions">
+      <button class="header-btn" id="btnAskAI" type="button" title="Ask AI (⌘K)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
+        <span class="lbl">Ask AI</span>
+      </button>
+      <button class="header-btn icon" id="btnNewProject" aria-label="New project" title="New project">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="header-btn icon" id="btnMore" aria-label="More" title="More">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- MODE BANNER -->
+  <div class="mode-banner" id="modeBanner" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span class="mb-text" id="modeBannerText"></span>
+    <button class="mb-action" id="modeBannerAction" type="button">Sync</button>
+  </div>
+
+  <!-- BODY — rail + main area + drawer -->
+  <div class="ai-body" id="aiBody">
+
+    <!-- RAIL -->
+    <nav class="ai-rail" id="aiRail" aria-label="Sections">
+      <button class="rail-btn" data-rail="files" aria-label="Files" title="Files">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </button>
+      <button class="rail-btn" data-rail="search" aria-label="Search" title="Search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <button class="rail-btn" data-rail="docs" aria-label="Documentation" title="Docs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      </button>
+      <button class="rail-btn" data-rail="history" aria-label="History" title="AI history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </button>
+      <button class="rail-btn" data-rail="commits" aria-label="Commits" title="Commits">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/></svg>
+      </button>
+      <button class="rail-btn" data-rail="notes" aria-label="Notes" title="Notes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      <button class="rail-btn" data-rail="info" aria-label="Info" title="Info">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      </button>
+    </nav>
+
+    <!-- MAIN AREA -->
+    <main class="ai-main" id="aiMain">
+      <!-- Each section is a pane, only one visible at a time -->
+      <section class="ai-section" data-section="files" hidden>
+        <div class="files-layout">
+          <aside class="files-pane" id="filesPane">
+            <div class="files-pane-head">
+              <span class="pane-title">Files</span>
+              <button class="icon-btn" id="btnFilesReload" aria-label="Reload" title="Reload">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              </button>
+            </div>
+            <div class="files-pane-filter">
+              <input class="input" id="filesFilter" type="search" placeholder="Filter files…">
+            </div>
+            <div class="files-tree" id="filesTree"></div>
+          </aside>
+          <div class="editor-pane" id="editorPane">
+            <div class="editor-tabs" id="editorTabs" style="display:none;"></div>
+            <div class="editor-container" id="editorContainer"></div>
+            <div class="editor-empty" id="editorEmpty">
+              <div class="editor-empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div class="editor-empty-title">No file open</div>
+              <div class="editor-empty-desc">Pick a file from the left to start editing.</div>
+            </div>
+            <div class="editor-loading" id="editorLoading" hidden>
+              <div class="spinner"></div>
+              <div>Loading editor…</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="ai-section" data-section="search" hidden></section>
+      <section class="ai-section" data-section="docs" hidden></section>
+      <section class="ai-section" data-section="history" hidden></section>
+      <section class="ai-section" data-section="commits" hidden></section>
+      <section class="ai-section" data-section="notes" hidden></section>
+      <section class="ai-section" data-section="info" hidden></section>
+    </main>
+
+    <!-- ASK AI DRAWER -->
+    <aside class="ai-drawer" id="aiDrawer" aria-label="Ask AI">
+      <div class="ai-drawer-head">
+        <div class="ai-drawer-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
+          <span>Ask AI</span>
+        </div>
+        <button class="icon-btn" id="drawerClose" aria-label="Close AI panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="ai-drawer-body">
+        <div class="ai-drawer-controls">
+          <div class="scope-picker" role="radiogroup" aria-label="Scope">
+            <button class="scope-btn" data-scope="project" type="button" aria-pressed="false">Project</button>
+            <button class="scope-btn" data-scope="file" type="button" aria-pressed="false">File</button>
+            <button class="scope-btn" data-scope="selection" type="button" aria-pressed="false">Selection</button>
+          </div>
+
+          <div class="task-picker">
+            <select class="select" id="taskSelect" aria-label="Task"></select>
+          </div>
+
+          <div class="ai-info-bar" id="infoBar" hidden></div>
+
+          <button class="ai-run-btn" id="btnRun" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="btnRunLabel">Run</span>
+          </button>
+        </div>
+
+        <div class="ai-drawer-result" id="drawerResult">
+          <div class="ai-result-empty" id="resultEmpty">
+            <div class="ai-result-empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
+            </div>
+            <div class="ai-result-empty-title">Ask anything</div>
+            <div class="ai-result-empty-hint">Pick a scope, a task, and run.</div>
+          </div>
+          <div class="ai-result-loading" id="resultLoading" hidden>
+            <div class="spinner"></div>
+            <div class="ai-result-loading-text" id="resultLoadingText">Running…</div>
+          </div>
+          <div class="ai-result-content" id="resultContent" hidden></div>
+        </div>
+
+        <div class="ai-drawer-footer">
+          <div class="ai-quota-hud" id="quotaHud"></div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="ai-drawer-backdrop" id="drawerBackdrop"></div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <footer class="ai-status-bar" id="statusBar">
+    <div class="ai-status-left">
+      <span id="statusFile">—</span>
+      <span class="ai-status-sep">·</span>
+      <span id="statusSize">0 B</span>
+    </div>
+    <div class="ai-status-right">
+      <button class="ai-status-pending" id="statusPending" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span id="statusPendingText">0 staged</span>
+      </button>
+      <span id="statusSync">Idle</span>
+    </div>
+  </footer>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div class="sheet" id="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+  <div class="sheet-handle"></div>
+  <div class="sheet-body" style="padding:20px 16px;text-align:center;">
+    <div class="confirm-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <h2 class="sheet-title" id="confirmTitle" style="margin-bottom:6px;">Confirm</h2>
+    <p class="confirm-message" id="confirmMessage">Are you sure?</p>
+    <div class="confirm-actions">
+      <button class="btn btn-secondary" id="confirmCancel" type="button">Cancel</button>
+      <button class="btn btn-danger" id="confirmOk" type="button">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- PENDING SHEET -->
+<div class="sheet" id="pendingSheet" role="dialog" aria-modal="true" aria-labelledby="pendingTitle">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <h2 class="sheet-title" id="pendingTitle">Staged proposals</h2>
+    <button class="sheet-close" id="pendingClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body" id="pendingBody"></div>
+</div>
+
+<!-- OVERLAYS -->
+<div class="backdrop" id="backdrop"></div>
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+<!-- EMPTY STATE -->
+<div class="empty-project-state hidden" id="emptyState" role="dialog" aria-modal="true">
+  <div class="empty-project-card">
+    <div class="empty-project-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    </div>
+    <h2 class="empty-project-title" id="emptyStateTitle">No project selected</h2>
+    <p class="empty-project-desc" id="emptyStateDesc">Pick a project to start.</p>
+    <div class="empty-project-actions">
+      <button class="btn btn-primary" id="emptyPickProject" type="button">Choose project</button>
+      <button class="btn btn-secondary" id="emptyNewProject" type="button">New project</button>
+    </div>
+  </div>
+</div>
+
+<!-- SVG SPRITE -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-folder-open" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 12h18"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
+    <symbol id="i-file-code" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="10 13 8 15 10 17"/><polyline points="14 13 16 15 14 17"/></symbol>
+    <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+    <symbol id="i-wifi-off" viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+    <symbol id="i-hash" viewBox="0 0 24 24"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></symbol>
+    <symbol id="i-bold" viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 0 8H6z"/><path d="M6 12h9a4 4 0 0 1 0 8H6z"/></symbol>
+    <symbol id="i-italic" viewBox="0 0 24 24"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></symbol>
+    <symbol id="i-strike" viewBox="0 0 24 24"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" y1="12" x2="20" y2="12"/></symbol>
+    <symbol id="i-h1" viewBox="0 0 24 24"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M17 10l2-2v10"/></symbol>
+    <symbol id="i-h2" viewBox="0 0 24 24"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M21 18h-4c0-4 4-3 4-6 0-1.5-2-2.5-4-1"/></symbol>
+    <symbol id="i-h3" viewBox="0 0 24 24"><path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M17.5 10.5c1.7-1 3.5 0 3.5 1.5a2 2 0 0 1-2 2"/><path d="M17 17.5c2 1.5 4 .3 4-1.5a2 2 0 0 0-2-2"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></symbol>
+    <symbol id="i-list-ol" viewBox="0 0 24 24"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></symbol>
+    <symbol id="i-quote" viewBox="0 0 24 24"><path d="M3 21c3 0 7-1 7-8V5H3v7h4c0 3-1 5-4 6z"/><path d="M14 21c3 0 7-1 7-8V5h-7v7h4c0 3-1 5-4 6z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-droplet" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></symbol>
+  </defs>
+</svg>
+
+<script type="module">
+// ═══════════════════════════════════════════════════════════════════
+//  ai.html — AI Project Hub
+// ═══════════════════════════════════════════════════════════════════
+
+import {
+  TASK_META, NOTES_PATH,
+  readQuotaCache, writeQuotaCache,
+  readAiState, appendAiRun, stageArtifactsFromRun,
+  removePendingItem, clearPending,
+  markRunArtifactAccepted, markRunArtifactRejected,
+  runTask, applyPatch, applyFiles,
+  renderMarkdown, hydrateMarkdown, renderArtifacts,
+  getTaskMeta, isGuestTask,
+  formatCompact,
+} from "/js/ai.js";
+
+import {
+  initCreateProject, createNewProject,
+  handleNewProjectImageReturn, promoteQueuedLocalProjects,
+} from "/js/create-project.js";
+
+// ─── Helpers ─────────────────────────────────────────────────────
+
+function formatRelativeReset(resetAt) {
+  if (!resetAt) return "";
+  const ms = new Date(resetAt).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "now";
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `in ${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `in ${hours}h`;
+  return `in ${Math.round(hours / 24)}d`;
+}
+
+// ─── Config ──────────────────────────────────────────────────────
+
+const DB_NAME = "folio";
+const DB_VERSION = 3;
+const API_BASE = "https://foliostudios.vercel.app/api";
+const API_HOST = API_BASE + "/host";
+const API_FLIER = API_BASE + "/flier";
+const DEFAULT_PROJECT_STORAGE_LIMIT = 10 * 1024 * 1024;
+
+const STORAGE = {
+  session: "folio.session",
+  user: "folio.user",
+  lastProject: "folio.lastProject",
+  lastFile: "folio.ai.lastFile",
+  lastRail: "folio.ai.lastRail",
+  sidebarOpen: "folio.ai.sidebarOpen",
+  task: "folio.ai.lastTask",
+  docsMode: "folio.docs.mode",
+};
+
+const AVATAR_GRADIENTS = [
+  "linear-gradient(135deg, #F59E0B, #f97316)",
+  "linear-gradient(135deg, #0284c7, #0369a1)",
+  "linear-gradient(135deg, #a855f7, #6d28d9)",
+  "linear-gradient(135deg, #10B981, #059669)",
+  "linear-gradient(135deg, #ec4899, #be185d)",
+  "linear-gradient(135deg, #06b6d4, #0891b2)",
+];
+
+const DOCS_PATH_RE = /(^docs\/|^README\.md$|\.mdx?$|\.markdown$)/i;
+
+// Tasks available in the Ask AI drawer, grouped and gated by scope
+const ASK_TASKS = {
+  project: ["designExplain", "brainstorm", "scaffold", "struggle", "findFn"],
+  file: [
+    "explain", "diagram", "simulate", "debug", "codefix", "optimize", "audit",
+    "suggest", "designExplain", "translate", "brainstorm", "scaffold", "findFn", "struggle",
+  ],
+  selection: [
+    "explain", "diagram", "simulate", "debug", "codefix", "optimize", "audit",
+    "suggest", "translate", "findFn",
+  ],
+};
+
+const STATE = {
+  pid: null,
+  project: null,
+  files: [],
+  activeFile: null,
+  openFiles: [],
+  dirtyFiles: new Set(),
+  selection: "",
+
+  session: null,
+  user: null,
+  isGuest: true,
+  online: navigator.onLine,
+  syncState: "unknown",
+
+  activeRail: "files",
+  sidebarOpen: false,   // default closed — restored from localStorage
+
+  // Ask AI drawer
+  aiOpen: false,
+  scope: "file",
+  activeTask: "explain",
+  running: false,
+  abort: null,
+  lastRun: null,
+
+  aiState: null,
+  notes: { version: 1, notes: [] },
+
+  fileFilter: "",
+  expandedFolders: new Set(),
+
+  editorModules: null,
+  editorView: null,
+  editorDirtyTimer: null,
+
+  docsActivePath: null,
+  docsDirty: false,
+  docsMode: "edit",
+  docsSaveTimer: null,
+  docsReviewOpen: false,
+};
+
+// ─── DOM / utils ─────────────────────────────────────────────────
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k === "style" && typeof v === "object") Object.assign(node.style, v);
+    else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
+    else if (k === "dataset" && typeof v === "object") Object.assign(node.dataset, v);
+    else if (k === "html") node.innerHTML = String(v);
+    else if (v === true) node.setAttribute(k, "");
+    else node.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c == null || c === false) continue;
+    if (typeof c === "string" || typeof c === "number") node.appendChild(document.createTextNode(String(c)));
+    else if (c instanceof Node) node.appendChild(c);
+  }
+  return node;
+}
+
+function svg(name, size = 14) {
+  const NS = "http://www.w3.org/2000/svg";
+  const s = document.createElementNS(NS, "svg");
+  s.setAttribute("viewBox", "0 0 24 24");
+  s.setAttribute("width", String(size));
+  s.setAttribute("height", String(size));
+  s.setAttribute("fill", "none");
+  s.setAttribute("stroke", "currentColor");
+  s.setAttribute("stroke-width", "2");
+  s.setAttribute("stroke-linecap", "round");
+  s.setAttribute("stroke-linejoin", "round");
+  s.setAttribute("aria-hidden", "true");
+  const u = document.createElementNS(NS, "use");
+  u.setAttribute("href", `#i-${name}`);
+  s.appendChild(u);
+  return s;
+}
+
+function svgString(name, size = 14) {
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function getInitials(name) {
+  const s = String(name || "").trim();
+  if (!s) return "?";
+  const parts = s.split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function getAvatarColor(seed) {
+  const s = String(seed || "");
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+}
+
+function isSystemFile(path) {
+  return path === NOTES_PATH
+    || /(^|\/)\.gitkeep$/i.test(path)
+    || /(^|\/)\.keep$/i.test(path);
+}
+
+function isDocsFile(path) {
+  return DOCS_PATH_RE.test(path) && !isSystemFile(path);
+}
+
+function isTextFile(path) {
+  return /\.(html?|css|js|mjs|cjs|jsx|tsx?|py|json|md|txt|ya?ml)$/i.test(path);
+}
+
+function fileIconName(path) {
+  const ext = (path.split(".").pop() || "").toLowerCase();
+  if (["html","htm","css","scss","less","js","mjs","cjs","jsx","ts","tsx"].includes(ext)) return "file-code";
+  if (ext === "json") return "file";
+  if (["md","markdown","txt"].includes(ext)) return "file-text";
+  if (["png","jpg","jpeg","gif","svg","webp"].includes(ext)) return "image";
+  return "file";
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function relativeTime(ts) {
+  if (!ts) return "";
+  const d = Date.now() - ts;
+  if (d < 60000) return "just now";
+  const m = Math.floor(d / 60000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function estimateSize(v) {
+  if (typeof v === "string") return v.length;
+  try { return JSON.stringify(v).length; } catch { return 0; }
+}
+
+function formatBytes(n) {
+  if (!n || n < 0) return "0 B";
+  const u = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+}
+
+function countWords(text) {
+  const m = String(text || "").match(/\S+/g);
+  return m ? m.length : 0;
+}
+
+// ─── IndexedDB ───────────────────────────────────────────────────
+
+let dbConn = null;
+
+function openDB() {
+  if (dbConn) return Promise.resolve(dbConn);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => {
+      setTimeout(() => {
+        try { req.result?.close?.(); } catch {}
+        dbConn = null;
+        openDB().then(resolve, reject);
+      }, 800);
+    };
+    req.onsuccess = () => { dbConn = req.result; resolve(dbConn); };
+    req.onupgradeneeded = (event) => {
+      const conn = event.target.result;
+      if (!conn.objectStoreNames.contains("projects")) conn.createObjectStore("projects", { keyPath: "pid" });
+      if (!conn.objectStoreNames.contains("files")) {
+        const store = conn.createObjectStore("files", { keyPath: ["pid", "path"] });
+        store.createIndex("pid", "pid");
+      }
+      if (!conn.objectStoreNames.contains("versions")) {
+        const store = conn.createObjectStore("versions", { keyPath: "vid" });
+        store.createIndex("pid", "pid");
+      }
+      if (!conn.objectStoreNames.contains("projectMeta")) conn.createObjectStore("projectMeta", { keyPath: "pid" });
+      if (!conn.objectStoreNames.contains("syncQueue")) conn.createObjectStore("syncQueue", { keyPath: "id", autoIncrement: true });
+      if (!conn.objectStoreNames.contains("folders")) {
+        const store = conn.createObjectStore("folders", { keyPath: ["pid", "path"] });
+        store.createIndex("pid", "pid");
+      }
+    };
+  });
+}
+
+function dbWrap(req) {
+  return new Promise((res, rej) => {
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+function dbTx(store, mode = "readonly") { return dbConn.transaction(store, mode).objectStore(store); }
+
+const idb = {
+  getProject: (pid) => dbWrap(dbTx("projects").get(pid)),
+  putProject: (p) => dbWrap(dbTx("projects", "readwrite").put(p)),
+  listProjects: () => dbWrap(dbTx("projects").getAll()),
+  listFiles: (pid) => dbWrap(dbTx("files").index("pid").getAll(pid)),
+  getFile: (pid, path) => dbWrap(dbTx("files").get([pid, path])),
+  putFile: (pid, path, content) => dbWrap(dbTx("files", "readwrite").put({ pid, path, content, updatedAt: Date.now() })),
+  deleteFile: (pid, path) => dbWrap(dbTx("files", "readwrite").delete([pid, path])),
+  listVersions: async (pid) => {
+    const all = await dbWrap(dbTx("versions").index("pid").getAll(pid));
+    return all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  },
+  getProjectMeta: async (pid) => {
+    const m = await dbWrap(dbTx("projectMeta").get(pid));
+    return m || { pid, notepad: "", meta: {}, coverMeta: {}, docs: { version: 1, entries: {} } };
+  },
+  setProjectMeta: async (pid, patch) => {
+    const current = await idb.getProjectMeta(pid);
+    return dbWrap(dbTx("projectMeta", "readwrite").put({ ...current, ...patch, pid }));
+  },
+};
+
+// ─── Session / API ───────────────────────────────────────────────
+
+function readSession() {
+  try { STATE.session = localStorage.getItem(STORAGE.session); } catch {}
+  try {
+    const raw = localStorage.getItem(STORAGE.user);
+    STATE.user = raw ? JSON.parse(raw) : null;
+  } catch {}
+  STATE.isGuest = !STATE.session;
+}
+
+async function apiFetch(url, opts = {}) {
+  const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+  if (STATE.session) headers["Authorization"] = `Bearer ${STATE.session}`;
+  try {
+    const res = await fetch(url, { ...opts, headers });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, data, headers: res.headers };
+  } catch (err) {
+    return { ok: false, status: 0, data: { error: String(err?.message || "Network error") }, headers: null };
+  }
+}
+
+// ─── Toast / Confirm ─────────────────────────────────────────────
+
+function toast(message, type = "info", duration = 2400) {
+  const node = el("div", { class: `toast ${type}` }, el("span", {}, message));
+  $("toastContainer").appendChild(node);
+  requestAnimationFrame(() => node.classList.add("show"));
+  setTimeout(() => {
+    node.classList.remove("show");
+    setTimeout(() => node.remove(), 300);
+  }, duration);
+}
+window.toast = toast;
+
+let confirmResolve = null;
+
+function confirmDialog({ title, message, confirmLabel = "Confirm", danger = false }) {
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+    $("confirmTitle").textContent = title || "Are you sure?";
+    $("confirmMessage").textContent = message || "";
+    $("confirmOk").textContent = confirmLabel;
+    $("confirmOk").className = danger ? "btn btn-danger" : "btn btn-primary";
+    $("backdrop").classList.add("visible");
+    $("confirmDialog").classList.add("open");
+    setTimeout(() => $("confirmCancel")?.focus(), 50);
+  });
+}
+
+function resolveConfirm(value) {
+  $("confirmDialog").classList.remove("open");
+  if (!anySheetOpen()) $("backdrop").classList.remove("visible");
+  const r = confirmResolve;
+  confirmResolve = null;
+  if (r) r(value);
+}
+
+function anySheetOpen() {
+  return !!document.querySelector(".sheet.open");
+}
+
+// ─── CodeMirror ──────────────────────────────────────────────────
+
+const cm = {
+  async loadModules() {
+    if (STATE.editorModules) return STATE.editorModules;
+    const [core, oneDark, viewMod, stateMod, langMod] = await Promise.all([
+      import("codemirror/codemirror/dist/index.js"),
+      import("codemirror/theme-one-dark/dist/index.js"),
+      import("codemirror/view/dist/index.js"),
+      import("codemirror/state/dist/index.js"),
+      import("codemirror/language/dist/index.js"),
+    ]);
+    STATE.editorModules = {
+      basicSetup: core.basicSetup,
+      EditorView: viewMod.EditorView,
+      EditorState: stateMod.EditorState,
+      keymap: viewMod.keymap,
+      oneDark: oneDark.oneDark,
+      foldGutter: langMod.foldGutter,
+      foldKeymap: langMod.foldKeymap,
+    };
+    return STATE.editorModules;
+  },
+
+  async getLangExt(path) {
+    if (!path) return null;
+    const ext = (path.split(".").pop() || "").toLowerCase();
+    try {
+      if (["html","htm","xhtml"].includes(ext)) { const m = await import("codemirror/lang-html/dist/index.js"); return m.html(); }
+      if (["css","scss","less"].includes(ext)) { const m = await import("codemirror/lang-css/dist/index.js"); return m.css(); }
+      if (["js","mjs","cjs","jsx","ts","tsx"].includes(ext)) {
+        const m = await import("codemirror/lang-javascript/dist/index.js");
+        return m.javascript({ jsx: true, typescript: ext === "ts" || ext === "tsx" });
+      }
+      if (["json","jsonc"].includes(ext)) { const m = await import("codemirror/lang-json/dist/index.js"); return m.json(); }
+      if (["md","markdown"].includes(ext)) { const m = await import("codemirror/lang-markdown/dist/index.js"); return m.markdown(); }
+      if (["py"].includes(ext)) { const m = await import("codemirror/lang-python/dist/index.js"); return m.python(); }
+    } catch (e) { console.warn("[CM]", ext, e); }
+    return null;
+  },
+
+  async mount(container, content, path) {
+    const m = await this.loadModules();
+    this.destroy();
+
+    const langExt = await this.getLangExt(path);
+    const extensions = [
+      m.basicSetup,
+      m.oneDark,
+      m.foldGutter(),
+      m.keymap.of(m.foldKeymap),
+      m.EditorView.theme({
+        "&": { fontSize: "13px", height: "100%" },
+        ".cm-content": { fontSize: "13px", lineHeight: "1.55" },
+        ".cm-gutters": { fontSize: "11px" },
+      }),
+      m.EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          markDirty();
+          scheduleAutosave();
+        }
+      }),
+    ];
+    if (langExt) extensions.push(langExt);
+
+    const state = m.EditorState.create({ doc: content || "", extensions });
+    STATE.editorView = new m.EditorView({ state, parent: container });
+    requestAnimationFrame(() => updateStatusBar());
+  },
+
+  getContent() { return STATE.editorView?.state.doc.toString() || ""; },
+  getSelection() {
+    if (!STATE.editorView) return "";
+    const sel = STATE.editorView.state.selection.main;
+    return STATE.editorView.state.sliceDoc(sel.from, sel.to);
+  },
+  destroy() {
+    if (STATE.editorView) { try { STATE.editorView.destroy(); } catch {} STATE.editorView = null; }
+  },
+};
+
+function markDirty() {
+  if (!STATE.activeFile) return;
+  const was = STATE.dirtyFiles.size;
+  STATE.dirtyFiles.add(STATE.activeFile);
+  if (STATE.dirtyFiles.size !== was) renderEditorTabs();
+  updateStatusBar();
+}
+
+function scheduleAutosave() {
+  if (STATE.editorDirtyTimer) clearTimeout(STATE.editorDirtyTimer);
+  STATE.editorDirtyTimer = setTimeout(() => {
+    if (STATE.activeFile && STATE.dirtyFiles.has(STATE.activeFile)) {
+      saveActiveFile({ silent: true });
+    }
+  }, 2000);
+}
+
+function updateStatusBar() {
+  $("statusFile").textContent = STATE.activeFile || "—";
+  const content = STATE.editorView ? cm.getContent() : "";
+  $("statusSize").textContent = formatBytes(estimateSize(content));
+
+  const pending = STATE.aiState?.pending || [];
+  if (pending.length) {
+    $("statusPending").hidden = false;
+    $("statusPendingText").textContent = `${pending.length} staged`;
+  } else {
+    $("statusPending").hidden = true;
+  }
+
+  let sync = "Idle";
+  if (STATE.syncState === "local") sync = "Local";
+  else if (STATE.syncState === "cached" || !STATE.online) sync = "Offline";
+  else if (STATE.session) sync = "Synced";
+  else sync = "Guest";
+  $("statusSync").textContent = sync;
+}
+
+// ─── create-project deps ─────────────────────────────────────────
+
+function buildCreateProjectDeps() {
+  return {
+    apiFetch, db: idb, toast,
+    workspace: {
+      openProject: async (project) => {
+        if (project && project.pid) location.href = "/ai.html?pid=" + encodeURIComponent(project.pid);
+      },
+    },
+    setPidInUrl: (pid) => {
+      if (!pid) return;
+      try {
+        const url = new URL(location.href);
+        url.searchParams.set("pid", pid);
+        history.replaceState(null, "", url.toString());
+      } catch {}
+    },
+    getAvatarColor, getInitials,
+    renderSidebar: () => {}, renderEmptyRecent: () => {},
+    DEFAULT_PROJECT_STORAGE_LIMIT, API_HOST, API_FLIER,
+    isGuest: () => STATE.isGuest,
+    isOnline: () => STATE.online,
+    getUsername: () => STATE.user?.profile?.username || STATE.user?.username || null,
+    getSession: () => STATE.session,
+    getUid: () => STATE.user?.uid || null,
+  };
+}
+
+// ─── Boot ────────────────────────────────────────────────────────
+
+async function boot() {
+  readSession();
+  STATE.pid = new URLSearchParams(location.search).get("pid");
+
+  await openDB().catch(err => {
+    console.error("[AI] openDB failed:", err);
+    throw new Error("Storage unavailable");
+  });
+
+  initCreateProject(buildCreateProjectDeps());
+
+  if (handleNewProjectImageReturn()) return;
+
+  // Restore sidebar state — fix the auto-open bug
+  const savedSidebar = localStorage.getItem(STORAGE.sidebarOpen);
+  STATE.sidebarOpen = savedSidebar === null
+    ? window.innerWidth >= 1024
+    : savedSidebar === "true";
+
+  wireStaticListeners();
+  wireEmptyState();
+
+  if (STATE.pid) await loadProject();
+
+  if (!STATE.project) { showEmptyState(); return; }
+
+  await loadAiState();
+  await loadNotes();
+
+  hideEmptyState();
+  mountHeader();
+  mountRail();
+
+  try {
+    const lastRail = localStorage.getItem(STORAGE.lastRail);
+    if (lastRail && ["files","search","docs","history","commits","notes","info"].includes(lastRail)) {
+      STATE.activeRail = lastRail;
+    }
+  } catch {}
+
+  renderRail();
+  switchRail(STATE.activeRail);
+
+  let toOpen = null;
+  try {
+    const lastFile = localStorage.getItem(STORAGE.lastFile + "." + STATE.pid);
+    if (lastFile && STATE.files.some(f => f.path === lastFile)) toOpen = lastFile;
+  } catch {}
+  if (!toOpen) {
+    toOpen = STATE.files.find(f => /index\.html?$/i.test(f.path))?.path
+      || STATE.files.find(f => isTextFile(f.path))?.path
+      || STATE.files[0]?.path
+      || null;
+  }
+  if (toOpen) await openFile(toOpen);
+
+  wireDrawer();
+  updateStatusBar();
+  renderModeBanner();
+
+  if (!STATE.isGuest && STATE.online) promoteQueuedLocalProjects().catch(() => {});
+}
+
+function showEmptyState() {
+  $("emptyState").classList.remove("hidden");
+  $("aiBody").style.display = "none";
+  $("aiHeader").style.display = "none";
+  $("statusBar").style.display = "none";
+}
+
+function hideEmptyState() {
+  $("emptyState").classList.add("hidden");
+  $("aiBody").style.display = "";
+  $("aiHeader").style.display = "";
+  $("statusBar").style.display = "";
+}
+
+function wireEmptyState() {
+  $("emptyPickProject").addEventListener("click", openProjectPicker);
+  $("emptyNewProject").addEventListener("click", () => createNewProject());
+}
+
+// ─── Project picker ──────────────────────────────────────────────
+
+async function openProjectPicker() {
+  let projects = [];
+  try { projects = await idb.listProjects(); } catch {}
+  projects.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  const sheet = el("div", { class: "sheet open", style: { zIndex: "3100" } });
+  sheet.innerHTML = `
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <h2 class="sheet-title">Choose a project</h2>
+      <button class="sheet-close" data-close aria-label="Close" type="button">${svgString("x", 14)}</button>
+    </div>
+    <div class="sheet-body" id="pickerBody"></div>
+  `;
+  document.body.appendChild(sheet);
+  $("backdrop").classList.add("visible");
+
+  const body = sheet.querySelector("#pickerBody");
+
+  if (!projects.length) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-state-title">No projects yet</div></div>`;
+  } else {
+    for (const p of projects) {
+      const row = el("button", {
+        type: "button",
+        style: {
+          display: "flex", alignItems: "center", gap: "10px",
+          width: "100%", padding: "10px 12px",
+          background: "transparent", border: "none",
+          borderBottom: "1px solid var(--theme-divider)",
+          textAlign: "left", cursor: "pointer", color: "var(--theme-text)",
+          fontFamily: "inherit",
+        },
+        onclick: () => { close(); location.href = "/ai.html?pid=" + encodeURIComponent(p.pid); },
+      });
+
+      const iconWrap = el("div", { class: "project-icon-box", style: { width: "36px", height: "36px", borderRadius: "9px", fontSize: "13px" } });
+      if (p.iconUrl) {
+        const img = document.createElement("img"); img.src = p.iconUrl; img.alt = "";
+        iconWrap.appendChild(img);
+      } else {
+        iconWrap.textContent = getInitials(p.name);
+        iconWrap.style.background = getAvatarColor(p.name);
+        iconWrap.style.color = "#0a0c10";
+      }
+      row.appendChild(iconWrap);
+      row.appendChild(el("div", { style: { flex: "1", minWidth: "0" } },
+        el("div", { style: { fontSize: "13px", fontWeight: "700", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, p.name || "Untitled"),
+        el("div", { style: { fontSize: "10.5px", color: "var(--theme-text-tertiary)", marginTop: "2px" } },
+          `${p.pid.startsWith("local_") ? "Local · " : ""}${relativeTime(p.updatedAt)}`),
+      ));
+      body.appendChild(row);
+    }
+  }
+
+  function close() { sheet.remove(); $("backdrop").classList.remove("visible"); }
+  sheet.querySelector("[data-close]").addEventListener("click", close);
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) close(); });
+}
+
+// ─── Static listeners ────────────────────────────────────────────
+
+function wireStaticListeners() {
+  $("confirmOk").addEventListener("click", () => resolveConfirm(true));
+  $("confirmCancel").addEventListener("click", () => resolveConfirm(false));
+  $("pendingClose").addEventListener("click", closePendingSheet);
+
+  $("backdrop").addEventListener("click", () => {
+    if ($("confirmDialog").classList.contains("open")) { resolveConfirm(false); return; }
+    if ($("pendingSheet").classList.contains("open")) { closePendingSheet(); return; }
+    if (STATE.aiOpen && window.innerWidth < 1024) { closeDrawer(); return; }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+
+    if (mod && e.key === "Enter" && STATE.aiOpen && !$("btnRun").disabled) {
+      e.preventDefault(); runCurrentTask(); return;
+    }
+    if (mod && e.key.toLowerCase() === "s") {
+      e.preventDefault(); saveActiveFile(); return;
+    }
+    if (mod && e.key.toLowerCase() === "k") {
+      e.preventDefault(); toggleDrawer(); return;
+    }
+    if (e.key === "Escape") {
+      if ($("confirmDialog").classList.contains("open")) { resolveConfirm(false); return; }
+      if ($("pendingSheet").classList.contains("open")) { closePendingSheet(); return; }
+      if (STATE.aiOpen) { closeDrawer(); return; }
+    }
+  });
+
+  window.addEventListener("online", () => {
+    STATE.online = true;
+    if (STATE.syncState === "cached") STATE.syncState = "synced";
+    renderModeBanner(); renderHeader(); updateStatusBar();
+    if (STATE.project && !STATE.isGuest) promoteQueuedLocalProjects().catch(() => {});
+  });
+  window.addEventListener("offline", () => {
+    STATE.online = false;
+    if (STATE.syncState === "synced") STATE.syncState = "cached";
+    renderModeBanner(); renderHeader(); updateStatusBar();
+  });
+  window.addEventListener("beforeunload", (e) => {
+    if (STATE.activeFile && STATE.dirtyFiles.has(STATE.activeFile)) saveActiveFile({ silent: true }).catch(() => {});
+    if (STATE.dirtyFiles.size > 0 || (STATE.docsDirty)) {
+      e.preventDefault(); e.returnValue = ""; return "";
+    }
+  });
+}
+
+// ─── Data loaders ────────────────────────────────────────────────
+
+async function loadProject() {
+  let project = null;
+  try { project = await idb.getProject(STATE.pid); } catch {}
+
+  if (!project && STATE.session && STATE.online && !/^local_/.test(STATE.pid)) {
+    const res = await apiFetch(API_HOST + "?action=projects/get&pid=" + encodeURIComponent(STATE.pid));
+    if (res.ok && res.data?.success) {
+      project = res.data.project;
+      try { await idb.putProject(project); } catch {}
+    }
+  }
+  if (!project) { STATE.project = null; return; }
+  STATE.project = project;
+
+  try { STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path)); }
+  catch { STATE.files = []; }
+
+  if (STATE.syncState === "unknown") {
+    if (/^local_/.test(STATE.pid)) STATE.syncState = "local";
+    else if (!STATE.online) STATE.syncState = "cached";
+    else if (STATE.session) STATE.syncState = "synced";
+    else STATE.syncState = "cached";
+  }
+}
+
+async function loadAiState() {
+  try { STATE.aiState = await readAiState(STATE.pid, { idb }); }
+  catch { STATE.aiState = { version: 1, runs: [], pending: [], quota: null }; }
+  if (STATE.aiState?.quota) writeQuotaCache(STATE.aiState.quota);
+}
+
+async function loadNotes() {
+  try {
+    const file = await idb.getFile(STATE.pid, NOTES_PATH);
+    const content = typeof file === "string" ? file : (file?.content || "");
+    if (!content) { STATE.notes = { version: 1, notes: [] }; return; }
+    const parsed = JSON.parse(content);
+    STATE.notes = { version: parsed.version || 1, notes: parsed.notes || [] };
+  } catch { STATE.notes = { version: 1, notes: [] }; }
+}
+
+// ─── Header ──────────────────────────────────────────────────────
+
+let headerMounted = false;
+
+function mountHeader() {
+  if (headerMounted) { renderHeader(); return; }
+  headerMounted = true;
+
+  $("btnBack").href = "/project?pid=" + encodeURIComponent(STATE.pid);
+  $("headerIdentity").addEventListener("click", openProjectPicker);
+  $("btnAskAI").addEventListener("click", toggleDrawer);
+  $("btnNewProject").addEventListener("click", () => createNewProject());
+  $("btnMore").addEventListener("click", openMoreMenu);
+
+  renderHeader();
+}
+
+function renderHeader() {
+  $("headerProjectName").textContent = STATE.project?.name || "Untitled";
+  const parts = [];
+  if (STATE.syncState === "local") parts.push("Local");
+  else if (STATE.syncState === "cached" || !STATE.online) parts.push("Cached");
+  else if (STATE.isGuest) parts.push("Guest");
+  else parts.push("Synced");
+  parts.push(`${STATE.files.length} file${STATE.files.length === 1 ? "" : "s"}`);
+  $("headerProjectSub").textContent = parts.join(" · ");
+
+  const iconEl = $("headerProjectIcon");
+  iconEl.innerHTML = "";
+  if (STATE.project.iconUrl) {
+    const img = document.createElement("img"); img.src = STATE.project.iconUrl; img.alt = "";
+    iconEl.appendChild(img);
+    $("pageFavicon").href = STATE.project.iconUrl;
+  } else {
+    iconEl.textContent = getInitials(STATE.project.name);
+    iconEl.style.background = getAvatarColor(STATE.project.name);
+    iconEl.style.color = "#0a0c10";
+  }
+}
+
+function openMoreMenu() {
+  const items = [
+    { label: "Open in editor", icon: "code", action: () => { location.href = "/?pid=" + encodeURIComponent(STATE.pid); } },
+    { label: "Project dashboard", icon: "external", action: () => { location.href = "/project?pid=" + encodeURIComponent(STATE.pid); } },
+    { label: "Clear staged", icon: "trash", danger: true, action: () => confirmClearPending() },
+  ];
+  const sheet = el("div", { class: "sheet open", style: { zIndex: "3100" } });
+  sheet.innerHTML = `
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <h2 class="sheet-title">More</h2>
+      <button class="sheet-close" data-close aria-label="Close" type="button">${svgString("x", 14)}</button>
+    </div>
+    <div class="sheet-body" id="menuBody"></div>
+  `;
+  document.body.appendChild(sheet);
+  $("backdrop").classList.add("visible");
+
+  const body = sheet.querySelector("#menuBody");
+  for (const it of items) {
+    body.appendChild(el("button", {
+      type: "button",
+      style: {
+        display: "flex", alignItems: "center", gap: "10px",
+        width: "100%", padding: "12px", background: "transparent",
+        border: "none", borderBottom: "1px solid var(--theme-divider)",
+        textAlign: "left", cursor: "pointer",
+        color: it.danger ? "var(--theme-danger)" : "var(--theme-text)",
+        fontSize: "13px", fontFamily: "inherit",
+      },
+      onclick: () => { close(); setTimeout(it.action, 80); },
+    }, svg(it.icon, 14), el("span", {}, it.label)));
+  }
+  function close() { sheet.remove(); $("backdrop").classList.remove("visible"); }
+  sheet.querySelector("[data-close]").addEventListener("click", close);
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) close(); });
+}
+
+// ─── Rail / sections ────────────────────────────────────────────
+
+function mountRail() {
+  document.querySelectorAll(".rail-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const rail = btn.dataset.rail;
+      if (rail === STATE.activeRail && STATE.sidebarOpen) {
+        setSidebarOpen(false);
+      } else {
+        setSidebarOpen(true);
+        switchRail(rail);
+      }
+    });
+  });
+  $("statusPending").addEventListener("click", openPendingSheet);
+}
+
+function renderRail() {
+  document.querySelectorAll(".rail-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.rail === STATE.activeRail);
+  });
+}
+
+function setSidebarOpen(open) {
+  STATE.sidebarOpen = open;
+  try { localStorage.setItem(STORAGE.sidebarOpen, String(open)); } catch {}
+  $("aiBody").classList.toggle("sidebar-open", open);
+  renderRail();
+}
+
+function switchRail(rail) {
+  if (!["files","search","docs","history","commits","notes","info"].includes(rail)) return;
+  STATE.activeRail = rail;
+  try { localStorage.setItem(STORAGE.lastRail, rail); } catch {}
+
+  document.querySelectorAll(".ai-section").forEach(sec => {
+    sec.hidden = sec.dataset.section !== rail;
+  });
+  renderRail();
+
+  const section = document.querySelector(`.ai-section[data-section="${rail}"]`);
+  if (section) renderSection(rail, section);
+}
+
+function renderSection(rail, section) {
+  if (rail !== "files") {
+    section.innerHTML = "";
+  }
+  switch (rail) {
+    case "files": return renderFilesSection(section);
+    case "search": return renderSearchSection(section);
+    case "docs": return renderDocsSection(section);
+    case "history": return renderHistorySection(section);
+    case "commits": return renderCommitsSection(section);
+    case "notes": return renderNotesSection(section);
+    case "info": return renderInfoSection(section);
+  }
+}
+
+// ─── Files section ───────────────────────────────────────────────
+
+function renderFilesSection(section) {
+  // The HTML markup is static — the pane already exists
+  // Refresh the tree and tabs
+  renderFilesTree();
+  renderEditorTabs();
+  wireFilesSection();
+}
+
+let filesSectionWired = false;
+function wireFilesSection() {
+  const filter = $("filesFilter");
+  const reload = $("btnFilesReload");
+  if (!filter || !reload) return;   // markup not ready
+  if (filter.dataset.wired === "1") return;
+  filter.dataset.wired = "1";
+
+  filter.addEventListener("input", debounce((e) => {
+    STATE.fileFilter = e.target.value.toLowerCase();
+    renderFilesTree();
+  }, 120));
+
+  reload.addEventListener("click", async () => {
+    try { STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path)); }
+    catch {}
+    renderFilesTree();
+    renderHeader();
+  });
+}
+
+function renderFilesTree() {
+  const tree = $("filesTree");
+  if (!tree) return;
+  tree.innerHTML = "";
+
+  const files = STATE.fileFilter
+    ? STATE.files.filter(f => f.path.toLowerCase().includes(STATE.fileFilter))
+    : STATE.files;
+
+  if (!files.length) {
+    tree.innerHTML = `<div class="empty-state"><div class="empty-state-title">No files</div></div>`;
+    return;
+  }
+
+  const root = { children: {}, files: [] };
+  for (const f of files) {
+    const parts = f.path.split("/");
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!node.children[parts[i]]) node.children[parts[i]] = { children: {}, files: [], path: parts.slice(0, i + 1).join("/") };
+      node = node.children[parts[i]];
+    }
+    node.files.push({ name: parts[parts.length - 1], path: f.path });
+  }
+
+  const renderNode = (node, depth) => {
+    for (const [name, child] of Object.entries(node.children).sort(([a], [b]) => a.localeCompare(b))) {
+      const expanded = STATE.expandedFolders.has(child.path) || !!STATE.fileFilter;
+      const row = el("div", {
+        class: `tree-row ${expanded ? "expanded" : ""}`,
+        style: { "--depth": String(depth) },
+        onclick: () => {
+          if (STATE.expandedFolders.has(child.path)) STATE.expandedFolders.delete(child.path);
+          else STATE.expandedFolders.add(child.path);
+          renderFilesTree();
+        },
+      },
+        el("span", { class: "tree-chev" }, svg("chevron-right", 10)),
+        el("span", { class: "tree-icon" }, svg(expanded ? "folder-open" : "folder", 12)),
+        el("span", { class: "tree-name" }, name),
+      );
+      tree.appendChild(row);
+      if (expanded) renderNode(child, depth + 1);
+    }
+    for (const file of node.files.sort((a, b) => a.name.localeCompare(b.name))) {
+      const active = STATE.activeFile === file.path;
+      const row = el("div", {
+        class: `tree-row ${active ? "active" : ""}`,
+        style: { "--depth": String(depth) },
+        onclick: () => openFile(file.path),
+        oncontextmenu: (e) => {
+          e.preventDefault();
+          openFileContextMenu(e, file.path);
+        },
+      },
+        el("span", { class: "tree-chev" }),
+        el("span", { class: "tree-icon" }, svg(fileIconName(file.path), 12)),
+        el("span", { class: "tree-name", title: file.path }, file.name),
+      );
+      tree.appendChild(row);
+    }
+  };
+  renderNode(root, 0);
+}
+
+function openFileContextMenu(e, path) {
+  document.querySelectorAll(".ctx-menu").forEach(m => m.remove());
+
+  const tasks = [
+    { id: "explain", label: "Explain" },
+    { id: "debug", label: "Find bugs" },
+    { id: "codefix", label: "Fix" },
+    { id: "optimize", label: "Optimize" },
+    { id: "audit", label: "Audit" },
+    { id: "docstrings", label: "Add docstrings" },
+    { id: "diagram", label: "Diagram" },
+    { id: "simulate", label: "Simulate" },
+  ];
+
+  const menu = el("div", { class: "ctx-menu", style: {
+    position: "fixed", top: e.clientY + "px", left: e.clientX + "px",
+    background: "var(--theme-surface-card-solid)",
+    border: "1px solid var(--theme-glass-border)",
+    borderRadius: "8px", padding: "4px", zIndex: "9000",
+    boxShadow: "var(--shadow-menu)", minWidth: "180px",
+    fontFamily: "var(--font-sans)",
+  }});
+
+  for (const t of tasks) {
+    menu.appendChild(el("button", {
+      type: "button",
+      style: {
+        display: "flex", alignItems: "center", gap: "8px",
+        width: "100%", padding: "8px 10px",
+        background: "transparent", border: "none",
+        color: "var(--theme-text)", fontFamily: "inherit",
+        fontSize: "12px", fontWeight: "600",
+        textAlign: "left", cursor: "pointer", borderRadius: "5px",
+      },
+      onmouseover: (ev) => { ev.currentTarget.style.background = "var(--theme-glass-bg)"; },
+      onmouseout: (ev) => { ev.currentTarget.style.background = "transparent"; },
+      onclick: () => {
+        menu.remove();
+        STATE.activeTask = t.id;
+        STATE.scope = "file";
+        if (path !== STATE.activeFile) openFile(path);
+        openDrawer();
+      },
+    }, svg("sparkles", 12), el("span", {}, t.label)));
+  }
+
+  document.body.appendChild(menu);
+  setTimeout(() => {
+    document.addEventListener("click", function close(ev) {
+      if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener("click", close); }
+    });
+  }, 0);
+}
+
+async function openFile(path) {
+  if (!STATE.project) return;
+  if (STATE.activeFile === path && STATE.editorView) return;
+
+  if (STATE.activeFile && STATE.dirtyFiles.has(STATE.activeFile) && STATE.activeFile !== path) {
+    await saveActiveFile({ silent: true });
+  }
+
+  const file = await idb.getFile(STATE.pid, path);
+  if (!file) { toast("File not found", "error"); return; }
+  if (!isTextFile(path)) { toast("Binary preview not supported", "info"); return; }
+
+  if (!STATE.openFiles.includes(path)) STATE.openFiles.push(path);
+  STATE.activeFile = path;
+  try { localStorage.setItem(STORAGE.lastFile + "." + STATE.pid, path); } catch {}
+
+  const empty = $("editorEmpty");
+  const loading = $("editorLoading");
+  if (empty) empty.style.display = "none";
+  if (loading) loading.hidden = false;
+
+  try {
+    $("editorContainer").innerHTML = "";
+    await cm.mount($("editorContainer"), file.content || "", path);
+    if (loading) loading.hidden = true;
+    renderEditorTabs();
+    updateStatusBar();
+  } catch (err) {
+    console.error("[openFile]", err);
+    if (loading) loading.hidden = true;
+    if (empty) empty.style.display = "";
+    toast("Editor failed to load", "error");
+  }
+}
+
+async function saveActiveFile({ silent = false } = {}) {
+  if (!STATE.activeFile || !STATE.editorView) { if (!silent) toast("No file open", "info"); return; }
+  try {
+    const content = cm.getContent();
+    await idb.putFile(STATE.pid, STATE.activeFile, content);
+    try {
+      const p = await idb.getProject(STATE.pid);
+      if (p) { p.updatedAt = Date.now(); await idb.putProject(p); }
+    } catch {}
+    STATE.dirtyFiles.delete(STATE.activeFile);
+    renderEditorTabs();
+    updateStatusBar();
+    if (!silent) toast("Saved", "success");
+  } catch (err) {
+    console.error("[save]", err);
+    toast("Save failed", "error");
+  }
+}
+
+function renderEditorTabs() {
+  const tabs = $("editorTabs");
+  if (!tabs) return;
+  if (!STATE.openFiles.length) { tabs.style.display = "none"; tabs.innerHTML = ""; return; }
+  tabs.style.display = "flex";
+  tabs.innerHTML = "";
+  for (const path of STATE.openFiles) {
+    const active = path === STATE.activeFile;
+    const dirty = STATE.dirtyFiles.has(path);
+    tabs.appendChild(el("button", {
+      class: `editor-tab ${active ? "active" : ""}`,
+      type: "button",
+      onclick: () => openFile(path),
+    },
+      el("span", { class: "editor-tab-name" }, path.split("/").pop()),
+      dirty ? el("span", { class: "editor-tab-dot" }) : null,
+      el("button", {
+        class: "editor-tab-close",
+        type: "button",
+        "aria-label": "Close",
+        onclick: (e) => { e.stopPropagation(); closeFile(path); },
+      }, svg("x", 10)),
+    ));
+  }
+}
+
+async function closeFile(path) {
+  if (STATE.dirtyFiles.has(path)) {
+    const ok = await confirmDialog({ title: "Discard changes?", message: `${path.split("/").pop()} has unsaved changes.`, confirmLabel: "Discard", danger: true });
+    if (!ok) return;
+    STATE.dirtyFiles.delete(path);
+  }
+  const idx = STATE.openFiles.indexOf(path);
+  if (idx >= 0) STATE.openFiles.splice(idx, 1);
+  if (STATE.activeFile === path) {
+    if (STATE.openFiles.length) await openFile(STATE.openFiles[STATE.openFiles.length - 1]);
+    else {
+      STATE.activeFile = null;
+      cm.destroy();
+      $("editorContainer").innerHTML = "";
+      $("editorEmpty").style.display = "";
+    }
+  }
+  renderEditorTabs();
+  updateStatusBar();
+}
+
+// ─── Search section ──────────────────────────────────────────────
+
+function renderSearchSection(section) {
+  section.innerHTML = "";
+  const wrap = el("div", { class: "section-pad" });
+  const input = el("input", { class: "input", type: "search", placeholder: "Search across all files…" });
+  wrap.appendChild(input);
+  const summary = el("div", { class: "search-summary" });
+  wrap.appendChild(summary);
+  const results = el("div", { class: "search-results" });
+  results.innerHTML = `<div class="empty-state"><div class="empty-state-title">Type to search</div><div class="empty-state-desc">Find text across the project.</div></div>`;
+  wrap.appendChild(results);
+  section.appendChild(wrap);
+
+  input.addEventListener("input", debounce(async (e) => {
+    const q = e.target.value.trim();
+    if (!q) {
+      results.innerHTML = `<div class="empty-state"><div class="empty-state-title">Type to search</div></div>`;
+      summary.textContent = "";
+      return;
+    }
+    const lower = q.toLowerCase();
+    results.innerHTML = "";
+    summary.textContent = "";
+    let total = 0, fileCount = 0;
+    for (const file of STATE.files) {
+      if (!isTextFile(file.path)) continue;
+      const lines = String(file.content || "").split("\n");
+      const hits = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].toLowerCase().includes(lower)) hits.push({ line: i + 1, text: lines[i] });
+      }
+      if (!hits.length) continue;
+      fileCount++;
+      total += hits.length;
+
+      const block = el("div", { class: "search-file-block" });
+      block.appendChild(el("div", { class: "search-file-head" },
+        svg(fileIconName(file.path), 11),
+        el("span", { class: "search-file-path" }, file.path),
+        el("span", { class: "search-file-count" }, String(hits.length)),
+      ));
+      for (const h of hits.slice(0, 5)) {
+        block.appendChild(el("div", {
+          class: "search-hit",
+          onclick: async () => {
+            switchRail("files");
+            await openFile(file.path);
+            setTimeout(() => jumpToLine(h.line), 50);
+          },
+        },
+          el("span", { class: "search-line-num" }, String(h.line)),
+          el("span", { class: "search-line-text" }, h.text.slice(0, 120)),
+        ));
+      }
+      results.appendChild(block);
+    }
+    summary.textContent = total ? `${total} matches in ${fileCount} file${fileCount === 1 ? "" : "s"}` : "No matches";
+  }, 200));
+}
+
+async function jumpToLine(line) {
+  if (!STATE.editorView) return;
+  try {
+    const ln = Math.max(1, Math.min(line, STATE.editorView.state.doc.lines));
+    const lineObj = STATE.editorView.state.doc.line(ln);
+    STATE.editorView.dispatch({ selection: { anchor: lineObj.from }, scrollIntoView: true });
+    STATE.editorView.focus();
+  } catch {}
+}
+
+// ─── Docs section ────────────────────────────────────────────────
+
+function renderDocsSection(section) {
+  section.innerHTML = "";
+
+  const layout = el("div", { class: "docs-layout" });
+
+  // Sidebar
+  const sidebar = el("aside", { class: "docs-side" });
+  const sideHead = el("div", { class: "docs-side-head" },
+    el("span", { class: "pane-title" }, "Docs"),
+    el("button", { class: "icon-btn", type: "button", title: "New doc", onclick: () => createNewDoc() }, svg("plus", 13)),
+  );
+  sidebar.appendChild(sideHead);
+  const sideList = el("div", { class: "docs-side-list" });
+  sidebar.appendChild(sideList);
+  const sideFooter = el("div", { class: "docs-side-footer" },
+    el("button", {
+      class: "btn btn-secondary btn-block btn-sm", type: "button",
+      onclick: () => openGeneratePanel(section),
+    }, svg("sparkles", 12), " Generate from code"),
+  );
+  sidebar.appendChild(sideFooter);
+  layout.appendChild(sidebar);
+
+  // Main
+  const main = el("div", { class: "docs-main" });
+  const head = el("div", { class: "docs-head" });
+  const active = el("button", { class: "docs-active-file", type: "button" },
+    el("span", { id: "docsActivePath" }, "—"),
+    svg("chevron-down", 10),
+  );
+  head.appendChild(active);
+  const modeSwitch = el("div", { class: "docs-mode-switch" },
+    el("button", { type: "button", "data-mode": "edit", class: "active" }, "Edit"),
+    el("button", { type: "button", "data-mode": "preview" }, "Preview"),
+    el("button", { type: "button", "data-mode": "focus" }, "Focus"),
+  );
+  head.appendChild(modeSwitch);
+  const saveBtn = el("button", {
+    class: "btn btn-primary btn-sm", type: "button", id: "docsSave", disabled: true,
+    onclick: () => saveDoc(),
+  }, svg("check", 11), " Save");
+  head.appendChild(saveBtn);
+  main.appendChild(head);
+
+  const toolbar = el("div", { class: "docs-toolbar", id: "docsToolbar" });
+  main.appendChild(toolbar);
+
+  const panes = el("div", { class: "docs-panes", id: "docsPanes", dataset: { mode: "edit" } });
+  const source = el("textarea", { class: "docs-source", id: "docsSource", spellcheck: "false", placeholder: "Start writing markdown…" });
+  const preview = el("div", { class: "docs-preview ai-markdown", id: "docsPreview" });
+  panes.appendChild(el("div", { class: "docs-pane docs-pane-source" }, source));
+  panes.appendChild(el("div", { class: "docs-pane docs-pane-preview" }, preview));
+  main.appendChild(panes);
+
+  const review = el("div", { class: "docs-review", id: "docsReview", hidden: true });
+  main.appendChild(review);
+
+  layout.appendChild(main);
+  section.appendChild(layout);
+
+  // Wire
+  modeSwitch.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => setDocsMode(btn.dataset.mode));
+  });
+
+  source.addEventListener("input", () => {
+    STATE.docsDirty = true;
+    updateDocsSaveState();
+    if (STATE.docsSaveTimer) clearTimeout(STATE.docsSaveTimer);
+    STATE.docsSaveTimer = setTimeout(() => saveDoc(), 800);
+    scheduleDocsPreview();
+  });
+
+  renderDocsToolbar();
+  renderDocsFileList();
+  loadActiveDocIntoPanes();
+}
+
+const scheduleDocsPreview = debounce(() => {
+  const preview = $("docsPreview");
+  const source = $("docsSource");
+  if (!preview || !source) return;
+  preview.innerHTML = renderMarkdown(source.value);
+  hydrateMarkdown(preview).catch(() => {});
+}, 150);
+
+function renderDocsToolbar() {
+  const tools = [
+    { icon: "h1", prefix: "# ", block: true },
+    { icon: "h2", prefix: "## ", block: true },
+    { icon: "h3", prefix: "### ", block: true },
+    { sep: true },
+    { icon: "bold", wrap: ["**", "**"] },
+    { icon: "italic", wrap: ["*", "*"] },
+    { icon: "strike", wrap: ["~~", "~~"] },
+    { sep: true },
+    { icon: "list", prefix: "- ", block: true },
+    { icon: "list-ol", prefix: "1. ", block: true },
+    { icon: "quote", prefix: "> ", block: true },
+    { sep: true },
+    { icon: "link", wrap: ["[", "](https://)"] },
+    { icon: "code", wrap: ["`", "`"] },
+  ];
+  const bar = $("docsToolbar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  for (const t of tools) {
+    if (t.sep) { bar.appendChild(el("span", { class: "docs-toolbar-sep" })); continue; }
+    bar.appendChild(el("button", {
+      class: "docs-toolbar-btn", type: "button", "aria-label": t.icon, title: t.icon,
+      onmousedown: (e) => e.preventDefault(),
+      onclick: () => applyDocFormat(t),
+    }, svg(t.icon, 13)));
+  }
+}
+
+function applyDocFormat(action) {
+  const ta = $("docsSource");
+  if (!ta) return;
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  const value = ta.value;
+  const selected = value.slice(start, end);
+  let nv, ns, ne;
+
+  if (action.block) {
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const line = value.slice(lineStart, start);
+    if (line.startsWith(action.prefix)) {
+      nv = value.slice(0, lineStart) + line.slice(action.prefix.length) + value.slice(start);
+      ns = Math.max(lineStart, start - action.prefix.length);
+      ne = Math.max(lineStart, end - action.prefix.length);
+    } else {
+      nv = value.slice(0, lineStart) + action.prefix + value.slice(lineStart);
+      ns = start + action.prefix.length;
+      ne = end + action.prefix.length;
+    }
+  } else if (action.wrap) {
+    const [b, a] = action.wrap;
+    nv = value.slice(0, start) + b + selected + a + value.slice(end);
+    ns = start + b.length;
+    ne = start + b.length + selected.length;
+  }
+
+  ta.value = nv;
+  ta.selectionStart = ns;
+  ta.selectionEnd = ne;
+  ta.focus();
+
+  STATE.docsDirty = true;
+  updateDocsSaveState();
+  const preview = $("docsPreview");
+  if (preview) { preview.innerHTML = renderMarkdown(nv); hydrateMarkdown(preview).catch(() => {}); }
+  if (STATE.docsSaveTimer) clearTimeout(STATE.docsSaveTimer);
+  STATE.docsSaveTimer = setTimeout(() => saveDoc(), 800);
+}
+
+function renderDocsFileList() {
+  const list = document.querySelector(".docs-side-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const docs = STATE.files.filter(f => isDocsFile(f.path)).sort((a, b) => a.path.localeCompare(b.path));
+  if (!docs.length) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-state-title" style="font-size:11px">No docs yet</div></div>`;
+    return;
+  }
+  for (const d of docs) {
+    const active = STATE.docsActivePath === d.path;
+    list.appendChild(el("button", {
+      class: `docs-file-row ${active ? "active" : ""}`,
+      type: "button",
+      onclick: () => loadDoc(d.path),
+    }, svg(fileIconName(d.path), 12), el("span", {}, d.path)));
+  }
+}
+
+async function loadActiveDocIntoPanes() {
+  const docs = STATE.files.filter(f => isDocsFile(f.path));
+  if (!docs.length) {
+    const src = $("docsSource");
+    const preview = $("docsPreview");
+    const path = $("docsActivePath");
+    if (src) src.value = "";
+    if (preview) preview.innerHTML = `<div class="empty-state"><div class="empty-state-title">No docs yet</div><div class="empty-state-desc">Click "New doc" or "Generate from code".</div></div>`;
+    if (path) path.textContent = "—";
+    updateDocsSaveState();
+    return;
+  }
+  const active = STATE.docsActivePath && docs.find(d => d.path === STATE.docsActivePath)
+    ? STATE.docsActivePath
+    : docs[0].path;
+  await loadDoc(active);
+}
+
+async function loadDoc(path) {
+  if (STATE.docsDirty && STATE.docsActivePath && STATE.docsActivePath !== path) await saveDoc();
+  if (STATE.docsSaveTimer) { clearTimeout(STATE.docsSaveTimer); STATE.docsSaveTimer = null; }
+
+  const file = await idb.getFile(STATE.pid, path);
+  if (!file) { toast("Doc not found", "error"); return; }
+
+  STATE.docsActivePath = path;
+  STATE.docsDirty = false;
+
+  const src = $("docsSource");
+  const preview = $("docsPreview");
+  const pathEl = $("docsActivePath");
+  if (src) src.value = file.content || "";
+  if (pathEl) pathEl.textContent = path;
+  if (preview) {
+    preview.innerHTML = renderMarkdown(file.content || "");
+    hydrateMarkdown(preview).catch(() => {});
+  }
+  renderDocsFileList();
+  updateDocsSaveState();
+}
+
+function updateDocsSaveState() {
+  const save = $("docsSave");
+  if (save) save.disabled = !STATE.docsDirty;
+}
+
+async function saveDoc() {
+  if (!STATE.docsActivePath) return;
+  const src = $("docsSource");
+  if (!src) return;
+  try {
+    await idb.putFile(STATE.pid, STATE.docsActivePath, src.value);
+    STATE.docsDirty = false;
+    updateDocsSaveState();
+    STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path));
+    renderDocsFileList();
+  } catch (err) {
+    console.error("[docs save]", err);
+    toast("Save failed", "error");
+  }
+}
+
+function setDocsMode(mode) {
+  STATE.docsMode = mode;
+  const panes = $("docsPanes");
+  if (panes) panes.dataset.mode = mode;
+  document.querySelectorAll(".docs-mode-switch button").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+}
+
+async function createNewDoc() {
+  const name = window.prompt("New doc path (e.g. docs/guide.md):", "docs/untitled.md");
+  if (!name) return;
+  const path = name.trim();
+  if (!path) return;
+  const existing = await idb.getFile(STATE.pid, path);
+  if (existing) { toast("Doc exists", "warning"); return; }
+  await idb.putFile(STATE.pid, path, `# ${path.split("/").pop().replace(/\.mdx?$/, "")}\n\n`);
+  STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path));
+  renderDocsFileList();
+  await loadDoc(path);
+  toast("Created " + path, "success");
+}
+
+// ─── Generate docs panel (inline review) ─────────────────────────
+
+function openGeneratePanel(section) {
+  const review = $("docsReview");
+  if (!review) return;
+
+  const panes = $("docsPanes");
+  const head = document.querySelector(".docs-head");
+  const toolbar = $("docsToolbar");
+
+  review.hidden = false;
+  if (panes) panes.hidden = true;
+  if (head) head.hidden = true;
+  if (toolbar) toolbar.hidden = true;
+
+  review.innerHTML = `
+    <div class="section-pad" style="padding:24px;">
+      <h3 style="margin:0 0 6px;font-size:15px;font-weight:800;">Generate documentation</h3>
+      <p style="margin:0 0 16px;font-size:12px;color:var(--theme-text-tertiary);">AI reads your code and drafts documentation.</p>
+
+      <div class="sheet-section-title">Scope</div>
+      <label class="sheet-radio" style="margin-bottom:6px;">
+        <input type="radio" name="genScope" value="all" checked>
+        <span>Entire project (${STATE.files.length} files)</span>
+      </label>
+      <label class="sheet-radio" style="margin-bottom:16px;">
+        <input type="radio" name="genScope" value="code">
+        <span>Code files only</span>
+      </label>
+
+      <div class="sheet-section-title">Style</div>
+      <label class="sheet-radio" style="margin-bottom:6px;">
+        <input type="radio" name="genStyle" value="thorough" checked>
+        <span>Thorough</span>
+      </label>
+      <label class="sheet-radio" style="margin-bottom:16px;">
+        <input type="radio" name="genStyle" value="minimal">
+        <span>Minimal</span>
+      </label>
+
+      <div class="sheet-actions" style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" type="button" id="genCancel">Cancel</button>
+        <button class="btn btn-primary" type="button" id="genRun" style="flex:1;">Generate</button>
+      </div>
+    </div>
+  `;
+
+  const close = () => {
+    review.hidden = true;
+    if (panes) panes.hidden = false;
+    if (head) head.hidden = false;
+    if (toolbar) toolbar.hidden = false;
+  };
+
+  $("genCancel").addEventListener("click", close);
+  $("genRun").addEventListener("click", () => runGenerateInline(close));
+}
+
+async function runGenerateInline(closeCb) {
+  const scope = document.querySelector('input[name="genScope"]:checked')?.value || "all";
+  const style = document.querySelector('input[name="genStyle"]:checked')?.value || "thorough";
+
+  const filesToSend = {};
+  for (const f of STATE.files) {
+    if (scope === "code" && !/\.(html?|css|js|mjs|jsx|tsx?|py|json)$/i.test(f.path)) continue;
+    filesToSend[f.path] = f.content || "";
+  }
+  if (!Object.keys(filesToSend).length) { toast("No files to analyze", "warning"); return; }
+
+  const review = $("docsReview");
+  review.innerHTML = `<div class="docs-review-loading"><div class="spinner"></div><div>Generating documentation…</div></div>`;
+
+  try {
+    const res = await runTask({
+      task: "docs", pid: STATE.pid,
+      payload: {
+        name: STATE.project.name || "Untitled",
+        description: STATE.project.description || "",
+        files: filesToSend,
+        _style: style,
+      },
+      deps: { idb, apiFetch },
+    });
+
+    if (!res.ok || !res.data?.success) {
+      toast(res.data?.error || "Generation failed", "error");
+      closeCb(); return;
+    }
+
+    const artifacts = (res.data.artifacts || []).filter(a => a.type === "files");
+    if (!artifacts.length) { toast("No files returned", "warning"); closeCb(); return; }
+
+    const run = await appendAiRun(STATE.pid, {
+      task: "docs", pid: STATE.pid, file: null, scope: "project",
+      text: res.data.text,
+      artifacts: res.data.artifacts,
+      usage: res.data.usage,
+      quota: res.data.quota,
+      cached: !!res.data.cached,
+    }, { idb });
+
+    if (res.data.quota) { writeQuotaCache(res.data.quota); renderQuotaHud(); }
+    STATE.aiState = await readAiState(STATE.pid, { idb });
+    updateStatusBar();
+
+    renderDocsReview(artifacts, run, closeCb);
+  } catch (err) {
+    console.error("[docs generate]", err);
+    toast(err.message || "Generation failed", "error");
+    closeCb();
+  }
+}
+
+function renderDocsReview(artifacts, run, closeCb) {
+  const review = $("docsReview");
+  review.hidden = false;
+
+  review.innerHTML = "";
+  review.appendChild(el("div", { class: "section-pad", style: { padding: "20px" } },
+    el("h3", { style: { margin: "0 0 6px", fontSize: "15px", fontWeight: "800" } }, "Generated documentation"),
+    el("p", { style: { margin: "0 0 16px", fontSize: "12px", color: "var(--theme-text-tertiary)" } }, "Review and accept what you want to keep."),
+  ));
+
+  const list = el("div", { class: "docs-review-cards", style: { padding: "0 20px 20px" } });
+  const allFiles = artifacts.flatMap(a => a.files || []);
+  for (const f of allFiles) {
+    list.appendChild(el("div", { class: "docs-review-card" },
+      el("div", { class: "docs-review-card-head" },
+        el("code", { class: "docs-review-card-path" }, f.path),
+        el("span", { class: "docs-review-card-size" }, formatBytes(estimateSize(f.content || ""))),
+      ),
+      el("pre", { class: "docs-review-card-preview" }, (f.content || "").slice(0, 240) + ((f.content || "").length > 240 ? "\n…" : "")),
+      el("div", { class: "docs-review-card-actions" },
+        el("button", { class: "btn btn-primary btn-sm", type: "button", onclick: async () => {
+          await idb.putFile(STATE.pid, f.path, f.content || "");
+          STATE.files = (await idb.listFiles(STATE.pid) || []).filter(x => !isSystemFile(x.path));
+          renderDocsFileList();
+          toast(`Saved ${f.path}`, "success");
+          closeCb();
+          await loadDoc(f.path);
+        }}, "Accept"),
+        el("button", { class: "btn btn-secondary btn-sm", type: "button", onclick: () => {
+          closeCb();
+          const src = $("docsSource");
+          const pathEl = $("docsActivePath");
+          STATE.docsActivePath = f.path;
+          STATE.docsDirty = true;
+          if (pathEl) pathEl.textContent = f.path;
+          if (src) src.value = f.content || "";
+          updateDocsSaveState();
+          setDocsMode("edit");
+        }}, "Edit"),
+        el("button", { class: "btn btn-ghost btn-sm", type: "button", onclick: (e) => {
+          e.currentTarget.closest(".docs-review-card").remove();
+        }}, "Reject"),
+      ),
+    ));
+  }
+  review.appendChild(list);
+
+  const footer = el("div", { class: "docs-review-footer", style: { padding: "16px 20px", display: "flex", gap: "8px", justifyContent: "flex-end" } },
+    el("button", { class: "btn btn-secondary", type: "button", onclick: closeCb }, "Close"),
+    el("button", { class: "btn btn-primary", type: "button", onclick: async () => {
+      let count = 0;
+      for (const a of artifacts) {
+        for (const f of a.files || []) {
+          await idb.putFile(STATE.pid, f.path, f.content || "");
+          count++;
+        }
+      }
+      STATE.files = (await idb.listFiles(STATE.pid) || []).filter(x => !isSystemFile(x.path));
+      renderDocsFileList();
+      toast(`Saved ${count} doc${count === 1 ? "" : "s"}`, "success");
+      closeCb();
+    }}, "Accept all"),
+  );
+  review.appendChild(footer);
+}
+
+// ─── History section ─────────────────────────────────────────────
+
+function renderHistorySection(section) {
+  section.innerHTML = "";
+  const wrap = el("div", { class: "section-pad" });
+  wrap.appendChild(el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0 0 16px" } }, "AI history"));
+
+  const runs = STATE.aiState?.runs || [];
+  if (!runs.length) {
+    wrap.appendChild(el("div", { class: "empty-state" },
+      el("div", { class: "empty-state-title" }, "No runs yet"),
+      el("div", { class: "empty-state-desc" }, "Your AI runs will appear here."),
+    ));
+    section.appendChild(wrap);
+    return;
+  }
+
+  for (const r of runs.slice(0, 50)) {
+    const meta = getTaskMeta(r.task) || { label: r.task };
+    wrap.appendChild(el("div", {
+      class: "history-row",
+      onclick: () => openRunInline(r),
+    },
+      el("div", { class: "history-row-top" },
+        el("span", { class: "history-row-task" }, meta.label),
+        el("span", { class: "history-row-time" }, relativeTime(r.createdAt)),
+      ),
+      el("div", { class: "history-row-file" }, r.file || "project"),
+      el("div", { class: "history-row-count" }, `${(r.artifacts || []).length} artifact${(r.artifacts || []).length === 1 ? "" : "s"}`),
+    ));
+  }
+  section.appendChild(wrap);
+}
+
+function openRunInline(run) {
+  const section = document.querySelector(`.ai-section[data-section="${STATE.activeRail}"]`);
+  if (!section) return;
+
+  section.innerHTML = "";
+  const wrap = el("div", { class: "section-pad" });
+  wrap.appendChild(el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" } },
+    el("button", {
+      class: "btn btn-ghost btn-sm", type: "button",
+      onclick: () => renderHistorySection(section),
+    }, svg("chevron-left", 12), " Back"),
+    el("span", { style: { fontSize: "11px", color: "var(--theme-text-tertiary)", fontFamily: "var(--font-mono)" } }, relativeTime(run.createdAt)),
+  ));
+
+  if (run.text) {
+    const md = el("div", { class: "ai-markdown" });
+    md.innerHTML = renderMarkdown(run.text);
+    wrap.appendChild(md);
+    hydrateMarkdown(md).catch(() => {});
+  }
+
+  if (Array.isArray(run.artifacts) && run.artifacts.length) {
+    const arts = el("div", { class: "ai-artifacts" });
+    wrap.appendChild(arts);
+    renderArtifacts(arts, run.artifacts, {
+      task: run.task,
+      onAccept: (artifact, idx) => handleAccept(artifact, idx, run),
+      onReject: (artifact, idx) => handleReject(artifact, idx, run),
+      onOpenFile: (path, line) => { switchRail("files"); openFile(path).then(() => { if (line) jumpToLine(line); }); },
+    });
+  }
+
+  section.appendChild(wrap);
+}
+
+// ─── Commits section ────────────────────────────────────────────
+
+async function renderCommitsSection(section) {
+  section.innerHTML = "";
+  const wrap = el("div", { class: "section-pad" });
+
+  const header = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" } },
+    el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0" } }, "Commits"),
+    el("button", {
+      class: "btn btn-primary btn-sm", type: "button",
+      onclick: () => draftCommitMessage(),
+    }, svg("sparkles", 12), " Draft message"),
+  );
+  wrap.appendChild(header);
+
+  let versions = [];
+  try { versions = await idb.listVersions(STATE.pid); } catch {}
+
+  if (!versions.length) {
+    wrap.appendChild(el("div", { class: "empty-state" },
+      el("div", { class: "empty-state-title" }, "No commits yet"),
+      el("div", { class: "empty-state-desc" }, "Commits made from the project dashboard will appear here."),
+    ));
+  } else {
+    for (const v of versions) {
+      wrap.appendChild(el("div", { class: "commit-row" },
+        el("div", { class: "commit-row-top" },
+          el("span", { class: "commit-row-msg" }, v.message || "Untitled"),
+          el("span", { class: "commit-row-time" }, relativeTime(v.createdAt)),
+        ),
+        el("div", { class: "commit-row-meta" },
+          `${Object.keys(v.files || {}).length} files`),
+      ));
+    }
+  }
+  section.appendChild(wrap);
+}
+
+async function draftCommitMessage() {
+  toast("Drafting commit message…", "info");
+  try {
+    const res = await runTask({
+      task: "commitMsg", pid: STATE.pid,
+      payload: { diff: "(see project files)" },
+      deps: { idb, apiFetch },
+    });
+    if (!res.ok || !res.data?.success) { toast(res.data?.error || "Failed", "error"); return; }
+    toast("Message drafted — opening editor to prefill", "success");
+    sessionStorage.setItem("folio.ai.prefillCommit", JSON.stringify({ message: res.data.text || "", changed: [] }));
+    location.href = "/?pid=" + encodeURIComponent(STATE.pid);
+  } catch (err) {
+    toast(err.message || "Failed", "error");
+  }
+}
+
+// ─── Notes section ──────────────────────────────────────────────
+
+async function renderNotesSection(section) {
+  section.innerHTML = "";
+  await loadNotes();
+  const wrap = el("div", { class: "section-pad" });
+  wrap.appendChild(el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0 0 16px" } }, "Notes"));
+
+  const notes = (STATE.notes.notes || []).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (!notes.length) {
+    wrap.appendChild(el("div", { class: "empty-state" },
+      el("div", { class: "empty-state-title" }, "No notes yet"),
+      el("div", { class: "empty-state-desc" }, "Notes you save from AI runs will appear here."),
+    ));
+  } else {
+    for (const n of notes) {
+      wrap.appendChild(el("div", { class: "note-row" },
+        el("div", { class: "note-row-title" }, n.title || "Untitled"),
+        el("div", { class: "note-row-meta" }, `${relativeTime(n.updatedAt || n.createdAt || 0)}${n.sourceTask ? " · " + n.sourceTask : ""}`),
+      ));
+    }
+  }
+  section.appendChild(wrap);
+}
+
+// ─── Info section ───────────────────────────────────────────────
+
+async function renderInfoSection(section) {
+  section.innerHTML = "";
+  const wrap = el("div", { class: "section-pad" });
+
+  const totalBytes = STATE.files.reduce((s, f) => s + estimateSize(f.content || ""), 0);
+  const limit = STATE.project.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+  const pct = Math.min(100, (totalBytes / limit) * 100);
+
+  let versions = [];
+  try { versions = await idb.listVersions(STATE.pid); } catch {}
+
+  wrap.appendChild(el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0 0 16px" } }, "Project"));
+
+  const card = el("div", { class: "info-card" });
+  card.appendChild(el("div", { class: "info-card-title" }, "Overview"));
+  card.appendChild(el("div", { class: "info-card-row" }, el("span", {}, "Name"), el("span", {}, STATE.project.name || "Untitled")));
+  card.appendChild(el("div", { class: "info-card-row" }, el("span", {}, "Files"), el("span", {}, String(STATE.files.length))));
+  card.appendChild(el("div", { class: "info-card-row" }, el("span", {}, "Commits"), el("span", {}, String(versions.length))));
+  wrap.appendChild(card);
+
+  const storageCard = el("div", { class: "info-card" });
+  storageCard.appendChild(el("div", { class: "info-card-title" }, "Storage"));
+  storageCard.appendChild(el("div", { class: "info-card-row" },
+    el("span", {}, "Used"), el("span", {}, `${formatBytes(totalBytes)} / ${formatBytes(limit)}`)));
+  const bar = el("div", { class: "storage-bar" });
+  bar.appendChild(el("div", { class: "storage-bar-fill", style: { width: pct + "%" } }));
+  storageCard.appendChild(bar);
+  wrap.appendChild(storageCard);
+
+  // AI actions
+  const aiCard = el("div", { class: "info-card" });
+  aiCard.appendChild(el("div", { class: "info-card-title" }, "AI insights"));
+  aiCard.appendChild(el("button", {
+    class: "btn btn-secondary btn-block btn-sm", type: "button",
+    style: { marginTop: "6px", marginBottom: "6px" },
+    onclick: () => runProjectTask("readProject", aiResult),
+  }, svg("sparkles", 12), " Summarize project"));
+  aiCard.appendChild(el("button", {
+    class: "btn btn-secondary btn-block btn-sm", type: "button",
+    style: { marginBottom: "6px" },
+    onclick: () => runProjectTask("designExplain", aiResult),
+  }, svg("layers", 12), " Explain architecture"));
+  aiCard.appendChild(el("button", {
+    class: "btn btn-secondary btn-block btn-sm", type: "button",
+    onclick: () => runProjectTask("struggle", aiResult),
+  }, svg("alert", 12), " Find weak spots"));
+  wrap.appendChild(aiCard);
+
+  const aiResult = el("div", { style: { marginTop: "16px" } });
+  wrap.appendChild(aiResult);
+
+  if (STATE.project.deployment?.url) {
+    const dep = el("div", { class: "info-card" });
+    dep.appendChild(el("div", { class: "info-card-title" }, "Deployment"));
+    dep.appendChild(el("div", { class: "info-card-row" },
+      el("span", {}, "Status"), el("span", { style: { color: "var(--theme-success)" } }, "Live")));
+    dep.appendChild(el("a", {
+      class: "btn btn-secondary btn-sm btn-block",
+      href: STATE.project.deployment.url,
+      target: "_blank",
+      rel: "noopener",
+      style: { marginTop: "8px" },
+    }, svg("external", 11), " Open live site"));
+    wrap.appendChild(dep);
+  }
+
+  section.appendChild(wrap);
+
+  async function runProjectTask(task, resultEl) {
+    resultEl.innerHTML = `<div class="docs-review-loading"><div class="spinner"></div><div>Running…</div></div>`;
+    try {
+      const payload = { name: STATE.project.name, description: STATE.project.description || "" };
+      if (task !== "readProject") {
+        payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
+      }
+      const res = await runTask({ task, pid: STATE.pid, payload, deps: { idb, apiFetch } });
+      if (!res.ok || !res.data?.success) {
+        resultEl.innerHTML = `<div class="ai-result-error">${svgString("alert", 14)} ${escapeHtml(res.data?.error || "Failed")}</div>`;
+        return;
+      }
+      resultEl.innerHTML = "";
+      if (res.data.text) {
+        const md = el("div", { class: "ai-markdown" });
+        md.innerHTML = renderMarkdown(res.data.text);
+        resultEl.appendChild(md);
+        hydrateMarkdown(md).catch(() => {});
+      }
+      if (res.data.artifacts?.length) {
+        const arts = el("div", { class: "ai-artifacts" });
+        resultEl.appendChild(arts);
+        renderArtifacts(arts, res.data.artifacts, { task });
+      }
+      if (res.data.quota) writeQuotaCache(res.data.quota);
+      await appendAiRun(STATE.pid, {
+        task, pid: STATE.pid, file: null, scope: "project",
+        text: res.data.text, artifacts: res.data.artifacts,
+        usage: res.data.usage, quota: res.data.quota, cached: !!res.data.cached,
+      }, { idb });
+      STATE.aiState = await readAiState(STATE.pid, { idb });
+      updateStatusBar();
+    } catch (err) {
+      resultEl.innerHTML = `<div class="ai-result-error">${svgString("alert", 14)} ${escapeHtml(err.message || "Failed")}</div>`;
+    }
+  }
+}
+
+// ─── AI drawer ──────────────────────────────────────────────────
+
+function wireDrawer() {
+  $("drawerClose").addEventListener("click", closeDrawer);
+  $("drawerBackdrop").addEventListener("click", closeDrawer);
+
+  document.querySelectorAll(".scope-btn").forEach(btn => {
+    btn.addEventListener("click", () => setScope(btn.dataset.scope));
+  });
+
+  $("taskSelect").addEventListener("change", () => {
+    STATE.activeTask = $("taskSelect").value;
+    try { localStorage.setItem(STORAGE.task, STATE.activeTask); } catch {}
+    updateInfoBar();
+    updateRunButtonState();
+  });
+
+  $("btnRun").addEventListener("click", runCurrentTask);
+
+  try {
+    const saved = localStorage.getItem(STORAGE.task);
+    if (saved && TASK_META[saved]) STATE.activeTask = saved;
+  } catch {}
+}
+
+function toggleDrawer() { STATE.aiOpen ? closeDrawer() : openDrawer(); }
+
+function openDrawer() {
+  STATE.aiOpen = true;
+  $("aiDrawer").classList.add("open");
+  $("drawerBackdrop").classList.add("visible");
+
+  // Default scope
+  const sel = STATE.editorView ? cm.getSelection() : "";
+  if (sel) STATE.scope = "selection";
+  else if (STATE.activeFile) STATE.scope = "file";
+  else STATE.scope = "project";
+
+  renderScope();
+  renderTaskPicker();
+  updateInfoBar();
+  updateRunButtonState();
+  renderQuotaHud();
+}
+
+function closeDrawer() {
+  STATE.aiOpen = false;
+  $("aiDrawer").classList.remove("open");
+  $("drawerBackdrop").classList.remove("visible");
+}
+
+function setScope(scope) {
+  STATE.scope = scope;
+  renderScope();
+  renderTaskPicker();
+  updateInfoBar();
+  updateRunButtonState();
+}
+
+function renderScope() {
+  document.querySelectorAll(".scope-btn").forEach(btn => {
+    const active = btn.dataset.scope === STATE.scope;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+function renderTaskPicker() {
+  const allowed = ASK_TASKS[STATE.scope] || [];
+  const select = $("taskSelect");
+  select.innerHTML = "";
+
+  // Group by TASK_META group
+  const groups = {};
+  for (const id of allowed) {
+    const meta = TASK_META[id];
+    if (!meta) continue;
+    if (!groups[meta.group]) groups[meta.group] = [];
+    groups[meta.group].push({ id, meta });
+  }
+
+  for (const [groupName, items] of Object.entries(groups)) {
+    const og = document.createElement("optgroup");
+    og.label = groupName;
+    for (const { id, meta } of items) {
+      const opt = document.createElement("option");
+      opt.value = id;
+      const cost = meta.weight > 1 ? ` · ${meta.weight} credits` : "";
+      opt.textContent = meta.label + cost;
+      og.appendChild(opt);
+    }
+    select.appendChild(og);
+  }
+
+  // If current task isn't allowed, pick first
+  if (!allowed.includes(STATE.activeTask) && allowed.length) {
+    STATE.activeTask = allowed[0];
+  }
+  if (allowed.includes(STATE.activeTask)) select.value = STATE.activeTask;
+}
+
+function updateInfoBar() {
+  const bar = $("infoBar");
+  const meta = getTaskMeta(STATE.activeTask);
+  if (!meta) { bar.hidden = true; return; }
+
+  bar.className = "ai-info-bar";
+  bar.hidden = false;
+  bar.innerHTML = "";
+
+  const quota = readQuotaCache();
+  const exhausted = quota &&
+    ((quota.wordsUsed ?? 0) >= (quota.wordsLimit ?? Infinity)
+     || (quota.creditsUsed ?? 0) >= (quota.creditsLimit ?? Infinity));
+
+  if (exhausted) {
+    bar.classList.add("error");
+    bar.innerHTML = `${svgString("clock", 12)} <span>Quota reached · resets ${formatRelativeReset(quota.resetAt)}</span>`;
+    return;
+  }
+  if (!STATE.online) {
+    bar.classList.add("muted");
+    bar.innerHTML = `${svgString("wifi-off", 12)} <span>Offline</span>`;
+    return;
+  }
+  if (STATE.isGuest && !isGuestTask(STATE.activeTask)) {
+    bar.classList.add("guest");
+    bar.innerHTML = `${svgString("lock", 12)} <span><a href="/register?next=${encodeURIComponent(location.pathname + location.search)}">Sign in</a> to unlock</span>`;
+    return;
+  }
+  if (meta.writes) {
+    bar.classList.add("warn");
+    bar.innerHTML = `${svgString("alert", 12)} <span>This will create a diff. Nothing saves until you accept.</span>`;
+    return;
+  }
+  if (STATE.scope === "selection" && !cm.getSelection()) {
+    bar.classList.add("muted");
+    bar.innerHTML = `<span>Select text in the editor first</span>`;
+    return;
+  }
+  if (STATE.scope === "file" && !STATE.activeFile) {
+    bar.classList.add("muted");
+    bar.innerHTML = `<span>Open a file to use this task</span>`;
+    return;
+  }
+  bar.hidden = true;
+}
+
+function updateRunButtonState() {
+  const btn = $("btnRun");
+  if (STATE.running) {
+    btn.disabled = true;
+    btn.classList.add("running");
+    btn.innerHTML = `${svgString("refresh", 14)}<span>Running…</span>`;
+    return;
+  }
+  btn.classList.remove("running");
+  btn.innerHTML = `${svgString("play", 14)}<span>Run</span>`;
+
+  const meta = getTaskMeta(STATE.activeTask);
+  const quota = readQuotaCache();
+  const exhausted = quota &&
+    ((quota.wordsUsed ?? 0) >= (quota.wordsLimit ?? Infinity)
+     || (quota.creditsUsed ?? 0) >= (quota.creditsLimit ?? Infinity));
+  const selection = STATE.editorView ? cm.getSelection() : "";
+
+  btn.disabled =
+    !meta || !STATE.online || exhausted ||
+    (STATE.isGuest && !isGuestTask(STATE.activeTask)) ||
+    (STATE.scope === "file" && !STATE.activeFile) ||
+    (STATE.scope === "selection" && !selection);
+}
+
+async function runCurrentTask() {
+  if (STATE.running) return;
+  const meta = getTaskMeta(STATE.activeTask);
+  if (!meta) return;
+
+  const selection = STATE.editorView ? cm.getSelection() : "";
+  const payload = buildPayload();
+  if (!payload) return;
+
+  STATE.running = true;
+  STATE.abort = new AbortController();
+  updateRunButtonState();
+  showResultLoading(`Running ${meta.label}…`);
+
+  try {
+    const res = await runTask({
+      task: STATE.activeTask, pid: STATE.pid, payload,
+      signal: STATE.abort.signal,
+      deps: { idb, apiFetch },
+    });
+
+    if (!res.ok || !res.data?.success) {
+      if (res.data?.quotaExceeded) showResultError(res.data.error || "Quota exceeded");
+      else showResultError(res.data?.error || `AI error (${res.status})`);
+      return;
+    }
+
+    const run = await appendAiRun(STATE.pid, {
+      task: STATE.activeTask, pid: STATE.pid,
+      file: STATE.scope === "project" ? null : STATE.activeFile,
+      scope: STATE.scope,
+      text: res.data.text,
+      artifacts: res.data.artifacts || [],
+      usage: res.data.usage || null,
+      quota: res.data.quota || null,
+      cached: !!res.data.cached,
+    }, { idb });
+
+    if (res.data.quota) { writeQuotaCache(res.data.quota); renderQuotaHud(); }
+    STATE.aiState = await readAiState(STATE.pid, { idb });
+    updateStatusBar();
+
+    if (res.data.artifacts?.length) {
+      await stageArtifactsFromRun(STATE.pid, run, { idb });
+      STATE.aiState = await readAiState(STATE.pid, { idb });
+    }
+
+    renderDrawerResult(res.data, run);
+    if (STATE.activeRail === "history") switchRail("history");
+  } catch (err) {
+    if (err?.name === "AbortError") showResultError("Cancelled");
+    else showResultError(err?.message || "AI call failed");
+  } finally {
+    STATE.running = false;
+    STATE.abort = null;
+    updateRunButtonState();
+    updateInfoBar();
+  }
+}
+
+function buildPayload() {
+  const meta = getTaskMeta(STATE.activeTask);
+  if (!meta) return null;
+  const payload = {};
+
+  const selection = STATE.editorView ? cm.getSelection() : "";
+  const file = STATE.files.find(f => f.path === STATE.activeFile);
+
+  const needsProject = STATE.scope === "project";
+  const needsFile = STATE.scope === "file" || STATE.scope === "selection";
+
+  if (needsProject) {
+    payload.name = STATE.project.name || "Untitled";
+    payload.description = STATE.project.description || "";
+    payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
+  } else if (needsFile) {
+    if (!file) { toast("Open a file first", "warning"); return null; }
+    payload.file = STATE.activeFile;
+    payload.content = file.content || "";
+    if (STATE.scope === "selection" && selection) payload.selection = selection;
+  }
+
+  // Task-specific overrides
+  if (STATE.activeTask === "findFn") {
+    const name = window.prompt("Function name?");
+    if (!name) return null;
+    payload.fnName = name;
+    if (needsProject) payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
+  }
+  if (STATE.activeTask === "translate") {
+    const to = window.prompt("Target language?", "python");
+    if (!to) return null;
+    payload.to = to.toLowerCase();
+    if (needsProject) {
+      payload.code = STATE.files.map(f => f.content).join("\n\n");
+      payload.from = "mixed";
+    } else {
+      payload.code = (STATE.scope === "selection" && selection) ? selection : file?.content || "";
+      payload.from = (STATE.activeFile.split(".").pop() || "unknown");
+    }
+  }
+  if (STATE.activeTask === "diagram") {
+    payload.kind = payload.kind || "flow";
+  }
+
+  return payload;
+}
+
+function showResultLoading(text) {
+  $("resultEmpty").hidden = true;
+  $("resultContent").hidden = true;
+  $("resultLoading").hidden = false;
+  $("resultLoadingText").textContent = text;
+}
+
+function showResultError(message) {
+  $("resultEmpty").hidden = true;
+  $("resultLoading").hidden = true;
+  $("resultContent").hidden = false;
+  $("resultContent").innerHTML = `<div class="ai-result-error">${svgString("alert", 14)} <span>${escapeHtml(message)}</span></div>`;
+}
+
+function renderDrawerResult(data, run) {
+  $("resultEmpty").hidden = true;
+  $("resultLoading").hidden = true;
+  $("resultContent").hidden = false;
+  $("resultContent").innerHTML = "";
+
+  if (data.text) {
+    const md = el("div", { class: "ai-markdown" });
+    md.innerHTML = renderMarkdown(data.text);
+    $("resultContent").appendChild(md);
+    hydrateMarkdown(md).catch(() => {});
+  }
+
+  if (Array.isArray(data.artifacts) && data.artifacts.length) {
+    const arts = el("div", { class: "ai-artifacts" });
+    $("resultContent").appendChild(arts);
+    renderArtifacts(arts, data.artifacts, {
+      task: STATE.activeTask,
+      onAccept: (artifact, idx) => handleAccept(artifact, idx, run),
+      onReject: (artifact, idx) => handleReject(artifact, idx, run),
+      onOpenFile: (path, line) => { switchRail("files"); openFile(path).then(() => { if (line) jumpToLine(line); }); },
+    });
+  }
+
+  if (data.usage) {
+    const footer = el("div", { class: "ai-result-usage" });
+    if (data.usage.promptWords != null) footer.appendChild(el("span", {}, `${data.usage.promptWords}w in · ${data.usage.completionWords || 0}w out`));
+    if (data.cached) footer.appendChild(el("span", { class: "cached" }, "cached"));
+    if (data.quota) footer.appendChild(el("span", {}, `${data.quota.creditsUsed ?? 0}/${data.quota.creditsLimit ?? "?"} credits`));
+    $("resultContent").appendChild(footer);
+  }
+}
+
+async function handleAccept(artifact, index, run) {
+  if (!run) return;
+  const result = artifact.type === "diff"
+    ? await applyPatch({ artifact, pid: STATE.pid, deps: { idb } })
+    : await applyFiles({ artifact, pid: STATE.pid, deps: { idb } });
+  if (!result.ok) { toast(result.error || "Apply failed", "error"); return; }
+
+  await markRunArtifactAccepted(STATE.pid, run.id, index, { idb });
+  STATE.aiState = await readAiState(STATE.pid, { idb });
+  updateStatusBar();
+
+  try { STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path)); } catch {}
+  if (artifact.file && STATE.activeFile === artifact.file) await openFile(artifact.file);
+  if (STATE.activeRail === "files") renderFilesTree();
+
+  toast(`Applied ${artifact.file || (artifact.files?.length + " files")}`, "success");
+}
+
+async function handleReject(artifact, index, run) {
+  if (!run) return;
+  await markRunArtifactRejected(STATE.pid, run.id, index, { idb });
+  STATE.aiState = await readAiState(STATE.pid, { idb });
+  updateStatusBar();
+  toast("Rejected", "info");
+}
+
+// ─── Quota HUD ──────────────────────────────────────────────────
+
+function renderQuotaHud() {
+  const hud = $("quotaHud");
+  if (!hud) return;
+  const quota = readQuotaCache();
+  if (!quota) { hud.innerHTML = ""; return; }
+  const wUsed = quota.wordsUsed ?? 0, wLimit = quota.wordsLimit ?? 1;
+  const cUsed = quota.creditsUsed ?? 0, cLimit = quota.creditsLimit ?? 1;
+  const wp = Math.min(100, Math.round((wUsed / wLimit) * 100));
+  const cp = Math.min(100, Math.round((cUsed / cLimit) * 100));
+  hud.innerHTML = `
+    <div class="quota-row">
+      <div class="quota-label"><span>Words</span><span>${formatCompact(wUsed)} / ${formatCompact(wLimit)}</span></div>
+      <div class="quota-bar"><div class="quota-fill words" style="width:${wp}%"></div></div>
+    </div>
+    <div class="quota-row">
+      <div class="quota-label"><span>Credits</span><span>${formatCompact(cUsed)} / ${formatCompact(cLimit)}</span></div>
+      <div class="quota-bar"><div class="quota-fill credits" style="width:${cp}%"></div></div>
+    </div>
+  `;
+}
+
+// ─── Pending ────────────────────────────────────────────────────
+
+function openPendingSheet() {
+  const pending = STATE.aiState?.pending || [];
+  const body = $("pendingBody");
+  body.innerHTML = "";
+  if (!pending.length) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-state-title">No staged proposals</div></div>`;
+  } else {
+    for (const item of pending) {
+      const meta = getTaskMeta(item.task) || { label: item.task };
+      const art = item.artifact || {};
+      const file = art.file || (art.files ? `${art.files.length} files` : "");
+      body.appendChild(el("div", { class: "pending-item" },
+        el("div", { class: "pending-item-meta" },
+          el("span", { class: "pending-item-task" }, meta.label),
+          el("span", { class: "pending-item-file" }, file),
+          el("span", { class: "pending-item-time" }, relativeTime(item.createdAt)),
+        ),
+        el("div", { class: "pending-item-actions" },
+          el("button", { class: "btn btn-primary btn-sm", type: "button", onclick: async () => {
+            const r = STATE.aiState.runs.find(x => x.id === item.runId);
+            if (r) await handleAccept(item.artifact, item.artifactIndex, r);
+            closePendingSheet();
+          } }, "Accept"),
+          el("button", { class: "btn btn-ghost btn-sm", type: "button", onclick: async () => {
+            await removePendingItem(STATE.pid, item.id, { idb });
+            STATE.aiState = await readAiState(STATE.pid, { idb });
+            updateStatusBar();
+            openPendingSheet();
+          } }, "Discard"),
+        ),
+      ));
+    }
+  }
+  $("backdrop").classList.add("visible");
+  $("pendingSheet").classList.add("open");
+}
+
+function closePendingSheet() {
+  $("pendingSheet").classList.remove("open");
+  if (!anySheetOpen()) $("backdrop").classList.remove("visible");
+}
+
+async function confirmClearPending() {
+  const ok = await confirmDialog({ title: "Clear all staged proposals?", message: "You can re-run the AI to regenerate them.", confirmLabel: "Clear all", danger: true });
+  if (!ok) return;
+  await clearPending(STATE.pid, { idb });
+  STATE.aiState = await readAiState(STATE.pid, { idb });
+  updateStatusBar();
+  toast("Cleared", "success");
+}
+
+// ─── Mode banner ────────────────────────────────────────────────
+
+function renderModeBanner() {
+  const banner = $("modeBanner");
+  const text = $("modeBannerText");
+  const action = $("modeBannerAction");
+
+  if (STATE.syncState === "local" && !STATE.session) {
+    banner.hidden = false;
+    text.textContent = "Local project. Sign in to back it up.";
+    action.hidden = false;
+    action.textContent = "Sign in";
+    action.onclick = () => { location.href = "/register?next=" + encodeURIComponent(location.pathname + location.search); };
+    return;
+  }
+  if (STATE.syncState === "local" && STATE.session) {
+    banner.hidden = false;
+    text.textContent = "Local project. Sync to your account.";
+    action.hidden = false;
+    action.textContent = "Sync";
+    action.onclick = () => promoteQueuedLocalProjects().then(() => location.reload()).catch(() => {});
+    return;
+  }
+  if (STATE.syncState === "cached" || !STATE.online) {
+    banner.hidden = false;
+    text.textContent = "Offline — showing cached data.";
+    action.hidden = true;
+    return;
+  }
+  banner.hidden = true;
+}
+
+// ─── Boot ───────────────────────────────────────────────────────
+
+boot().catch(err => {
+  console.error("[AI] boot failed:", err);
+  const errEl = document.createElement("div");
+  errEl.className = "boot-error";
+  errEl.innerHTML = `<div class="boot-error-title">Couldn't load the page</div><div class="boot-error-desc">${escapeHtml(String(err?.message || err))}</div><button class="btn btn-primary" onclick="location.reload()">Retry</button>`;
+  document.body.appendChild(errEl);
+});
+</script>
+
+</body>
+</html>
