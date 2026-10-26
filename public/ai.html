@@ -51,7 +51,7 @@
 
 <div class="ai-app" id="aiApp">
 
-  <!-- ═══════════════ HEADER ═══════════════ -->
+  <!-- HEADER -->
   <header class="ai-header" id="aiHeader">
     <button class="ai-rail-toggle" id="railToggle" aria-label="Toggle sidebar" title="Toggle sidebar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -66,7 +66,7 @@
     </button>
 
     <div class="ai-header-actions">
-      <button class="ai-header-btn ai-header-btn-primary" id="btnAskAI" type="button" title="Focus AI bar (⌘K)">
+      <button class="ai-header-btn ai-header-btn-primary" id="btnAskAI" type="button" title="Ask AI (⌘K)" aria-expanded="false" aria-controls="aiCommandSheet">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
         <span>Ask AI</span>
       </button>
@@ -76,14 +76,14 @@
     </div>
   </header>
 
-  <!-- ═══════════════ MODE BANNER ═══════════════ -->
+  <!-- MODE BANNER -->
   <div class="ai-banner" id="modeBanner" hidden>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
     <span class="ai-banner-text" id="modeBannerText"></span>
     <button class="ai-banner-action" id="modeBannerAction" type="button">Sync</button>
   </div>
 
-  <!-- ═══════════════ BODY ═══════════════ -->
+  <!-- BODY -->
   <div class="ai-body" id="aiBody">
 
     <!-- SIDEBAR -->
@@ -99,30 +99,8 @@
     </aside>
     <div class="sb-backdrop" id="sbBackdrop"></div>
 
-    <!-- MAIN AREA -->
+    <!-- MAIN -->
     <main class="ai-main" id="aiMain">
-
-      <!-- AI COMMAND BAR -->
-      <div class="ai-commandbar" id="aiCommandBar">
-        <div class="ai-commandbar-row">
-          <span class="ai-commandbar-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
-          </span>
-          <input
-            type="text"
-            class="ai-commandbar-input"
-            id="aiCommandInput"
-            placeholder="Ask, or type @ to add a file…"
-            autocomplete="off"
-            spellcheck="false"
-          >
-          <button class="ai-commandbar-submit" id="aiCommandSubmit" aria-label="Run" title="Run (⌘↵)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          </button>
-        </div>
-        <div class="ai-commandbar-chips" id="aiCommandChips"></div>
-        <div class="ai-commandbar-suggest" id="aiCommandSuggest"></div>
-      </div>
 
       <!-- Files -->
       <section class="ai-view" data-view="files" hidden>
@@ -158,9 +136,10 @@
                 <button type="button" data-mode="preview">Preview</button>
                 <button type="button" data-mode="focus">Focus</button>
               </div>
-              <button class="btn btn-primary btn-sm" id="docsSave" type="button" disabled>
+              <button class="btn btn-primary btn-sm docs-save-btn" id="docsSave" type="button" disabled>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                Save
+                <span class="save-label">Save</span>
+                <span class="saving-label">Saving…</span>
               </button>
             </div>
             <div class="docs-toolbar" id="docsToolbar"></div>
@@ -170,6 +149,9 @@
               </div>
               <div class="docs-pane">
                 <div class="docs-preview ai-markdown" id="docsPreview"></div>
+              </div>
+              <div class="docs-loading" id="docsLoading" hidden>
+                <div class="spinner"></div>
               </div>
             </div>
             <div class="docs-review" id="docsReview" hidden></div>
@@ -237,7 +219,7 @@
     <div class="ai-drawer-backdrop" id="drawerBackdrop"></div>
   </div>
 
-  <!-- ═══════════════ STATUS BAR ═══════════════ -->
+  <!-- STATUS BAR -->
   <footer class="ai-status" id="statusBar">
     <div class="ai-status-left">
       <span id="statusFile">—</span>
@@ -249,9 +231,186 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span id="statusPendingText">0 staged</span>
       </button>
+      <button class="ai-status-sync" id="statusSyncPending" hidden type="button" title="Open the editor to sync">
+        <span id="statusSyncPendingText">0 pending</span>
+      </button>
       <span id="statusSync">Idle</span>
     </div>
   </footer>
+</div>
+
+<!-- COMMAND SHEET -->
+<div class="ai-command-sheet-backdrop" id="commandSheetBackdrop" hidden></div>
+<div class="ai-command-sheet" id="aiCommandSheet" role="dialog" aria-label="Ask AI" hidden>
+  <div class="ai-command-sheet-handle" id="commandSheetHandle" aria-label="Close" title="Close"></div>
+  <div class="ai-commandbar-row">
+    <span class="ai-commandbar-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.7L19.7 10l-5.8 1.3L12 17l-1.9-5.7L4.3 10l5.8-1.3z"/></svg>
+    </span>
+    <input
+      type="text"
+      class="ai-commandbar-input"
+      id="aiCommandInput"
+      placeholder="Ask, or type / for commands, @ for files…"
+      autocomplete="off"
+      spellcheck="false"
+    >
+    <button class="ai-commandbar-submit" id="aiCommandSubmit" aria-label="Run" title="Run (⌘↵)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    </button>
+  </div>
+  <div class="ai-commandbar-chips" id="aiCommandChips"></div>
+  <div class="ai-commandbar-suggest" id="aiCommandSuggest"></div>
+</div>
+
+<!-- SLASH POPOVER -->
+<div class="ai-slash-popover" id="slashPopover" hidden>
+  <div class="ai-slash-head">
+    <span>Commands</span>
+    <button type="button" class="ai-slash-close" id="slashClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <input type="text" class="ai-slash-filter" id="slashFilter" placeholder="Filter commands…" autocomplete="off" spellcheck="false">
+  <div class="ai-slash-list" id="slashList"></div>
+</div>
+
+<!-- @ PICKER -->
+<div class="ai-at-popover" id="atPopover" hidden>
+  <div class="ai-at-popover-head">
+    <span>Add context</span>
+    <button type="button" class="ai-at-popover-close" id="atPopoverClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <input type="text" class="ai-at-popover-input" id="atPopoverFilter" placeholder="Filter files…" autocomplete="off" spellcheck="false">
+  <div class="ai-at-popover-list" id="atPopoverList"></div>
+</div>
+
+<!-- DOCS SETUP OVERLAY -->
+<div class="ai-fullpage" id="docsSetupOverlay" hidden>
+  <div class="ai-fullpage-header">
+    <button class="ai-fullpage-back" id="docsSetupBack" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
+    <div style="flex:1;min-width:0;">
+      <div class="ai-fullpage-title" id="docsSetupTitle">Documentation setup</div>
+      <div class="ai-fullpage-subtitle" id="docsSetupSubtitle"></div>
+    </div>
+    <div class="ai-fullpage-actions">
+      <button class="btn btn-primary btn-sm" id="docsSetupSubmit" type="button">Generate</button>
+    </div>
+  </div>
+  <div class="ai-fullpage-body">
+    <div class="docs-setup" id="docsSetupBody"></div>
+  </div>
+</div>
+
+<!-- DOCS PROGRESS OVERLAY -->
+<div class="ai-fullpage" id="docsProgressOverlay" hidden>
+  <div class="ai-fullpage-header">
+    <button class="ai-fullpage-back" id="docsProgressCancel" aria-label="Cancel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div style="flex:1;min-width:0;">
+      <div class="ai-fullpage-title">Generating documentation</div>
+    </div>
+  </div>
+  <div class="ai-progress-bar ai-progress-bar-indeterminate">
+    <div class="ai-progress-bar-fill"></div>
+  </div>
+  <div class="ai-fullpage-body">
+    <div class="docs-progress-inner">
+      <div class="docs-progress-spinner"></div>
+      <div class="docs-progress-title" id="docsProgressTitle">Analyzing files…</div>
+      <div class="docs-progress-subtitle" id="docsProgressSubtitle">This can take up to a minute.</div>
+      <div class="docs-progress-steps" id="docsProgressSteps"></div>
+    </div>
+  </div>
+</div>
+
+<!-- DOCS REVIEW OVERLAY -->
+<div class="ai-fullpage" id="docsReviewOverlay" hidden>
+  <div class="ai-fullpage-header">
+    <button class="ai-fullpage-back" id="docsReviewBack" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
+    <div style="flex:1;min-width:0;">
+      <div class="ai-fullpage-title" id="docsReviewTitle">Review generated docs</div>
+      <div class="ai-fullpage-subtitle" id="docsReviewSubtitle"></div>
+    </div>
+    <div class="ai-fullpage-actions">
+      <button class="btn btn-secondary btn-sm" id="docsReviewDiscardAll" type="button">Discard all</button>
+      <button class="btn btn-primary btn-sm" id="docsReviewAcceptAll" type="button">Accept all</button>
+    </div>
+  </div>
+  <div class="ai-fullpage-body">
+    <div class="docs-review-list" id="docsReviewList"></div>
+  </div>
+</div>
+
+<!-- COMPARE OVERLAY -->
+<div class="ai-fullpage" id="compareOverlay" hidden>
+  <div class="ai-fullpage-header">
+    <button class="ai-fullpage-back" id="compareBack" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
+    <div style="flex:1;min-width:0;">
+      <div class="ai-fullpage-title" id="compareTitle">Compare</div>
+      <div class="ai-fullpage-subtitle" id="compareSubtitle"></div>
+    </div>
+    <div class="ai-fullpage-actions">
+      <button class="btn btn-secondary btn-sm" id="compareRejectAll" type="button">Reject all</button>
+      <button class="btn btn-primary btn-sm" id="compareApply" type="button" disabled>Apply merge</button>
+    </div>
+  </div>
+  <div class="ai-compare">
+    <aside class="ai-compare-rail">
+      <div class="ai-compare-rail-head" id="compareRailHead">Changed files</div>
+      <div class="ai-compare-rail-list" id="compareRailList"></div>
+    </aside>
+    <div class="ai-compare-main">
+      <div class="ai-compare-main-head">
+        <div class="ai-compare-main-title" id="compareMainTitle">—</div>
+        <div class="ai-compare-main-stats" id="compareMainStats"></div>
+        <div class="ai-compare-nav">
+          <button class="ai-compare-nav-btn" id="comparePrevFile" aria-label="Previous file" title="Previous file">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="ai-compare-nav-counter" id="compareFileCounter">—</div>
+          <button class="ai-compare-nav-btn" id="compareNextFile" aria-label="Next file" title="Next file">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="ai-compare-summary" id="compareSummary"></div>
+      <div class="ai-compare-hunks" id="compareHunks"></div>
+      <div class="ai-compare-footer">
+        <div class="ai-compare-footer-info" id="compareFooterInfo"></div>
+        <button class="btn btn-ghost btn-sm" id="compareAcceptFile" type="button">Accept all hunks</button>
+        <button class="btn btn-ghost btn-sm" id="compareRejectFile" type="button">Reject all hunks</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NEW COMMIT OVERLAY -->
+<div class="ai-fullpage" id="commitOverlay" hidden>
+  <div class="ai-fullpage-header">
+    <button class="ai-fullpage-back" id="commitBack" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
+    <div style="flex:1;min-width:0;">
+      <div class="ai-fullpage-title">New commit</div>
+      <div class="ai-fullpage-subtitle" id="commitSubtitle"></div>
+    </div>
+    <div class="ai-fullpage-actions">
+      <button class="btn btn-primary btn-sm" id="commitSubmit" type="button" disabled>Commit</button>
+    </div>
+  </div>
+  <div class="ai-fullpage-body">
+    <div class="ai-commit-view" id="commitBody"></div>
+  </div>
 </div>
 
 <!-- CONFIRM DIALOG -->
@@ -286,26 +445,14 @@
 <div class="ai-backdrop" id="backdrop"></div>
 <div class="ai-toast-container" id="toastContainer" aria-live="polite"></div>
 
-<!-- @-PICKER POPOVER -->
-<div class="ai-at-popover" id="atPopover" hidden>
-  <div class="ai-at-popover-head">
-    <span>Add context</span>
-    <button type="button" class="ai-at-popover-close" id="atPopoverClose" aria-label="Close">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
-  </div>
-  <input type="text" class="ai-at-popover-input" id="atPopoverFilter" placeholder="Filter files…" autocomplete="off" spellcheck="false">
-  <div class="ai-at-popover-list" id="atPopoverList"></div>
-</div>
-
 <!-- EMPTY STATE -->
 <div class="empty-project-state hidden" id="emptyState" role="dialog" aria-modal="true">
   <div class="empty-project-card">
     <div class="empty-project-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
     </div>
-    <h2 class="empty-project-title" id="emptyStateTitle">No project selected</h2>
-    <p class="empty-project-desc" id="emptyStateDesc">Pick a project to start.</p>
+    <h2 class="empty-project-title">No project selected</h2>
+    <p class="empty-project-desc">Pick a project to start.</p>
     <div class="empty-project-actions">
       <button class="btn btn-primary" id="emptyPickProject" type="button">Choose project</button>
       <button class="btn btn-secondary" id="emptyNewProject" type="button">New project</button>
@@ -326,6 +473,7 @@
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
     <symbol id="i-file-code" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="10 13 8 15 10 17"/><polyline points="14 13 16 15 14 17"/></symbol>
     <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></symbol>
+    <symbol id="i-file-plus" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
@@ -356,14 +504,24 @@
     <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
     <symbol id="i-droplet" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></symbol>
     <symbol id="i-git-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/></symbol>
+    <symbol id="i-git-merge" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></symbol>
     <symbol id="i-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
+    <symbol id="i-compare" viewBox="0 0 24 24"><rect x="2" y="4" width="8" height="16" rx="1"/><rect x="14" y="4" width="8" height="16" rx="1"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/></symbol>
+    <symbol id="i-slash" viewBox="0 0 24 24"><line x1="19" y1="5" x2="5" y2="19"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></symbol>
   </defs>
 </svg>
 
 <script type="module">
 // ═══════════════════════════════════════════════════════════════════
-//  ai.html — AI Project Hub (command bar model)
+//  ai.html — AI Project Hub
 // ═══════════════════════════════════════════════════════════════════
+//
+//  See js/ai.js for the storage contract (projectMeta.ai, versions,
+//  notes.json). This file is the page controller — every async action
+//  routes through js/ai.js, IDB writes go through persistFile(), and
+//  every overlay pushes/pops history entries.
 
 import {
   TASK_META, NOTES_PATH,
@@ -374,7 +532,9 @@ import {
   runTask, applyPatch, applyFiles,
   renderMarkdown, hydrateMarkdown, renderArtifacts,
   getTaskMeta, isGuestTask,
-  formatCompact,
+  formatCompact, formatRelativeReset,
+  listTaskGroups,
+  diffFiles, getCommitBaseline, commitVersion,
 } from "/js/ai.js";
 
 import {
@@ -382,20 +542,7 @@ import {
   handleNewProjectImageReturn, promoteQueuedLocalProjects,
 } from "/js/create-project.js";
 
-// ─── Helpers ─────────────────────────────────────────────────────
-
-function formatRelativeReset(resetAt) {
-  if (!resetAt) return "";
-  const ms = new Date(resetAt).getTime() - Date.now();
-  if (!Number.isFinite(ms) || ms <= 0) return "now";
-  const mins = Math.round(ms / 60000);
-  if (mins < 60) return `in ${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `in ${hours}h`;
-  return `in ${Math.round(hours / 24)}d`;
-}
-
-// ─── Config ──────────────────────────────────────────────────────
+// ─── Config ─────────────────────────────────────────────────────
 
 const DB_NAME = "folio";
 const DB_VERSION = 3;
@@ -409,7 +556,8 @@ const STORAGE = {
   user: "folio.user",
   lastFile: "folio.ai.lastFile",
   lastTab: "folio.ai.lastTab",
-  sidebarOpen: "folio.ai.sidebarOpen",
+  docsMode: "folio.docs.mode",
+  authRedirectShown: "folio.authRedirectShown",
 };
 
 const AVATAR_GRADIENTS = [
@@ -423,11 +571,12 @@ const AVATAR_GRADIENTS = [
 
 const DOCS_PATH_RE = /(^docs\/|^README\.md$|\.mdx?$|\.markdown$)/i;
 
-// Intent classifier — keyword → task mapping
+// ─── Intent classifier ─────────────────────────────────────────
+
 const INTENT_RULES = [
   { task: "audit",      match: /\b(security|accessibility|a11y|vulnerab|audit)\b/i },
   { task: "simulate",   match: /\b(trace|simulate|step through|walk through|execution)\b/i },
-  { task: "diagram",    match: /\b(diagram|draw|visualize|flowchart|visualize|visuali[sz]e)\b/i },
+  { task: "diagram",    match: /\b(diagram|draw|visualize|flowchart|visuali[sz]e)\b/i },
   { task: "optimize",   match: /\b(faster|performance|optimi[sz]e|speed|efficien)\b/i },
   { task: "codefix",    match: /\b(fix|correct|repair|patch)\b/i },
   { task: "debug",      match: /\b(bug|broken|not working|error|throws|crash|fail)\b/i },
@@ -441,6 +590,25 @@ const INTENT_RULES = [
   { task: "suggest",    match: /\b(suggest|next line|complete this|autocomplete)\b/i },
   { task: "explain",    match: /\b(explain|what does|how does|walk me through|tell me about)\b/i },
 ];
+
+// Curated list for the `/` popover — matches the brief's 14 commands
+const SLASH_COMMANDS = [
+  { group: "Understand", items: ["explain", "diagram", "simulate"] },
+  { group: "Fix",        items: ["debug", "codefix", "optimize", "audit"] },
+  { group: "Complete",   items: ["docstrings", "translate"] },
+  { group: "Design",     items: ["brainstorm", "scaffold", "findFn"] },
+  { group: "Document",   items: ["docs", "commitMsg"] },
+];
+
+const SLASH_ICON = {
+  explain: "sparkles", diagram: "layers", simulate: "play",
+  debug: "alert", codefix: "edit", optimize: "refresh", audit: "lock",
+  docstrings: "file-text", translate: "code",
+  brainstorm: "sparkles", scaffold: "layers", findFn: "hash",
+  docs: "file-text", commitMsg: "git-commit",
+};
+
+// ─── STATE ──────────────────────────────────────────────────────
 
 const STATE = {
   pid: null,
@@ -477,12 +645,29 @@ const STATE = {
   docsMode: "edit",
   docsSaveTimer: null,
 
-  chips: [],          // { type: 'file'|'project'|'folder'|'selection', value, label }
+  chips: [],
   detectedTask: null,
   prompt: "",
   atOpen: false,
   atFilter: "",
   autoRun: false,
+
+  overlayStack: [],
+  commandSheetOpen: false,
+
+  slashOpen: false,
+  slashFilter: "",
+  slashSelection: 0,
+
+  docsSetupMode: "generate",
+  docsSetupScope: "project",
+  docsSetupFiles: new Set(),
+  docsSetupExpanded: new Set(),
+
+  compareState: null,
+  commitState: null,
+
+  pendingSyncCount: 0,
 };
 
 // ─── DOM / utils ────────────────────────────────────────────────
@@ -603,20 +788,9 @@ function formatBytes(n) {
   return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
 }
 
-// ─── Intent classifier ──────────────────────────────────────────
-
 function classifyIntent(prompt, chips) {
   const text = String(prompt || "").trim();
-
-  // Empty prompt with chips → decide based on what's chipped
-  if (!text) {
-    const hasProject = chips.some(c => c.type === "project");
-    const hasSelection = chips.some(c => c.type === "selection");
-    if (hasSelection) return "explain";
-    if (hasProject) return "explain";
-    return "explain";
-  }
-
+  if (!text) return "explain";
   for (const rule of INTENT_RULES) {
     if (rule.match.test(text)) return rule.task;
   }
@@ -687,6 +861,8 @@ const idb = {
     const all = await dbWrap(dbTx("versions").index("pid").getAll(pid));
     return all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   },
+  getVersion: (vid) => dbWrap(dbTx("versions").get(vid)),
+  putVersion: (v) => dbWrap(dbTx("versions", "readwrite").put(v)),
   getProjectMeta: async (pid) => {
     const m = await dbWrap(dbTx("projectMeta").get(pid));
     return m || { pid, notepad: "", meta: {}, coverMeta: {}, docs: { version: 1, entries: {} } };
@@ -695,6 +871,14 @@ const idb = {
     const current = await idb.getProjectMeta(pid);
     return dbWrap(dbTx("projectMeta", "readwrite").put({ ...current, ...patch, pid }));
   },
+  async enqueueSync(pid, type, payload) {
+    return dbWrap(dbTx("syncQueue", "readwrite").add({
+      pid, type, payload, createdAt: Date.now(), attempts: 0,
+    }));
+  },
+  async listSyncQueue() { return dbWrap(dbTx("syncQueue").getAll()); },
+  async deleteSyncQueue(id) { return dbWrap(dbTx("syncQueue", "readwrite").delete(id)); },
+  async updateSyncQueue(item) { return dbWrap(dbTx("syncQueue", "readwrite").put(item)); },
 };
 
 // ─── Session / API ──────────────────────────────────────────────
@@ -715,10 +899,79 @@ async function apiFetch(url, opts = {}) {
     const res = await fetch(url, { ...opts, headers });
     let data = {};
     try { data = await res.json(); } catch {}
+    if (res.status === 401) handle401();
     return { ok: res.ok, status: res.status, data, headers: res.headers };
   } catch (err) {
     return { ok: false, status: 0, data: { error: String(err?.message || "Network error") }, headers: null };
   }
+}
+
+function handle401() {
+  try {
+    localStorage.removeItem(STORAGE.session);
+    localStorage.removeItem(STORAGE.user);
+  } catch {}
+  STATE.session = null;
+  STATE.user = null;
+  STATE.isGuest = true;
+  if (!sessionStorage.getItem(STORAGE.authRedirectShown)) {
+    sessionStorage.setItem(STORAGE.authRedirectShown, "1");
+    setTimeout(() => {
+      const next = encodeURIComponent(location.pathname + location.search);
+      location.href = "/register?next=" + next;
+    }, 800);
+  }
+}
+
+// ─── persistFile ───────────────────────────────────────────────
+//   Content-compare-first write. Respects the shared contract:
+//     1. Skip if unchanged
+//     2. Write to IDB
+//     3. If online + session + not local → sync-back
+//     4. Otherwise enqueue to syncQueue
+async function persistFile(path, content) {
+  const existing = await idb.getFile(STATE.pid, path).catch(() => null);
+  const existingContent = typeof existing === "string" ? existing : existing?.content;
+  if (existingContent === content) return { ok: true, unchanged: true };
+
+  await idb.putFile(STATE.pid, path, content);
+
+  const isLocal = /^local_/.test(STATE.pid);
+  if (STATE.online && STATE.session && !isLocal) {
+    try {
+      const res = await apiFetch(API_HOST + "?action=project/sync-back", {
+        method: "POST",
+        body: JSON.stringify({ pid: STATE.pid, files: { [path]: content } }),
+      });
+      if (res.ok && res.data?.success) {
+        refreshPendingSyncCount().catch(() => {});
+        return { ok: true, synced: true };
+      }
+    } catch {}
+  }
+
+  if (!isLocal) {
+    try { await idb.enqueueSync(STATE.pid, "file-save", { path, content }); } catch {}
+    refreshPendingSyncCount().catch(() => {});
+  }
+  return { ok: true, queued: !isLocal };
+}
+
+async function refreshPendingSyncCount() {
+  try {
+    const queue = await idb.listSyncQueue();
+    const mine = (queue || []).filter(item => item.pid === STATE.pid);
+    STATE.pendingSyncCount = mine.length;
+    const el = $("statusSyncPending");
+    if (el) {
+      if (mine.length > 0) {
+        el.hidden = false;
+        $("statusSyncPendingText").textContent = `${mine.length} pending`;
+      } else {
+        el.hidden = true;
+      }
+    }
+  } catch {}
 }
 
 // ─── Toast / confirm ────────────────────────────────────────────
@@ -743,6 +996,7 @@ function confirmDialog({ title, message, confirmLabel = "Confirm", danger = fals
     $("confirmMessage").textContent = message || "";
     $("confirmOk").textContent = confirmLabel;
     $("confirmOk").className = danger ? "btn btn-danger" : "btn btn-primary";
+    pushOverlay("confirm");
     $("backdrop").classList.add("visible");
     $("confirmDialog").classList.add("open");
     setTimeout(() => $("confirmCancel")?.focus(), 50);
@@ -750,10 +1004,10 @@ function confirmDialog({ title, message, confirmLabel = "Confirm", danger = fals
 }
 
 function resolveConfirm(value) {
-  $("confirmDialog").classList.remove("open");
-  if (!anySheetOpen()) $("backdrop").classList.remove("visible");
+  if (confirmResolve === null) return;
   const r = confirmResolve;
   confirmResolve = null;
+  closeOverlay("confirm");
   if (r) r(value);
 }
 
@@ -761,7 +1015,176 @@ function anySheetOpen() {
   return !!document.querySelector(".ai-sheet.open");
 }
 
-// ─── CodeMirror ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+//  OVERLAY STACK
+// ═══════════════════════════════════════════════════════════════
+//
+//  Every overlay (sheet, full-page, drawer, popover) pushes one
+//  history entry on open. Close button → closeOverlay(name) →
+//  history.back() → popstate → no-op (already popped from stack).
+//  Back button → popstate → stack mismatch → closeOverlay(name,
+//  { fromPopstate: true }) → run DOM close, do NOT call back again.
+
+function pushOverlay(name) {
+  if (!name) return;
+  if (STATE.overlayStack.includes(name)) return;
+  STATE.overlayStack.push(name);
+  try {
+    history.pushState(
+      { overlay: name, pid: STATE.pid },
+      "",
+      location.href
+    );
+  } catch {}
+}
+
+function closeTopOverlay() {
+  const top = STATE.overlayStack[STATE.overlayStack.length - 1];
+  if (!top) return;
+  closeOverlay(top);
+}
+
+function closeOverlay(name, { fromPopstate = false } = {}) {
+  const idx = STATE.overlayStack.lastIndexOf(name);
+  if (idx < 0) return;
+  STATE.overlayStack.splice(idx, 1);
+  _closeOverlayDom(name);
+  if (!fromPopstate) {
+    try { history.back(); } catch {}
+  }
+}
+
+function _closeOverlayDom(name) {
+  switch (name) {
+    case "command-sheet":
+      STATE.commandSheetOpen = false;
+      closeSlashPicker();
+      $("aiCommandSheet")?.classList.remove("open");
+      setTimeout(() => {
+        if (!STATE.commandSheetOpen) {
+          const sheet = $("aiCommandSheet");
+          const bd = $("commandSheetBackdrop");
+          if (sheet) sheet.hidden = true;
+          if (bd) { bd.classList.remove("visible"); bd.hidden = true; }
+        }
+      }, 280);
+      $("btnAskAI")?.setAttribute("aria-expanded", "false");
+      break;
+    case "drawer":
+      STATE.aiOpen = false;
+      $("aiDrawer")?.classList.remove("open");
+      $("drawerBackdrop")?.classList.remove("visible");
+      break;
+    case "confirm":
+      $("confirmDialog")?.classList.remove("open");
+      if (!anySheetOpen() && !anyFullpageOpen()) $("backdrop")?.classList.remove("visible");
+      if (confirmResolve) {
+        const r = confirmResolve;
+        confirmResolve = null;
+        try { r(false); } catch {}
+      }
+      break;
+    case "pending":
+      $("pendingSheet")?.classList.remove("open");
+      if (!anySheetOpen() && !anyFullpageOpen()) $("backdrop")?.classList.remove("visible");
+      break;
+    case "project-picker":
+      document.querySelector('[data-overlay="project-picker"]')?.remove();
+      if (!anySheetOpen() && !anyFullpageOpen()) $("backdrop")?.classList.remove("visible");
+      break;
+    case "more-menu":
+      document.querySelector('[data-overlay="more-menu"]')?.remove();
+      if (!anySheetOpen() && !anyFullpageOpen()) $("backdrop")?.classList.remove("visible");
+      break;
+    case "at-picker":
+      STATE.atOpen = false;
+      if ($("atPopover")) $("atPopover").hidden = true;
+      break;
+    case "slash-picker":
+      STATE.slashOpen = false;
+      if ($("slashPopover")) $("slashPopover").hidden = true;
+      break;
+    case "docs-setup":
+      hideFullpage("docsSetupOverlay");
+      break;
+    case "docs-progress":
+      hideFullpage("docsProgressOverlay");
+      break;
+    case "docs-review":
+      hideFullpage("docsReviewOverlay");
+      STATE.docsReviewFiles = null;
+      break;
+    case "compare":
+      hideFullpage("compareOverlay");
+      STATE.compareState = null;
+      break;
+    case "commit":
+      hideFullpage("commitOverlay");
+      STATE.commitState = null;
+      break;
+    default: break;
+  }
+}
+
+function anyFullpageOpen() {
+  return !!document.querySelector(".ai-fullpage.open");
+}
+
+window.addEventListener("popstate", (e) => {
+  const top = STATE.overlayStack[STATE.overlayStack.length - 1];
+  if (!top) return;
+  const current = e.state?.overlay || null;
+  if (current !== top) {
+    closeOverlay(top, { fromPopstate: true });
+  }
+});
+
+function showFullpage(id) {
+  const node = $(id);
+  if (!node) return;
+  node.hidden = false;
+  void node.offsetWidth;
+  node.classList.add("open");
+}
+
+function hideFullpage(id) {
+  const node = $(id);
+  if (!node) return;
+  node.classList.remove("open");
+  setTimeout(() => {
+    if (!node.classList.contains("open")) node.hidden = true;
+  }, 280);
+}
+
+// ─── Command sheet ─────────────────────────────────────────────
+
+function openCommandSheet() {
+  if (STATE.commandSheetOpen) return;
+  STATE.commandSheetOpen = true;
+  const sheet = $("aiCommandSheet");
+  const bd = $("commandSheetBackdrop");
+  if (!sheet) return;
+  sheet.hidden = false;
+  if (bd) { bd.hidden = false; bd.classList.add("visible"); }
+  void sheet.offsetWidth;
+  sheet.classList.add("open");
+  $("btnAskAI")?.setAttribute("aria-expanded", "true");
+  pushOverlay("command-sheet");
+  setTimeout(() => { $("aiCommandInput")?.focus(); }, 80);
+  renderSuggestions();
+}
+
+function closeCommandSheet() {
+  if (!STATE.commandSheetOpen) return;
+  closeOverlay("command-sheet");
+}
+
+function toggleCommandSheet() {
+  if (STATE.commandSheetOpen) closeCommandSheet();
+  else openCommandSheet();
+}
+
+// ─── CodeMirror ────────────────────────────────────────────────
 
 const cm = {
   async loadModules() {
@@ -874,7 +1297,7 @@ function updateStatusBar() {
   $("statusSync").textContent = sync;
 }
 
-// ─── create-project deps ────────────────────────────────────────
+// ─── create-project deps ───────────────────────────────────────
 
 function buildCreateProjectDeps() {
   return {
@@ -889,7 +1312,7 @@ function buildCreateProjectDeps() {
       try {
         const url = new URL(location.href);
         url.searchParams.set("pid", pid);
-        history.replaceState(null, "", url.toString());
+        history.replaceState({ pid, root: true }, "", url.toString());
       } catch {}
     },
     getAvatarColor, getInitials,
@@ -903,7 +1326,7 @@ function buildCreateProjectDeps() {
   };
 }
 
-// ─── Sidebar controller ─────────────────────────────────────────
+// ─── Sidebar controller ────────────────────────────────────────
 
 class Sidebar {
   constructor(opts) {
@@ -913,17 +1336,14 @@ class Sidebar {
     this.titleEl = $("sbTitle");
     this.backdropEl = $("sbBackdrop");
     this.closeBtn = $("sbClose");
-
     this.panels = opts.panels || [];
     this.current = opts.initial || this.panels[0]?.id;
     this.isOpen = false;
     this.ctx = opts.ctx || {};
     this._token = 0;
-
     this._bind();
     this.render();
   }
-
   open(panel) {
     if (panel) this.current = panel;
     this.isOpen = true;
@@ -931,17 +1351,12 @@ class Sidebar {
     if (this.backdropEl && window.innerWidth < 1024) this.backdropEl.classList.add("open");
     this.render();
   }
-
   close() {
     this.isOpen = false;
     this.root.classList.remove("open");
     this.backdropEl?.classList.remove("open");
   }
-
-  toggle(panel) {
-    this.isOpen ? this.close() : this.open(panel);
-  }
-
+  toggle(panel) { this.isOpen ? this.close() : this.open(panel); }
   switchTo(panel) {
     if (!this.panels.find(p => p.id === panel)) return;
     this.current = panel;
@@ -950,32 +1365,18 @@ class Sidebar {
     this.render();
     showMainView(panel);
   }
-
   refresh() { this.render(); }
-
   _bind() {
     this.closeBtn?.addEventListener("click", () => this.close());
     this.backdropEl?.addEventListener("click", () => this.close());
-
     window.addEventListener("resize", () => {
-      if (window.innerWidth >= 1024) {
-        this.backdropEl?.classList.remove("open");
-      } else if (this.isOpen) {
-        this.backdropEl?.classList.add("open");
-      }
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.isOpen && window.innerWidth < 1024) {
-        this.close();
-      }
+      if (window.innerWidth >= 1024) this.backdropEl?.classList.remove("open");
+      else if (this.isOpen) this.backdropEl?.classList.add("open");
     });
   }
-
   render() {
     if (!this.tabsEl || !this.bodyEl) return;
     const token = ++this._token;
-
     this.tabsEl.innerHTML = "";
     for (const panel of this.panels) {
       const btn = document.createElement("button");
@@ -987,14 +1388,11 @@ class Sidebar {
       btn.addEventListener("click", () => this.switchTo(panel.id));
       this.tabsEl.appendChild(btn);
     }
-
     const cur = this.panels.find(p => p.id === this.current);
     if (this.titleEl) this.titleEl.textContent = cur?.label || "Panel";
-
     this.bodyEl.innerHTML = "";
     this.bodyEl.scrollTop = 0;
     if (!cur || typeof cur.render !== "function") return;
-
     const self = this;
     Promise.resolve()
       .then(() => cur.render(self.bodyEl, self.ctx))
@@ -1005,7 +1403,6 @@ class Sidebar {
         self.bodyEl.appendChild(self._empty("Panel failed to load", String(err?.message || err)));
       });
   }
-
   _empty(title, desc) {
     const wrap = el("div", { class: "sb-empty" });
     wrap.innerHTML = `
@@ -1018,7 +1415,7 @@ class Sidebar {
 
 let sidebar = null;
 
-// ─── Boot ───────────────────────────────────────────────────────
+// ─── Boot ──────────────────────────────────────────────────────
 
 async function boot() {
   readSession();
@@ -1029,26 +1426,43 @@ async function boot() {
     throw new Error("Storage unavailable");
   });
 
+  // Root history sentinel so back from the last overlay doesn't leave the page
+  try {
+    history.replaceState(
+      { pid: STATE.pid, root: true },
+      "",
+      location.href
+    );
+  } catch {}
+
   initCreateProject(buildCreateProjectDeps());
 
   if (handleNewProjectImageReturn()) return;
 
   wireStaticListeners();
   wireEmptyState();
+  wireCommandBar();
+  wireSlashPicker();
+  wireAtPicker();
+  wireDrawer();
+  wireDocs();
+  wireDocsSetup();
+  wireDocsProgress();
+  wireDocsReview();
+  wireCompare();
+  wireCommit();
+  wirePending();
 
   if (STATE.pid) await loadProject();
-
   if (!STATE.project) { showEmptyState(); return; }
 
   await loadAiState();
   await loadNotes();
+  await refreshPendingSyncCount().catch(() => {});
 
   hideEmptyState();
   mountHeader();
   mountRailToggle();
-  wireDrawer();
-  wireDocs();
-  wireCommandBar();
   mountSidebar();
 
   let lastTab = "files";
@@ -1100,84 +1514,26 @@ function wireEmptyState() {
   $("emptyNewProject").addEventListener("click", () => createNewProject());
 }
 
-// ─── Project picker ─────────────────────────────────────────────
-
-async function openProjectPicker() {
-  let projects = [];
-  try { projects = await idb.listProjects(); } catch {}
-  projects.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
-  const sheet = el("div", { class: "ai-sheet open", style: { zIndex: "3100" } });
-  sheet.innerHTML = `
-    <div class="ai-sheet-handle"></div>
-    <div class="ai-sheet-header">
-      <h2 class="ai-sheet-title">Choose a project</h2>
-      <button class="ai-sheet-close" data-close aria-label="Close" type="button">${iconHTML("x", 14)}</button>
-    </div>
-    <div class="ai-sheet-body" id="pickerBody"></div>
-  `;
-  document.body.appendChild(sheet);
-  $("backdrop").classList.add("visible");
-
-  const body = sheet.querySelector("#pickerBody");
-
-  if (!projects.length) {
-    body.innerHTML = `<div class="sb-empty"><div class="sb-empty-title">No projects yet</div></div>`;
-  } else {
-    for (const p of projects) {
-      const row = el("button", {
-        type: "button",
-        style: {
-          display: "flex", alignItems: "center", gap: "10px",
-          width: "100%", padding: "10px 12px",
-          background: "transparent", border: "none",
-          borderBottom: "1px solid var(--theme-divider)",
-          textAlign: "left", cursor: "pointer", color: "var(--theme-text)",
-          fontFamily: "inherit",
-        },
-        onclick: () => { close(); location.href = "/ai.html?pid=" + encodeURIComponent(p.pid); },
-      });
-
-      const iconWrap = el("div", { class: "project-icon-box", style: { width: "36px", height: "36px", borderRadius: "9px", fontSize: "13px" } });
-      if (p.iconUrl) {
-        const img = document.createElement("img"); img.src = p.iconUrl; img.alt = "";
-        iconWrap.appendChild(img);
-      } else {
-        iconWrap.textContent = getInitials(p.name);
-        iconWrap.style.background = getAvatarColor(p.name);
-        iconWrap.style.color = "#0a0c10";
-      }
-      row.appendChild(iconWrap);
-      row.appendChild(el("div", { style: { flex: "1", minWidth: "0" } },
-        el("div", { style: { fontSize: "13px", fontWeight: "700", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, p.name || "Untitled"),
-        el("div", { style: { fontSize: "10.5px", color: "var(--theme-text-tertiary)", marginTop: "2px" } },
-          `${p.pid.startsWith("local_") ? "Local · " : ""}${relativeTime(p.updatedAt)}`),
-      ));
-      body.appendChild(row);
-    }
-  }
-
-  function close() { sheet.remove(); $("backdrop").classList.remove("visible"); }
-  sheet.querySelector("[data-close]").addEventListener("click", close);
-  sheet.addEventListener("click", (e) => { if (e.target === sheet) close(); });
-}
-
-// ─── Static listeners ───────────────────────────────────────────
+// ─── Static listeners ──────────────────────────────────────────
 
 function wireStaticListeners() {
   $("confirmOk").addEventListener("click", () => resolveConfirm(true));
   $("confirmCancel").addEventListener("click", () => resolveConfirm(false));
-  $("pendingClose").addEventListener("click", closePendingSheet);
-  $("atPopoverClose").addEventListener("click", closeAtPicker);
-
   $("backdrop").addEventListener("click", () => {
     if ($("confirmDialog").classList.contains("open")) { resolveConfirm(false); return; }
-    if ($("pendingSheet").classList.contains("open")) { closePendingSheet(); return; }
-    if (STATE.aiOpen && window.innerWidth < 1024) { closeDrawer(); return; }
+    if ($("pendingSheet").classList.contains("open")) { closeOverlay("pending"); return; }
+  });
+  $("commandSheetBackdrop").addEventListener("click", () => closeCommandSheet());
+  $("commandSheetHandle").addEventListener("click", () => closeCommandSheet());
+
+  $("statusPending").addEventListener("click", () => openPendingSheet());
+  $("statusSyncPending").addEventListener("click", () => {
+    toast("Open the editor to sync pending changes", "info", 3000);
   });
 
   document.addEventListener("keydown", (e) => {
     const mod = e.metaKey || e.ctrlKey;
+
     if (mod && e.key === "Enter") {
       const activeId = document.activeElement?.id;
       if (activeId === "aiCommandInput" && !STATE.running) {
@@ -1186,12 +1542,17 @@ function wireStaticListeners() {
       if (STATE.aiOpen && !$("btnRun").disabled) { e.preventDefault(); runCurrentTask(); return; }
     }
     if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveActiveFile(); return; }
-    if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); focusCommand(); return; }
+    if (mod && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      toggleCommandSheet();
+      return;
+    }
     if (e.key === "Escape") {
-      if ($("confirmDialog").classList.contains("open")) { resolveConfirm(false); return; }
-      if ($("pendingSheet").classList.contains("open")) { closePendingSheet(); return; }
-      if (STATE.atOpen) { closeAtPicker(); return; }
-      if (STATE.aiOpen) { closeDrawer(); return; }
+      if (STATE.overlayStack.length) {
+        e.preventDefault();
+        closeTopOverlay();
+        return;
+      }
     }
   });
 
@@ -1199,6 +1560,7 @@ function wireStaticListeners() {
     STATE.online = true;
     if (STATE.syncState === "cached") STATE.syncState = "synced";
     renderModeBanner(); renderHeader(); updateStatusBar();
+    refreshPendingSyncCount().catch(() => {});
     if (STATE.project && !STATE.isGuest) promoteQueuedLocalProjects().catch(() => {});
   });
   window.addEventListener("offline", () => {
@@ -1212,7 +1574,7 @@ function wireStaticListeners() {
   });
 }
 
-// ─── Data loaders ───────────────────────────────────────────────
+// ─── Data loaders ──────────────────────────────────────────────
 
 async function loadProject() {
   let project = null;
@@ -1252,24 +1614,28 @@ async function loadNotes() {
   } catch { STATE.notes = { version: 1, notes: [] }; }
 }
 
-// ─── Header ─────────────────────────────────────────────────────
+async function reloadFiles() {
+  try { STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path)); } catch {}
+  if (sidebar) sidebar.render();
+  renderHeader();
+}
+
+// ─── Header ────────────────────────────────────────────────────
 
 let headerMounted = false;
 
 function mountHeader() {
   if (headerMounted) { renderHeader(); return; }
   headerMounted = true;
-
   $("headerIdentity").addEventListener("click", openProjectPicker);
-  $("btnAskAI").addEventListener("click", focusCommand);
+  $("btnAskAI").addEventListener("click", toggleCommandSheet);
   $("btnMore").addEventListener("click", openMoreMenu);
-
   renderHeader();
 }
 
 function mountRailToggle() {
   $("railToggle").addEventListener("click", () => {
-    sidebar.toggle();
+    if (sidebar) sidebar.toggle();
   });
 }
 
@@ -1296,13 +1662,87 @@ function renderHeader() {
   }
 }
 
+// ─── Project picker ────────────────────────────────────────────
+
+async function openProjectPicker() {
+  if (document.querySelector('[data-overlay="project-picker"]')) return;
+  let projects = [];
+  try { projects = await idb.listProjects(); } catch {}
+  projects.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  const sheet = el("div", {
+    class: "ai-sheet open",
+    style: { zIndex: "3100" },
+    dataset: { overlay: "project-picker" },
+  });
+  sheet.innerHTML = `
+    <div class="ai-sheet-handle"></div>
+    <div class="ai-sheet-header">
+      <h2 class="ai-sheet-title">Choose a project</h2>
+      <button class="ai-sheet-close" data-close aria-label="Close" type="button">${iconHTML("x", 14)}</button>
+    </div>
+    <div class="ai-sheet-body" id="pickerBody"></div>
+  `;
+  document.body.appendChild(sheet);
+  $("backdrop").classList.add("visible");
+  pushOverlay("project-picker");
+
+  const body = sheet.querySelector("#pickerBody");
+  if (!projects.length) {
+    body.innerHTML = `<div class="sb-empty"><div class="sb-empty-title">No projects yet</div></div>`;
+  } else {
+    for (const p of projects) {
+      const row = el("button", {
+        type: "button",
+        style: {
+          display: "flex", alignItems: "center", gap: "10px",
+          width: "100%", padding: "10px 12px",
+          background: "transparent", border: "none",
+          borderBottom: "1px solid var(--theme-divider)",
+          textAlign: "left", cursor: "pointer", color: "var(--theme-text)",
+          fontFamily: "inherit",
+        },
+        onclick: () => {
+          closeOverlay("project-picker");
+          location.href = "/ai.html?pid=" + encodeURIComponent(p.pid);
+        },
+      });
+      const iconWrap = el("div", { class: "project-icon-box", style: { width: "36px", height: "36px", borderRadius: "9px", fontSize: "13px" } });
+      if (p.iconUrl) {
+        const img = document.createElement("img"); img.src = p.iconUrl; img.alt = "";
+        iconWrap.appendChild(img);
+      } else {
+        iconWrap.textContent = getInitials(p.name);
+        iconWrap.style.background = getAvatarColor(p.name);
+        iconWrap.style.color = "#0a0c10";
+      }
+      row.appendChild(iconWrap);
+      row.appendChild(el("div", { style: { flex: "1", minWidth: "0" } },
+        el("div", { style: { fontSize: "13px", fontWeight: "700", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, p.name || "Untitled"),
+        el("div", { style: { fontSize: "10.5px", color: "var(--theme-text-tertiary)", marginTop: "2px" } },
+          `${p.pid.startsWith("local_") ? "Local · " : ""}${relativeTime(p.updatedAt)}`),
+      ));
+      body.appendChild(row);
+    }
+  }
+  sheet.querySelector("[data-close]").addEventListener("click", () => closeOverlay("project-picker"));
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) closeOverlay("project-picker"); });
+}
+
+// ─── More menu ─────────────────────────────────────────────────
+
 function openMoreMenu() {
+  if (document.querySelector('[data-overlay="more-menu"]')) return;
   const items = [
     { label: "Open in editor", icon: "code", action: () => { location.href = "/?pid=" + encodeURIComponent(STATE.pid); } },
     { label: "Project dashboard", icon: "external", action: () => { location.href = "/project?pid=" + encodeURIComponent(STATE.pid); } },
     { label: "Clear staged", icon: "trash", danger: true, action: () => confirmClearPending() },
   ];
-  const sheet = el("div", { class: "ai-sheet open", style: { zIndex: "3100" } });
+  const sheet = el("div", {
+    class: "ai-sheet open",
+    style: { zIndex: "3100" },
+    dataset: { overlay: "more-menu" },
+  });
   sheet.innerHTML = `
     <div class="ai-sheet-handle"></div>
     <div class="ai-sheet-header">
@@ -1313,6 +1753,8 @@ function openMoreMenu() {
   `;
   document.body.appendChild(sheet);
   $("backdrop").classList.add("visible");
+  pushOverlay("more-menu");
+
   const body = sheet.querySelector("#menuBody");
   for (const it of items) {
     body.appendChild(el("button", {
@@ -1325,15 +1767,14 @@ function openMoreMenu() {
         color: it.danger ? "var(--theme-danger)" : "var(--theme-text)",
         fontSize: "13px", fontFamily: "inherit",
       },
-      onclick: () => { close(); setTimeout(it.action, 80); },
+      onclick: () => { closeOverlay("more-menu"); setTimeout(it.action, 80); },
     }, icon(it.icon, 14), el("span", {}, it.label)));
   }
-  function close() { sheet.remove(); $("backdrop").classList.remove("visible"); }
-  sheet.querySelector("[data-close]").addEventListener("click", close);
-  sheet.addEventListener("click", (e) => { if (e.target === sheet) close(); });
+  sheet.querySelector("[data-close]").addEventListener("click", () => closeOverlay("more-menu"));
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) closeOverlay("more-menu"); });
 }
 
-// ─── Main views ─────────────────────────────────────────────────
+// ─── Main views ────────────────────────────────────────────────
 
 function showMainView(view) {
   document.querySelectorAll(".ai-view").forEach(sec => {
@@ -1347,7 +1788,7 @@ function showMainView(view) {
   else if (view === "info") renderInfoView();
 }
 
-// ─── Sidebar mount ──────────────────────────────────────────────
+// ─── Sidebar mount ─────────────────────────────────────────────
 
 function mountSidebar() {
   const panels = [
@@ -1358,24 +1799,19 @@ function mountSidebar() {
     { id: "notes", label: "Notes", render: renderNotesPanel },
     { id: "info", label: "Info", render: renderInfoPanel },
   ];
-
   sidebar = new Sidebar({
     id: "sb",
     panels,
     initial: "files",
     ctx: { STATE, idb, toast },
   });
-
-  if (window.innerWidth >= 1024) {
-    sidebar.open("files");
-  }
+  if (window.innerWidth >= 1024) sidebar.open("files");
 }
 
-// ─── Files panel ────────────────────────────────────────────────
+// ─── Files panel ───────────────────────────────────────────────
 
 function renderFilesPanel(root) {
   root.innerHTML = "";
-
   const totalBytes = STATE.files.reduce((s, f) => s + estimateSize(f.content || ""), 0);
   const limit = STATE.project.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
   const pct = Math.min(100, (totalBytes / limit) * 100);
@@ -1406,7 +1842,7 @@ function renderFilesPanel(root) {
     el("span", {}, `Files (${STATE.files.length})`),
     el("div", { class: "sb-section-actions" },
       el("button", { class: "sb-icon-btn", title: "New file", type: "button", onclick: createNewFile }, icon("plus", 12)),
-      el("button", { class: "sb-icon-btn", title: "Reload", type: "button", onclick: reloadFiles }, icon("refresh", 12)),
+      el("button", { class: "sb-icon-btn", title: "Reload", type: "button", onclick: () => reloadFiles() }, icon("refresh", 12)),
     )
   );
   root.appendChild(section);
@@ -1437,7 +1873,6 @@ function renderFilesPanel(root) {
   }
 
   const treeData = buildTree(allFiles.map(f => f.path));
-
   const renderNode = (node, depth) => {
     for (const [name, child] of Object.entries(node.children).sort(([a], [b]) => a.localeCompare(b))) {
       const expanded = STATE.expandedFolders.has(child.path) || !!STATE.fileFilter;
@@ -1474,7 +1909,7 @@ function renderFilesPanel(root) {
             onclick: (e) => {
               e.stopPropagation();
               addChip({ type: "file", value: file.path, label: file.name });
-              focusCommand();
+              openCommandSheet();
             },
           }, icon("sparkles", 10)),
           el("button", {
@@ -1486,7 +1921,6 @@ function renderFilesPanel(root) {
       tree.appendChild(row);
     }
   };
-
   renderNode(treeData, 0);
 }
 
@@ -1504,12 +1938,6 @@ function buildTree(paths) {
   return root;
 }
 
-async function reloadFiles() {
-  try { STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path)); } catch {}
-  renderFilesPanel($("sbBody"));
-  renderHeader();
-}
-
 async function createNewFile() {
   const name = window.prompt("New file path (e.g. index.html):");
   if (!name) return;
@@ -1518,8 +1946,7 @@ async function createNewFile() {
   const existing = await idb.getFile(STATE.pid, path);
   if (existing) { toast("File exists", "warning"); return; }
   await idb.putFile(STATE.pid, path, "");
-  STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path));
-  renderFilesPanel($("sbBody"));
+  await reloadFiles();
   await openFile(path);
 }
 
@@ -1527,7 +1954,7 @@ async function deleteFileConfirm(path) {
   const ok = await confirmDialog({ title: `Delete ${path.split("/").pop()}?`, message: "This cannot be undone.", confirmLabel: "Delete", danger: true });
   if (!ok) return;
   await idb.deleteFile(STATE.pid, path);
-  STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path));
+  await reloadFiles();
   if (STATE.activeFile === path) {
     STATE.activeFile = null;
     cm.destroy();
@@ -1535,13 +1962,11 @@ async function deleteFileConfirm(path) {
     $("editorEmpty").style.display = "";
     renderEditorTabs();
   }
-  renderFilesPanel($("sbBody"));
   toast("Deleted", "info");
 }
 
 function openFileContextMenu(e, path) {
   document.querySelectorAll(".ctx-menu").forEach(m => m.remove());
-
   const tasks = [
     { id: "explain", label: "Explain" },
     { id: "debug", label: "Find bugs" },
@@ -1551,6 +1976,7 @@ function openFileContextMenu(e, path) {
     { id: "docstrings", label: "Add docstrings" },
     { id: "diagram", label: "Diagram" },
     { id: "simulate", label: "Simulate" },
+    { id: "compare", label: "Compare to last commit" },
   ];
 
   const menu = el("div", { class: "ctx-menu", style: {
@@ -1558,7 +1984,7 @@ function openFileContextMenu(e, path) {
     background: "var(--theme-surface-card-solid)",
     border: "1px solid var(--theme-glass-border)",
     borderRadius: "8px", padding: "4px", zIndex: "9000",
-    boxShadow: "var(--shadow-menu)", minWidth: "180px",
+    boxShadow: "var(--shadow-menu)", minWidth: "200px",
     fontFamily: "var(--font-sans)",
   }});
 
@@ -1577,15 +2003,20 @@ function openFileContextMenu(e, path) {
       onmouseout: (ev) => { ev.currentTarget.style.background = "transparent"; },
       onclick: () => {
         menu.remove();
-        // Direct run — no drawer form
+        if (t.id === "compare") { openCompareFromFile(path); return; }
         STATE.chips = [{ type: "file", value: path, label: path.split("/").pop() }];
         STATE.prompt = `${{ explain: "Explain this file", debug: "Find bugs in this file", codefix: "Fix this file", optimize: "Optimize this file", audit: "Audit this file", docstrings: "Add docstrings to this file", diagram: "Draw a diagram of this file", simulate: "Simulate this file" }[t.id]}`;
         STATE.detectedTask = t.id;
         if (path !== STATE.activeFile) openFile(path);
+        openCommandSheet();
+        const input = $("aiCommandInput");
+        if (input) input.value = STATE.prompt;
+        updateCommandChips();
+        updateDetectedTask();
         openDrawer();
         autoRunNow();
       },
-    }, icon("sparkles", 12), el("span", {}, t.label)));
+    }, icon(t.id === "compare" ? "compare" : "sparkles", 12), el("span", {}, t.label)));
   }
 
   document.body.appendChild(menu);
@@ -1596,7 +2027,7 @@ function openFileContextMenu(e, path) {
   }, 0);
 }
 
-// ─── Editor ─────────────────────────────────────────────────────
+// ─── Editor ────────────────────────────────────────────────────
 
 async function openFile(path) {
   if (!STATE.project) return;
@@ -1612,24 +2043,19 @@ async function openFile(path) {
   STATE.activeFile = path;
   try { localStorage.setItem(STORAGE.lastFile + "." + STATE.pid, path); } catch {}
 
-  // Auto-chip the active file if it's not already chipped
   if (!STATE.chips.some(c => c.type === "file" && c.value === path)) {
-    // Only auto-chip if no explicit chips and nothing else open
-    if (STATE.chips.length === 0) {
-      addChip({ type: "file", value: path, label: path.split("/").pop() }, { silent: true });
-    }
+    if (STATE.chips.length === 0) addChip({ type: "file", value: path, label: path.split("/").pop() }, { silent: true });
   }
 
   $("editorEmpty").style.display = "none";
   $("editorLoading").hidden = false;
-
   try {
     $("editorContainer").innerHTML = "";
     await cm.mount($("editorContainer"), file.content || "", path);
     $("editorLoading").hidden = true;
     renderEditorTabs();
     updateStatusBar();
-    if (sidebar) renderFilesPanel($("sbBody"));
+    if (sidebar) sidebar.render();
   } catch (err) {
     console.error("[openFile]", err);
     $("editorLoading").hidden = true;
@@ -1641,7 +2067,7 @@ async function saveActiveFile({ silent = false } = {}) {
   if (!STATE.activeFile || !STATE.editorView) { if (!silent) toast("No file open", "info"); return; }
   try {
     const content = cm.getContent();
-    await idb.putFile(STATE.pid, STATE.activeFile, content);
+    await persistFile(STATE.activeFile, content);
     try {
       const p = await idb.getProject(STATE.pid);
       if (p) { p.updatedAt = Date.now(); await idb.putProject(p); }
@@ -1702,16 +2128,18 @@ async function closeFile(path) {
   updateStatusBar();
 }
 
-// ─── Docs panel ─────────────────────────────────────────────────
+// ─── Docs panel ────────────────────────────────────────────────
 
 function renderDocsPanel(root) {
   root.innerHTML = "";
   const docs = STATE.files.filter(f => isDocsFile(f.path));
+  // Sort alphabetically
+  docs.sort((a, b) => a.path.localeCompare(b.path));
 
   const section = el("div", { class: "sb-section" },
     el("span", {}, `Docs (${docs.length})`),
     el("div", { class: "sb-section-actions" },
-      el("button", { class: "sb-icon-btn", title: "New doc", type: "button", onclick: createNewDoc }, icon("plus", 12)),
+      el("button", { class: "sb-icon-btn", title: "New doc", type: "button", onclick: () => openDocsSetup("generate") }, icon("plus", 12)),
     )
   );
   root.appendChild(section);
@@ -1720,52 +2148,47 @@ function renderDocsPanel(root) {
     root.appendChild(el("div", { class: "sb-empty" },
       el("div", { class: "sb-empty-title" }, "No docs yet"),
       el("div", { class: "sb-empty-desc" }, "Create a doc or generate from code."),
-      el("button", { class: "sb-btn sb-btn-primary", type: "button", onclick: createNewDoc }, "New doc"),
+      el("button", { class: "sb-btn sb-btn-primary", type: "button", onclick: () => openDocsSetup("generate") }, "New doc"),
     ));
     return;
   }
 
   for (const d of docs) {
     const active = STATE.docsActivePath === d.path;
+    const wordCount = (String(d.content || "").match(/\S+/g) || []).length;
     root.appendChild(el("div", {
       class: `sb-tree-node ${active ? "active" : ""}`,
       onclick: () => { loadDoc(d.path); if (STATE.activeTab !== "docs") sidebar.switchTo("docs"); },
     },
       el("span", { class: "sb-tree-icon" }, icon(fileIconName(d.path), 12)),
       el("span", { class: "sb-tree-name" }, d.path),
+      el("span", { class: "sb-tree-meta" }, wordCount ? `${wordCount}w` : ""),
     ));
   }
 
   root.appendChild(el("button", {
     class: "sb-btn sb-btn-secondary", type: "button",
     style: { width: "100%", marginTop: "8px" },
-    onclick: () => {
-      STATE.prompt = "Generate documentation for this project";
-      STATE.chips = [{ type: "project", value: "*", label: "project" }];
-      STATE.detectedTask = "docs";
-      if (STATE.activeTab !== "docs") sidebar.switchTo("docs");
-      openDrawer();
-      autoRunNow();
-    },
+    onclick: () => openDocsSetup("generate"),
   }, icon("sparkles", 12), " Generate from code"));
 }
 
-// ─── Docs view ──────────────────────────────────────────────────
+// ─── Docs view ────────────────────────────────────────────────
 
 function wireDocs() {
-  $("docsSave").addEventListener("click", () => saveDoc());
+  $("docsSave").addEventListener("click", () => saveDoc({ silent: false }));
   $("docsSource").addEventListener("input", () => {
     STATE.docsDirty = true;
     updateDocsSaveState();
     if (STATE.docsSaveTimer) clearTimeout(STATE.docsSaveTimer);
-    STATE.docsSaveTimer = setTimeout(() => saveDoc(), 800);
+    STATE.docsSaveTimer = setTimeout(() => saveDoc({ silent: true }), 800);
     scheduleDocsPreview();
   });
   document.querySelectorAll(".docs-mode-switch button").forEach(btn => {
     btn.addEventListener("click", () => setDocsMode(btn.dataset.mode));
   });
   try {
-    const mode = localStorage.getItem("folio.docs.mode");
+    const mode = localStorage.getItem(STORAGE.docsMode);
     if (mode && ["edit","preview","focus"].includes(mode)) STATE.docsMode = mode;
   } catch {}
 }
@@ -1863,15 +2286,17 @@ function applyDocFormat(action) {
   const preview = $("docsPreview");
   if (preview) { preview.innerHTML = renderMarkdown(nv); hydrateMarkdown(preview).catch(() => {}); }
   if (STATE.docsSaveTimer) clearTimeout(STATE.docsSaveTimer);
-  STATE.docsSaveTimer = setTimeout(() => saveDoc(), 800);
+  STATE.docsSaveTimer = setTimeout(() => saveDoc({ silent: true }), 800);
 }
 
 async function loadDoc(path) {
-  if (STATE.docsDirty && STATE.docsActivePath && STATE.docsActivePath !== path) await saveDoc();
+  if (STATE.docsDirty && STATE.docsActivePath && STATE.docsActivePath !== path) await saveDoc({ silent: true });
   if (STATE.docsSaveTimer) { clearTimeout(STATE.docsSaveTimer); STATE.docsSaveTimer = null; }
 
+  $("docsLoading").hidden = false;
+
   const file = await idb.getFile(STATE.pid, path);
-  if (!file) { toast("Doc not found", "error"); return; }
+  if (!file) { $("docsLoading").hidden = true; toast("Doc not found", "error"); return; }
 
   STATE.docsActivePath = path;
   STATE.docsDirty = false;
@@ -1886,31 +2311,39 @@ async function loadDoc(path) {
     hydrateMarkdown(preview).catch(() => {});
   }
   updateDocsSaveState();
+  $("docsLoading").hidden = true;
 }
 
 function updateDocsSaveState() {
   const save = $("docsSave");
-  if (save) save.disabled = !STATE.docsDirty;
+  if (!save) return;
+  save.disabled = !STATE.docsDirty;
+  save.classList.toggle("saving", false);
 }
 
-async function saveDoc() {
+async function saveDoc({ silent = true } = {}) {
   if (!STATE.docsActivePath) return;
   const src = $("docsSource");
   if (!src) return;
+  const save = $("docsSave");
+  if (save && !silent) save.classList.add("saving");
   try {
-    await idb.putFile(STATE.pid, STATE.docsActivePath, src.value);
+    await persistFile(STATE.docsActivePath, src.value);
     STATE.docsDirty = false;
     updateDocsSaveState();
-    STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path));
+    await reloadFiles();
+    if (save) save.classList.remove("saving");
+    if (!silent) toast("Saved", "success");
   } catch (err) {
     console.error("[docs save]", err);
+    if (save) save.classList.remove("saving");
     toast("Save failed", "error");
   }
 }
 
 function setDocsMode(mode) {
   STATE.docsMode = mode;
-  try { localStorage.setItem("folio.docs.mode", mode); } catch {}
+  try { localStorage.setItem(STORAGE.docsMode, mode); } catch {}
   const panes = $("docsPanes");
   if (panes) panes.dataset.mode = mode;
   document.querySelectorAll(".docs-mode-switch button").forEach(btn => {
@@ -1918,29 +2351,408 @@ function setDocsMode(mode) {
   });
 }
 
-async function createNewDoc() {
-  const name = window.prompt("New doc path (e.g. docs/guide.md):", "docs/untitled.md");
-  if (!name) return;
-  const path = name.trim();
-  if (!path) return;
-  const existing = await idb.getFile(STATE.pid, path);
-  if (existing) { toast("Doc exists", "warning"); return; }
-  await idb.putFile(STATE.pid, path, `# ${path.split("/").pop().replace(/\.mdx?$/, "")}\n\n`);
-  STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path));
-  renderDocsPanel($("sbBody"));
-  await loadDoc(path);
-  if (STATE.activeTab !== "docs") sidebar.switchTo("docs");
-  toast("Created " + path, "success");
+// ─── Docs setup overlay ────────────────────────────────────────
+
+function wireDocsSetup() {
+  $("docsSetupBack").addEventListener("click", () => closeOverlay("docs-setup"));
+  $("docsSetupSubmit").addEventListener("click", submitDocsSetup);
 }
 
-// ─── History ────────────────────────────────────────────────────
+function openDocsSetup(mode = "generate") {
+  STATE.docsSetupMode = mode;
+  STATE.docsSetupScope = "project";
+  STATE.docsSetupFiles = new Set();
+  STATE.docsSetupExpanded = new Set();
+  renderDocsSetup();
+  pushOverlay("docs-setup");
+  $("backdrop").classList.add("visible");
+  showFullpage("docsSetupOverlay");
+}
+
+function renderDocsSetup() {
+  const body = $("docsSetupBody");
+  if (!body) return;
+  const isGenerate = STATE.docsSetupMode === "generate";
+  $("docsSetupTitle").textContent = isGenerate ? "Generate documentation" : "New blank doc";
+  $("docsSetupSubtitle").textContent = isGenerate ? "Pick scope, then generate with AI" : "Create a starter markdown file";
+  $("docsSetupSubmit").textContent = isGenerate ? "Generate" : "Create";
+
+  body.innerHTML = "";
+
+  if (isGenerate) {
+    // Scope
+    const scopeSec = el("div", { class: "docs-setup-section" });
+    scopeSec.appendChild(el("div", { class: "docs-setup-section-title" }, "Scope"));
+    const scopeRow = el("div", { class: "docs-setup-scope-row" });
+    [
+      { id: "project", label: "Whole project" },
+      { id: "files", label: "Specific files" },
+    ].forEach(s => {
+      scopeRow.appendChild(el("button", {
+        class: `docs-setup-scope ${STATE.docsSetupScope === s.id ? "active" : ""}`,
+        type: "button",
+        onclick: () => { STATE.docsSetupScope = s.id; renderDocsSetup(); },
+      }, s.label));
+    });
+    scopeSec.appendChild(scopeRow);
+    body.appendChild(scopeSec);
+
+    if (STATE.docsSetupScope === "files") {
+      const treeSec = el("div", { class: "docs-setup-section" });
+      treeSec.appendChild(el("div", { class: "docs-setup-section-title" }, "Files"));
+      const tree = el("div", { class: "docs-setup-tree" });
+      renderDocsSetupTree(tree);
+      treeSec.appendChild(tree);
+      body.appendChild(treeSec);
+    }
+  } else {
+    // Blank doc form
+    const formSec = el("div", { class: "docs-setup-section" });
+    formSec.appendChild(el("div", { class: "docs-setup-section-title" }, "Blank doc"));
+
+    const pathField = el("div", { class: "docs-setup-field" });
+    pathField.appendChild(el("label", { class: "docs-setup-label" }, "Path"));
+    const pathInput = el("input", { class: "input", type: "text", value: "docs/untitled.md", id: "docsNewPath" });
+    pathField.appendChild(pathInput);
+    formSec.appendChild(pathField);
+
+    const titleField = el("div", { class: "docs-setup-field" });
+    titleField.appendChild(el("label", { class: "docs-setup-label" }, "Title (optional)"));
+    titleField.appendChild(el("input", { class: "input", type: "text", placeholder: "Untitled", id: "docsNewTitle" }));
+    formSec.appendChild(titleField);
+
+    body.appendChild(formSec);
+  }
+}
+
+function renderDocsSetupTree(container) {
+  const tree = buildTree(STATE.files.map(f => f.path));
+  const renderNode = (node, depth) => {
+    for (const [name, child] of Object.entries(node.children).sort(([a], [b]) => a.localeCompare(b))) {
+      const expanded = STATE.docsSetupExpanded.has(child.path);
+      container.appendChild(el("div", {
+        class: `docs-setup-tree-node folder ${expanded ? "expanded" : ""}`,
+        style: { "--depth": String(depth) },
+        onclick: () => {
+          if (STATE.docsSetupExpanded.has(child.path)) STATE.docsSetupExpanded.delete(child.path);
+          else STATE.docsSetupExpanded.add(child.path);
+          container.innerHTML = "";
+          renderDocsSetupTree(container);
+        },
+      },
+        el("span", { class: "chevron" }, icon("chevron-right", 9)),
+        el("span", { class: "node-icon" }, icon(expanded ? "folder-open" : "folder", 12)),
+        el("span", { class: "node-label" }, name),
+      ));
+      if (expanded) renderNode(child, depth + 1);
+    }
+    for (const file of node.files.sort((a, b) => a.name.localeCompare(b.name))) {
+      const checked = STATE.docsSetupFiles.has(file.path);
+      const row = el("div", {
+        class: "docs-setup-tree-node",
+        style: { "--depth": String(depth) },
+        onclick: (e) => {
+          if (e.target.tagName === "INPUT") return;
+          if (STATE.docsSetupFiles.has(file.path)) STATE.docsSetupFiles.delete(file.path);
+          else STATE.docsSetupFiles.add(file.path);
+          container.innerHTML = "";
+          renderDocsSetupTree(container);
+        },
+      });
+      const cb = el("input", { type: "checkbox" });
+      cb.checked = checked;
+      cb.addEventListener("change", () => {
+        if (cb.checked) STATE.docsSetupFiles.add(file.path);
+        else STATE.docsSetupFiles.delete(file.path);
+      });
+      row.appendChild(cb);
+      row.appendChild(el("span", { class: "node-icon" }, icon(fileIconName(file.path), 12)));
+      row.appendChild(el("span", { class: "node-label" }, file.name));
+      container.appendChild(row);
+    }
+  };
+  renderNode(tree, 0);
+}
+
+async function submitDocsSetup() {
+  if (STATE.docsSetupMode === "blank") {
+    const pathInput = $("docsNewPath");
+    const titleInput = $("docsNewTitle");
+    const path = (pathInput?.value || "").trim();
+    if (!path) { toast("Path required", "warning"); return; }
+    if (!/^[a-zA-Z0-9._\-\/]+\.mdx?$/.test(path)) { toast("Path must end in .md or .mdx", "warning"); return; }
+    const existing = await idb.getFile(STATE.pid, path);
+    if (existing) { toast("File exists", "warning"); return; }
+    const title = (titleInput?.value || "").trim() || path.split("/").pop().replace(/\.mdx?$/, "");
+    await idb.putFile(STATE.pid, path, `# ${title}\n\n`);
+    await reloadFiles();
+    closeOverlay("docs-setup");
+    $("backdrop").classList.remove("visible");
+    await loadDoc(path);
+    if (STATE.activeTab !== "docs") sidebar.switchTo("docs");
+    toast("Created " + path, "success");
+    return;
+  }
+
+  // Generate mode
+  const scopeFiles = STATE.docsSetupScope === "project"
+    ? STATE.files
+    : STATE.files.filter(f => STATE.docsSetupFiles.has(f.path));
+
+  if (scopeFiles.length === 0) {
+    toast("Select at least one file", "warning");
+    return;
+  }
+
+  closeOverlay("docs-setup");
+  openDocsProgress(scopeFiles);
+}
+
+// ─── Docs progress overlay ────────────────────────────────────
+
+let docsProgressAbort = null;
+
+function wireDocsProgress() {
+  $("docsProgressCancel").addEventListener("click", () => {
+    if (docsProgressAbort) docsProgressAbort.abort();
+    closeOverlay("docs-progress");
+    $("backdrop").classList.remove("visible");
+  });
+}
+
+function openDocsProgress(files) {
+  // Reset UI
+  $("docsProgressTitle").textContent = "Analyzing files…";
+  $("docsProgressSubtitle").textContent = `${files.length} file${files.length === 1 ? "" : "s"} · This can take up to a minute.`;
+  const stepsEl = $("docsProgressSteps");
+  stepsEl.innerHTML = "";
+  const steps = [
+    { id: "analyze", label: "Analyze files" },
+    { id: "generate", label: "Draft documentation" },
+    { id: "prepare", label: "Prepare review" },
+  ];
+  steps.forEach((s, i) => {
+    stepsEl.appendChild(el("div", { class: `docs-progress-step ${i === 0 ? "active" : ""}`, id: `progStep-${s.id}` },
+      el("span", { class: "docs-progress-step-icon" }, String(i + 1)),
+      el("span", {}, s.label),
+    ));
+  });
+
+  pushOverlay("docs-progress");
+  $("backdrop").classList.add("visible");
+  showFullpage("docsProgressOverlay");
+
+  runDocsGenerate(files);
+}
+
+async function runDocsGenerate(files) {
+  docsProgressAbort = new AbortController();
+  try {
+    setProgressStep(0);
+    $("docsProgressTitle").textContent = "Analyzing files…";
+
+    // Build payload
+    const payload = {
+      name: STATE.project.name || "Untitled",
+      description: STATE.project.description || "",
+      files: Object.fromEntries(files.map(f => [f.path, f.content || ""])),
+    };
+
+    setProgressStep(1);
+    $("docsProgressTitle").textContent = "Drafting documentation…";
+
+    const res = await runTask({
+      task: "docs",
+      pid: STATE.pid,
+      payload,
+      signal: docsProgressAbort.signal,
+      deps: { idb, apiFetch },
+    });
+
+    if (!res.ok || !res.data?.success) {
+      closeOverlay("docs-progress");
+      $("backdrop").classList.remove("visible");
+      toast(res.data?.error || "Generation failed", "error", 4000);
+      return;
+    }
+
+    // Record run
+    const run = await appendAiRun(STATE.pid, {
+      task: "docs", pid: STATE.pid,
+      file: null,
+      scope: "project",
+      text: res.data.text,
+      artifacts: res.data.artifacts || [],
+      usage: res.data.usage || null,
+      quota: res.data.quota || null,
+      cached: !!res.data.cached,
+    }, { idb });
+    if (res.data.quota) { writeQuotaCache(res.data.quota); renderQuotaHud(); }
+    STATE.aiState = await readAiState(STATE.pid, { idb });
+
+    setProgressStep(2);
+    $("docsProgressTitle").textContent = "Preparing review…";
+
+    // Collect files from artifacts
+    const fileArtifacts = (res.data.artifacts || []).filter(a => a.type === "files");
+    const allFiles = [];
+    for (const art of fileArtifacts) {
+      for (const f of (art.files || [])) allFiles.push(f);
+    }
+
+    closeOverlay("docs-progress");
+    $("backdrop").classList.remove("visible");
+
+    if (allFiles.length === 0) {
+      toast("No files generated — try again", "warning", 4000);
+      return;
+    }
+
+    openDocsReview(allFiles, run);
+  } catch (err) {
+    if (err?.name === "AbortError") { toast("Cancelled", "info"); return; }
+    closeOverlay("docs-progress");
+    $("backdrop").classList.remove("visible");
+    toast(err?.message || "Generation failed", "error", 5000);
+  } finally {
+    docsProgressAbort = null;
+  }
+}
+
+function setProgressStep(index) {
+  const ids = ["analyze", "generate", "prepare"];
+  ids.forEach((id, i) => {
+    const el = $(`progStep-${id}`);
+    if (!el) return;
+    el.classList.toggle("active", i === index);
+    el.classList.toggle("done", i < index);
+    const iconEl = el.querySelector(".docs-progress-step-icon");
+    if (iconEl) {
+      if (i < index) iconEl.innerHTML = iconHTML("check", 12);
+      else iconEl.textContent = String(i + 1);
+    }
+  });
+}
+
+// ─── Docs review overlay ──────────────────────────────────────
+
+function wireDocsReview() {
+  $("docsReviewBack").addEventListener("click", () => {
+    closeOverlay("docs-review");
+    $("backdrop").classList.remove("visible");
+  });
+  $("docsReviewDiscardAll").addEventListener("click", () => {
+    closeOverlay("docs-review");
+    $("backdrop").classList.remove("visible");
+    toast("Discarded", "info");
+  });
+  $("docsReviewAcceptAll").addEventListener("click", acceptAllDocsReview);
+}
+
+let docsReviewFiles = null;
+let docsReviewRun = null;
+
+function openDocsReview(files, run) {
+  docsReviewFiles = files;
+  docsReviewRun = run;
+  $("docsReviewTitle").textContent = `${files.length} document${files.length === 1 ? "" : "s"} generated`;
+  $("docsReviewSubtitle").textContent = "Review, then accept or discard";
+
+  const list = $("docsReviewList");
+  list.innerHTML = "";
+  files.forEach((f, idx) => {
+    const card = el("div", { class: "docs-review-card", id: `docReview-${idx}` });
+    const header = el("div", { class: "docs-review-card-header" });
+    header.appendChild(el("span", { class: "docs-review-card-path" }, f.path));
+    const wc = (String(f.content || "").match(/\S+/g) || []).length;
+    header.appendChild(el("span", { class: "docs-review-card-meta" }, `${wc} words`));
+    header.appendChild(el("button", {
+      class: "docs-review-card-discard", type: "button", "aria-label": "Discard",
+      onclick: () => {
+        const c = $(`docReview-${idx}`);
+        if (c) c.remove();
+        docsReviewFiles = docsReviewFiles.filter((_, i) => i !== idx);
+        if (docsReviewFiles.length === 0) {
+          closeOverlay("docs-review");
+          $("backdrop").classList.remove("visible");
+          toast("Discarded all", "info");
+        }
+      },
+    }, "Discard"));
+    card.appendChild(header);
+
+    const body = el("div", { class: "docs-review-card-body" });
+    const preview = el("div", { class: "docs-review-card-preview" });
+    const md = renderMarkdown(f.content || "");
+    preview.innerHTML = md;
+    body.appendChild(preview);
+    hydrateMarkdown(preview).catch(() => {});
+    card.appendChild(body);
+
+    const toggle = el("button", {
+      class: "docs-review-card-toggle", type: "button",
+      onclick: () => {
+        card.classList.toggle("expanded");
+        toggle.textContent = card.classList.contains("expanded") ? "Show less" : "Show more";
+      },
+    }, "Show more");
+    card.appendChild(toggle);
+
+    list.appendChild(card);
+  });
+
+  pushOverlay("docs-review");
+  $("backdrop").classList.add("visible");
+  showFullpage("docsReviewOverlay");
+}
+
+async function acceptAllDocsReview() {
+  if (!docsReviewFiles || !docsReviewFiles.length) return;
+  $("docsReviewAcceptAll").disabled = true;
+  $("docsReviewAcceptAll").textContent = "Writing…";
+  try {
+    let written = 0;
+    for (const f of docsReviewFiles) {
+      if (!f || !f.path) continue;
+      const res = await persistFile(f.path, f.content || "");
+      if (res.ok) written++;
+    }
+    await reloadFiles();
+    closeOverlay("docs-review");
+    $("backdrop").classList.remove("visible");
+    toast(`Created ${written} document${written === 1 ? "" : "s"}`, "success");
+    if (docsReviewRun) {
+      try {
+        // Mark stageable artifacts accepted
+        for (let i = 0; i < (docsReviewRun.artifacts || []).length; i++) {
+          if (docsReviewRun.artifacts[i].type === "files") {
+            await markRunArtifactAccepted(STATE.pid, docsReviewRun.id, i, { idb });
+          }
+        }
+        STATE.aiState = await readAiState(STATE.pid, { idb });
+        updateStatusBar();
+      } catch {}
+    }
+    // Load first doc
+    if (docsReviewFiles[0]?.path) {
+      await loadDoc(docsReviewFiles[0].path);
+      if (STATE.activeTab !== "docs") sidebar.switchTo("docs");
+    }
+  } catch (err) {
+    toast(err?.message || "Write failed", "error", 5000);
+  } finally {
+    $("docsReviewAcceptAll").disabled = false;
+    $("docsReviewAcceptAll").textContent = "Accept all";
+  }
+}
+
+// ─── History panel / view ─────────────────────────────────────
 
 function renderHistoryPanel(root) {
   root.innerHTML = "";
   const runs = STATE.aiState?.runs || [];
   const section = el("div", { class: "sb-section" }, el("span", {}, `Runs (${runs.length})`));
   root.appendChild(section);
-
   if (!runs.length) {
     root.appendChild(el("div", { class: "sb-empty" },
       el("div", { class: "sb-empty-title" }, "No runs yet"),
@@ -1948,7 +2760,6 @@ function renderHistoryPanel(root) {
     ));
     return;
   }
-
   for (const r of runs.slice(0, 30)) {
     const meta = getTaskMeta(r.task) || { label: r.task };
     root.appendChild(el("div", {
@@ -1971,21 +2782,16 @@ function renderHistoryView() {
   const runs = STATE.aiState?.runs || [];
   const wrap = el("div", { class: "section-pad" });
   wrap.appendChild(el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0 0 16px" } }, "AI history"));
-
   if (!runs.length) {
     wrap.appendChild(el("div", { class: "sb-empty" },
       el("div", { class: "sb-empty-title" }, "No runs yet"),
-      el("div", { class: "sb-empty-desc" }, "Your AI runs will appear here."),
     ));
     section.appendChild(wrap);
     return;
   }
   for (const r of runs.slice(0, 50)) {
     const meta = getTaskMeta(r.task) || { label: r.task };
-    wrap.appendChild(el("div", {
-      class: "history-row",
-      onclick: () => openRunInline(r),
-    },
+    wrap.appendChild(el("div", { class: "history-row", onclick: () => openRunInline(r) },
       el("div", { class: "history-row-top" },
         el("span", { class: "history-row-task" }, meta.label),
         el("span", { class: "history-row-time" }, relativeTime(r.createdAt)),
@@ -2021,33 +2827,38 @@ function openRunInline(run) {
       onAccept: (artifact, idx) => handleAccept(artifact, idx, run),
       onReject: (artifact, idx) => handleReject(artifact, idx, run),
       onOpenFile: (path, line) => { switchToFiles(); openFile(path); },
+      onCompare: (artifact) => openCompareFromArtifact(artifact, run),
     });
   }
   section.appendChild(wrap);
 }
 
-// ─── Commits ────────────────────────────────────────────────────
+// ─── Commits panel / view ─────────────────────────────────────
 
 async function renderCommitsPanel(root) {
   root.innerHTML = "";
   let versions = [];
   try { versions = await idb.listVersions(STATE.pid); } catch {}
-  const section = el("div", { class: "sb-section" }, el("span", {}, `Commits (${versions.length})`));
+  const section = el("div", { class: "sb-section" },
+    el("span", {}, `Commits (${versions.length})`),
+    el("div", { class: "sb-section-actions" },
+      el("button", { class: "sb-icon-btn", title: "New commit", type: "button", onclick: openNewCommit }, icon("plus", 12)),
+    )
+  );
   root.appendChild(section);
-
   if (!versions.length) {
     root.appendChild(el("div", { class: "sb-empty" },
       el("div", { class: "sb-empty-title" }, "No commits yet"),
-      el("div", { class: "sb-empty-desc" }, "Commits from the dashboard appear here."),
+      el("div", { class: "sb-empty-desc" }, "Create one to snapshot the current state."),
     ));
     return;
   }
   for (const v of versions.slice(0, 30)) {
     root.appendChild(el("div", {
       class: "sb-tree-node",
-      onclick: () => { if (STATE.activeTab !== "commits") sidebar.switchTo("commits"); },
+      onclick: () => openCompareFromCommit(v),
     },
-      el("span", { class: "sb-tree-icon" }, icon("git-commit", 12)),
+      el("span", { class: "sb-tree-icon" }, icon(v.kind === "deploy" ? "external" : "git-commit", 12)),
       el("div", { style: { flex: "1", minWidth: "0" } },
         el("div", { style: { fontSize: "11.5px", fontWeight: "700", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, v.message || "Untitled"),
         el("div", { style: { fontSize: "10px", color: "var(--theme-text-tertiary)", marginTop: "1px" } }, relativeTime(v.createdAt)),
@@ -2061,43 +2872,533 @@ async function renderCommitsView() {
   if (!section) return;
   section.innerHTML = "";
   const wrap = el("div", { class: "section-pad" });
-  const header = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" } },
-    el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0" } }, "Commits"),
+
+  const header = el("div", { class: "commits-header" },
+    el("h2", {}, "Commits"),
     el("button", {
       class: "btn btn-primary btn-sm", type: "button",
-      onclick: () => {
-        STATE.prompt = "Write a commit message for the current changes";
-        STATE.chips = [{ type: "project", value: "*", label: "project" }];
-        STATE.detectedTask = "commitMsg";
-        openDrawer();
-        autoRunNow();
-      },
-    }, icon("sparkles", 12), " Draft message"),
+      onclick: openNewCommit,
+    }, icon("plus", 12), " New commit"),
   );
   wrap.appendChild(header);
+
+  // Show drafted message callout if any
+  const drafted = STATE.aiState?.runs?.find(r =>
+    r.task === "commitMsg" || r.task === "commitDraft"
+  );
+  if (drafted?.text) {
+    const callout = el("div", { class: "draft-callout" });
+    callout.appendChild(el("span", { class: "draft-callout-icon" }, icon("sparkles", 14)));
+    callout.appendChild(el("span", { class: "draft-callout-text" }, `AI drafted: "${String(drafted.text).split("\n")[0]}"`));
+    wrap.appendChild(callout);
+  }
 
   let versions = [];
   try { versions = await idb.listVersions(STATE.pid); } catch {}
   if (!versions.length) {
     wrap.appendChild(el("div", { class: "sb-empty" },
       el("div", { class: "sb-empty-title" }, "No commits yet"),
-      el("div", { class: "sb-empty-desc" }, "Commits from the dashboard appear here."),
+      el("div", { class: "sb-empty-desc" }, "Commit now to snapshot the current state."),
     ));
   } else {
     for (const v of versions) {
-      wrap.appendChild(el("div", { class: "commit-row" },
-        el("div", { class: "commit-row-top" },
-          el("span", { class: "commit-row-msg" }, v.message || "Untitled"),
-          el("span", { class: "commit-row-time" }, relativeTime(v.createdAt)),
-        ),
-        el("div", { class: "commit-row-meta" }, `${Object.keys(v.files || {}).length} files`),
+      const isDeploy = v.kind === "deploy";
+      const fileCount = Object.keys(v.files || {}).length;
+      const row = el("div", { class: "commit-row" });
+      row.appendChild(el("div", { class: "commit-row-top" },
+        el("span", { class: "commit-row-msg" }, v.message || "Untitled"),
+        el("span", { class: "commit-row-time" }, relativeTime(v.createdAt)),
       ));
+      row.appendChild(el("div", { class: "commit-row-meta" },
+        `${isDeploy ? "Deploy · " : ""}${fileCount} file${fileCount === 1 ? "" : "s"}`));
+      row.appendChild(el("div", { class: "commit-row-actions" },
+        el("button", { class: "btn btn-ghost btn-sm", type: "button", onclick: (e) => { e.stopPropagation(); openCompareFromCommit(v); } },
+          icon("compare", 11), " Compare"),
+      ));
+      row.addEventListener("click", () => openCompareFromCommit(v));
+      wrap.appendChild(row);
     }
   }
   section.appendChild(wrap);
 }
 
-// ─── Notes ──────────────────────────────────────────────────────
+// ─── Compare overlay ──────────────────────────────────────────
+
+function wireCompare() {
+  $("compareBack").addEventListener("click", () => {
+    closeOverlay("compare");
+    $("backdrop").classList.remove("visible");
+  });
+  $("comparePrevFile").addEventListener("click", () => navCompare(-1));
+  $("compareNextFile").addEventListener("click", () => navCompare(1));
+  $("compareAcceptFile").addEventListener("click", () => acceptAllHunksInFile());
+  $("compareRejectFile").addEventListener("click", () => rejectAllHunksInFile());
+  $("compareApply").addEventListener("click", applyCompareMerge);
+  $("compareRejectAll").addEventListener("click", () => {
+    if (!STATE.compareState) return;
+    for (const f of STATE.compareState.files) f.hunks.forEach(h => h.decision = "reject");
+    renderCompare();
+  });
+}
+
+function openCompareFromCommit(version) {
+  const currentMap = Object.fromEntries(STATE.files.map(f => [f.path, f.content || ""]));
+  const oldMap = version.files || {};
+  openCompareView(oldMap, currentMap, {
+    title: "Compare",
+    subtitle: `vs. ${version.message || "Untitled"}`,
+  });
+}
+
+async function openCompareFromFile(path) {
+  const baseline = await getCommitBaseline(STATE.pid, { idb });
+  const currentFile = STATE.files.find(f => f.path === path);
+  if (!currentFile) { toast("File not loaded", "error"); return; }
+  const oldMap = baseline[path] !== undefined ? { [path]: baseline[path] } : {};
+  const newMap = { [path]: currentFile.content || "" };
+  if (!Object.keys(oldMap).length && !Object.keys(newMap).length) {
+    toast("Nothing to compare", "info");
+    return;
+  }
+  openCompareView(oldMap, newMap, {
+    title: "Compare",
+    subtitle: `vs. last commit · ${path}`,
+  });
+}
+
+function openCompareFromArtifact(artifact, run) {
+  if (!artifact || artifact.type !== "diff") return;
+  const oldMap = artifact.old ? { [artifact.file]: artifact.old } : {};
+  const newMap = { [artifact.file]: artifact.new || "" };
+  openCompareView(oldMap, newMap, {
+    title: "Compare",
+    subtitle: `AI ${run?.task || ""} · ${artifact.file}`,
+  });
+}
+
+function openCompareView(oldMap, newMap, { title, subtitle }) {
+  const result = diffFiles(oldMap, newMap);
+  const changed = result.files.filter(f => f.status !== "unchanged");
+  if (!changed.length) { toast("No changes", "info"); return; }
+
+  STATE.compareState = {
+    title: title || "Compare",
+    subtitle: subtitle || "",
+    files: changed.map(f => ({
+      path: f.path,
+      old: f.old,
+      new: f.new,
+      status: f.status,
+      stats: f.stats,
+      hunks: (f.hunks || []).map(h => ({
+        ...h,
+        decision: "accept", // default: accept all
+      })),
+    })),
+    index: 0,
+  };
+
+  $("compareTitle").textContent = title || "Compare";
+  $("compareSubtitle").textContent = subtitle || "";
+  $("compareApply").disabled = false;
+
+  pushOverlay("compare");
+  $("backdrop").classList.add("visible");
+  showFullpage("compareOverlay");
+
+  renderCompareRail();
+  renderCompare();
+}
+
+function renderCompareRail() {
+  const list = $("compareRailList");
+  if (!list || !STATE.compareState) return;
+  list.innerHTML = "";
+  const files = STATE.compareState.files;
+  $("compareRailHead").textContent = `${files.length} file${files.length === 1 ? "" : "s"} changed`;
+  files.forEach((f, idx) => {
+    const badge = f.status === "added" ? "A" : f.status === "removed" ? "D" : "M";
+    const active = idx === STATE.compareState.index;
+    const row = el("button", {
+      class: `ai-compare-file ${active ? "active" : ""}`,
+      type: "button",
+      onclick: () => { STATE.compareState.index = idx; renderCompare(); },
+    },
+      el("span", { class: `ai-compare-file-badge ${badge}` }, badge),
+      el("span", { class: "ai-compare-file-path", title: f.path }, f.path),
+      el("span", { class: "ai-compare-file-stats" },
+        el("span", { class: "add" }, `+${f.stats.added || 0}`),
+        el("span", { class: "rem" }, `−${f.stats.removed || 0}`),
+      ),
+    );
+    list.appendChild(row);
+  });
+}
+
+function renderCompare() {
+  if (!STATE.compareState) return;
+  const st = STATE.compareState;
+  const files = st.files;
+  const idx = Math.max(0, Math.min(st.index, files.length - 1));
+  st.index = idx;
+  const f = files[idx];
+
+  $("compareMainTitle").textContent = f.path;
+  $("compareMainStats").innerHTML =
+    `<span class="add">+${f.stats.added || 0}</span><span class="rem">−${f.stats.removed || 0}</span>`;
+  $("compareFileCounter").textContent = `${idx + 1} / ${files.length}`;
+  $("comparePrevFile").disabled = idx === 0;
+  $("compareNextFile").disabled = idx === files.length - 1;
+
+  // Summary
+  let accepted = 0, rejected = 0;
+  for (const h of f.hunks) {
+    if (h.decision === "accept") accepted++;
+    else if (h.decision === "reject") rejected++;
+  }
+  $("compareSummary").textContent =
+    `${f.hunks.length} hunk${f.hunks.length === 1 ? "" : "s"} · ${accepted} accept · ${rejected} reject`;
+
+  // Hunk list
+  const hunks = $("compareHunks");
+  hunks.innerHTML = "";
+  if (f.hunks.length === 0) {
+    hunks.appendChild(el("div", { class: "ai-compare-empty" },
+      el("div", { style: { fontWeight: 700 } }, "No hunks to display"),
+      el("div", { style: { fontSize: "11px", marginTop: "6px" } }, f.status === "added" ? "File added" : "File removed"),
+    ));
+  } else {
+    f.hunks.forEach((h, hIdx) => {
+      const hunkEl = el("div", { class: `ai-compare-hunk ${h.decision === "reject" ? "rejected" : ""}` });
+      const head = el("div", { class: "ai-compare-hunk-head" },
+        el("span", {}, `Hunk ${hIdx + 1} of ${f.hunks.length}`),
+        el("span", {}, `L${h.oldStart}–${h.oldEnd} → L${h.newStart}–${h.newEnd}`),
+        el("span", { class: "spacer" }),
+        el("div", { class: "ai-compare-hunk-actions" },
+          el("button", {
+            class: `ai-compare-hunk-action accept ${h.decision === "accept" ? "active" : ""}`,
+            type: "button",
+            onclick: () => { h.decision = "accept"; renderCompare(); },
+          }, "Accept"),
+          el("button", {
+            class: `ai-compare-hunk-action reject ${h.decision === "reject" ? "active" : ""}`,
+            type: "button",
+            onclick: () => { h.decision = "reject"; renderCompare(); },
+          }, "Reject"),
+        ),
+      );
+      hunkEl.appendChild(head);
+
+      // Build left/right columns
+      const linesGrid = el("div", { class: "ai-compare-hunk-lines" });
+      const colOld = el("div", { class: "ai-compare-col" });
+      const colNew = el("div", { class: "ai-compare-col" });
+      const oldLines = [];
+      const newLines = [];
+      for (const line of h.lines) {
+        if (line.type === "eq") { oldLines.push(line); newLines.push(line); }
+        else if (line.type === "rem") oldLines.push(line);
+        else if (line.type === "add") newLines.push(line);
+      }
+      // Pad the shorter side
+      const max = Math.max(oldLines.length, newLines.length);
+      for (let i = 0; i < max; i++) {
+        const o = oldLines[i], n = newLines[i];
+        colOld.appendChild(el("div", {
+          class: `ai-compare-line ${o ? o.type : "empty"}`,
+        },
+          el("span", { class: "line-sign" }, o ? (o.type === "rem" ? "−" : o.type === "add" ? "+" : " ") : ""),
+          el("span", { class: "line-text" }, o?.text ?? ""),
+        ));
+        colNew.appendChild(el("div", {
+          class: `ai-compare-line ${n ? n.type : "empty"}`,
+        },
+          el("span", { class: "line-sign" }, n ? (n.type === "rem" ? "−" : n.type === "add" ? "+" : " ") : ""),
+          el("span", { class: "line-text" }, n?.text ?? ""),
+        ));
+      }
+      linesGrid.appendChild(colOld);
+      linesGrid.appendChild(colNew);
+      hunkEl.appendChild(linesGrid);
+
+      hunks.appendChild(hunkEl);
+    });
+  }
+
+  // Footer info
+  const pendingCount = files.reduce((n, file) => n + file.hunks.filter(h => h.decision === "accept").length, 0);
+  $("compareFooterInfo").innerHTML =
+    `<strong>${pendingCount}</strong> hunk${pendingCount === 1 ? "" : "s"} marked for merge across <strong>${files.length}</strong> file${files.length === 1 ? "" : "s"}`;
+
+  renderCompareRail();
+}
+
+function navCompare(dir) {
+  if (!STATE.compareState) return;
+  const next = STATE.compareState.index + dir;
+  if (next < 0 || next >= STATE.compareState.files.length) return;
+  STATE.compareState.index = next;
+  renderCompare();
+}
+
+function acceptAllHunksInFile() {
+  if (!STATE.compareState) return;
+  const f = STATE.compareState.files[STATE.compareState.index];
+  for (const h of f.hunks) h.decision = "accept";
+  renderCompare();
+}
+
+function rejectAllHunksInFile() {
+  if (!STATE.compareState) return;
+  const f = STATE.compareState.files[STATE.compareState.index];
+  for (const h of f.hunks) h.decision = "reject";
+  renderCompare();
+}
+
+async function applyCompareMerge() {
+  if (!STATE.compareState) return;
+  const btn = $("compareApply");
+  btn.disabled = true;
+  btn.textContent = "Applying…";
+  try {
+    let applied = 0;
+    for (const f of STATE.compareState.files) {
+      // Build merged content: for each hunk, if accept use new lines, else old lines
+      const lines = [];
+      for (const h of f.hunks) {
+        if (h.decision === "reject") {
+          for (const line of h.lines) if (line.type !== "add") lines.push(line.text);
+        } else {
+          for (const line of h.lines) if (line.type !== "rem") lines.push(line.text);
+        }
+      }
+      const merged = lines.join("\n");
+      // Only write if different from current
+      const current = STATE.files.find(x => x.path === f.path);
+      const currentContent = current?.content ?? "";
+      if (merged !== currentContent) {
+        const res = await persistFile(f.path, merged);
+        if (res.ok) applied++;
+      } else {
+        applied++;
+      }
+    }
+    await reloadFiles();
+    closeOverlay("compare");
+    $("backdrop").classList.remove("visible");
+    toast(`Merged ${applied} file${applied === 1 ? "" : "s"}`, "success");
+    if (STATE.activeTab === "files" && STATE.activeFile) {
+      await openFile(STATE.activeFile);
+    }
+  } catch (err) {
+    toast(err?.message || "Merge failed", "error", 5000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Apply merge";
+  }
+}
+
+// ─── New commit overlay ───────────────────────────────────────
+
+function wireCommit() {
+  $("commitBack").addEventListener("click", () => {
+    closeOverlay("commit");
+    $("backdrop").classList.remove("visible");
+  });
+  $("commitSubmit").addEventListener("click", submitCommit);
+}
+
+let commitDraftAbort = null;
+
+async function openNewCommit(prefill = null) {
+  const baseline = await getCommitBaseline(STATE.pid, { idb });
+  const currentMap = Object.fromEntries(STATE.files.map(f => [f.path, f.content || ""]));
+  const result = diffFiles(baseline, currentMap);
+  const changed = result.files.filter(f => f.status !== "unchanged");
+
+  STATE.commitState = {
+    prefillMessage: prefill?.message || "",
+    changed,
+    message: prefill?.message || "",
+    stats: result.stats,
+  };
+
+  if (!changed.length) {
+    // Still let user create a checkpoint
+    const ok = await confirmDialog({
+      title: "No changes since last commit",
+      message: "Commit anyway as a checkpoint of the current state?",
+      confirmLabel: "Checkpoint",
+      danger: false,
+    });
+    if (!ok) return;
+  }
+
+  renderCommitView();
+  pushOverlay("commit");
+  $("backdrop").classList.add("visible");
+  showFullpage("commitOverlay");
+}
+
+function renderCommitView() {
+  const body = $("commitBody");
+  if (!body || !STATE.commitState) return;
+  const st = STATE.commitState;
+  const changed = st.changed;
+  const filesCount = changed.length;
+  const adds = changed.reduce((n, c) => n + (c.stats?.added || 0), 0);
+  const rems = changed.reduce((n, c) => n + (c.stats?.removed || 0), 0);
+
+  $("commitSubtitle").textContent = filesCount > 0
+    ? `${filesCount} file${filesCount === 1 ? "" : "s"} · +${adds} −${rems}`
+    : "Checkpoint (no changes)";
+
+  body.innerHTML = "";
+
+  // Message
+  const msgField = el("div", { class: "ai-commit-field" });
+  msgField.appendChild(el("label", { class: "ai-commit-label" }, "Commit message"));
+  const msgTA = el("textarea", { class: "textarea ai-commit-message", id: "commitMessage", placeholder: "Describe what changed…" });
+  msgTA.value = st.message || "";
+  msgTA.addEventListener("input", () => { st.message = msgTA.value; updateCommitSubmit(); });
+  msgField.appendChild(msgTA);
+  body.appendChild(msgField);
+
+  // Actions
+  const actionsRow = el("div", { class: "ai-commit-actions-row" });
+  const draftBtn = el("button", { class: "btn btn-secondary btn-sm", type: "button" },
+    icon("sparkles", 12), " Draft with AI");
+  draftBtn.addEventListener("click", () => draftCommitMessage(draftBtn, msgTA));
+  actionsRow.appendChild(draftBtn);
+  actionsRow.appendChild(el("button", { class: "btn btn-ghost btn-sm", type: "button", onclick: () => msgTA.focus() }, "Write my own"));
+  body.appendChild(actionsRow);
+
+  // Change list
+  if (filesCount > 0) {
+    const changesCard = el("div", { class: "ai-commit-changes" });
+    const head = el("div", { class: "ai-commit-changes-head" },
+      el("span", {}, `Changes (${filesCount})`),
+      el("span", { class: "stat" },
+        el("span", { class: "add" }, `+${adds}`),
+        el("span", { class: "rem" }, `−${rems}`),
+      ),
+    );
+    changesCard.appendChild(head);
+    for (const c of changed) {
+      const badge = c.status === "added" ? "A" : c.status === "removed" ? "D" : "M";
+      const row = el("div", { class: "ai-commit-change ai-commit-change-clickable" },
+        el("span", { class: `ai-commit-change-badge ${badge}` }, badge),
+        el("span", { class: "ai-commit-change-path" }, c.path),
+        el("span", { class: "ai-commit-change-stats" },
+          el("span", { class: "add" }, `+${c.stats?.added || 0}`),
+          el("span", { class: "rem" }, `−${c.stats?.removed || 0}`),
+        ),
+      );
+      row.addEventListener("click", () => {
+        openCompareView(
+          c.status === "removed" ? { [c.path]: c.old } : (c.old ? { [c.path]: c.old } : {}),
+          c.status === "added" ? { [c.path]: c.new } : { [c.path]: c.new },
+          { title: "Compare", subtitle: c.path }
+        );
+      });
+      changesCard.appendChild(row);
+    }
+    body.appendChild(changesCard);
+  } else {
+    body.appendChild(el("div", { class: "ai-commit-empty" }, "No changes since last commit. You can still create a checkpoint."));
+  }
+
+  updateCommitSubmit();
+}
+
+function updateCommitSubmit() {
+  const btn = $("commitSubmit");
+  if (!btn) return;
+  const st = STATE.commitState;
+  if (!st) { btn.disabled = true; return; }
+  const hasMsg = String(st.message || "").trim().length > 0;
+  btn.disabled = !hasMsg;
+  btn.textContent = "Commit";
+}
+
+async function draftCommitMessage(btn, ta) {
+  btn.disabled = true;
+  btn.innerHTML = `${iconHTML("refresh", 12)} Drafting…`;
+  commitDraftAbort = new AbortController();
+  try {
+    const res = await runTask({
+      task: "commitDraft",
+      pid: STATE.pid,
+      payload: {},
+      signal: commitDraftAbort.signal,
+      deps: { idb, apiFetch },
+    });
+    if (!res.ok || !res.data?.success) {
+      toast(res.data?.error || "Draft failed", "error", 4000);
+      return;
+    }
+    const draftArt = (res.data.artifacts || []).find(a => a.type === "commitDraft");
+    const message = draftArt?.message || res.data.text || "";
+    if (message) {
+      ta.value = message;
+      STATE.commitState.message = message;
+      updateCommitSubmit();
+      // Record run
+      try {
+        await appendAiRun(STATE.pid, {
+          task: "commitDraft", pid: STATE.pid,
+          text: res.data.text,
+          artifacts: res.data.artifacts || [],
+          usage: res.data.usage || null,
+          quota: res.data.quota || null,
+        }, { idb });
+        if (res.data.quota) { writeQuotaCache(res.data.quota); renderQuotaHud(); }
+        STATE.aiState = await readAiState(STATE.pid, { idb });
+      } catch {}
+      toast("Draft ready", "success", 2000);
+    }
+  } catch (err) {
+    if (err?.name !== "AbortError") toast(err?.message || "Draft failed", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `${iconHTML("sparkles", 12)} Draft with AI`;
+    commitDraftAbort = null;
+  }
+}
+
+async function submitCommit() {
+  if (!STATE.commitState) return;
+  const btn = $("commitSubmit");
+  btn.disabled = true;
+  btn.textContent = "Committing…";
+
+  try {
+    const filesMap = Object.fromEntries(STATE.files.map(f => [f.path, f.content || ""]));
+    const res = await commitVersion(
+      STATE.pid,
+      { message: STATE.commitState.message || "commit", files: filesMap },
+      { idb, apiFetch }
+    );
+    if (!res.ok) {
+      toast(res.error || "Commit failed", "error", 5000);
+      btn.disabled = false;
+      btn.textContent = "Commit";
+      return;
+    }
+
+    closeOverlay("commit");
+    $("backdrop").classList.remove("visible");
+    toast(res.synced ? "Committed" : "Committed locally — will sync when online", "success");
+    if (STATE.activeTab === "commits") renderCommitsView();
+    if (sidebar) sidebar.render();
+  } catch (err) {
+    toast(err?.message || "Commit failed", "error", 5000);
+    btn.disabled = false;
+    btn.textContent = "Commit";
+  }
+}
+
+// ─── Notes ────────────────────────────────────────────────────
 
 async function renderNotesPanel(root) {
   await loadNotes();
@@ -2105,7 +3406,6 @@ async function renderNotesPanel(root) {
   const notes = (STATE.notes.notes || []).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const section = el("div", { class: "sb-section" }, el("span", {}, `Notes (${notes.length})`));
   root.appendChild(section);
-
   if (!notes.length) {
     root.appendChild(el("div", { class: "sb-empty" },
       el("div", { class: "sb-empty-title" }, "No notes yet"),
@@ -2131,9 +3431,7 @@ function renderNotesView() {
   wrap.appendChild(el("h2", { style: { fontSize: "15px", fontWeight: "800", margin: "0 0 16px" } }, "Notes"));
   const notes = (STATE.notes.notes || []).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   if (!notes.length) {
-    wrap.appendChild(el("div", { class: "sb-empty" },
-      el("div", { class: "sb-empty-title" }, "No notes yet"),
-    ));
+    wrap.appendChild(el("div", { class: "sb-empty" }, el("div", { class: "sb-empty-title" }, "No notes yet")));
   } else {
     for (const n of notes) {
       wrap.appendChild(el("div", { class: "note-row" },
@@ -2145,7 +3443,7 @@ function renderNotesView() {
   section.appendChild(wrap);
 }
 
-// ─── Info ───────────────────────────────────────────────────────
+// ─── Info ─────────────────────────────────────────────────────
 
 function renderInfoPanel(root) {
   root.innerHTML = "";
@@ -2153,8 +3451,7 @@ function renderInfoPanel(root) {
   const totalBytes = files.reduce((s, f) => s + estimateSize(f.content || ""), 0);
   const limit = STATE.project.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
   const pct = Math.min(100, (totalBytes / limit) * 100);
-
-  const stats = el("div", { class: "sb-stats" },
+  root.appendChild(el("div", { class: "sb-stats" },
     el("div", { class: "sb-stat" },
       el("div", { class: "sb-stat-label" }, "Files"),
       el("div", { class: "sb-stat-value" }, String(files.length)),
@@ -2163,18 +3460,13 @@ function renderInfoPanel(root) {
       el("div", { class: "sb-stat-label" }, "Storage"),
       el("div", { class: "sb-stat-value" }, formatBytes(totalBytes)),
     ),
-  );
-  root.appendChild(stats);
-
-  const section = el("div", { class: "sb-section" }, el("span", {}, "Project"));
-  root.appendChild(section);
-
+  ));
+  root.appendChild(el("div", { class: "sb-section" }, el("span", {}, "Project")));
   root.appendChild(el("div", { class: "sb-row" },
     el("span", { class: "sb-row-icon" }, icon("info", 12)),
     el("span", { class: "sb-row-name" }, "Name"),
     el("span", { class: "sb-row-value" }, STATE.project.name || "Untitled"),
   ));
-
   const bar = el("div", { class: "sb-storage-mini", style: { marginTop: "8px" } });
   bar.appendChild(el("div", { class: `sb-storage-mini-fill ${pct > 90 ? "danger" : pct > 70 ? "warn" : ""}`, style: { width: pct + "%" } }));
   root.appendChild(bar);
@@ -2196,8 +3488,6 @@ function renderInfoView() {
 
   const aiCard = el("div", { class: "info-card" });
   aiCard.appendChild(el("div", { class: "info-card-title" }, "AI insights"));
-  const aiResult = el("div", { style: { marginTop: "12px" } });
-
   aiCard.appendChild(el("button", {
     class: "btn btn-secondary btn-block btn-sm", type: "button",
     style: { marginBottom: "6px" },
@@ -2231,8 +3521,6 @@ function renderInfoView() {
     },
   }, icon("alert", 12), " Find weak spots"));
   wrap.appendChild(aiCard);
-  wrap.appendChild(aiResult);
-
   section.appendChild(wrap);
 }
 
@@ -2240,65 +3528,77 @@ function switchToFiles() {
   if (STATE.activeTab !== "files") sidebar.switchTo("files");
 }
 
-// ─── Command bar ────────────────────────────────────────────────
+// ─── Command bar ──────────────────────────────────────────────
 
 function wireCommandBar() {
   const input = $("aiCommandInput");
   const submit = $("aiCommandSubmit");
+  if (!input || !submit) return;
 
   input.addEventListener("input", () => {
     STATE.prompt = input.value;
     updateCommandChips();
     updateDetectedTask();
     renderSuggestions();
+    detectSlashTrigger();
     if (input.value.includes("@")) openAtPicker();
-    else closeAtPicker();
+    else if (STATE.atOpen) closeAtPicker();
   });
 
   input.addEventListener("keydown", (e) => {
+    if (STATE.slashOpen) {
+      if (e.key === "ArrowDown") { e.preventDefault(); moveSlashSelection(1); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); moveSlashSelection(-1); return; }
+      if (e.key === "Enter") {
+        const sel = getSlashSelection();
+        if (sel) { e.preventDefault(); chooseSlashCommand(sel); return; }
+      }
+      if (e.key === "Escape") { e.preventDefault(); closeSlashPicker(); return; }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submitCommand();
     }
   });
 
-  input.addEventListener("focus", () => {
-    renderSuggestions();
-  });
-
+  input.addEventListener("focus", () => renderSuggestions());
   submit.addEventListener("click", submitCommand);
-
-  $("atPopoverFilter").addEventListener("input", () => {
-    STATE.atFilter = $("atPopoverFilter").value.toLowerCase();
-    renderAtList();
-  });
-
   updateCommandChips();
   updateDetectedTask();
   renderSuggestions();
 }
 
 function focusCommand() {
-  $("aiCommandInput").focus();
-  $("aiCommandInput").select();
+  openCommandSheet();
+  setTimeout(() => {
+    const input = $("aiCommandInput");
+    if (input) { input.focus(); input.select(); }
+  }, 80);
 }
 
 function submitCommand() {
   if (STATE.running) return;
   const input = $("aiCommandInput");
   STATE.prompt = input.value.trim();
+  const commandChip = STATE.chips.find(c => c.type === "command");
   if (!STATE.prompt && STATE.chips.length === 0) {
     toast("Type a prompt first", "warning");
     return;
   }
-  STATE.detectedTask = classifyIntent(STATE.prompt, STATE.chips);
+  STATE.detectedTask = commandChip?.value || classifyIntent(STATE.prompt, STATE.chips);
+  closeCommandSheet();
   openDrawer();
   runCurrentTask();
 }
 
 function addChip(chip, opts = {}) {
   const key = `${chip.type}:${chip.value || ""}`;
-  if (STATE.chips.some(c => `${c.type}:${c.value || ""}` === key)) return;
+  if (chip.type === "command") {
+    // Only one command chip at a time
+    STATE.chips = STATE.chips.filter(c => c.type !== "command");
+  } else if (STATE.chips.some(c => `${c.type}:${c.value || ""}` === key)) {
+    return;
+  }
   STATE.chips.push(chip);
   if (!opts.silent) {
     updateCommandChips();
@@ -2317,14 +3617,15 @@ function updateCommandChips() {
   const wrap = $("aiCommandChips");
   if (!wrap) return;
   wrap.innerHTML = "";
-  if (STATE.chips.length === 0) {
-    wrap.hidden = true;
-    return;
-  }
+  if (STATE.chips.length === 0) { wrap.hidden = true; return; }
   wrap.hidden = false;
   for (const chip of STATE.chips) {
-    wrap.appendChild(el("span", { class: "ai-chip", style: { display: "inline-flex" } },
-      el("span", { class: "ai-chip-icon" }, icon(chip.type === "project" ? "folder" : chip.type === "selection" ? "hash" : "file", 10)),
+    const chipClass = `ai-chip${chip.type === "command" ? " ai-chip-command" : ""}`;
+    const chipIcon = chip.type === "command"
+      ? "slash"
+      : (chip.type === "project" ? "folder" : chip.type === "selection" ? "hash" : "file");
+    wrap.appendChild(el("span", { class: chipClass, style: { display: "inline-flex" } },
+      el("span", { class: "ai-chip-icon" }, icon(chipIcon, 10)),
       el("span", { class: "ai-chip-label" }, chip.label || chip.value || chip.type),
       el("button", {
         class: "ai-chip-remove", type: "button", "aria-label": "Remove",
@@ -2341,11 +3642,12 @@ function updateCommandChips() {
 function updateDetectedTask() {
   const labelEl = $("drawerDetectedTask");
   if (!labelEl) return;
+  const commandChip = STATE.chips.find(c => c.type === "command");
   if (!STATE.prompt && STATE.chips.length === 0) {
     labelEl.hidden = true;
     return;
   }
-  const task = classifyIntent(STATE.prompt, STATE.chips);
+  const task = commandChip?.value || classifyIntent(STATE.prompt, STATE.chips);
   STATE.detectedTask = task;
   labelEl.hidden = false;
   labelEl.innerHTML = `${iconHTML("sparkles", 11)} <span>${escapeHtml(taskLabel(task))}</span>`;
@@ -2359,13 +3661,10 @@ const SUGGESTIONS = {
   ],
   docs: [
     { label: "Generate docs", prompt: "Generate documentation for this project", task: "docs" },
-    { label: "Improve this section", prompt: "Improve this section", task: "docs" },
   ],
-  history: [],
   commits: [
     { label: "Draft commit message", prompt: "Write a commit message for the current changes", task: "commitMsg" },
   ],
-  notes: [],
   info: [
     { label: "Summarize project", prompt: "Summarize this project", task: "readProject" },
     { label: "Explain architecture", prompt: "Explain the architecture of this project", task: "designExplain" },
@@ -2376,12 +3675,9 @@ function renderSuggestions() {
   const wrap = $("aiCommandSuggest");
   if (!wrap) return;
   wrap.innerHTML = "";
-  const focused = document.activeElement?.id === "aiCommandInput";
+  if (!STATE.commandSheetOpen) { wrap.hidden = true; return; }
   const hasValue = $("aiCommandInput").value.trim();
-  if (!focused || hasValue) {
-    wrap.hidden = true;
-    return;
-  }
+  if (hasValue) { wrap.hidden = true; return; }
   const list = SUGGESTIONS[STATE.activeTab] || [];
   if (!list.length) { wrap.hidden = true; return; }
   wrap.hidden = false;
@@ -2398,24 +3694,188 @@ function renderSuggestions() {
   }
 }
 
-// ─── @-picker ───────────────────────────────────────────────────
+// ─── Slash picker ─────────────────────────────────────────────
+
+function wireSlashPicker() {
+  $("slashClose").addEventListener("click", closeSlashPicker);
+  $("slashFilter").addEventListener("input", () => {
+    STATE.slashFilter = $("slashFilter").value.toLowerCase();
+    STATE.slashSelection = 0;
+    renderSlashList();
+  });
+  $("slashFilter").addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); moveSlashSelection(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); moveSlashSelection(-1); }
+    else if (e.key === "Enter") {
+      const sel = getSlashSelection();
+      if (sel) { e.preventDefault(); chooseSlashCommand(sel); }
+    }
+    else if (e.key === "Escape") { e.preventDefault(); closeSlashPicker(); }
+  });
+}
+
+function detectSlashTrigger() {
+  const input = $("aiCommandInput");
+  if (!input) return;
+  const val = input.value;
+  const caret = input.selectionStart ?? val.length;
+  const beforeCaret = val.slice(0, caret);
+  // Slash at start OR after whitespace
+  const slashMatch = beforeCaret.match(/(?:^|\s)\/([a-zA-Z]*)$/);
+  if (slashMatch) {
+    openSlashPicker(slashMatch[1] || "");
+  } else if (STATE.slashOpen) {
+    closeSlashPicker();
+  }
+}
+
+function openSlashPicker(initialFilter = "") {
+  if (STATE.slashOpen && !initialFilter) return;
+  STATE.slashOpen = true;
+  STATE.slashFilter = initialFilter.toLowerCase();
+  STATE.slashSelection = 0;
+  $("slashPopover").hidden = false;
+  $("slashFilter").value = initialFilter;
+  renderSlashList();
+  pushOverlay("slash-picker");
+  setTimeout(() => $("slashFilter").focus(), 30);
+}
+
+function closeSlashPicker() {
+  if (!STATE.slashOpen) return;
+  closeOverlay("slash-picker");
+}
+
+function getSlashCommands() {
+  const all = [];
+  for (const g of SLASH_COMMANDS) {
+    for (const id of g.items) {
+      const meta = getTaskMeta(id);
+      if (!meta) continue;
+      all.push({
+        id,
+        group: g.group,
+        label: meta.label,
+        desc: meta.sub,
+        icon: SLASH_ICON[id] || "sparkles",
+      });
+    }
+  }
+  return all;
+}
+
+function renderSlashList() {
+  const list = $("slashList");
+  if (!list) return;
+  list.innerHTML = "";
+  const all = getSlashCommands();
+  const filter = STATE.slashFilter;
+  const visible = filter
+    ? all.filter(c => (c.label + " " + c.id + " " + c.desc).toLowerCase().includes(filter))
+    : all;
+
+  if (!visible.length) {
+    list.appendChild(el("div", { class: "ai-slash-empty" }, "No commands match"));
+    return;
+  }
+
+  // Group
+  let currentGroup = "";
+  visible.forEach((c, idx) => {
+    if (c.group !== currentGroup) {
+      currentGroup = c.group;
+      list.appendChild(el("div", { class: "ai-slash-group" }, c.group));
+    }
+    const isActive = idx === STATE.slashSelection;
+    list.appendChild(el("button", {
+      class: `ai-slash-item${isActive ? " active" : ""}`,
+      type: "button",
+      dataset: { idx: String(idx) },
+      onmouseenter: () => { STATE.slashSelection = idx; renderSlashList(); },
+      onclick: () => chooseSlashCommand(c),
+    },
+      el("span", { class: "ai-slash-item-icon" }, icon(c.icon, 12)),
+      el("span", { class: "ai-slash-item-text" },
+        el("div", { class: "ai-slash-item-label" }, c.label),
+        el("div", { class: "ai-slash-item-desc" }, c.desc),
+      ),
+    ));
+  });
+
+  // Scroll active into view
+  const activeEl = list.querySelector(".ai-slash-item.active");
+  if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
+}
+
+function moveSlashSelection(dir) {
+  const list = $("slashList");
+  if (!list) return;
+  const items = Array.from(list.querySelectorAll(".ai-slash-item"));
+  if (!items.length) return;
+  const cur = STATE.slashSelection;
+  const next = Math.max(0, Math.min(items.length - 1, cur + dir));
+  STATE.slashSelection = next;
+  renderSlashList();
+}
+
+function getSlashSelection() {
+  const list = $("slashList");
+  if (!list) return null;
+  const items = Array.from(list.querySelectorAll(".ai-slash-item"));
+  const idx = STATE.slashSelection;
+  if (idx < 0 || idx >= items.length) return null;
+  // Find the command data — rebuild from same filter
+  const all = getSlashCommands();
+  const filter = STATE.slashFilter;
+  const visible = filter
+    ? all.filter(c => (c.label + " " + c.id + " " + c.desc).toLowerCase().includes(filter))
+    : all;
+  return visible[idx] || null;
+}
+
+function chooseSlashCommand(cmd) {
+  const input = $("aiCommandInput");
+  if (!input) return;
+  // Remove the /filter text from the input
+  const val = input.value;
+  const caret = input.selectionStart ?? val.length;
+  const before = val.slice(0, caret);
+  const after = val.slice(caret);
+  const cleanedBefore = before.replace(/(?:^|\s)\/[a-zA-Z]*$/, (m) => m.replace(/\/[a-zA-Z]*$/, ""));
+  input.value = cleanedBefore + after;
+  STATE.prompt = input.value;
+
+  addChip({ type: "command", value: cmd.id, label: cmd.label });
+  closeSlashPicker();
+  STATE.detectedTask = cmd.id;
+  updateDetectedTask();
+  input.focus();
+}
+
+// ─── @ picker ─────────────────────────────────────────────────
+
+function wireAtPicker() {
+  $("atPopoverClose").addEventListener("click", closeAtPicker);
+  $("atPopoverFilter").addEventListener("input", () => {
+    STATE.atFilter = $("atPopoverFilter").value.toLowerCase();
+    renderAtList();
+  });
+}
 
 function openAtPicker() {
-  const pop = $("atPopover");
-  if (!pop) return;
+  if (STATE.atOpen) return;
   STATE.atOpen = true;
-  pop.hidden = false;
+  $("atPopover").hidden = false;
   $("atPopoverFilter").value = "";
   STATE.atFilter = "";
   renderAtList();
+  pushOverlay("at-picker");
   setTimeout(() => $("atPopoverFilter").focus(), 30);
 }
 
 function closeAtPicker() {
-  const pop = $("atPopover");
-  if (!pop) return;
-  STATE.atOpen = false;
-  pop.hidden = true;
+  if (!STATE.atOpen) return;
+  closeOverlay("at-picker");
 }
 
 function renderAtList() {
@@ -2424,25 +3884,22 @@ function renderAtList() {
   list.innerHTML = "";
   const filter = STATE.atFilter;
 
-  // Whole project option
   const projMatch = !filter || "project".includes(filter) || "whole".includes(filter);
   if (projMatch) {
     list.appendChild(el("button", {
       class: "ai-at-item ai-at-item-project", type: "button",
-      onclick: () => { addChip({ type: "project", value: "*", label: "project" }); closeAtPicker(); focusCommand(); },
+      onclick: () => { addChip({ type: "project", value: "*", label: "project" }); closeAtPicker(); },
     }, icon("folder", 12), el("span", {}, "Project (whole)"), el("span", { class: "ai-at-item-sub" }, "All files")));
   }
 
-  // Files
   const files = STATE.files.filter(f => !filter || f.path.toLowerCase().includes(filter));
   for (const f of files.slice(0, 40)) {
     list.appendChild(el("button", {
       class: "ai-at-item", type: "button",
-      onclick: () => { addChip({ type: "file", value: f.path, label: f.path }); closeAtPicker(); focusCommand(); },
+      onclick: () => { addChip({ type: "file", value: f.path, label: f.path }); closeAtPicker(); },
     }, icon(fileIconName(f.path), 12), el("span", { class: "ai-at-item-path" }, f.path)));
   }
 
-  // Selection option (if any)
   if (STATE.editorView) {
     const sel = cm.getSelection();
     if (sel) {
@@ -2450,7 +3907,7 @@ function renderAtList() {
       if (selMatch) {
         list.appendChild(el("button", {
           class: "ai-at-item ai-at-item-selection", type: "button",
-          onclick: () => { addChip({ type: "selection", value: "*", label: "selection" }); closeAtPicker(); focusCommand(); },
+          onclick: () => { addChip({ type: "selection", value: "*", label: "selection" }); closeAtPicker(); },
         }, icon("hash", 12), el("span", {}, "Current selection"), el("span", { class: "ai-at-item-sub" }, `${sel.split("\n").length} lines`)));
       }
     }
@@ -2461,18 +3918,22 @@ function renderAtList() {
   }
 }
 
-// ─── AI drawer ──────────────────────────────────────────────────
+// ─── AI drawer ────────────────────────────────────────────────
 
 function wireDrawer() {
-  $("drawerClose").addEventListener("click", closeDrawer);
-  $("drawerBackdrop").addEventListener("click", closeDrawer);
+  $("drawerClose").addEventListener("click", () => closeOverlay("drawer"));
+  $("drawerBackdrop").addEventListener("click", () => closeOverlay("drawer"));
   $("btnRun").addEventListener("click", runCurrentTask);
 }
 
 function openDrawer() {
+  if (STATE.aiOpen) return;
+  // Close command sheet first if open
+  if (STATE.commandSheetOpen) closeCommandSheet();
   STATE.aiOpen = true;
   $("aiDrawer").classList.add("open");
   $("drawerBackdrop").classList.add("visible");
+  pushOverlay("drawer");
   renderDrawerChips();
   updateDetectedTask();
   updateInfoBar();
@@ -2480,24 +3941,17 @@ function openDrawer() {
   renderQuotaHud();
 }
 
-function closeDrawer() {
-  STATE.aiOpen = false;
-  $("aiDrawer").classList.remove("open");
-  $("drawerBackdrop").classList.remove("visible");
-}
-
 function renderDrawerChips() {
   const wrap = $("drawerChips");
   if (!wrap) return;
   wrap.innerHTML = "";
-  if (STATE.chips.length === 0) {
-    wrap.hidden = true;
-    return;
-  }
+  if (STATE.chips.length === 0) { wrap.hidden = true; return; }
   wrap.hidden = false;
   for (const chip of STATE.chips) {
-    wrap.appendChild(el("span", { class: "ai-chip" },
-      el("span", { class: "ai-chip-icon" }, icon(chip.type === "project" ? "folder" : chip.type === "selection" ? "hash" : "file", 10)),
+    const chipClass = `ai-chip${chip.type === "command" ? " ai-chip-command" : ""}`;
+    const chipIcon = chip.type === "command" ? "slash" : (chip.type === "project" ? "folder" : chip.type === "selection" ? "hash" : "file");
+    wrap.appendChild(el("span", { class: chipClass },
+      el("span", { class: "ai-chip-icon" }, icon(chipIcon, 10)),
       el("span", { class: "ai-chip-label" }, chip.label || chip.value || chip.type),
       el("button", {
         class: "ai-chip-remove", type: "button", "aria-label": "Remove",
@@ -2513,12 +3967,10 @@ function updateInfoBar() {
   bar.className = "ai-info-bar";
   bar.hidden = false;
   bar.innerHTML = "";
-
   const quota = readQuotaCache();
   const exhausted = quota &&
     ((quota.wordsUsed ?? 0) >= (quota.wordsLimit ?? Infinity)
      || (quota.creditsUsed ?? 0) >= (quota.creditsLimit ?? Infinity));
-
   if (exhausted) {
     bar.classList.add("error");
     bar.innerHTML = `${iconHTML("clock", 12)} <span>Quota reached · resets ${formatRelativeReset(quota.resetAt)}</span>`;
@@ -2548,26 +4000,21 @@ function updateRunButtonState() {
   }
   btn.classList.remove("running");
   btn.innerHTML = `${iconHTML("play", 14)}<span>Run</span>`;
-
   const quota = readQuotaCache();
   const exhausted = quota &&
     ((quota.wordsUsed ?? 0) >= (quota.wordsLimit ?? Infinity)
      || (quota.creditsUsed ?? 0) >= (quota.creditsLimit ?? Infinity));
-  btn.disabled = !STATE.online || exhausted || STATE.running || !STATE.prompt && STATE.chips.length === 0;
+  btn.disabled = !STATE.online || exhausted || STATE.running || (!STATE.prompt && STATE.chips.length === 0);
 }
 
-async function autoRunNow() {
-  await runCurrentTask();
-}
+async function autoRunNow() { await runCurrentTask(); }
 
 async function runCurrentTask() {
   if (STATE.running) return;
-  if (!STATE.prompt && STATE.chips.length === 0) {
-    toast("Type a prompt first", "warning");
-    return;
-  }
+  if (!STATE.prompt && STATE.chips.length === 0) { toast("Type a prompt first", "warning"); return; }
 
-  const task = STATE.detectedTask || classifyIntent(STATE.prompt, STATE.chips);
+  const commandChip = STATE.chips.find(c => c.type === "command");
+  const task = commandChip?.value || STATE.detectedTask || classifyIntent(STATE.prompt, STATE.chips);
   const payload = buildPayload(task);
   if (!payload) return;
 
@@ -2582,13 +4029,10 @@ async function runCurrentTask() {
       signal: STATE.abort.signal,
       deps: { idb, apiFetch },
     });
-
     if (!res.ok || !res.data?.success) {
-      if (res.data?.quotaExceeded) showResultError(res.data.error || "Quota exceeded");
-      else showResultError(res.data?.error || `AI error (${res.status})`);
+      showResultError(res.data?.error || `AI error (${res.status})`);
       return;
     }
-
     const fileChips = STATE.chips.filter(c => c.type === "file").map(c => c.value);
     const primaryFile = fileChips[0] || null;
 
@@ -2602,7 +4046,6 @@ async function runCurrentTask() {
       quota: res.data.quota || null,
       cached: !!res.data.cached,
     }, { idb });
-
     if (res.data.quota) { writeQuotaCache(res.data.quota); renderQuotaHud(); }
     STATE.aiState = await readAiState(STATE.pid, { idb });
     updateStatusBar();
@@ -2611,7 +4054,6 @@ async function runCurrentTask() {
       await stageArtifactsFromRun(STATE.pid, run, { idb });
       STATE.aiState = await readAiState(STATE.pid, { idb });
     }
-
     renderDrawerResult(res.data, run);
     if (STATE.activeTab === "history") renderHistoryPanel($("sbBody"));
   } catch (err) {
@@ -2634,7 +4076,6 @@ function buildPayload(task) {
   const hasProject = STATE.chips.some(c => c.type === "project");
   const hasSelection = STATE.chips.some(c => c.type === "selection");
 
-  // Selection
   if (hasSelection && STATE.editorView) {
     const sel = cm.getSelection();
     if (sel) {
@@ -2645,7 +4086,6 @@ function buildPayload(task) {
     }
   }
 
-  // File chips
   if (fileChips.length && !hasSelection) {
     const primary = fileChips[0].value;
     const primaryFile = STATE.files.find(f => f.path === primary);
@@ -2663,14 +4103,12 @@ function buildPayload(task) {
     }
   }
 
-  // Whole project
   if (hasProject) {
     payload.name = STATE.project.name || "Untitled";
     payload.description = STATE.project.description || "";
     payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
   }
 
-  // No chips at all → fall back to current file or project based on task
   if (!fileChips.length && !hasProject && !hasSelection) {
     const projectTasks = new Set(["readProject", "designExplain", "brainstorm", "scaffold", "struggle", "findFn", "docs"]);
     if (projectTasks.has(task)) {
@@ -2679,14 +4117,10 @@ function buildPayload(task) {
       payload.files = Object.fromEntries(STATE.files.map(f => [f.path, f.content]));
     } else if (STATE.activeFile) {
       const f = STATE.files.find(x => x.path === STATE.activeFile);
-      if (f) {
-        payload.file = f.path;
-        payload.content = f.content || "";
-      }
+      if (f) { payload.file = f.path; payload.content = f.content || ""; }
     }
   }
 
-  // Task-specific extras
   if (task === "findFn") {
     const name = window.prompt("Function name?");
     if (!name) return null;
@@ -2700,9 +4134,7 @@ function buildPayload(task) {
     payload.code = payload.selection || payload.content || STATE.files.map(f => f.content).join("\n\n");
     payload.from = payload.file ? (payload.file.split(".").pop() || "unknown") : "mixed";
   }
-  if (task === "diagram") {
-    payload.kind = payload.kind || "flow";
-  }
+  if (task === "diagram") payload.kind = payload.kind || "flow";
   if (task === "commitMsg") {
     const diff = window.prompt("Paste the diff or leave blank for project diff:");
     payload.diff = diff || "";
@@ -2735,14 +4167,12 @@ function renderDrawerResult(data, run) {
   $("resultLoading").hidden = true;
   $("resultContent").hidden = false;
   $("resultContent").innerHTML = "";
-
   if (data.text) {
     const md = el("div", { class: "ai-markdown" });
     md.innerHTML = renderMarkdown(data.text);
     $("resultContent").appendChild(md);
     hydrateMarkdown(md).catch(() => {});
   }
-
   if (Array.isArray(data.artifacts) && data.artifacts.length) {
     const arts = el("div", { class: "ai-artifacts" });
     $("resultContent").appendChild(arts);
@@ -2753,7 +4183,6 @@ function renderDrawerResult(data, run) {
       onOpenFile: (path, line) => { switchToFiles(); openFile(path); },
     });
   }
-
   if (data.usage) {
     const footer = el("div", { class: "ai-result-usage" });
     if (data.usage.promptWords != null) footer.appendChild(el("span", {}, `${data.usage.promptWords}w in · ${data.usage.completionWords || 0}w out`));
@@ -2769,15 +4198,12 @@ async function handleAccept(artifact, index, run) {
     ? await applyPatch({ artifact, pid: STATE.pid, deps: { idb } })
     : await applyFiles({ artifact, pid: STATE.pid, deps: { idb } });
   if (!result.ok) { toast(result.error || "Apply failed", "error"); return; }
-
   await markRunArtifactAccepted(STATE.pid, run.id, index, { idb });
   STATE.aiState = await readAiState(STATE.pid, { idb });
   updateStatusBar();
-
-  try { STATE.files = (await idb.listFiles(STATE.pid) || []).filter(f => !isSystemFile(f.path)); } catch {}
+  await reloadFiles();
   if (artifact.file && STATE.activeFile === artifact.file) await openFile(artifact.file);
-  if (STATE.activeTab === "files") renderFilesPanel($("sbBody"));
-
+  if (STATE.activeTab === "files") sidebar.render();
   toast(`Applied ${artifact.file || (artifact.files?.length + " files")}`, "success");
 }
 
@@ -2789,7 +4215,7 @@ async function handleReject(artifact, index, run) {
   toast("Rejected", "info");
 }
 
-// ─── Quota HUD ──────────────────────────────────────────────────
+// ─── Quota HUD ────────────────────────────────────────────────
 
 function renderQuotaHud() {
   const hud = $("quotaHud");
@@ -2812,9 +4238,14 @@ function renderQuotaHud() {
   `;
 }
 
-// ─── Pending ────────────────────────────────────────────────────
+// ─── Pending ──────────────────────────────────────────────────
+
+function wirePending() {
+  $("pendingClose").addEventListener("click", () => closeOverlay("pending"));
+}
 
 function openPendingSheet() {
+  if ($("pendingSheet").classList.contains("open")) return;
   const pending = STATE.aiState?.pending || [];
   const body = $("pendingBody");
   body.innerHTML = "";
@@ -2835,7 +4266,7 @@ function openPendingSheet() {
           el("button", { class: "btn btn-primary btn-sm", type: "button", onclick: async () => {
             const r = STATE.aiState.runs.find(x => x.id === item.runId);
             if (r) await handleAccept(item.artifact, item.artifactIndex, r);
-            closePendingSheet();
+            closeOverlay("pending");
           } }, "Accept"),
           el("button", { class: "btn btn-ghost btn-sm", type: "button", onclick: async () => {
             await removePendingItem(STATE.pid, item.id, { idb });
@@ -2849,11 +4280,7 @@ function openPendingSheet() {
   }
   $("backdrop").classList.add("visible");
   $("pendingSheet").classList.add("open");
-}
-
-function closePendingSheet() {
-  $("pendingSheet").classList.remove("open");
-  if (!anySheetOpen()) $("backdrop").classList.remove("visible");
+  pushOverlay("pending");
 }
 
 async function confirmClearPending() {
@@ -2865,13 +4292,12 @@ async function confirmClearPending() {
   toast("Cleared", "success");
 }
 
-// ─── Mode banner ────────────────────────────────────────────────
+// ─── Mode banner ──────────────────────────────────────────────
 
 function renderModeBanner() {
   const banner = $("modeBanner");
   const text = $("modeBannerText");
   const action = $("modeBannerAction");
-
   if (STATE.syncState === "local" && !STATE.session) {
     banner.hidden = false;
     text.textContent = "Local project. Sign in to back it up.";
@@ -2897,7 +4323,7 @@ function renderModeBanner() {
   banner.hidden = true;
 }
 
-// ─── Boot ───────────────────────────────────────────────────────
+// ─── Boot ─────────────────────────────────────────────────────
 
 boot().catch(err => {
   console.error("[AI] boot failed:", err);
