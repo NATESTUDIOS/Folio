@@ -673,7 +673,34 @@ function isValidRoutePath(p) {
   if (/%2e%2e/i.test(p) || /\.\.\//.test(p) || /\/\.\./.test(p)) return false;
   return true;
 }
+function filesToSnapshot(files) {
+  // Input:  { "path/to/file.js": "content" }
+  // Output: { "path__to__file.js": { path: "path/to/file.js", content: "content" } }
+  // Firebase RTDB keys cannot contain ".", "#", "$", "/", "[", "]", so we
+  // replace "/" with "__" and sanitize, storing the real path inside the value.
+  const snapshot = {};
+  for (const [p, c] of Object.entries(files || {})) {
+    if (typeof c !== "string") continue;
+    const safeKey = sanitizeFirebasePath(p.replace(/\//g, "__"));
+    if (!safeKey) continue;
+    snapshot[safeKey] = { path: p, content: c };
+  }
+  return snapshot;
+}
 
+function snapshotToFiles(snapshot) {
+  // Handles both the new { key: { path, content } } shape AND the legacy
+  // { key: "content" } shape that pre-fix snapshots may have used.
+  const out = {};
+  for (const [k, v] of Object.entries(snapshot || {})) {
+    if (v && typeof v === "object" && typeof v.path === "string") {
+      out[v.path] = v.content ?? "";
+    } else if (typeof v === "string") {
+      out[k.replace(/__/g, "/")] = v;
+    }
+  }
+  return out;
+}
 // =========================================================================
 // PROJECT LOOKUP
 // =========================================================================
@@ -1764,13 +1791,9 @@ async function ensureDeployVersion(pid, files, versionId) {
     if (snap?.exists()) return versionId;
   }
   const vid = `v_deploy_${Date.now()}_${crypto.randomBytes(2).toString("hex")}`;
-  const snapshot = {};
-  for (const [p, c] of Object.entries(files)) {
-    if (typeof c === "string") snapshot[p] = c;
-  }
   await db.ref(`versions/${pid}/${vid}`).set({
     message: `Deploy — ${new Date().toISOString()}`,
-    files: snapshot,
+    files: filesToSnapshot(files),
     createdAt: Date.now(),
     kind: "deploy",
   });
@@ -1877,7 +1900,7 @@ async function handleDeploy(req, res, reqId) {
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
-  // ✅ FIX: invalidate cache first so we don't read a stale project record
+  // Invalidate cache first so we don't read a stale project record
   invalidateProject(pid);
   const project = await getProjectCached(pid);
   if (!project)
@@ -1926,7 +1949,7 @@ async function handleDeploy(req, res, reqId) {
       .json({ success: false, error: "No valid files to deploy" });
   }
 
-  // ✅ FIX: make version snapshot non-fatal. If it fails, we still deploy.
+  // Make version snapshot non-fatal. If it fails, we still deploy.
   let resolvedVid = null;
   try {
     resolvedVid = await ensureDeployVersion(pid, acceptedFiles, versionId);
@@ -1982,17 +2005,17 @@ async function handleDeploy(req, res, reqId) {
     }
   } catch {}
 
-  // Build URLs
+  // Build URLs — BOTH must be declared here.
   const ownerUsername = await getProjectOwnerUsername(pid, project);
   const cleanUrl = ownerUsername
     ? buildProjectCleanUrl(ownerUsername, project, pid)
     : `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
+  const serveUrl = `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
 
   const deploymentId = `db_${pid}_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
   const deploymentRecord = {
     url: cleanUrl,
     serveUrl,
-    // ✅ FIX: versionId may be null — this is OK, url is what matters
     versionId: resolvedVid || null,
     deployedAt: Date.now(),
     deploymentId,
@@ -2001,7 +2024,7 @@ async function handleDeploy(req, res, reqId) {
     ...(clientRequestId ? { clientRequestId } : {}),
   };
 
-  // ✅ FIX: write the deployment FIRST so status polling succeeds immediately
+  // Write the deployment FIRST so status polling succeeds immediately
   await db.ref(`projects/${pid}/deployment`).set(deploymentRecord);
   await db
     .ref(`projects/${pid}/deployments/${deploymentId}`)
@@ -2082,8 +2105,8 @@ async function handleRedeploy(req, res, reqId) {
   if (!versionSnap.exists())
     return res.status(404).json({ success: false, error: "Version not found" });
   const version = versionSnap.val();
-  const files = version.files;
-  if (!files || typeof files !== "object") {
+  const files = snapshotToFiles(version.files);
+  if (!files || Object.keys(files).length === 0) {
     return res
       .status(400)
       .json({ success: false, error: "Version has no files" });
@@ -2623,8 +2646,6 @@ async function handleServe(req, res, reqId) {
     signedIn && (signedIn.role === "owner" || signedIn.role === "editor");
 
   // ── Live-site visibility gate ──
-  // Public live site → anyone can view, including historic snapshots.
-  // Private live site → only owner/editor, including historic snapshots.
   const liveSitePublic = project.visibility?.liveSite === "public";
   if (!liveSitePublic && !canAccessPrivate) {
     const ownerUsername =
@@ -2684,7 +2705,7 @@ async function handleServe(req, res, reqId) {
         status: 404,
       });
     }
-    contentMap = vSnap.val()?.files || {};
+    contentMap = snapshotToFiles(vSnap.val()?.files);
   }
 
   // ── Resolve path ──
@@ -2756,8 +2777,6 @@ async function handleServe(req, res, reqId) {
     try {
       let meta = await resolveProjectMeta(pid, project);
 
-      // Historic snapshots use the deployment's own OG image when available
-      // so shared links reflect what that snapshot actually looked like.
       if (fromId) {
         try {
           const dThumb = await db
@@ -3445,7 +3464,7 @@ async function handleProjectExport(req, res, reqId) {
       return res
         .status(404)
         .json({ success: false, error: "Version not found" });
-    filesObj = vSnap.val().files || {};
+    filesObj = snapshotToFiles(vSnap.val().files);
   } else {
     const filesSnap = await db.ref(`files/${pid}`).once("value");
     if (filesSnap.exists()) {
@@ -3559,7 +3578,7 @@ async function handleProjectSyncBack(req, res, reqId) {
     return res.status(400).json({ success: false, error: "Missing pid" });
   if (!(await enforceRate(req, res, "projectSyncBack", `pid_${pid}`))) return;
 
-  // ✅ FIX: invalidate cache before role check to avoid stale role lookups
+  // Invalidate cache before role check to avoid stale role lookups
   invalidateProject(pid);
 
   const access = await requireProjectRole(req, res, pid, "editor");
@@ -3614,7 +3633,39 @@ async function handleProjectSyncBack(req, res, reqId) {
       try {
         const exists = await db.ref(`versions/${pid}/${vid}`).once("value");
         if (exists.exists()) continue;
-        await db.ref(`versions/${pid}/${vid}`).set(v);
+
+        // Normalise whatever shape the client sent into the canonical
+        // { safeKey: { path, content } } snapshot form. Clients may send
+        // either { "file.js": "content" } or { safeKey: { path, content } }.
+        const rawFiles = v?.files;
+        let normalisedFiles = {};
+        if (rawFiles && typeof rawFiles === "object") {
+          const firstVal = Object.values(rawFiles)[0];
+          if (
+            firstVal &&
+            typeof firstVal === "object" &&
+            typeof firstVal.path === "string"
+          ) {
+            // Already in canonical shape
+            normalisedFiles = rawFiles;
+          } else {
+            // Flat { "path": "content" } — re-key through filesToSnapshot
+            const flat = {};
+            for (const [k, c] of Object.entries(rawFiles)) {
+              if (typeof c === "string") {
+                const restoredPath = k.includes("__")
+                  ? k.replace(/__/g, "/")
+                  : k;
+                flat[restoredPath] = c;
+              }
+            }
+            normalisedFiles = filesToSnapshot(flat);
+          }
+        }
+
+        await db
+          .ref(`versions/${pid}/${vid}`)
+          .set({ ...v, files: normalisedFiles });
         result.versionsWritten++;
       } catch (err) {
         log("host.sync_back.version_failed", {
@@ -3893,7 +3944,11 @@ async function handleProjectHydrate(req, res, reqId) {
       entries.push({ vid: child.key, data: v });
     });
     entries.sort((a, b) => (b.data.createdAt || 0) - (a.data.createdAt || 0));
-    for (const { vid, data } of entries.slice(0, 30)) versions[vid] = data;
+    for (const { vid, data } of entries.slice(0, 30)) {
+      // Convert snapshot keys back to real paths so the client's IDB gets
+      // { "path/to/file.js": "content" } and can diff/restore correctly.
+      versions[vid] = { ...data, files: snapshotToFiles(data.files) };
+    }
   }
 
   return res.status(200).json({
