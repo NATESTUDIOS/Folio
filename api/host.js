@@ -84,7 +84,34 @@ const RESERVED_USERNAMES = new Set([
   "sw.js",
   "firebase-messaging-sw.js",
 ]);
-
+const RESERVED_SLUGS = new Set([
+  "api",
+  "p",
+  "register",
+  "profile",
+  "project",
+  "projects",
+  "tools",
+  "settings",
+  "analytics",
+  "offline",
+  "invite",
+  "notifications",
+  "icons",
+  "js",
+  "css",
+  "_next",
+]);
+function slugifyProjectName(name) {
+  const base = String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
+  if (!base) return "";
+  if (RESERVED_SLUGS.has(base)) return `${base}-site`;
+  return base;
+}
 // =========================================================================
 // RATE LIMITS
 // =========================================================================
@@ -704,12 +731,14 @@ async function getProjectOwnerUsername(pid, project) {
   }
 }
 
-function buildProjectCleanUrl(username, project) {
-  const slug = project?.slug || "";
+function buildProjectCleanUrl(username, project, pid = null) {
   if (!username) return null;
-  if (!slug)
-    return `${BASE_URL}/${username}/${encodeURIComponent(shortId(project?.pid || ""))}`;
-  return `${BASE_URL}/${username}/${encodeURIComponent(slug)}`;
+  const slug = project?.slug || "";
+  if (slug)
+    return `${BASE_URL}/${encodeURIComponent(username)}/${encodeURIComponent(slug)}`;
+  const fallbackPid = pid || project?.pid || null;
+  if (!fallbackPid) return `${BASE_URL}/${encodeURIComponent(username)}`;
+  return `${BASE_URL}/p/${encodeURIComponent(fallbackPid)}`;
 }
 function buildLiveSiteUrl(username, project) {
   const slug = project?.slug || "";
@@ -1956,9 +1985,8 @@ async function handleDeploy(req, res, reqId) {
   // Build URLs
   const ownerUsername = await getProjectOwnerUsername(pid, project);
   const cleanUrl = ownerUsername
-    ? buildProjectCleanUrl(ownerUsername, project)
+    ? buildProjectCleanUrl(ownerUsername, project, pid)
     : `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
-  const serveUrl = `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
 
   const deploymentId = `db_${pid}_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
   const deploymentRecord = {
@@ -2090,13 +2118,14 @@ async function handleDeploymentHistory(req, res, reqId) {
   );
   const offset = Math.max(parseInt(req.query?.offset, 10) || 0, 0);
 
-  const [snap, versionsSnap, currentSnap] = await Promise.all([
+  const [snap, versionsSnap, currentSnap, project] = await Promise.all([
     db.ref(`projects/${pid}/deployments`).once("value"),
     db
       .ref(`versions/${pid}`)
       .once("value")
       .catch(() => null),
     db.ref(`projects/${pid}/deployment/deploymentId`).once("value"),
+    getProjectCached(pid),
   ]);
 
   const existingVersions = new Set();
@@ -2127,6 +2156,26 @@ async function handleDeploymentHistory(req, res, reqId) {
       } catch {}
     }),
   );
+
+  // Build the historic-preview URL for every deployment. This is what the
+  // UI must use to view an old live site — the `url` field is the promoted
+  // address, not a preview address.
+  const ownerUsername =
+    project?.ownerUsername ||
+    (project ? await getProjectOwnerUsername(pid, project) : null);
+  const cleanBase =
+    ownerUsername && project?.slug
+      ? `${BASE_URL}/${encodeURIComponent(ownerUsername)}/project/${encodeURIComponent(project.slug)}`
+      : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}`;
+
+  for (const d of slice) {
+    if (!d.hasSnapshot) {
+      d.previewUrl = null;
+      continue;
+    }
+    const sep = cleanBase.includes("?") ? "&" : "?";
+    d.previewUrl = `${cleanBase}${sep}from=${encodeURIComponent(d.id)}`;
+  }
 
   const currentId = currentSnap.exists() ? currentSnap.val() : null;
 
@@ -2507,7 +2556,7 @@ async function handleServe(req, res, reqId) {
     } catch {}
   }
 
-  // ── Slug redirect ──
+  // ── Slug redirect / pid resolution ──
   if (username && projectSlug) {
     const found = await findProjectBySlug(username, projectSlug);
     if (found) {
@@ -2573,18 +2622,16 @@ async function handleServe(req, res, reqId) {
   const canAccessPrivate =
     signedIn && (signedIn.role === "owner" || signedIn.role === "editor");
 
-  // ── GATE: live site only exists if visibility.liveSite === "public" ──
+  // ── Live-site visibility gate ──
+  // Public live site → anyone can view, including historic snapshots.
+  // Private live site → only owner/editor, including historic snapshots.
   const liveSitePublic = project.visibility?.liveSite === "public";
-  const isHistoricPreview = !!String(req.query?.from || "").length;
-
   if (!liveSitePublic && !canAccessPrivate) {
     const ownerUsername =
       username ||
       project.ownerUsername ||
       (await getProjectOwnerUsername(pid, project)) ||
       "";
-    // If the details page IS public, send visitors there so they can see
-    // why the live URL isn't available (e.g., "not deployed" state).
     if (
       ownerUsername &&
       project.slug &&
@@ -2601,18 +2648,7 @@ async function handleServe(req, res, reqId) {
     });
   }
 
-  // ── Historic previews require owner/editor ──
-  if (isHistoricPreview && !canAccessPrivate) {
-    return sendHtmlPage(res, {
-      title: "Preview restricted",
-      heading: "This preview is for the owner",
-      message: "Sign in as the owner to preview historical deployments.",
-      icon: "lock",
-      status: 403,
-    });
-  }
-
-  // ── Historical preview ──
+  // ── Historic preview ──
   const fromId = String(req.query?.from || "").trim();
   let contentMap = null;
   if (fromId) {
@@ -2718,14 +2754,32 @@ async function handleServe(req, res, reqId) {
   if (/\.html?$/i.test(relPath)) {
     let html = content;
     try {
-      const meta = await resolveProjectMeta(pid, project);
+      let meta = await resolveProjectMeta(pid, project);
+
+      // Historic snapshots use the deployment's own OG image when available
+      // so shared links reflect what that snapshot actually looked like.
+      if (fromId) {
+        try {
+          const dThumb = await db
+            .ref(`projects/${pid}/deployments/${fromId}/thumbnail/url`)
+            .once("value");
+          if (dThumb?.exists() && isValidOgUrl(dThumb.val())) {
+            meta = { ...meta, ogImage: dThumb.val() };
+          }
+        } catch {}
+      }
+
       const canonicalPath =
         relPath === "index.html" || relPath === "index.htm" ? "" : relPath;
-      const canonicalUrl = buildLiveSiteUrlForPath(
+      const baseCanonical = buildLiveSiteUrlForPath(
         ownerUsername,
         project,
         canonicalPath,
       );
+      const canonicalUrl = fromId
+        ? `${baseCanonical}?from=${encodeURIComponent(fromId)}`
+        : baseCanonical;
+
       html = injectMetaIntoHtml(html, {
         project,
         meta,
@@ -2889,6 +2943,17 @@ async function handleProjectsCreate(req, res, reqId) {
       description: description?.trim() || "",
       storageLimit: user.settings?.globalLimit || 10 * 1024 * 1024,
     });
+
+    // Force a safe slug if the auto-derived one landed on a reserved word.
+    const safeSlug = slugifyProjectName(project.name || name);
+    if (safeSlug && safeSlug !== project.slug) {
+      await db
+        .ref(`projects/${project.pid}/slug`)
+        .set(safeSlug)
+        .catch(() => {});
+      project.slug = safeSlug;
+    }
+
     const ownerUsername = user.profile?.username || null;
     if (ownerUsername) {
       await db
@@ -2897,7 +2962,6 @@ async function handleProjectsCreate(req, res, reqId) {
         .catch(() => {});
     }
 
-    // ✅ FIX: explicitly guarantee ownerId is set, and clear stale cache
     await db
       .ref(`projects/${project.pid}/ownerId`)
       .set(user.uid)
@@ -2911,7 +2975,6 @@ async function handleProjectsCreate(req, res, reqId) {
       .set(true)
       .catch(() => {});
 
-    // ✅ FIX: invalidate cache so the next getProjectCached() reads fresh data
     invalidateProject(project.pid);
 
     await logProjectEvent(project.pid, user.uid, "project", "project.created", {
@@ -2967,16 +3030,11 @@ async function handleProjectsUpdate(req, res, reqId) {
   if (iconUrl !== undefined) {
     if (iconUrl !== null) {
       if (typeof iconUrl !== "string" || iconUrl.length > 500) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error: "iconUrl must be a string ≤500 chars or null",
-          });
+        return res.status(400).json({
+          success: false,
+          error: "iconUrl must be a string ≤500 chars or null",
+        });
       }
-      // Only HTTPS URLs are accepted. Data URIs must be uploaded via
-      // /api/flier?action=upload first — this keeps the project record small
-      // and avoids serving megabytes of base64 on every list request.
       if (!iconUrl.startsWith("https://")) {
         return res.status(400).json({
           success: false,
@@ -2994,12 +3052,7 @@ async function handleProjectsUpdate(req, res, reqId) {
 
   // Slug change on rename
   if (patch.name && patch.name !== existing.name) {
-    const newSlug =
-      patch.name
-        .toLowerCase()
-        .replace(/[^a-z0-9-]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 60) || existing.slug;
+    const newSlug = slugifyProjectName(patch.name) || existing.slug;
     if (newSlug && newSlug !== existing.slug) {
       try {
         const collisions = await db
@@ -3016,9 +3069,27 @@ async function handleProjectsUpdate(req, res, reqId) {
         }
         if (!conflict) {
           patch.slug = newSlug;
+          // Cap previous-slug history so the redirect chain stays bounded.
+          const MAX_PREV_SLUGS = 20;
+          const prevSnap = await db
+            .ref(`previousSlugs/${pid}`)
+            .once("value")
+            .catch(() => null);
+          const prevMap = prevSnap?.exists() ? prevSnap.val() || {} : {};
           const updates = {};
           if (existing.slug)
             updates[`previousSlugs/${pid}/${existing.slug}`] = newSlug;
+          const prevKeys = Object.keys(prevMap);
+          if (prevKeys.length > MAX_PREV_SLUGS) {
+            const sorted = prevKeys.sort(
+              (a, b) =>
+                (prevMap[a] ? String(prevMap[a]).length : 0) -
+                (prevMap[b] ? String(prevMap[b]).length : 0),
+            );
+            for (const k of sorted.slice(0, prevKeys.length - MAX_PREV_SLUGS)) {
+              updates[`previousSlugs/${pid}/${k}`] = null;
+            }
+          }
           if (Object.keys(updates).length)
             await db
               .ref()
@@ -3043,12 +3114,10 @@ async function handleProjectsUpdate(req, res, reqId) {
     patch.iconUrl !== undefined
   ) {
     await invalidateProjectOgImage(pid);
-    // Thumbnail shows the old identity — wipe it so the next read regenerates.
     await db
       .ref(`projects/${pid}/thumbnail`)
       .remove()
       .catch(() => {});
-    // Per-deployment thumbnails also bake in the old icon.
     try {
       const dSnap = await db.ref(`projects/${pid}/deployments`).once("value");
       if (dSnap.exists()) {
@@ -3077,12 +3146,17 @@ async function handleProjectsUpdate(req, res, reqId) {
             .catch(() => null);
           if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
         } catch {}
-        const ownerUsername = patch.slug
-          ? await getProjectOwnerUsername(pid, { ...existing, ...patch })
-          : null;
+        const ownerUsername = await getProjectOwnerUsername(pid, {
+          ...existing,
+          ...patch,
+        });
         const link =
           ownerUsername && (patch.slug || existing.slug)
-            ? buildProjectCleanUrl(ownerUsername, { ...existing, ...patch })
+            ? buildProjectCleanUrl(
+                ownerUsername,
+                { ...existing, ...patch },
+                pid,
+              )
             : `${BASE_URL}/project?pid=${pid}`;
         await notifyMany("project", others, {
           title: "Project details updated",
@@ -3090,8 +3164,6 @@ async function handleProjectsUpdate(req, res, reqId) {
           imageUrl,
           link,
           extra: { pid, fields: touched },
-          // Unique per-project key so updates to different projects aren't
-          // collapsed by notify.js's 60-second dedupe window.
           dedupeKey: `project_update_${pid}_${touched.join("_")}`,
           dedupeTtlMs: 60 * 1000,
         });
@@ -3132,14 +3204,12 @@ async function handleRegeneratePreview(req, res, reqId) {
     const languages = await ensureProjectLanguages(pid, project, files);
     const thumbnailUrl = await ensureProjectThumbnail(pid, files);
     await invalidateProjectOgImage(pid).catch(() => {});
-    return res
-      .status(200)
-      .json({
-        success: true,
-        languages,
-        thumbnailUrl: thumbnailUrl || null,
-        regeneratedAt: Date.now(),
-      });
+    return res.status(200).json({
+      success: true,
+      languages,
+      thumbnailUrl: thumbnailUrl || null,
+      regeneratedAt: Date.now(),
+    });
   } catch (err) {
     log("host.regenerate_preview.failed", { pid, message: err.message });
     return res
@@ -3229,12 +3299,10 @@ async function handleCacheClear(req, res, reqId) {
   const access = await requireProjectRole(req, res, pid, "owner");
   if (!access) return;
   await logProjectEvent(pid, access.uid, "project", "cache.cleared", {});
-  return res
-    .status(200)
-    .json({
-      success: true,
-      message: "Client cache is clearable via project.html",
-    });
+  return res.status(200).json({
+    success: true,
+    message: "Client cache is clearable via project.html",
+  });
 }
 
 // =========================================================================
@@ -4095,34 +4163,28 @@ async function handleDbSet(req, res, reqId) {
 
   if (key !== undefined) {
     if (data !== undefined)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Send either `key` or `data`, not both",
-          rateLimit: rateLimitMeta,
-        });
+      return res.status(400).json({
+        success: false,
+        error: "Send either `key` or `data`, not both",
+        rateLimit: rateLimitMeta,
+      });
     const parts = String(key).split("/").filter(Boolean);
     if (parts.length === 0)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Invalid key path",
-          rateLimit: rateLimitMeta,
-        });
+      return res.status(400).json({
+        success: false,
+        error: "Invalid key path",
+        rateLimit: rateLimitMeta,
+      });
 
     const safeParts = [];
     for (const seg of parts) {
       const safe = sanitizeFirebasePath(seg);
       if (!safe)
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error: `Invalid path segment: "${seg}"`,
-            rateLimit: rateLimitMeta,
-          });
+        return res.status(400).json({
+          success: false,
+          error: `Invalid path segment: "${seg}"`,
+          rateLimit: rateLimitMeta,
+        });
       safeParts.push(safe);
     }
     let nested = value === undefined ? null : value;
@@ -4148,13 +4210,11 @@ async function handleDbSet(req, res, reqId) {
         key,
         message: err.message,
       });
-      return res
-        .status(500)
-        .json({
-          success: false,
-          error: "Write failed",
-          rateLimit: rateLimitMeta,
-        });
+      return res.status(500).json({
+        success: false,
+        error: "Write failed",
+        rateLimit: rateLimitMeta,
+      });
     }
     const { finalSize, spaceRemaining, percentUsed, totalWrites, todayWrites } =
       await finalize(serialized);
@@ -4196,46 +4256,38 @@ async function handleDbSet(req, res, reqId) {
 
   if (data !== undefined && mode === "merge") {
     if (!data || typeof data !== "object" || Array.isArray(data)) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Merge data must be a plain object",
-          rateLimit: rateLimitMeta,
-        });
+      return res.status(400).json({
+        success: false,
+        error: "Merge data must be a plain object",
+        rateLimit: rateLimitMeta,
+      });
     }
     if (Object.keys(data).length === 0) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Nothing to merge",
-          rateLimit: rateLimitMeta,
-        });
+      return res.status(400).json({
+        success: false,
+        error: "Nothing to merge",
+        rateLimit: rateLimitMeta,
+      });
     }
     const serialized = JSON.stringify(data);
     if (serialized.length > LIMIT) {
-      return res
-        .status(413)
-        .json({
-          success: false,
-          error: "Payload too large (15 MB max)",
-          size: serialized.length,
-          limit: LIMIT,
-          rateLimit: rateLimitMeta,
-        });
+      return res.status(413).json({
+        success: false,
+        error: "Payload too large (15 MB max)",
+        size: serialized.length,
+        limit: LIMIT,
+        rateLimit: rateLimitMeta,
+      });
     }
     try {
       await dbRef.update(data);
     } catch (err) {
       log("host.dbSet.merge_failed", { reqId, pid, message: err.message });
-      return res
-        .status(500)
-        .json({
-          success: false,
-          error: "Write failed",
-          rateLimit: rateLimitMeta,
-        });
+      return res.status(500).json({
+        success: false,
+        error: "Write failed",
+        rateLimit: rateLimitMeta,
+      });
     }
     const { finalSize, spaceRemaining, percentUsed, totalWrites, todayWrites } =
       await finalize(serialized);
@@ -4278,27 +4330,23 @@ async function handleDbSet(req, res, reqId) {
   if (data !== undefined) {
     const serialized = JSON.stringify(data ?? null);
     if (serialized.length > LIMIT) {
-      return res
-        .status(413)
-        .json({
-          success: false,
-          error: "Payload too large (15 MB max)",
-          size: serialized.length,
-          limit: LIMIT,
-          rateLimit: rateLimitMeta,
-        });
+      return res.status(413).json({
+        success: false,
+        error: "Payload too large (15 MB max)",
+        size: serialized.length,
+        limit: LIMIT,
+        rateLimit: rateLimitMeta,
+      });
     }
     try {
       await dbRef.set(data);
     } catch (err) {
       log("host.dbSet.replace_failed", { reqId, pid, message: err.message });
-      return res
-        .status(500)
-        .json({
-          success: false,
-          error: "Write failed",
-          rateLimit: rateLimitMeta,
-        });
+      return res.status(500).json({
+        success: false,
+        error: "Write failed",
+        rateLimit: rateLimitMeta,
+      });
     }
     const { finalSize, spaceRemaining, percentUsed, totalWrites, todayWrites } =
       await finalize(serialized);
@@ -4321,13 +4369,11 @@ async function handleDbSet(req, res, reqId) {
     });
   }
 
-  return res
-    .status(400)
-    .json({
-      success: false,
-      error: "Missing key or data",
-      rateLimit: rateLimitMeta,
-    });
+  return res.status(400).json({
+    success: false,
+    error: "Missing key or data",
+    rateLimit: rateLimitMeta,
+  });
 }
 
 async function handleDbGet(req, res, reqId) {
@@ -4541,12 +4587,10 @@ async function handleVisibility(req, res, reqId) {
   for (const axis of VISIBILITY_AXES) {
     if (visibility[axis] === undefined) continue;
     if (visibility[axis] !== "public" && visibility[axis] !== "private") {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: `visibility.${axis} must be "public" or "private"`,
-        });
+      return res.status(400).json({
+        success: false,
+        error: `visibility.${axis} must be "public" or "private"`,
+      });
     }
     patch[`visibility/${axis}`] = visibility[axis];
     changes[axis] = visibility[axis];
@@ -4664,12 +4708,10 @@ async function handleInviteCreate(req, res, reqId) {
       .json({ success: false, error: "Cannot invite yourself" });
   const existingRole = await canAccessProject(invited.uid, pid);
   if (existingRole)
-    return res
-      .status(409)
-      .json({
-        success: false,
-        error: `User already has role: ${existingRole}`,
-      });
+    return res.status(409).json({
+      success: false,
+      error: `User already has role: ${existingRole}`,
+    });
 
   const token = generateInviteToken();
   const tokenHash = hashToken(token);
@@ -4978,18 +5020,6 @@ async function handleShare(req, res, reqId) {
     .toLowerCase();
   const pidParam = String(req.query?.pid || "").trim();
   const slug = String(req.query?.project || "").trim();
-  const fileParam = String(req.query?.file || "").trim();
-
-  if (
-    fileParam &&
-    (fileParam.includes("..") ||
-      /[\x00-\x1F\x7F]/.test(fileParam) ||
-      fileParam.length > 200)
-  ) {
-    return res
-      .status(400)
-      .json({ success: false, error: "Invalid file parameter" });
-  }
 
   let found = null;
   if (pidParam) {
@@ -5019,7 +5049,6 @@ async function handleShare(req, res, reqId) {
 
   const { pid, project, owner } = found;
 
-  // Ensure languages are computed
   if (
     !project.languages?.breakdown ||
     Object.keys(project.languages.breakdown).length === 0
@@ -5072,9 +5101,22 @@ async function handleShare(req, res, reqId) {
   }
   const isSignedIn = !!viewerUid;
 
-  // ✅ GATE: details page only exists if visibility.profile === "public"
-  // (or the viewer is the owner/editor). 404 — not 200 — for everyone else.
+  // ── Details-page visibility gate ──
+  // If the details page is private but the live site is public and deployed,
+  // redirect visitors to the live site so they land somewhere useful instead
+  // of a 404 they can't act on.
   if (!isProfilePublic && !viewerIsOwner) {
+    const liveSitePublic = project.visibility?.liveSite === "public";
+    const hasLiveDeployment =
+      project.deployment?.state === "READY" && !!project.slug;
+    const ownerUsername =
+      owner.profile?.username || username || project.ownerUsername || "";
+    if (liveSitePublic && hasLiveDeployment && ownerUsername) {
+      return res.redirect(
+        302,
+        `${BASE_URL}/${encodeURIComponent(ownerUsername)}/project/${encodeURIComponent(project.slug)}`,
+      );
+    }
     return sendHtmlPage(res, {
       title: "Private project",
       heading: "This project page is private",
@@ -5093,15 +5135,17 @@ async function handleShare(req, res, reqId) {
   const ownerUsername =
     owner.profile?.username || username || project.ownerUsername || "";
 
-  // ✅ The two URLs are independent:
-  //   detailsUrl → two-segment, gated by visibility.profile
-  //   liveUrl    → three-segment, gated by visibility.liveSite
+  // ✅ Details and live are independent gates.
   const detailsUrl =
     ownerUsername && project.slug
-      ? buildProjectCleanUrl(ownerUsername, project)
-      : null;
+      ? buildProjectCleanUrl(ownerUsername, project, pid)
+      : `${BASE_URL}/p/${pid}`;
+
+  // Only advertise the live URL when it can actually render.
+  const hasLiveDeployment =
+    project.deployment?.state === "READY" && !!project.slug;
   const liveUrl =
-    liveSitePublic && ownerUsername && project.slug
+    liveSitePublic && hasLiveDeployment && ownerUsername
       ? buildLiveSiteUrl(ownerUsername, project)
       : null;
 
@@ -5173,7 +5217,7 @@ async function handleShare(req, res, reqId) {
     ownerAvatarUrl,
     ownerProfileUrl,
     contributors,
-    detailsUrl: detailsUrl || null,
+    detailsUrl,
     liveUrl: liveUrl || null,
     codePublic,
     dbPublic,
@@ -5182,11 +5226,9 @@ async function handleShare(req, res, reqId) {
     isSignedIn,
     canCopy,
     viewerUsername,
-    fileParam: fileParam || null,
-    canonicalPath:
-      ownerUsername && project.slug
-        ? `/${ownerUsername}/${project.slug}`
-        : null,
+    canonicalPath: project.slug
+      ? `/${ownerUsername}/${project.slug}`
+      : `p/${pid}`,
     languages: languagesPublic ? project.languages?.breakdown || {} : {},
     updatedAt: project.updatedAt || null,
     createdAt: project.createdAt || null,
@@ -5267,8 +5309,8 @@ async function handleShare(req, res, reqId) {
     OG_DESCRIPTION: resolvedMeta.description || "",
     OG_IMAGE_META: { raw: ogImageMeta },
     TWITTER_IMAGE_META: { raw: twitterImageMeta },
-    CANONICAL_URL: `${BASE_URL}/${ownerUsername}/${project.slug || ""}`,
-    SHARE_URL: `${BASE_URL}/${ownerUsername}/${project.slug || ""}`,
+    CANONICAL_URL: detailsUrl,
+    SHARE_URL: detailsUrl,
     INJECT_PROJECT_SCRIPT: { raw: projectScript },
     PROJECT_PREVIEW_HTML: { raw: projectPreviewHtml },
     OG_PREVIEW_HTML: { raw: ogPreviewHtml },
@@ -5379,14 +5421,15 @@ async function handleProfilePublic(req, res, reqId) {
       if (t?.exists() && isValidOgUrl(t.val())) thumbnailUrl = t.val();
     } catch {}
 
-    // ✅ Two independent URLs:
-    //   url       → two-segment details page (always present in this list)
-    //   liveUrl   → three-segment live site, or null if liveSite !== "public"
+    // Details URL: two-segment when a slug exists, otherwise /p/:pid.
     const url = p.slug
       ? `${BASE_URL}/${username}/${p.slug}`
-      : `${BASE_URL}/${username}`;
+      : `${BASE_URL}/p/${pid}`;
+
+    // Live URL: three-segment, only when deployed AND liveSite is public.
+    const hasLiveDeployment = p.deployment?.state === "READY" && !!p.slug;
     const liveUrl =
-      p.visibility?.liveSite === "public" && p.slug
+      p.visibility?.liveSite === "public" && hasLiveDeployment
         ? `${BASE_URL}/${username}/project/${p.slug}`
         : null;
 
