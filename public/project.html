@@ -498,6 +498,7 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
     syncQueueCount: 0,
     _regenerating: false,
     _noteHistoryPushed: false,
+    _expandedDeployments: new Set(),
   };
 
   const $ = id => document.getElementById(id);
@@ -664,30 +665,30 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   async function apiFetch(url, opts = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-  if (S.session) headers['Authorization'] = `Bearer ${S.session}`;
-  try {
-    const res = await fetch(url, { ...opts, headers });
-    let data = {};
-    try { data = await res.json(); } catch {}
-    if (res.status === 401) {
-      try {
-        localStorage.removeItem(STORAGE.session);
-        localStorage.removeItem(STORAGE.user);
-      } catch {}
-      if (!sessionStorage.getItem('folio.authRedirectShown')) {
-        sessionStorage.setItem('folio.authRedirectShown', '1');
-        setTimeout(() => {
-          const next = encodeURIComponent(location.pathname + location.search);
-          location.href = '/register?next=' + next;
-        }, 800);
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (S.session) headers['Authorization'] = `Bearer ${S.session}`;
+    try {
+      const res = await fetch(url, { ...opts, headers });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (res.status === 401) {
+        try {
+          localStorage.removeItem(STORAGE.session);
+          localStorage.removeItem(STORAGE.user);
+        } catch {}
+        if (!sessionStorage.getItem('folio.authRedirectShown')) {
+          sessionStorage.setItem('folio.authRedirectShown', '1');
+          setTimeout(() => {
+            const next = encodeURIComponent(location.pathname + location.search);
+            location.href = '/register?next=' + next;
+          }, 800);
+        }
       }
+      return { ok: res.ok, status: res.status, data };
+    } catch (err) {
+      return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
     }
-    return { ok: res.ok, status: res.status, data };
-  } catch (err) {
-    return { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
   }
-}
 
   // ═══════════════════════════════════════════════════════════
   // TOAST / MODAL / LOADING
@@ -771,76 +772,74 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   async function flushSyncQueue() {
-  if (S.syncFlushing || !S.online || !S.session || S.isLocalOnly) return;
-  S.syncFlushing = true;
-  try {
-    const queue = await IDB.listSyncQueue();
-    for (const item of queue) {
-      if (item.pid !== S.pid) continue;
-      try {
-        let success = false;
-        let body = null;
-        let endpoint = API_HOST;
+    if (S.syncFlushing || !S.online || !S.session || S.isLocalOnly) return;
+    S.syncFlushing = true;
+    try {
+      const queue = await IDB.listSyncQueue();
+      for (const item of queue) {
+        if (item.pid !== S.pid) continue;
+        try {
+          let success = false;
+          let body = null;
+          let endpoint = API_HOST;
 
-        if (item.type === 'file-save') {
-          endpoint = API_HOST + '?action=project/sync-back';
-          body = { pid: item.pid, files: { [item.payload.path]: item.payload.content } };
-        } else if (item.type === 'file-delete') {
-          endpoint = API_HOST + '?action=file/delete';
-          body = { pid: item.pid, path: item.payload.path };
-        } else if (item.type === 'version-commit') {
-          endpoint = API_HOST + '?action=project/sync-back';
-          // ✅ FIX: correctly pass versions map
-          body = { pid: item.pid, versions: { [item.payload.vid]: item.payload.data } };
-        } else if (item.type === 'metatags-save') {
-          endpoint = API_HOST + '?action=metatags/save';
-          body = { pid: item.pid, metaTags: item.payload.metaTags };
-        } else if (item.type === 'project-update') {
-          endpoint = API_HOST + '?action=projects/update';
-          body = { pid: item.pid, ...item.payload };
-        } else {
-          success = true; // unknown types: discard
-        }
-
-        if (body) {
-          const res = await apiFetch(endpoint, {
-            method: 'POST',
-            body: JSON.stringify(body),
-          });
-          success = res.ok && res.data?.success;
-          // ✅ FIX: if the item is definitively rejected (400/403/404), don't retry forever
-          if (!success && (res.status === 400 || res.status === 403 || res.status === 404)) {
-            console.warn(`[Sync] Dropping ${item.type} — server rejected with ${res.status}:`, res.data?.error);
-            await IDB.deleteSyncQueue(item.id);
-            continue;
+          if (item.type === 'file-save') {
+            endpoint = API_HOST + '?action=project/sync-back';
+            body = { pid: item.pid, files: { [item.payload.path]: item.payload.content } };
+          } else if (item.type === 'file-delete') {
+            endpoint = API_HOST + '?action=file/delete';
+            body = { pid: item.pid, path: item.payload.path };
+          } else if (item.type === 'version-commit') {
+            endpoint = API_HOST + '?action=project/sync-back';
+            body = { pid: item.pid, versions: { [item.payload.vid]: item.payload.data } };
+          } else if (item.type === 'metatags-save') {
+            endpoint = API_HOST + '?action=metatags/save';
+            body = { pid: item.pid, metaTags: item.payload.metaTags };
+          } else if (item.type === 'project-update') {
+            endpoint = API_HOST + '?action=projects/update';
+            body = { pid: item.pid, ...item.payload };
+          } else {
+            success = true;
           }
-        }
 
-        if (success) {
-          await IDB.deleteSyncQueue(item.id);
-        } else {
+          if (body) {
+            const res = await apiFetch(endpoint, {
+              method: 'POST',
+              body: JSON.stringify(body),
+            });
+            success = res.ok && res.data?.success;
+            if (!success && (res.status === 400 || res.status === 403 || res.status === 404)) {
+              console.warn(`[Sync] Dropping ${item.type} — server rejected with ${res.status}:`, res.data?.error);
+              await IDB.deleteSyncQueue(item.id);
+              continue;
+            }
+          }
+
+          if (success) {
+            await IDB.deleteSyncQueue(item.id);
+          } else {
+            item.attempts = (item.attempts || 0) + 1;
+            if (item.attempts >= SYNC_QUEUE_MAX_ATTEMPTS) {
+              await IDB.deleteSyncQueue(item.id);
+              toast('Some offline changes could not sync', 'warning', 4000);
+            } else {
+              await IDB.updateSyncQueue(item);
+            }
+          }
+        } catch (err) {
           item.attempts = (item.attempts || 0) + 1;
           if (item.attempts >= SYNC_QUEUE_MAX_ATTEMPTS) {
             await IDB.deleteSyncQueue(item.id);
-            toast('Some offline changes could not sync', 'warning', 4000);
           } else {
             await IDB.updateSyncQueue(item);
           }
         }
-      } catch (err) {
-        item.attempts = (item.attempts || 0) + 1;
-        if (item.attempts >= SYNC_QUEUE_MAX_ATTEMPTS) {
-          await IDB.deleteSyncQueue(item.id);
-        } else {
-          await IDB.updateSyncQueue(item);
-        }
       }
+    } finally {
+      S.syncFlushing = false;
+      await refreshSyncQueueCount();
     }
-  } finally {
-    S.syncFlushing = false;
-    await refreshSyncQueueCount();
   }
-}
 
   function startSyncFlushLoop() {
     if (S.syncTimer) clearInterval(S.syncTimer);
@@ -919,109 +918,109 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   function updateModeBanner() {
-  const banner = $('modeBanner');
-  const text = $('modeBannerText');
-  const action = $('modeBannerAction');
-  if (!banner || !text || !action) return;
+    const banner = $('modeBanner');
+    const text = $('modeBannerText');
+    const action = $('modeBannerAction');
+    if (!banner || !text || !action) return;
 
-  const state = S.syncState;
+    const state = S.syncState;
 
-  if (state === 'needs-pull') {
-    banner.hidden = false;
-    banner.classList.add('visible');
-    banner.dataset.kind = 'pull';
-    if (!S.online) {
-      text.textContent = `Offline — ${S.serverFileCount || 0} files on your account. Will sync when you're online.`;
-      action.textContent = 'Sync';
-      action.disabled = true;
-    } else {
-      text.textContent = `${S.serverFileCount || 0} files on your account — not on this device yet.`;
-      action.textContent = 'Sync now';
-      action.disabled = false;
-    }
-    action.onclick = () => pullFromServer();
-    return;
-  }
-
-  banner.dataset.kind = 'default';
-
-  if (state === 'local' && !S.session) {
-    banner.hidden = false;
-    banner.classList.add('visible');
-    text.textContent = 'Saved only on this device. Sign in to back it up and deploy.';
-    action.textContent = 'Sign in';
-    action.disabled = false;
-    action.onclick = () => {
-      window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
-    };
-    return;
-  }
-  if (state === 'local' && S.session) {
-    banner.hidden = false;
-    banner.classList.add('visible');
-    text.textContent = 'Saved only on this device. Sync to your account.';
-    action.textContent = 'Sync to account';
-    action.disabled = false;
-    action.onclick = () => promoteLocalProject();
-    return;
-  }
-  if (state === 'orphan') {
-    banner.hidden = false;
-    banner.classList.add('visible');
-    text.textContent = "This project isn't on the server yet. Push it to keep your files safe.";
-    action.textContent = 'Push to server';
-    action.disabled = false;
-    action.onclick = () => pushOrphanToServer();
-    return;
-  }
-  if (state === 'cached' || !S.online) {
-    banner.hidden = false;
-    banner.classList.add('visible');
-    text.textContent = 'Offline — showing cached data. Changes will sync when you reconnect.';
-    action.textContent = 'Retry';
-    action.disabled = false;
-    action.onclick = () => location.reload();
-    return;
-  }
-
-  banner.hidden = true;
-  banner.classList.remove('visible');
-}
-
-// ── Pull handler (Scenario 1) ─────────────────────────────────────────
-async function pullFromServer() {
-  if (!S.online) { toast('Requires internet', 'warning'); return; }
-  if (!S.session) {
-    window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
-    return;
-  }
-
-  showLoading('Syncing', 'Pulling files from your account…');
-  try {
-    const result = await hydrateProjectFromServer(S.pid);
-    hideLoading();
-    if (!result.ok) {
-      toast(result.reason || 'Sync failed', 'error', 4000);
+    if (state === 'needs-pull') {
+      banner.hidden = false;
+      banner.classList.add('visible');
+      banner.dataset.kind = 'pull';
+      if (!S.online) {
+        text.textContent = `Offline — ${S.serverFileCount || 0} files on your account. Will sync when you're online.`;
+        action.textContent = 'Sync';
+        action.disabled = true;
+      } else {
+        text.textContent = `${S.serverFileCount || 0} files on your account — not on this device yet.`;
+        action.textContent = 'Sync now';
+        action.disabled = false;
+      }
+      action.onclick = () => pullFromServer();
       return;
     }
-    S.syncState = 'synced';
-    markSynced(S.pid);
-    toast(
-      `Synced ${result.filesWritten} file${result.filesWritten === 1 ? '' : 's'}` +
-      (result.versionsWritten ? `, ${result.versionsWritten} version${result.versionsWritten === 1 ? '' : 's'}` : ''),
-      'success',
-      2400
-    );
-    updateModeBanner();
-    updateHeader();
-    renderPanel();
-    refreshFileCount().catch(() => {});
-    refreshSyncQueueCount().catch(() => {});
-  } catch (err) {
-    hideLoading();
-    toast(err.message || 'Sync failed', 'error', 5000);
+
+    banner.dataset.kind = 'default';
+
+    if (state === 'local' && !S.session) {
+      banner.hidden = false;
+      banner.classList.add('visible');
+      text.textContent = 'Saved only on this device. Sign in to back it up and deploy.';
+      action.textContent = 'Sign in';
+      action.disabled = false;
+      action.onclick = () => {
+        window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
+      };
+      return;
+    }
+    if (state === 'local' && S.session) {
+      banner.hidden = false;
+      banner.classList.add('visible');
+      text.textContent = 'Saved only on this device. Sync to your account.';
+      action.textContent = 'Sync to account';
+      action.disabled = false;
+      action.onclick = () => promoteLocalProject();
+      return;
+    }
+    if (state === 'orphan') {
+      banner.hidden = false;
+      banner.classList.add('visible');
+      text.textContent = "This project isn't on the server yet. Push it to keep your files safe.";
+      action.textContent = 'Push to server';
+      action.disabled = false;
+      action.onclick = () => pushOrphanToServer();
+      return;
+    }
+    if (state === 'cached' || !S.online) {
+      banner.hidden = false;
+      banner.classList.add('visible');
+      text.textContent = 'Offline — showing cached data. Changes will sync when you reconnect.';
+      action.textContent = 'Retry';
+      action.disabled = false;
+      action.onclick = () => location.reload();
+      return;
+    }
+
+    banner.hidden = true;
+    banner.classList.remove('visible');
   }
-}
+
+  // ── Pull handler (Scenario 1) ─────────────────────────────────────────
+  async function pullFromServer() {
+    if (!S.online) { toast('Requires internet', 'warning'); return; }
+    if (!S.session) {
+      window.location.href = '/register?next=' + encodeURIComponent(location.pathname + location.search);
+      return;
+    }
+
+    showLoading('Syncing', 'Pulling files from your account…');
+    try {
+      const result = await hydrateProjectFromServer(S.pid);
+      hideLoading();
+      if (!result.ok) {
+        toast(result.reason || 'Sync failed', 'error', 4000);
+        return;
+      }
+      S.syncState = 'synced';
+      markSynced(S.pid);
+      toast(
+        `Synced ${result.filesWritten} file${result.filesWritten === 1 ? '' : 's'}` +
+        (result.versionsWritten ? `, ${result.versionsWritten} version${result.versionsWritten === 1 ? '' : 's'}` : ''),
+        'success',
+        2400
+      );
+      updateModeBanner();
+      updateHeader();
+      renderPanel();
+      refreshFileCount().catch(() => {});
+      refreshSyncQueueCount().catch(() => {});
+    } catch (err) {
+      hideLoading();
+      toast(err.message || 'Sync failed', 'error', 5000);
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════
   // PROJECT ICON HELPERS
@@ -1062,7 +1061,7 @@ async function pullFromServer() {
   function buildProjectUrl({ path = '', deploymentId = null, absolute = false } = {}) {
     const user = getOwnerUsername();
     const slug = S.project?.slug || '';
-    if (!user || !slug) return S.project?.deployment?.url || null;
+    if (!user || !slug) return null;
     let url = `${BASE_URL}/${encodeURIComponent(user)}/project/${encodeURIComponent(slug)}`;
     if (path) url += '/' + String(path).split('/').map(encodeURIComponent).join('/');
     const params = [];
@@ -1076,6 +1075,24 @@ async function pullFromServer() {
     const slug = S.project?.slug || '';
     if (!user || !slug) return null;
     return `${BASE_URL}/${encodeURIComponent(user)}/${encodeURIComponent(slug)}`;
+  }
+
+  function buildDeploymentUrls(deploymentId) {
+    const user = getOwnerUsername();
+    const slug = S.project?.slug || '';
+    if (!user || !slug) return null;
+
+    const pid = S.pid;
+    const from = encodeURIComponent(deploymentId);
+    const baseClean = `${BASE_URL}/${encodeURIComponent(user)}/project/${encodeURIComponent(slug)}`;
+    const baseServe = `${API_HOST}?action=serve&pid=${encodeURIComponent(pid)}`;
+
+    return {
+      clean: `${baseClean}?from=${from}`,
+      serve: `${baseServe}&path=index.html&from=${from}`,
+      bare: baseClean,
+      id: deploymentId,
+    };
   }
 
   function getHtmlFiles(files) {
@@ -1109,7 +1126,6 @@ async function pullFromServer() {
     const iconName = kind === 'denied' ? 'lock' : kind === 'empty' ? 'folder' : 'alert';
     iconEl.innerHTML = svg(iconName, 26, 2.2);
     $('emptyProjectState').classList.remove('hidden');
-    // Hide chrome
     const header = $('header');
     if (header) header.style.display = 'none';
     const tabsBar = $('topTabsBar');
@@ -1128,130 +1144,144 @@ async function pullFromServer() {
     if (rail) rail.style.display = '';
     S.projectState = 'normal';
   }
-// ── Last-sync tracking ────────────────────────────────────────────────
-// Stamps a per-project timestamp in localStorage every time we successfully
-// pull or push. Rendered in the header as "Synced 2m ago".
-function markSynced(pid) {
-  if (!pid) return;
-  try { localStorage.setItem('folio.lastSync.' + pid, String(Date.now())); } catch {}
-}
-function readLastSynced(pid) {
-  if (!pid) return 0;
-  try { return Number(localStorage.getItem('folio.lastSync.' + pid) || 0); } catch { return 0; }
-}
 
-// ── Hydrate IDB from server: files + versions ─────────────────────────
-// Single API call. Used by the "Sync now" banner action when IDB has no
-// files for this project (fresh device, cleared storage, new browser).
-async function hydrateProjectFromServer(pid) {
-  if (!pid || !S.online || !S.session) return { ok: false, reason: 'offline' };
-
-  let res;
-  try {
-    res = await apiFetch(API_HOST + '?action=project/hydrate&pid=' + encodeURIComponent(pid));
-  } catch {
-    return { ok: false, reason: 'network' };
+  // ── Last-sync tracking ────────────────────────────────────────────────
+  function markSynced(pid) {
+    if (!pid) return;
+    try { localStorage.setItem('folio.lastSync.' + pid, String(Date.now())); } catch {}
   }
-  if (!res.ok || !res.data?.success) {
-    return { ok: false, reason: res.data?.error || `HTTP ${res.status}` };
+  function readLastSynced(pid) {
+    if (!pid) return 0;
+    try { return Number(localStorage.getItem('folio.lastSync.' + pid) || 0); } catch { return 0; }
   }
 
-  const files = res.data.files || {};
-  const versions = res.data.versions || {};
+  // ── Hydrate IDB from server: files + versions ─────────────────────────
+  async function hydrateProjectFromServer(pid) {
+    if (!pid || !S.online || !S.session) return { ok: false, reason: 'offline' };
 
-  let filesWritten = 0;
-  for (const [path, content] of Object.entries(files)) {
-    if (typeof content !== 'string') continue;
+    let res;
     try {
-      await IDB.putFile(pid, path, content);
-      filesWritten++;
-    } catch (err) {
-      console.warn('[Hydrate] file write failed:', path, err);
+      res = await apiFetch(API_HOST + '?action=project/hydrate&pid=' + encodeURIComponent(pid));
+    } catch {
+      return { ok: false, reason: 'network' };
     }
+    if (!res.ok || !res.data?.success) {
+      return { ok: false, reason: res.data?.error || `HTTP ${res.status}` };
+    }
+
+    const files = res.data.files || {};
+    const versions = res.data.versions || {};
+
+    let filesWritten = 0;
+    for (const [path, content] of Object.entries(files)) {
+      if (typeof content !== 'string') continue;
+      try {
+        await IDB.putFile(pid, path, content);
+        filesWritten++;
+      } catch (err) {
+        console.warn('[Hydrate] file write failed:', path, err);
+      }
+    }
+
+    let versionsWritten = 0;
+    for (const [vid, data] of Object.entries(versions)) {
+      try {
+        const existing = await IDB.getVersion(vid);
+        if (existing) continue;
+        await IDB.putVersion({ vid, pid, ...data });
+        versionsWritten++;
+      } catch (err) {
+        console.warn('[Hydrate] version write failed:', vid, err);
+      }
+    }
+
+    markSynced(pid);
+    return { ok: true, filesWritten, versionsWritten };
   }
 
-  let versionsWritten = 0;
-  for (const [vid, data] of Object.entries(versions)) {
-    try {
-      const existing = await IDB.getVersion(vid);
-      if (existing) continue;
-      await IDB.putVersion({ vid, pid, ...data });
-      versionsWritten++;
-    } catch (err) {
-      console.warn('[Hydrate] version write failed:', vid, err);
-    }
-  }
-
-  markSynced(pid);
-  return { ok: true, filesWritten, versionsWritten };
-}
-  
   // ═══════════════════════════════════════════════════════════
   // LOAD PROJECT
   // ═══════════════════════════════════════════════════════════
 
   async function loadProject() {
-  let localProject = null;
-  try { localProject = await IDB.getProject(S.pid); } catch {}
+    let localProject = null;
+    try { localProject = await IDB.getProject(S.pid); } catch {}
 
-  // Local-only project
-  if (/^local_/.test(S.pid)) {
-    if (!localProject) {
-      showEmptyState('notfound', 'Not found', 'This local project no longer exists.', S.pid);
-      return false;
-    }
-    S.project = {
-      ...localProject,
-      myRole: 'owner',
-      visibility: localProject.visibility || { profile: 'private' },
-    };
-    S.isLocalOnly = true;
-    setSyncState('local');
-    applyProjectMeta();
-    return true;
-  }
-
-  if (S.session && S.online) {
-    let res = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
-      } catch (err) {
-        res = { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
+    if (/^local_/.test(S.pid)) {
+      if (!localProject) {
+        showEmptyState('notfound', 'Not found', 'This local project no longer exists.', S.pid);
+        return false;
       }
-      if (res.ok || res.status === 404 || res.status === 403) break;
-      if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
-    }
-
-    if (res.ok && res.data?.success) {
-      const norm = normalizeServerProject(res.data.project);
-      try { await IDB.putProject(norm); } catch {}
-      S.project = { ...res.data.project, ...norm };
-      S.isLocalOnly = false;
-      cacheProject(S.project);
-
-      // ✅ Scenario 1: server has files but this device doesn't. Prompt.
-      // We do NOT auto-hydrate — the user clicks "Sync now".
-      const serverFileCount = res.data.project.fileCount || 0;
-      let localFileCount = 0;
-      try {
-        const localFiles = await IDB.listFiles(S.pid);
-        localFileCount = localFiles.length;
-      } catch {}
-
-      if (serverFileCount > 0 && localFileCount === 0) {
-        S.serverFileCount = serverFileCount;
-        setSyncState('needs-pull');
-      } else {
-        S.serverFileCount = serverFileCount;
-        setSyncState('synced');
-      }
-
+      S.project = {
+        ...localProject,
+        myRole: 'owner',
+        visibility: localProject.visibility || { profile: 'private' },
+      };
+      S.isLocalOnly = true;
+      setSyncState('local');
       applyProjectMeta();
       return true;
     }
 
-    if (res.status === 404 || res.status === 403) {
+    if (S.session && S.online) {
+      let res = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.pid));
+        } catch (err) {
+          res = { ok: false, status: 0, data: { error: 'NETWORK_ERROR' } };
+        }
+        if (res.ok || res.status === 404 || res.status === 403) break;
+        if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+      }
+
+      if (res.ok && res.data?.success) {
+        const norm = normalizeServerProject(res.data.project);
+        try { await IDB.putProject(norm); } catch {}
+        S.project = { ...res.data.project, ...norm };
+        S.isLocalOnly = false;
+        cacheProject(S.project);
+
+        const serverFileCount = res.data.project.fileCount || 0;
+        let localFileCount = 0;
+        try {
+          const localFiles = await IDB.listFiles(S.pid);
+          localFileCount = localFiles.length;
+        } catch {}
+
+        if (serverFileCount > 0 && localFileCount === 0) {
+          S.serverFileCount = serverFileCount;
+          setSyncState('needs-pull');
+        } else {
+          S.serverFileCount = serverFileCount;
+          setSyncState('synced');
+        }
+
+        applyProjectMeta();
+        return true;
+      }
+
+      if (res.status === 404 || res.status === 403) {
+        if (localProject) {
+          const inferredRole = localProject.myRole || (localProject._server ? 'viewer' : 'owner');
+          S.project = {
+            ...localProject,
+            myRole: inferredRole,
+            visibility: localProject.visibility || { profile: 'private' },
+          };
+          S.isLocalOnly = false;
+          setSyncState('orphan');
+          applyProjectMeta();
+          return true;
+        }
+        if (res.status === 403) {
+          showEmptyState('denied', 'Access denied', "You don't have permission to view this project. Sign in with the right account, or ask the owner.", S.pid);
+        } else {
+          showEmptyState('notfound', 'Project not found', "This project may have been deleted, or the link is broken.", S.pid);
+        }
+        return false;
+      }
+
       if (localProject) {
         const inferredRole = localProject.myRole || (localProject._server ? 'viewer' : 'owner');
         S.project = {
@@ -1260,16 +1290,10 @@ async function hydrateProjectFromServer(pid) {
           visibility: localProject.visibility || { profile: 'private' },
         };
         S.isLocalOnly = false;
-        setSyncState('orphan');
+        setSyncState('cached');
         applyProjectMeta();
         return true;
       }
-      if (res.status === 403) {
-        showEmptyState('denied', 'Access denied', "You don't have permission to view this project. Sign in with the right account, or ask the owner.", S.pid);
-      } else {
-        showEmptyState('notfound', 'Project not found', "This project may have been deleted, or the link is broken.", S.pid);
-      }
-      return false;
     }
 
     if (localProject) {
@@ -1284,32 +1308,18 @@ async function hydrateProjectFromServer(pid) {
       applyProjectMeta();
       return true;
     }
-  }
 
-  if (localProject) {
-    const inferredRole = localProject.myRole || (localProject._server ? 'viewer' : 'owner');
-    S.project = {
-      ...localProject,
-      myRole: inferredRole,
-      visibility: localProject.visibility || { profile: 'private' },
-    };
-    S.isLocalOnly = false;
-    setSyncState('cached');
-    applyProjectMeta();
-    return true;
-  }
+    const cached = readCachedProject();
+    if (cached) {
+      S.project = { ...cached, myRole: cached.myRole || 'viewer' };
+      setSyncState('cached');
+      applyProjectMeta();
+      return true;
+    }
 
-  const cached = readCachedProject();
-  if (cached) {
-    S.project = { ...cached, myRole: cached.myRole || 'viewer' };
-    setSyncState('cached');
-    applyProjectMeta();
-    return true;
+    showEmptyState('notfound', "Couldn't load project", 'Check your connection and try again.', S.pid);
+    return false;
   }
-
-  showEmptyState('notfound', "Couldn't load project", 'Check your connection and try again.', S.pid);
-  return false;
-}
 
   function applyProjectMeta() {
     S.role = S.project.myRole || (S.isLocalOnly ? 'owner' : 'viewer');
@@ -1330,55 +1340,54 @@ async function hydrateProjectFromServer(pid) {
   }
 
   function updateHeader() {
-  $('headerProjectName').textContent = S.project.name || 'Untitled project';
+    $('headerProjectName').textContent = S.project.name || 'Untitled project';
 
-  const slugPart = S.project.slug ? `@${escapeHTML(S.project.slug)}` : '';
-  const updatedPart = S.project.updatedAt ? ` · ${timeAgo(S.project.updatedAt)}` : '';
-  const roleBadge = `<span class="header-role-badge">${S.isOwner ? 'Owner' : escapeHTML(S.role || 'Viewer')}</span>`;
+    const slugPart = S.project.slug ? `@${escapeHTML(S.project.slug)}` : '';
+    const updatedPart = S.project.updatedAt ? ` · ${timeAgo(S.project.updatedAt)}` : '';
+    const roleBadge = `<span class="header-role-badge">${S.isOwner ? 'Owner' : escapeHTML(S.role || 'Viewer')}</span>`;
 
-  // Sync indicator reflects the four-state model.
-  const syncBadge = (() => {
-    if (S.syncState === 'needs-pull') {
-      return `<span class="header-sync-badge warn" title="Server has files this device doesn't">Pull needed</span>`;
+    const syncBadge = (() => {
+      if (S.syncState === 'needs-pull') {
+        return `<span class="header-sync-badge warn" title="Server has files this device doesn't">Pull needed</span>`;
+      }
+      if (S.syncState === 'local') return `<span class="header-sync-badge">Not synced</span>`;
+      if (S.syncState === 'orphan') return `<span class="header-sync-badge">Not on server</span>`;
+      if (S.syncState === 'cached' || !S.online) {
+        return `<span class="header-sync-badge cached">Cached</span>`;
+      }
+      if (S.syncState === 'synced') {
+        const ts = readLastSynced(S.pid);
+        const label = ts ? `Synced ${timeAgo(ts)}` : 'Synced';
+        return `<span class="header-sync-badge ok">${label}</span>`;
+      }
+      return '';
+    })();
+
+    const deployBadge = S.project.deployment?.url
+      ? `<span class="header-deploy-badge"><span class="dot"></span>Live</span>`
+      : S.project.deployment?.state === 'OFFLINE'
+        ? `<span class="header-deploy-badge offline">Offline</span>`
+        : '';
+
+    $('headerProjectSub').innerHTML =
+      `<span class="sub-slug">${slugPart}</span><span class="sub-sep">·</span>` +
+      `${roleBadge}${syncBadge}${deployBadge}<span class="sub-updated">${updatedPart}</span>`;
+
+    document.title = `${S.project.name || 'Project'} — Folio`;
+
+    const deployBtn = $('btnDeploy');
+    if (deployBtn) {
+      if (S.project.deployment?.url) {
+        deployBtn.classList.add('is-live');
+        deployBtn.querySelector('.lbl').textContent = 'Live';
+      } else {
+        deployBtn.classList.remove('is-live');
+        deployBtn.querySelector('.lbl').textContent = 'Deploy';
+      }
     }
-    if (S.syncState === 'local') return `<span class="header-sync-badge">Not synced</span>`;
-    if (S.syncState === 'orphan') return `<span class="header-sync-badge">Not on server</span>`;
-    if (S.syncState === 'cached' || !S.online) {
-      return `<span class="header-sync-badge cached">Cached</span>`;
-    }
-    if (S.syncState === 'synced') {
-      const ts = readLastSynced(S.pid);
-      const label = ts ? `Synced ${timeAgo(ts)}` : 'Synced';
-      return `<span class="header-sync-badge ok">${label}</span>`;
-    }
-    return '';
-  })();
 
-  const deployBadge = S.project.deployment?.url
-    ? `<span class="header-deploy-badge"><span class="dot"></span>Live</span>`
-    : S.project.deployment?.state === 'OFFLINE'
-      ? `<span class="header-deploy-badge offline">Offline</span>`
-      : '';
-
-  $('headerProjectSub').innerHTML =
-    `<span class="sub-slug">${slugPart}</span><span class="sub-sep">·</span>` +
-    `${roleBadge}${syncBadge}${deployBadge}<span class="sub-updated">${updatedPart}</span>`;
-
-  document.title = `${S.project.name || 'Project'} — Folio`;
-
-  const deployBtn = $('btnDeploy');
-  if (deployBtn) {
-    if (S.project.deployment?.url) {
-      deployBtn.classList.add('is-live');
-      deployBtn.querySelector('.lbl').textContent = 'Live';
-    } else {
-      deployBtn.classList.remove('is-live');
-      deployBtn.querySelector('.lbl').textContent = 'Deploy';
-    }
+    $('btnBell').style.display = S.session ? '' : 'none';
   }
-
-  $('btnBell').style.display = S.session ? '' : 'none';
-}
 
   // ═══════════════════════════════════════════════════════════
   // TOP TABS
@@ -1901,6 +1910,13 @@ async function hydrateProjectFromServer(pid) {
         else toast('Copy failed', 'error');
       });
     });
+
+    $('btnQuickDeploy')?.addEventListener('click', deployNow);
+    $('btnRedeployQuick')?.addEventListener('click', deployNow);
+    $('btnPushFirst')?.addEventListener('click', () => {
+      if (S.syncState === 'orphan') pushOrphanToServer();
+      else if (S.syncState === 'local') promoteLocalProject();
+    });
   }
 
   function renderLiveUrlBody(realFiles, coverUrl) {
@@ -2215,347 +2231,226 @@ async function hydrateProjectFromServer(pid) {
   // ═══════════════════════════════════════════════════════════
 
   async function openProjectImageModal() {
-  if (!S.isEditor && !S.isLocalOnly) { toast('Read-only', 'warning'); return; }
-  const initial = await getCoverDraft();
-  let draft = { ...initial };
-  let pendingPreview = null;
-  let pendingUrl = null;
-  let currentTab = 'generate';
-  let generating = false;
-  let saving = false;
-  let selectedTemplate = draft.template || 'browser-frame';
-  let selectedScene = 'auto';
-  let flierVariants = null; // for the icon picker (avatar/preview)
+    if (!S.isEditor && !S.isLocalOnly) { toast('Read-only', 'warning'); return; }
+    const initial = await getCoverDraft();
+    let draft = { ...initial };
+    let pendingPreview = null;
+    let pendingUrl = null;
+    let currentTab = 'generate';
+    let generating = false;
+    let saving = false;
+    let selectedTemplate = draft.template || 'browser-frame';
+    let selectedScene = 'auto';
 
-  openModal(`
-    <div class="modal-title">Project image</div>
-    <div class="modal-desc">Used on share cards, the project icon, and the deployment preview.</div>
-    <div class="cover-tabs">
-      <button class="cover-tab active" data-cover-tab="generate">Generate</button>
-      <button class="cover-tab" data-cover-tab="upload">Upload</button>
-      <button class="cover-tab" data-cover-tab="url">From URL</button>
-    </div>
-
-    <div data-cover-panel="generate">
-      <div class="cover-preview-live" id="coverPreview">
-        <div class="cover-preview-empty">Pick a template and click Generate</div>
+    openModal(`
+      <div class="modal-title">Project image</div>
+      <div class="modal-desc">Used on share cards, the project icon, and the deployment preview.</div>
+      <div class="cover-tabs">
+        <button class="cover-tab active" data-cover-tab="generate">Generate</button>
+        <button class="cover-tab" data-cover-tab="upload">Upload</button>
+        <button class="cover-tab" data-cover-tab="url">From URL</button>
       </div>
 
-      <div class="cover-controls">
-        <div class="cover-field-row" style="grid-column:1/-1;">
-          <label class="cover-field-label">Template</label>
-          <div class="cover-template-pills" id="coverTemplates">
-            ${COVER_TEMPLATES.map(t => `<button class="filter-pill ${draft.template === t.id ? 'active' : ''}" data-tpl="${t.id}" type="button">${t.label}</button>`).join('')}
+      <div data-cover-panel="generate">
+        <div class="cover-preview-live" id="coverPreview">
+          <div class="cover-preview-empty">Pick a template and click Generate</div>
+        </div>
+
+        <div class="cover-controls">
+          <div class="cover-field-row" style="grid-column:1/-1;">
+            <label class="cover-field-label">Template</label>
+            <div class="cover-template-pills" id="coverTemplates">
+              ${COVER_TEMPLATES.map(t => `<button class="filter-pill ${draft.template === t.id ? 'active' : ''}" data-tpl="${t.id}" type="button">${t.label}</button>`).join('')}
+            </div>
           </div>
-        </div>
 
-        <div class="cover-field-row">
-          <label class="cover-field-label">Scene</label>
-          <select class="select" id="coverScene">
-            <option value="auto">Auto (from project)</option>
-            <option value="none">None (solid)</option>
-            <optgroup label="Editorial">
-              <option value="paper_stack">Paper Stack</option>
-              <option value="newspaper_fold">Newspaper Fold</option>
-              <option value="type_specimen">Type Specimen</option>
-              <option value="book_spine">Book Spine</option>
-            </optgroup>
-            <optgroup label="Tech">
-              <option value="terminal">Terminal</option>
-              <option value="grid_wave">Grid Wave</option>
-              <option value="circuit">Circuit</option>
-              <option value="skyline">Skyline</option>
-            </optgroup>
-            <optgroup label="Music">
-              <option value="soundwave">Soundwave</option>
-              <option value="vinyl">Vinyl</option>
-              <option value="stage_light">Stage Light</option>
-              <option value="cassette">Cassette</option>
-            </optgroup>
-            <optgroup label="Home">
-              <option value="window_sill">Window Sill</option>
-              <option value="shelf">Shelf</option>
-              <option value="rooftop">Rooftop</option>
-            </optgroup>
-            <optgroup label="Abstract">
-              <option value="ribbon">Ribbon</option>
-              <option value="glass_cards">Glass Cards</option>
-              <option value="halftone">Halftone</option>
-            </optgroup>
-          </select>
-        </div>
-
-        <div class="cover-field-row">
-          <label class="cover-field-label">Scene palette</label>
-          <select class="select" id="coverScenePalette">
-            <option value="auto">Auto (seeded)</option>
-            <option value="warm">Warm</option>
-            <option value="cool">Cool</option>
-            <option value="neon">Neon</option>
-            <option value="earth">Earth</option>
-            <option value="sunset">Sunset</option>
-            <option value="mono">Mono</option>
-          </select>
-        </div>
-
-        <div class="cover-field-row">
-          <label class="cover-field-label">Primary</label>
-          <div class="cover-color-row">
-            <div class="cover-swatch" style="background:${draft.primary}"><input type="color" id="coverPrimary" value="${draft.primary}"></div>
-            <input class="input" id="coverPrimaryHex" value="${draft.primary}">
+          <div class="cover-field-row">
+            <label class="cover-field-label">Scene</label>
+            <select class="select" id="coverScene">
+              <option value="auto">Auto (from project)</option>
+              <option value="none">None (solid)</option>
+              <optgroup label="Editorial">
+                <option value="paper_stack">Paper Stack</option>
+                <option value="newspaper_fold">Newspaper Fold</option>
+                <option value="type_specimen">Type Specimen</option>
+                <option value="book_spine">Book Spine</option>
+              </optgroup>
+              <optgroup label="Tech">
+                <option value="terminal">Terminal</option>
+                <option value="grid_wave">Grid Wave</option>
+                <option value="circuit">Circuit</option>
+                <option value="skyline">Skyline</option>
+              </optgroup>
+              <optgroup label="Music">
+                <option value="soundwave">Soundwave</option>
+                <option value="vinyl">Vinyl</option>
+                <option value="stage_light">Stage Light</option>
+                <option value="cassette">Cassette</option>
+              </optgroup>
+              <optgroup label="Home">
+                <option value="window_sill">Window Sill</option>
+                <option value="shelf">Shelf</option>
+                <option value="rooftop">Rooftop</option>
+              </optgroup>
+              <optgroup label="Abstract">
+                <option value="ribbon">Ribbon</option>
+                <option value="glass_cards">Glass Cards</option>
+                <option value="halftone">Halftone</option>
+              </optgroup>
+            </select>
           </div>
-        </div>
 
-        <div class="cover-field-row">
-          <label class="cover-field-label">Accent</label>
-          <div class="cover-color-row">
-            <div class="cover-swatch" style="background:${draft.accent}"><input type="color" id="coverAccent" value="${draft.accent}"></div>
-            <input class="input" id="coverAccentHex" value="${draft.accent}">
+          <div class="cover-field-row">
+            <label class="cover-field-label">Scene palette</label>
+            <select class="select" id="coverScenePalette">
+              <option value="auto">Auto (seeded)</option>
+              <option value="warm">Warm</option>
+              <option value="cool">Cool</option>
+              <option value="neon">Neon</option>
+              <option value="earth">Earth</option>
+              <option value="sunset">Sunset</option>
+              <option value="mono">Mono</option>
+            </select>
           </div>
-        </div>
 
-        <div class="cover-field-row" style="grid-column:1/-1;">
-          <label class="cover-field-label">Headline</label>
-          <input class="input" id="coverHeadline" value="${escapeAttr(draft.headline)}" maxlength="120">
-        </div>
+          <div class="cover-field-row">
+            <label class="cover-field-label">Primary</label>
+            <div class="cover-color-row">
+              <div class="cover-swatch" style="background:${draft.primary}"><input type="color" id="coverPrimary" value="${draft.primary}"></div>
+              <input class="input" id="coverPrimaryHex" value="${draft.primary}">
+            </div>
+          </div>
 
-        <div class="cover-field-row" style="grid-column:1/-1;">
-          <label class="cover-field-label">Subheadline</label>
-          <input class="input" id="coverSub" value="${escapeAttr(draft.subheadline)}" maxlength="180">
+          <div class="cover-field-row">
+            <label class="cover-field-label">Accent</label>
+            <div class="cover-color-row">
+              <div class="cover-swatch" style="background:${draft.accent}"><input type="color" id="coverAccent" value="${draft.accent}"></div>
+              <input class="input" id="coverAccentHex" value="${draft.accent}">
+            </div>
+          </div>
+
+          <div class="cover-field-row" style="grid-column:1/-1;">
+            <label class="cover-field-label">Headline</label>
+            <input class="input" id="coverHeadline" value="${escapeAttr(draft.headline)}" maxlength="120">
+          </div>
+
+          <div class="cover-field-row" style="grid-column:1/-1;">
+            <label class="cover-field-label">Subheadline</label>
+            <input class="input" id="coverSub" value="${escapeAttr(draft.subheadline)}" maxlength="180">
+          </div>
         </div>
       </div>
-    </div>
 
-    <div data-cover-panel="upload" style="display:none;">
-      <input type="file" id="coverFile" accept="image/*" style="display:none;">
-      <button class="btn btn-secondary btn-block" id="coverFileBtn" style="margin-bottom:10px;">${svg('upload', 12, 2.2)} Choose image file</button>
-      <div class="field-hint">PNG, JPG, WebP. Max 1 MB.</div>
-      <div id="coverFileStatus" class="upload-url-status"></div>
-    </div>
-
-    <div data-cover-panel="url" style="display:none;">
-      <div class="upload-url-panel">
-        <div class="cover-field-row">
-          <label class="cover-field-label">Image URL (HTTPS)</label>
-          <div class="upload-url-input">
-            <input class="input mono" id="coverUrlInput" placeholder="https://..." type="url">
-            <button class="btn btn-primary btn-icon" id="coverUrlLoad">${svg('check', 12, 2.4)}</button>
-          </div>
-        </div>
-        <div class="upload-url-preview" id="coverUrlPreview"><div class="placeholder">Paste URL, click Load</div></div>
-        <div class="upload-url-status" id="coverUrlStatus"></div>
+      <div data-cover-panel="upload" style="display:none;">
+        <input type="file" id="coverFile" accept="image/*" style="display:none;">
+        <button class="btn btn-secondary btn-block" id="coverFileBtn" style="margin-bottom:10px;">${svg('upload', 12, 2.2)} Choose image file</button>
+        <div class="field-hint">PNG, JPG, WebP. Max 1 MB.</div>
+        <div id="coverFileStatus" class="upload-url-status"></div>
       </div>
-    </div>
 
-    <div class="modal-actions">
-      <button class="btn btn-secondary" id="coverCancel">Cancel</button>
-      <button class="btn btn-primary" id="coverGenerate">Generate</button>
-      <button class="btn btn-primary" id="coverSave" disabled>Save</button>
-    </div>
-  `);
+      <div data-cover-panel="url" style="display:none;">
+        <div class="upload-url-panel">
+          <div class="cover-field-row">
+            <label class="cover-field-label">Image URL (HTTPS)</label>
+            <div class="upload-url-input">
+              <input class="input mono" id="coverUrlInput" placeholder="https://..." type="url">
+              <button class="btn btn-primary btn-icon" id="coverUrlLoad">${svg('check', 12, 2.4)}</button>
+            </div>
+          </div>
+          <div class="upload-url-preview" id="coverUrlPreview"><div class="placeholder">Paste URL, click Load</div></div>
+          <div class="upload-url-status" id="coverUrlStatus"></div>
+        </div>
+      </div>
 
-  const preview = $('coverPreview');
-  const saveBtn = $('coverSave');
-  const genBtn = $('coverGenerate');
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="coverCancel">Cancel</button>
+        <button class="btn btn-primary" id="coverGenerate">Generate</button>
+        <button class="btn btn-primary" id="coverSave" disabled>Save</button>
+      </div>
+    `);
 
-  // ── Tab switching ──
-  document.querySelectorAll('[data-cover-tab]').forEach(tab => {
-    tab.addEventListener('click', () => {
-      currentTab = tab.dataset.coverTab;
-      document.querySelectorAll('[data-cover-tab]').forEach(t => t.classList.toggle('active', t === tab));
-      document.querySelectorAll('[data-cover-panel]').forEach(p => {
-        p.style.display = p.dataset.coverPanel === currentTab ? '' : 'none';
-      });
-      genBtn.style.display = currentTab === 'generate' ? '' : 'none';
-      updateSave();
-    });
-  });
+    const preview = $('coverPreview');
+    const saveBtn = $('coverSave');
+    const genBtn = $('coverGenerate');
 
-  function renderPrev(url) {
-    if (url) {
-      preview.innerHTML = '';
-      const img = document.createElement('img');
-      img.src = url;
-      img.alt = 'Preview';
-      preview.appendChild(img);
-    } else {
-      preview.innerHTML = '<div class="cover-preview-empty">Pick a template and click Generate</div>';
-    }
-  }
-
-  function updateSave() {
-    const dirty = JSON.stringify(draft) !== JSON.stringify(initial) || pendingPreview || pendingUrl;
-    saveBtn.disabled = generating || saving || !dirty;
-  }
-
-  // ── Template pills ──
-  document.querySelectorAll('#coverTemplates .filter-pill').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#coverTemplates .filter-pill').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedTemplate = btn.dataset.tpl;
-      draft.template = selectedTemplate;
-      pendingPreview = null;
-      pendingUrl = null;
-      renderPrev(null);
-      updateSave();
-    });
-  });
-
-  // ── Color binding ──
-  function bindColor(colorId, hexId, key) {
-    const ci = $(colorId);
-    const hi = $(hexId);
-    ci.addEventListener('input', (e) => {
-      draft[key] = e.target.value;
-      hi.value = e.target.value;
-      ci.parentElement.style.background = e.target.value;
-      updateSave();
-    });
-    hi.addEventListener('input', (e) => {
-      const v = e.target.value.trim();
-      const clamped = clampHex(v);
-      if (clamped) {
-        draft[key] = clamped;
-        ci.value = clamped;
-        ci.parentElement.style.background = clamped;
+    document.querySelectorAll('[data-cover-tab]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        currentTab = tab.dataset.coverTab;
+        document.querySelectorAll('[data-cover-tab]').forEach(t => t.classList.toggle('active', t === tab));
+        document.querySelectorAll('[data-cover-panel]').forEach(p => {
+          p.style.display = p.dataset.coverPanel === currentTab ? '' : 'none';
+        });
+        genBtn.style.display = currentTab === 'generate' ? '' : 'none';
         updateSave();
-      }
-    });
-  }
-  bindColor('coverPrimary', 'coverPrimaryHex', 'primary');
-  bindColor('coverAccent', 'coverAccentHex', 'accent');
-
-  $('coverHeadline').addEventListener('input', (e) => { draft.headline = e.target.value; updateSave(); });
-  $('coverSub').addEventListener('input', (e) => { draft.subheadline = e.target.value; updateSave(); });
-  $('coverScene').addEventListener('change', (e) => { selectedScene = e.target.value; updateSave(); });
-
-  // ── ✅ FIX: Generate via the Flier API (not client-side SVG) ──
-  genBtn.addEventListener('click', async () => {
-    if (generating) return;
-    generating = true;
-    genBtn.disabled = true;
-    genBtn.textContent = 'Generating…';
-    updateSave();
-
-    try {
-      const apiCoverUrl = await generateCoverViaFlier({
-        template: selectedTemplate,
-        scene: selectedScene,
-        palette: $('coverScenePalette').value,
-        primary: draft.primary,
-        accent: draft.accent,
-        headline: draft.headline,
-        subheadline: draft.subheadline,
-        seed: S.pid,
-        iconUrl: S.project?.iconUrl || null,
       });
-
-      pendingPreview = null;
-      pendingUrl = apiCoverUrl;
-      renderPrev(apiCoverUrl);
-      toast('Cover generated', 'success');
-    } catch (err) {
-      console.error('[Cover] generate failed:', err);
-      toast(err.message || 'Generation failed', 'error');
-    } finally {
-      generating = false;
-      genBtn.disabled = false;
-      genBtn.textContent = 'Generate';
-      updateSave();
-    }
-  });
-
-  // ── Upload ──
-  $('coverFileBtn')?.addEventListener('click', () => $('coverFile')?.click());
-  $('coverFile')?.addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (file.size > 1024 * 1024) { toast('Max 1 MB', 'error'); return; }
-    const statusEl = $('coverFileStatus');
-    statusEl.textContent = 'Uploading…';
-    statusEl.className = 'upload-url-status';
-
-    try {
-      // Read as data URL, then upload via Flier upload endpoint
-      const dataUrl = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
-
-      const res = await apiFetch(API_FLIER + '?action=upload', {
-        method: 'POST',
-        body: JSON.stringify({ dataUrl, kind: 'image' }),
-      });
-      if (!res.ok || !res.data?.success || !res.data.url) {
-        throw new Error(res.data?.error || 'Upload failed');
-      }
-
-      pendingUrl = res.data.url;
-      pendingPreview = null;
-      renderPrev(res.data.url);
-      statusEl.textContent = 'Ready — click Save';
-      statusEl.className = 'upload-url-status success';
-      updateSave();
-    } catch (err) {
-      statusEl.textContent = err.message || 'Upload failed';
-      statusEl.className = 'upload-url-status error';
-    }
-  });
-
-  // ── URL loading ──
-  $('coverUrlLoad')?.addEventListener('click', async () => {
-    const url = $('coverUrlInput').value.trim();
-    const statusEl = $('coverUrlStatus');
-    if (!/^https:\/\//i.test(url)) {
-      statusEl.textContent = 'Must be HTTPS';
-      statusEl.className = 'upload-url-status error';
-      return;
-    }
-    statusEl.textContent = 'Loading…';
-    statusEl.className = 'upload-url-status';
-
-    const img = new Image();
-    const ok = await new Promise(res => {
-      img.onload = () => res(true);
-      img.onerror = () => res(false);
-      img.src = url;
-      setTimeout(() => res(false), 8000);
     });
 
-    if (!ok) {
-      statusEl.textContent = 'Failed to load';
-      statusEl.className = 'upload-url-status error';
-      $('coverUrlPreview').innerHTML = '<div class="placeholder">Preview unavailable</div>';
-      return;
+    function renderPrev(url) {
+      if (url) {
+        preview.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = 'Preview';
+        preview.appendChild(img);
+      } else {
+        preview.innerHTML = '<div class="cover-preview-empty">Pick a template and click Generate</div>';
+      }
     }
 
-    const previewBox = $('coverUrlPreview');
-    previewBox.innerHTML = '';
-    const pi = document.createElement('img');
-    pi.src = url;
-    previewBox.appendChild(pi);
+    function updateSave() {
+      const dirty = JSON.stringify(draft) !== JSON.stringify(initial) || pendingPreview || pendingUrl;
+      saveBtn.disabled = generating || saving || !dirty;
+    }
 
-    pendingUrl = url;
-    pendingPreview = null;
-    statusEl.textContent = 'Ready — click Save';
-    statusEl.className = 'upload-url-status success';
-    updateSave();
-  });
+    document.querySelectorAll('#coverTemplates .filter-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#coverTemplates .filter-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedTemplate = btn.dataset.tpl;
+        draft.template = selectedTemplate;
+        pendingPreview = null;
+        pendingUrl = null;
+        renderPrev(null);
+        updateSave();
+      });
+    });
 
-  // ── Save ──
-  $('coverCancel')?.addEventListener('click', closeModal);
-  saveBtn.addEventListener('click', async () => {
-    // ✅ FIX: If nothing pending, generate via Flier first (don't fall back to client-side SVG)
-    if (!pendingPreview && !pendingUrl) {
-      saving = true;
-      saveBtn.textContent = 'Generating…';
+    function bindColor(colorId, hexId, key) {
+      const ci = $(colorId);
+      const hi = $(hexId);
+      ci.addEventListener('input', (e) => {
+        draft[key] = e.target.value;
+        hi.value = e.target.value;
+        ci.parentElement.style.background = e.target.value;
+        updateSave();
+      });
+      hi.addEventListener('input', (e) => {
+        const v = e.target.value.trim();
+        const clamped = clampHex(v);
+        if (clamped) {
+          draft[key] = clamped;
+          ci.value = clamped;
+          ci.parentElement.style.background = clamped;
+          updateSave();
+        }
+      });
+    }
+    bindColor('coverPrimary', 'coverPrimaryHex', 'primary');
+    bindColor('coverAccent', 'coverAccentHex', 'accent');
+
+    $('coverHeadline').addEventListener('input', (e) => { draft.headline = e.target.value; updateSave(); });
+    $('coverSub').addEventListener('input', (e) => { draft.subheadline = e.target.value; updateSave(); });
+    $('coverScene').addEventListener('change', (e) => { selectedScene = e.target.value; updateSave(); });
+
+    genBtn.addEventListener('click', async () => {
+      if (generating) return;
+      generating = true;
+      genBtn.disabled = true;
+      genBtn.textContent = 'Generating…';
       updateSave();
+
       try {
-        pendingUrl = await generateCoverViaFlier({
+        const apiCoverUrl = await generateCoverViaFlier({
           template: selectedTemplate,
           scene: selectedScene,
           palette: $('coverScenePalette').value,
@@ -2566,187 +2461,273 @@ async function hydrateProjectFromServer(pid) {
           seed: S.pid,
           iconUrl: S.project?.iconUrl || null,
         });
-        renderPrev(pendingUrl);
+
+        pendingPreview = null;
+        pendingUrl = apiCoverUrl;
+        renderPrev(apiCoverUrl);
+        toast('Cover generated', 'success');
       } catch (err) {
+        console.error('[Cover] generate failed:', err);
         toast(err.message || 'Generation failed', 'error');
-        saving = false;
-        saveBtn.textContent = 'Save';
+      } finally {
+        generating = false;
+        genBtn.disabled = false;
+        genBtn.textContent = 'Generate';
         updateSave();
-        return;
       }
-    }
+    });
 
-    saving = true;
-    saveBtn.textContent = 'Saving…';
-    updateSave();
-
-    try {
-      const finalUrl = pendingUrl || pendingPreview;
-      const metaNext = { ...(S.project.metaTags || {}), ogImage: finalUrl };
-
-      if (S.session && S.online && !S.isLocalOnly && S.syncState === 'synced') {
-        const res = await apiFetch(API_HOST + '?action=metatags/save', {
-          method: 'POST',
-          body: JSON.stringify({ pid: S.pid, metaTags: metaNext }),
-        });
-        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Save failed');
-
-        await apiFetch(API_HOST + '?action=project/regenerate-preview', {
-          method: 'POST',
-          body: JSON.stringify({ pid: S.pid }),
-        }).catch(() => {});
-      } else {
-        await enqueueSync('metatags-save', { metaTags: metaNext });
-      }
-
-      S.project.metaTags = metaNext;
-      S.project.iconUrl = finalUrl;
+    $('coverFileBtn')?.addEventListener('click', () => $('coverFile')?.click());
+    $('coverFile')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      if (file.size > 1024 * 1024) { toast('Max 1 MB', 'error'); return; }
+      const statusEl = $('coverFileStatus');
+      statusEl.textContent = 'Uploading…';
+      statusEl.className = 'upload-url-status';
 
       try {
-        await IDB.putProject({
-          ...(await IDB.getProject(S.pid)),
-          metaTags: metaNext,
-          iconUrl: finalUrl,
-          updatedAt: Date.now(),
+        const dataUrl = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result);
+          r.onerror = rej;
+          r.readAsDataURL(file);
         });
-        await IDB.setProjectMeta(S.pid, {
-          coverMeta: {
+
+        const res = await apiFetch(API_FLIER + '?action=upload', {
+          method: 'POST',
+          body: JSON.stringify({ dataUrl, kind: 'image' }),
+        });
+        if (!res.ok || !res.data?.success || !res.data.url) {
+          throw new Error(res.data?.error || 'Upload failed');
+        }
+
+        pendingUrl = res.data.url;
+        pendingPreview = null;
+        renderPrev(res.data.url);
+        statusEl.textContent = 'Ready — click Save';
+        statusEl.className = 'upload-url-status success';
+        updateSave();
+      } catch (err) {
+        statusEl.textContent = err.message || 'Upload failed';
+        statusEl.className = 'upload-url-status error';
+      }
+    });
+
+    $('coverUrlLoad')?.addEventListener('click', async () => {
+      const url = $('coverUrlInput').value.trim();
+      const statusEl = $('coverUrlStatus');
+      if (!/^https:\/\//i.test(url)) {
+        statusEl.textContent = 'Must be HTTPS';
+        statusEl.className = 'upload-url-status error';
+        return;
+      }
+      statusEl.textContent = 'Loading…';
+      statusEl.className = 'upload-url-status';
+
+      const img = new Image();
+      const ok = await new Promise(res => {
+        img.onload = () => res(true);
+        img.onerror = () => res(false);
+        img.src = url;
+        setTimeout(() => res(false), 8000);
+      });
+
+      if (!ok) {
+        statusEl.textContent = 'Failed to load';
+        statusEl.className = 'upload-url-status error';
+        $('coverUrlPreview').innerHTML = '<div class="placeholder">Preview unavailable</div>';
+        return;
+      }
+
+      const previewBox = $('coverUrlPreview');
+      previewBox.innerHTML = '';
+      const pi = document.createElement('img');
+      pi.src = url;
+      previewBox.appendChild(pi);
+
+      pendingUrl = url;
+      pendingPreview = null;
+      statusEl.textContent = 'Ready — click Save';
+      statusEl.className = 'upload-url-status success';
+      updateSave();
+    });
+
+    $('coverCancel')?.addEventListener('click', closeModal);
+    saveBtn.addEventListener('click', async () => {
+      if (!pendingPreview && !pendingUrl) {
+        saving = true;
+        saveBtn.textContent = 'Generating…';
+        updateSave();
+        try {
+          pendingUrl = await generateCoverViaFlier({
             template: selectedTemplate,
             scene: selectedScene,
+            palette: $('coverScenePalette').value,
             primary: draft.primary,
             accent: draft.accent,
             headline: draft.headline,
             subheadline: draft.subheadline,
-          },
-        });
-      } catch {}
+            seed: S.pid,
+            iconUrl: S.project?.iconUrl || null,
+          });
+          renderPrev(pendingUrl);
+        } catch (err) {
+          toast(err.message || 'Generation failed', 'error');
+          saving = false;
+          saveBtn.textContent = 'Save';
+          updateSave();
+          return;
+        }
+      }
 
-      cacheProject(S.project);
-      closeModal();
-      toast('Cover saved', 'success');
-      updateHeader();
-      updateProjectIcons();
-      renderPanel();
-    } catch (err) {
-      toast(err.message || 'Save failed', 'error');
-    } finally {
-      saving = false;
-      saveBtn.textContent = 'Save';
+      saving = true;
+      saveBtn.textContent = 'Saving…';
       updateSave();
-    }
-  });
 
-  updateSave();
-}
-// ═══════════════════════════════════════════════════════════
-// COVER GENERATION VIA FLIER API
-// ═══════════════════════════════════════════════════════════
+      try {
+        const finalUrl = pendingUrl || pendingPreview;
+        const metaNext = { ...(S.project.metaTags || {}), ogImage: finalUrl };
 
-async function generateCoverViaFlier({
-  template = 'browser-frame',
-  scene = 'auto',
-  palette = 'auto',
-  primary = '#F59E0B',
-  accent = '#fbbf24',
-  headline = '',
-  subheadline = '',
-  seed = null,
-  iconUrl = null,
-}) {
-  if (!S.online) throw new Error('Requires internet');
-  if (!S.session) throw new Error('Sign in to generate covers');
+        if (S.session && S.online && !S.isLocalOnly && S.syncState === 'synced') {
+          const res = await apiFetch(API_HOST + '?action=metatags/save', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid, metaTags: metaNext }),
+          });
+          if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Save failed');
 
-  // Map the client template names to Flier template names.
-  // COVER_TEMPLATES = browser-frame, hero-short, poster-centered, scene-poster, quote-card, split-image-side
-  const flierTemplate = {
-    'browser-frame': 'browser-frame',
-    'hero-short': 'hero-short',
-    'poster-centered': 'poster-centered',
-    'scene-poster': 'scene-poster',
-    'scene-card': 'scene-card',
-    'quote-card': 'quote-card',
-    'split-image-side': 'split-image-side',
-    'event-poster': 'event-poster',
-    'stat-hero': 'stat-hero',
-    'newspaper-classic': 'newspaper-classic',
-    'image-shadow-bottom': 'image-shadow-bottom',
-    'image-blur-text': 'image-blur-text',
-    'feature-image-top': 'feature-image-top',
-    'image-badge-overlay': 'image-badge-overlay',
-    'strip-bottom': 'strip-bottom',
-    'product-grid-2': 'product-grid-2',
-    'random-lines-top': 'random-lines-top',
-    'image-card-side-text': 'image-card-side-text',
-  }[template] || 'browser-frame';
+          await apiFetch(API_HOST + '?action=project/regenerate-preview', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid }),
+          }).catch(() => {});
+        } else {
+          await enqueueSync('metatags-save', { metaTags: metaNext });
+        }
 
-  // Build a Flier-compatible payload. mode=upload → server renders PNG and returns URL.
-  const payload = {
-    mode: 'upload',
-    type: 'template',
-    template: flierTemplate,
-    size: '1200x630',
-    seed: seed || S.pid || (S.project?.slug || S.project?.name || 'project'),
-    data: {
-      text: {
-        kicker: S.project?.slug ? `@${S.project.slug}` : '',
-        headline: headline || S.project?.name || 'Untitled project',
-        subheadline: subheadline || (S.project?.description || '').slice(0, 160),
-      },
-      style: {
-        variant: 'dark',
-        // Pass explicit primary + accent so we honor user choices
-        colors: { primary, accent },
-        scene,
-        scenePalette: palette,
-        sceneOpacity: 0.85,
-        watermark: true,
-      },
-      images: iconUrl ? { primary: { url: iconUrl } } : {},
-    },
-    upload: {
-      name: `og_${S.pid}_${Date.now()}`,
-    },
-  };
+        S.project.metaTags = metaNext;
+        S.project.iconUrl = finalUrl;
 
-  const res = await apiFetch(API_FLIER + '?action=generate', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+        try {
+          await IDB.putProject({
+            ...(await IDB.getProject(S.pid)),
+            metaTags: metaNext,
+            iconUrl: finalUrl,
+            updatedAt: Date.now(),
+          });
+          await IDB.setProjectMeta(S.pid, {
+            coverMeta: {
+              template: selectedTemplate,
+              scene: selectedScene,
+              primary: draft.primary,
+              accent: draft.accent,
+              headline: draft.headline,
+              subheadline: draft.subheadline,
+            },
+          });
+        } catch {}
 
-  if (!res.ok || !res.data?.success) {
-    const err = res.data?.error || `HTTP ${res.status}`;
-    if (res.status === 429) {
-      throw new Error(`Daily limit reached (${err}). Try again tomorrow or use Upload/URL tab.`);
-    }
-    throw new Error(`Image generation failed: ${err}`);
+        cacheProject(S.project);
+        closeModal();
+        toast('Cover saved', 'success');
+        updateHeader();
+        updateProjectIcons();
+        renderPanel();
+      } catch (err) {
+        toast(err.message || 'Save failed', 'error');
+      } finally {
+        saving = false;
+        saveBtn.textContent = 'Save';
+        updateSave();
+      }
+    });
+
+    updateSave();
   }
 
-  const url = res.data.url || res.data.display_url;
-  if (!url) throw new Error('No URL returned from generator');
+  // ═══════════════════════════════════════════════════════════
+  // COVER GENERATION VIA FLIER API
+  // ═══════════════════════════════════════════════════════════
 
-  return url;
-}
-  function buildCoverSvg(draft) {
-    const W = 1200, H = 630;
-    const p = draft.primary, a = draft.accent, angle = draft.bgAngle;
-    const h = String(draft.headline || '').replace(/[<>&"']/g, '');
-    const s = String(draft.subheadline || '').replace(/[<>&"']/g, '');
-    const rad = (angle * Math.PI) / 180;
-    const x1 = (0.5 - Math.cos(rad) * 0.5).toFixed(3);
-    const y1 = (0.5 - Math.sin(rad) * 0.5).toFixed(3);
-    const x2 = (0.5 + Math.cos(rad) * 0.5).toFixed(3);
-    const y2 = (0.5 + Math.sin(rad) * 0.5).toFixed(3);
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">
-      <defs><linearGradient id="bg" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">
-        <stop offset="0" stop-color="${p}"/><stop offset="1" stop-color="${a}"/>
-      </linearGradient></defs>
-      <rect width="${W}" height="${H}" fill="url(#bg)"/>
-      <rect x="60" y="60" width="${W-120}" height="${H-120}" rx="24" fill="rgba(0,0,0,0.35)"/>
-      <text x="140" y="300" font-family="system-ui,sans-serif" font-size="64" font-weight="900" fill="#ffffff" letter-spacing="-2">${h}</text>
-      <text x="140" y="360" font-family="system-ui,sans-serif" font-size="24" font-weight="500" fill="rgba(255,255,255,0.8)">${s}</text>
-      <rect x="140" y="410" width="180" height="52" rx="26" fill="${p}"/>
-      <text x="230" y="443" font-family="system-ui,sans-serif" font-size="16" font-weight="700" fill="#0a0c10" text-anchor="middle">Visit project</text>
-    </svg>`;
+  async function generateCoverViaFlier({
+    template = 'browser-frame',
+    scene = 'auto',
+    palette = 'auto',
+    primary = '#F59E0B',
+    accent = '#fbbf24',
+    headline = '',
+    subheadline = '',
+    seed = null,
+    iconUrl = null,
+  }) {
+    if (!S.online) throw new Error('Requires internet');
+    if (!S.session) throw new Error('Sign in to generate covers');
+
+    const flierTemplate = {
+      'browser-frame': 'browser-frame',
+      'hero-short': 'hero-short',
+      'poster-centered': 'poster-centered',
+      'scene-poster': 'scene-poster',
+      'scene-card': 'scene-card',
+      'quote-card': 'quote-card',
+      'split-image-side': 'split-image-side',
+      'event-poster': 'event-poster',
+      'stat-hero': 'stat-hero',
+      'newspaper-classic': 'newspaper-classic',
+      'image-shadow-bottom': 'image-shadow-bottom',
+      'image-blur-text': 'image-blur-text',
+      'feature-image-top': 'feature-image-top',
+      'image-badge-overlay': 'image-badge-overlay',
+      'strip-bottom': 'strip-bottom',
+      'product-grid-2': 'product-grid-2',
+      'random-lines-top': 'random-lines-top',
+      'image-card-side-text': 'image-card-side-text',
+    }[template] || 'browser-frame';
+
+    const payload = {
+      mode: 'upload',
+      type: 'template',
+      template: flierTemplate,
+      size: '1200x630',
+      seed: seed || S.pid || (S.project?.slug || S.project?.name || 'project'),
+      data: {
+        text: {
+          kicker: S.project?.slug ? `@${S.project.slug}` : '',
+          headline: headline || S.project?.name || 'Untitled project',
+          subheadline: subheadline || (S.project?.description || '').slice(0, 160),
+        },
+        style: {
+          variant: 'dark',
+          colors: { primary, accent },
+          scene,
+          scenePalette: palette,
+          sceneOpacity: 0.85,
+          watermark: true,
+        },
+        images: iconUrl ? { primary: { url: iconUrl } } : {},
+      },
+      upload: {
+        name: `og_${S.pid}_${Date.now()}`,
+      },
+    };
+
+    const res = await apiFetch(API_FLIER + '?action=generate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok || !res.data?.success) {
+      const err = res.data?.error || `HTTP ${res.status}`;
+      if (res.status === 429) {
+        throw new Error(`Daily limit reached (${err}). Try again tomorrow or use Upload/URL tab.`);
+      }
+      throw new Error(`Image generation failed: ${err}`);
+    }
+
+    const url = res.data.url || res.data.display_url;
+    if (!url) throw new Error('No URL returned from generator');
+
+    return url;
   }
 
   async function clearCoverDirect() {
@@ -2787,144 +2768,140 @@ async function generateCoverViaFlier({
   // ═══════════════════════════════════════════════════════════
 
   async function openIconPicker(onSelect) {
-  const isAuthed = !!S.session;
-  const currentUrl = S.project?.iconUrl || null;
+    const isAuthed = !!S.session;
+    const currentUrl = S.project?.iconUrl || null;
 
-  openModal(`
-    <div class="icon-picker-modal">
-      <div class="modal-title">Project icon</div>
-      <div class="modal-desc">Pick a preset, customize, or upload.</div>
-      ${currentUrl ? `<div class="icon-picker-current"><div class="project-icon-box icon-picker-current-img"><img src="${escapeAttr(currentUrl)}" alt=""></div><div style="flex:1;font-size:11px;color:var(--theme-text-tertiary);">Current icon</div></div>` : ''}
-      ${isAuthed ? `<div class="icon-tabs"><button class="icon-tab active" data-icon-tab="presets">Presets</button><button class="icon-tab" data-icon-tab="upload">Upload</button></div>` : ''}
-      <div class="icon-mode-panel active" data-icon-panel="presets">
-        <div id="iconPickerGrid" class="icon-picker-grid"></div>
-      </div>
-      ${isAuthed ? `
-        <div class="icon-mode-panel" data-icon-panel="upload">
-          <input type="file" id="iconUploadFile" accept="image/*" style="display:none;">
-          <button class="btn btn-secondary btn-block" id="iconUploadFromFile">${svg('upload', 12, 2.2)} Choose image</button>
-          <div class="field-hint">PNG, JPG, WebP. Max 1 MB.</div>
-          <div id="iconUploadStatus" class="upload-url-status"></div>
+    openModal(`
+      <div class="icon-picker-modal">
+        <div class="modal-title">Project icon</div>
+        <div class="modal-desc">Pick a preset, customize, or upload.</div>
+        ${currentUrl ? `<div class="icon-picker-current"><div class="project-icon-box icon-picker-current-img"><img src="${escapeAttr(currentUrl)}" alt=""></div><div style="flex:1;font-size:11px;color:var(--theme-text-tertiary);">Current icon</div></div>` : ''}
+        ${isAuthed ? `<div class="icon-tabs"><button class="icon-tab active" data-icon-tab="presets">Presets</button><button class="icon-tab" data-icon-tab="upload">Upload</button></div>` : ''}
+        <div class="icon-mode-panel active" data-icon-panel="presets">
+          <div id="iconPickerGrid" class="icon-picker-grid"></div>
         </div>
-      ` : ''}
-      <div class="icon-picker-footer">
-        <button class="btn btn-secondary" id="iconPickerCancel">Cancel</button>
-        <button class="btn btn-primary" id="iconPickerSave" disabled>${svg('check', 10, 2.4)} Save</button>
+        ${isAuthed ? `
+          <div class="icon-mode-panel" data-icon-panel="upload">
+            <input type="file" id="iconUploadFile" accept="image/*" style="display:none;">
+            <button class="btn btn-secondary btn-block" id="iconUploadFromFile">${svg('upload', 12, 2.2)} Choose image</button>
+            <div class="field-hint">PNG, JPG, WebP. Max 1 MB.</div>
+            <div id="iconUploadStatus" class="upload-url-status"></div>
+          </div>
+        ` : ''}
+        <div class="icon-picker-footer">
+          <button class="btn btn-secondary" id="iconPickerCancel">Cancel</button>
+          <button class="btn btn-primary" id="iconPickerSave" disabled>${svg('check', 10, 2.4)} Save</button>
+        </div>
       </div>
-    </div>
-  `);
+    `);
 
-  let selectedUrl = null;
+    let selectedUrl = null;
 
-  document.querySelectorAll('[data-icon-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('[data-icon-tab]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('[data-icon-panel]').forEach(p => {
-        p.classList.toggle('active', p.dataset.iconPanel === btn.dataset.iconTab);
-      });
-    });
-  });
-
-  const grid = $('iconPickerGrid');
-  grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
-
-  try {
-    const res = await apiFetch(API_FLIER + '?action=avatar/preview', {
-      method: 'POST',
-      body: JSON.stringify({
-        username: (S.project.slug || S.pid || 'project').replace(/[^a-z0-9]/gi, '').toLowerCase(),
-        displayName: S.project.name || 'Project',
-      }),
-    });
-
-    grid.innerHTML = '';
-
-    if (res.ok && res.data?.success && Array.isArray(res.data.variants)) {
-      res.data.variants.forEach(v => {
-        const btn = document.createElement('button');
-        btn.className = 'icon-option';
-        btn.type = 'button';
-        btn.innerHTML = `<img src="${escapeAttr(v.dataUrl)}" alt=""><span class="icon-label">${escapeHTML(v.label || v.id)}</span>`;
-        btn.addEventListener('click', async () => {
-          // Upload immediately so we store an HTTPS URL, not a data URI.
-          // Data URIs inflate the project record and get served on every
-          // projects/list response — this keeps the record ~200 bytes.
-          btn.disabled = true;
-          try {
-            const up = await apiFetch(API_FLIER + '?action=upload', {
-              method: 'POST',
-              body: JSON.stringify({ dataUrl: v.dataUrl, kind: 'icon' }),
-            });
-            if (!up.ok || !up.data?.success || !up.data.url) {
-              throw new Error(up.data?.error || 'Upload failed');
-            }
-            selectedUrl = up.data.url;
-            grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
-            btn.classList.add('selected');
-            $('iconPickerSave').disabled = false;
-          } catch (err) {
-            toast(err.message || 'Upload failed', 'error');
-          } finally {
-            btn.disabled = false;
-          }
+    document.querySelectorAll('[data-icon-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-icon-tab]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('[data-icon-panel]').forEach(p => {
+          p.classList.toggle('active', p.dataset.iconPanel === btn.dataset.iconTab);
         });
-        grid.appendChild(btn);
       });
-    } else {
-      grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;">Could not load presets</div>';
-    }
-  } catch (err) {
-    console.error('[IconPicker]', err);
-    grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;">Could not load</div>';
-  }
+    });
 
-  // Upload tab
-  $('iconUploadFromFile')?.addEventListener('click', () => $('iconUploadFile')?.click());
-  $('iconUploadFile')?.addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (file.size > 1024 * 1024) { toast('Max 1 MB', 'error'); return; }
-
-    const statusEl = $('iconUploadStatus');
-    statusEl.textContent = 'Uploading…';
-    statusEl.className = 'upload-url-status';
+    const grid = $('iconPickerGrid');
+    grid.innerHTML = Array.from({ length: 5 }, () => '<div class="icon-skeleton"></div>').join('');
 
     try {
-      const dataUrl = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
-
-      const res = await apiFetch(API_FLIER + '?action=upload', {
+      const res = await apiFetch(API_FLIER + '?action=avatar/preview', {
         method: 'POST',
-        body: JSON.stringify({ dataUrl, kind: 'icon' }),
+        body: JSON.stringify({
+          username: (S.project.slug || S.pid || 'project').replace(/[^a-z0-9]/gi, '').toLowerCase(),
+          displayName: S.project.name || 'Project',
+        }),
       });
 
-      if (!res.ok || !res.data?.success || !res.data.url) {
-        throw new Error(res.data?.error || 'Upload failed');
+      grid.innerHTML = '';
+
+      if (res.ok && res.data?.success && Array.isArray(res.data.variants)) {
+        res.data.variants.forEach(v => {
+          const btn = document.createElement('button');
+          btn.className = 'icon-option';
+          btn.type = 'button';
+          btn.innerHTML = `<img src="${escapeAttr(v.dataUrl)}" alt=""><span class="icon-label">${escapeHTML(v.label || v.id)}</span>`;
+          btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+              const up = await apiFetch(API_FLIER + '?action=upload', {
+                method: 'POST',
+                body: JSON.stringify({ dataUrl: v.dataUrl, kind: 'icon' }),
+              });
+              if (!up.ok || !up.data?.success || !up.data.url) {
+                throw new Error(up.data?.error || 'Upload failed');
+              }
+              selectedUrl = up.data.url;
+              grid.querySelectorAll('.icon-option').forEach(o => o.classList.remove('selected'));
+              btn.classList.add('selected');
+              $('iconPickerSave').disabled = false;
+            } catch (err) {
+              toast(err.message || 'Upload failed', 'error');
+            } finally {
+              btn.disabled = false;
+            }
+          });
+          grid.appendChild(btn);
+        });
+      } else {
+        grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;">Could not load presets</div>';
       }
-
-      selectedUrl = res.data.url;
-      statusEl.textContent = 'Uploaded — click Save';
-      statusEl.className = 'upload-url-status success';
-      $('iconPickerSave').disabled = false;
     } catch (err) {
-      statusEl.textContent = err.message || 'Upload failed';
-      statusEl.className = 'upload-url-status error';
+      console.error('[IconPicker]', err);
+      grid.innerHTML = '<div class="icon-placeholder" style="grid-column:1/-1;">Could not load</div>';
     }
-  });
 
-  $('iconPickerCancel')?.addEventListener('click', closeModal);
-  $('iconPickerSave')?.addEventListener('click', () => {
-    if (!selectedUrl) return;
-    closeModal();
-    if (typeof onSelect === 'function') onSelect(selectedUrl);
-  });
-}
+    $('iconUploadFromFile')?.addEventListener('click', () => $('iconUploadFile')?.click());
+    $('iconUploadFile')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      if (file.size > 1024 * 1024) { toast('Max 1 MB', 'error'); return; }
+
+      const statusEl = $('iconUploadStatus');
+      statusEl.textContent = 'Uploading…';
+      statusEl.className = 'upload-url-status';
+
+      try {
+        const dataUrl = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result);
+          r.onerror = rej;
+          r.readAsDataURL(file);
+        });
+
+        const res = await apiFetch(API_FLIER + '?action=upload', {
+          method: 'POST',
+          body: JSON.stringify({ dataUrl, kind: 'icon' }),
+        });
+
+        if (!res.ok || !res.data?.success || !res.data.url) {
+          throw new Error(res.data?.error || 'Upload failed');
+        }
+
+        selectedUrl = res.data.url;
+        statusEl.textContent = 'Uploaded — click Save';
+        statusEl.className = 'upload-url-status success';
+        $('iconPickerSave').disabled = false;
+      } catch (err) {
+        statusEl.textContent = err.message || 'Upload failed';
+        statusEl.className = 'upload-url-status error';
+      }
+    });
+
+    $('iconPickerCancel')?.addEventListener('click', closeModal);
+    $('iconPickerSave')?.addEventListener('click', () => {
+      if (!selectedUrl) return;
+      closeModal();
+      if (typeof onSelect === 'function') onSelect(selectedUrl);
+    });
+  }
 
   // ═══════════════════════════════════════════════════════════
   // FILES PANEL
@@ -3200,6 +3177,8 @@ async function generateCoverViaFlier({
             body: JSON.stringify({ pid: S.pid, files: { [path]: text } }),
           });
           if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Save failed');
+          markSynced(S.pid);
+          updateHeader();
         } else {
           await enqueueSync('file-save', { path, content: text });
         }
@@ -3304,90 +3283,116 @@ async function generateCoverViaFlier({
   }
 
   async function deployNow() {
-  if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
-  if (S.isLocalOnly) { toast("Local projects can't be deployed — sync to account first", 'warning'); return; }
-  if (S.syncState === 'needs-pull') {
-    toast('Sync files first before deploying', 'warning', 4000);
-    return;
-  }
-
-  let files = [];
-  try { files = await IDB.listFiles(S.pid); } catch {}
-  const fileMap = {};
-  for (const f of files) {
-    if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
-    if (typeof f.content !== 'string') continue;
-    fileMap[f.path] = f.content;
-  }
-  if (Object.keys(fileMap).length === 0) { toast('No files to deploy', 'warning'); return; }
-
-  confirmModal(
-    `Deploy ${Object.keys(fileMap).length} file${Object.keys(fileMap).length === 1 ? '' : 's'}?`,
-    'This will build and deploy to a live URL.',
-    'Deploy',
-    false,
-    async () => {
-      showLoading('Deploying', 'Uploading files…');
-      try {
-        $('loadingDesc').textContent = 'Deploying…';
-        const res = await apiFetch(API_HOST + '?action=deploy', {
-          method: 'POST',
-          body: JSON.stringify({ pid: S.pid, files: fileMap }),
-        });
-
-        if (!res.ok || !res.data?.success) {
-          const msg = res.data?.error
-            || (res.status === 403 ? 'You don\'t have permission to deploy this project'
-              : res.status === 404 ? 'Project not found on server'
-              : 'Deploy failed');
-          throw new Error(msg);
-        }
-
-        const returnedUrl = res.data.url || null;
-        if (returnedUrl) {
-          const liveDeployment = {
-            url: returnedUrl,
-            serveUrl: res.data.serveUrl || null,
-            versionId: res.data.versionId || null,
-            deploymentId: res.data.deploymentId,
-            deployedAt: Date.now(),
-            state: 'READY',
-          };
-          S.deployState = liveDeployment;
-          S.project.deployment = liveDeployment;
-        }
-
-        markSynced(S.pid);
-
-        $('loadingDesc').textContent = 'Confirming…';
-        const live = await pollDeployStatus(S.pid);
-        if (live) {
-          S.deployState = live;
-          S.project.deployment = live;
-        }
-
-        hideLoading();
-        toast('Deployed · ' + (live?.url || returnedUrl || 'live'), 'success');
-
-        if (res.data.filesSkipped > 0) {
-          toast(`${res.data.filesSkipped} file(s) skipped — usually size or invalid path`, 'warning', 4000);
-        }
-
-        // ✅ Invalidate cache and re-fetch history so (N/5) badges and
-        // the history list refresh immediately after deploy.
-        S.deployCache = { history: null, currentId: null, total: 0, at: 0, maxDeployments: 5 };
-        await loadDeployState();
-        await new Promise(r => setTimeout(r, 400));
-
-        if (['deployments', 'overview', 'commits'].includes(S.activeTab)) renderPanel();
-        updateHeader();
-      } catch (err) {
-        hideLoading();
-        toast(err.message || 'Deploy failed', 'error', 5000);
-      }
+    if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
+    if (S.isLocalOnly) { toast("Local projects can't be deployed — sync to account first", 'warning'); return; }
+    if (S.syncState === 'needs-pull') {
+      toast('Sync files first before deploying', 'warning', 4000);
+      return;
     }
-  );
-}
+
+    let files = [];
+    try { files = await IDB.listFiles(S.pid); } catch {}
+    const fileMap = {};
+    for (const f of files) {
+      if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
+      if (typeof f.content !== 'string') continue;
+      fileMap[f.path] = f.content;
+    }
+    if (Object.keys(fileMap).length === 0) { toast('No files to deploy', 'warning'); return; }
+
+    confirmModal(
+      `Deploy ${Object.keys(fileMap).length} file${Object.keys(fileMap).length === 1 ? '' : 's'}?`,
+      'This will build and deploy to a live URL.',
+      'Deploy',
+      false,
+      async () => {
+        showLoading('Deploying', 'Uploading files…');
+        try {
+          $('loadingDesc').textContent = 'Deploying…';
+          const res = await apiFetch(API_HOST + '?action=deploy', {
+            method: 'POST',
+            body: JSON.stringify({ pid: S.pid, files: fileMap }),
+          });
+
+          if (!res.ok || !res.data?.success) {
+            const msg = res.data?.error
+              || (res.status === 403 ? 'You don\'t have permission to deploy this project'
+                : res.status === 404 ? 'Project not found on server'
+                : 'Deploy failed');
+            throw new Error(msg);
+          }
+
+          const returnedUrl = res.data.url || null;
+          if (returnedUrl) {
+            const liveDeployment = {
+              url: returnedUrl,
+              serveUrl: res.data.serveUrl || null,
+              versionId: res.data.versionId || null,
+              deploymentId: res.data.deploymentId,
+              deployedAt: Date.now(),
+              state: 'READY',
+            };
+            S.deployState = liveDeployment;
+            S.project.deployment = liveDeployment;
+          }
+
+          markSynced(S.pid);
+
+          $('loadingDesc').textContent = 'Confirming…';
+          const live = await pollDeployStatus(S.pid);
+          if (live) {
+            S.deployState = live;
+            S.project.deployment = live;
+          }
+
+          hideLoading();
+
+          const deployUrls = res.data.deploymentId
+            ? buildDeploymentUrls(res.data.deploymentId)
+            : null;
+          const cleanPreviewUrl = deployUrls?.clean || live?.url || returnedUrl || null;
+
+          if (cleanPreviewUrl) {
+            toast('Deployed successfully', 'success', 2400);
+            openModal(`
+              <div class="modal-title">Deployed</div>
+              <div class="modal-desc">Your project is live. Copy the link or open the preview.</div>
+              <div class="field">
+                <label class="field-label">Clean URL (version-pinned)</label>
+                <div style="display:flex;gap:5px;">
+                  <input class="input mono" id="postDeployUrl" value="${escapeAttr(cleanPreviewUrl)}" readonly onclick="this.select()">
+                  <button class="btn btn-secondary btn-icon" id="postDeployCopy" type="button" aria-label="Copy">${svg('copy', 12, 2.2)}</button>
+                </div>
+              </div>
+              <div class="modal-actions">
+                <a class="btn btn-secondary" href="${escapeAttr(cleanPreviewUrl)}" target="_blank" rel="noopener">${svg('external', 12, 2.2)} Open</a>
+                <button class="btn btn-primary" onclick="closeModal()">Done</button>
+              </div>
+            `);
+            $('postDeployCopy')?.addEventListener('click', () => {
+              if (copyToClipboard(cleanPreviewUrl)) toast('Copied', 'success', 1000);
+            });
+          } else {
+            toast('Deployed', 'success');
+          }
+
+          if (res.data.filesSkipped > 0) {
+            toast(`${res.data.filesSkipped} file(s) skipped — usually size or invalid path`, 'warning', 4000);
+          }
+
+          S.deployCache = { history: null, currentId: null, total: 0, at: 0, maxDeployments: 5 };
+          await loadDeployState();
+          await new Promise(r => setTimeout(r, 800));
+
+          if (['deployments', 'overview', 'commits'].includes(S.activeTab)) renderPanel();
+          updateHeader();
+        } catch (err) {
+          hideLoading();
+          toast(err.message || 'Deploy failed', 'error', 5000);
+        }
+      }
+    );
+  }
 
   async function redeployVersion(versionId) {
     if (!S.isEditor || !S.online) { toast('Requires internet', 'warning'); return; }
@@ -3443,256 +3448,344 @@ async function generateCoverViaFlier({
   // ═══════════════════════════════════════════════════════════
 
   async function renderDeploymentsPanel(panel) {
-  if (!gate(panel, { label: 'Deployments' })) return;
-  panel.innerHTML = skeletonCard(3) + skeletonCard(6);
+    if (!gate(panel, { label: 'Deployments' })) return;
+    panel.innerHTML = skeletonCard(3) + skeletonCard(6);
 
-  const now = Date.now();
-  let current, history, currentId, total, maxDeployments;
-  if (S.deployCache.history && (now - S.deployCache.at) < DEPLOY_HISTORY_CACHE_TTL) {
-    current = S.deployState;
-    history = S.deployCache.history;
-    currentId = S.deployCache.currentId;
-    total = S.deployCache.total;
-    maxDeployments = S.deployCache.maxDeployments;
-  } else {
-    const [statusRes, historyRes] = await Promise.all([
-      apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.pid)),
-      apiFetch(API_HOST + '?action=deployment/history&pid=' + encodeURIComponent(S.pid)),
-    ]);
-    current = statusRes.ok ? statusRes.data?.deployment : null;
-    history = historyRes.ok ? (historyRes.data?.deployments || []) : [];
-    currentId = historyRes.ok ? historyRes.data?.currentDeploymentId : null;
-    total = historyRes.ok ? historyRes.data?.total : history.length;
-    maxDeployments = historyRes.ok ? historyRes.data?.maxDeployments : 5;
-    S.deployCache = { history, currentId, total, maxDeployments, at: now };
-  }
-
-  S.deployState = current;
-  S.project.deployment = current || S.project.deployment;
-  bumpTabCount('deployments', history.length);
-
-  const isLive = current?.url && current.state !== 'OFFLINE';
-  const isOffline = current?.state === 'OFFLINE';
-  const needsRedeploy = current && !current.url && !isOffline;
-  const canDeploy = S.isEditor && S.online && S.syncState === 'synced';
-
-  const previewIds = new Set(
-    history.filter(d => d.hasSnapshot === true).slice(0, 3).map(d => d.id)
-  );
-
-  const currentBlock = (() => {
-    if (isLive) {
-      return `
-        <div class="deploy-row current">
-          <div class="deploy-icon">${svg('check', 13, 2.2)}</div>
-          <div class="deploy-info">
-            <div class="deploy-title">Current deploy <span class="badge success" style="font-size:8px">CURRENT</span></div>
-            <div class="deploy-sub mono" style="font-size:10px;word-break:break-all;">${escapeHTML(current.url)}</div>
-            <div class="deploy-sub">${timeAgo(current.deployedAt)} · ${escapeHTML(current.state || 'READY')}</div>
-          </div>
-          <div class="deploy-actions">
-            <button class="btn btn-ghost btn-icon" id="btnCopyLiveUrl" title="Copy URL">${svg('copy', 10, 2.2)}</button>
-            <a class="btn btn-ghost btn-icon" href="${escapeAttr(current.url)}" target="_blank" rel="noopener" title="Open">${svg('external', 10, 2.2)}</a>
-            ${S.isEditor ? `<button class="btn btn-ghost btn-icon" id="btnTakeOffline" title="Take offline">${svg('eyeOff', 10, 2.2)}</button>` : ''}
-          </div>
-        </div>
-      `;
+    const now = Date.now();
+    let current, history, currentId, total, maxDeployments;
+    if (S.deployCache.history && (now - S.deployCache.at) < DEPLOY_HISTORY_CACHE_TTL) {
+      current = S.deployState;
+      history = S.deployCache.history;
+      currentId = S.deployCache.currentId;
+      total = S.deployCache.total;
+      maxDeployments = S.deployCache.maxDeployments;
+    } else {
+      const [statusRes, historyRes] = await Promise.all([
+        apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.pid)),
+        apiFetch(API_HOST + '?action=deployment/history&pid=' + encodeURIComponent(S.pid)),
+      ]);
+      current = statusRes.ok ? statusRes.data?.deployment : null;
+      history = historyRes.ok ? (historyRes.data?.deployments || []) : [];
+      currentId = historyRes.ok ? historyRes.data?.currentDeploymentId : null;
+      total = historyRes.ok ? historyRes.data?.total : history.length;
+      maxDeployments = historyRes.ok ? historyRes.data?.maxDeployments : 5;
+      S.deployCache = { history, currentId, total, maxDeployments, at: now };
     }
-    if (needsRedeploy) {
+
+    S.deployState = current;
+    S.project.deployment = current || S.project.deployment;
+    bumpTabCount('deployments', history.length);
+
+    const isLive = current?.url && current.state !== 'OFFLINE';
+    const isOffline = current?.state === 'OFFLINE';
+    const needsRedeploy = current && !current.url && !isOffline;
+    const canDeploy = S.isEditor && S.online && S.syncState === 'synced';
+
+    const previewIds = new Set(
+      history.filter(d => d.hasSnapshot === true).slice(0, 3).map(d => d.id)
+    );
+
+    const currentBlock = (() => {
+      if (isLive) {
+        return `
+          <div class="deploy-row current">
+            <div class="deploy-icon">${svg('check', 13, 2.2)}</div>
+            <div class="deploy-info">
+              <div class="deploy-title">Current deploy <span class="badge success" style="font-size:8px">CURRENT</span></div>
+              <div class="deploy-sub mono" style="font-size:10px;overflow-wrap:anywhere;">${escapeHTML(current.url)}</div>
+              <div class="deploy-sub">${timeAgo(current.deployedAt)} · ${escapeHTML(current.state || 'READY')}</div>
+            </div>
+            <div class="deploy-actions">
+              <button class="btn btn-ghost btn-icon" id="btnCopyLiveUrl" title="Copy URL">${svg('copy', 10, 2.2)}</button>
+              <a class="btn btn-ghost btn-icon" href="${escapeAttr(current.url)}" target="_blank" rel="noopener" title="Open">${svg('external', 10, 2.2)}</a>
+              ${S.isEditor ? `<button class="btn btn-ghost btn-icon" id="btnTakeOffline" title="Take offline">${svg('eyeOff', 10, 2.2)}</button>` : ''}
+            </div>
+          </div>
+        `;
+      }
+      if (needsRedeploy) {
+        return `
+          <div class="deploy-row">
+            <div class="deploy-icon" style="color:var(--theme-warning)">${svg('alert', 13, 2.2)}</div>
+            <div class="deploy-info">
+              <div class="deploy-title">Needs redeploy <span class="badge warning" style="font-size:8px">NO URL</span></div>
+              <div class="deploy-sub">Deployment record exists but has no live URL</div>
+            </div>
+            ${canDeploy ? `<button class="btn btn-primary btn-sm" id="btnRedeployNow">Redeploy</button>` : ''}
+          </div>
+        `;
+      }
+      if (isOffline) {
+        return `
+          <div class="deploy-row">
+            <div class="deploy-icon" style="color:var(--theme-text-tertiary)">${svg('eyeOff', 13, 2.2)}</div>
+            <div class="deploy-info">
+              <div class="deploy-title">Offline</div>
+              <div class="deploy-sub">${current.previousUrl ? 'Last live at: ' + escapeHTML(current.previousUrl) : 'Taken offline'}</div>
+            </div>
+            ${canDeploy ? `<button class="btn btn-primary btn-sm" id="btnDeployNow">Deploy</button>` : ''}
+          </div>
+        `;
+      }
+      if (S.syncState === 'local' || S.syncState === 'orphan') {
+        const hint = S.syncState === 'orphan' ? "This project isn't on the server yet." : "Local projects can't be deployed.";
+        return `
+          <div style="padding:14px;">
+            <div style="font-size:11.5px;color:var(--theme-text-tertiary);margin-bottom:8px;">${hint}</div>
+            <button class="btn btn-primary btn-sm" id="btnPushFirst">Push to server</button>
+          </div>
+        `;
+      }
       return `
         <div class="deploy-row">
-          <div class="deploy-icon" style="color:var(--theme-warning)">${svg('alert', 13, 2.2)}</div>
+          <div class="deploy-icon">${svg('rocket', 13, 2.2)}</div>
           <div class="deploy-info">
-            <div class="deploy-title">Needs redeploy <span class="badge warning" style="font-size:8px">NO URL</span></div>
-            <div class="deploy-sub">Deployment record exists but has no live URL</div>
+            <div class="deploy-title">Never deployed</div>
+            <div class="deploy-sub">Deploy to start building history</div>
           </div>
-          ${canDeploy ? `<button class="btn btn-primary btn-sm" id="btnRedeployNow">Redeploy</button>` : ''}
+          ${canDeploy ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">Deploy</button>` : ''}
         </div>
       `;
-    }
-    if (isOffline) {
-      return `
-        <div class="deploy-row">
-          <div class="deploy-icon" style="color:var(--theme-text-tertiary)">${svg('eyeOff', 13, 2.2)}</div>
-          <div class="deploy-info">
-            <div class="deploy-title">Offline</div>
-            <div class="deploy-sub">${current.previousUrl ? 'Last live at: ' + escapeHTML(current.previousUrl) : 'Taken offline'}</div>
-          </div>
-          ${canDeploy ? `<button class="btn btn-primary btn-sm" id="btnDeployNow">Deploy</button>` : ''}
+    })();
+
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('rocket', 13, 2.2)} Deployments</div>
+          ${canDeploy ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">${svg('rocket', 10, 2.4)} Deploy</button>` : ''}
         </div>
-      `;
-    }
-    if (S.syncState === 'local' || S.syncState === 'orphan') {
-      const hint = S.syncState === 'orphan' ? "This project isn't on the server yet." : "Local projects can't be deployed.";
-      return `
-        <div style="padding:14px;">
-          <div style="font-size:11.5px;color:var(--theme-text-tertiary);margin-bottom:8px;">${hint}</div>
-          <button class="btn btn-primary btn-sm" id="btnPushFirst">Push to server</button>
+        <div class="card-body flush">
+          ${currentBlock}
         </div>
-      `;
-    }
-    return `
-      <div class="deploy-row">
-        <div class="deploy-icon">${svg('rocket', 13, 2.2)}</div>
-        <div class="deploy-info">
-          <div class="deploy-title">Never deployed</div>
-          <div class="deploy-sub">Deploy to start building history</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('clock', 13, 2.2)} History (${history.length}${maxDeployments ? ` of ${maxDeployments}` : ''})</div>
+          <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshHistory">${svg('refresh', 10, 2.2)}</button>
         </div>
-        ${canDeploy ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">Deploy</button>` : ''}
+        <div class="card-body tight">
+          ${history.length === 0
+            ? emptyState('clock', 'No deployments', 'Deploy your project to start building history.')
+            : `<div class="row-list" id="deployHistoryList">${history.map(d => renderDeploymentRow(d, currentId, previewIds)).join('')}</div>
+               <div class="field-hint" style="margin-top:8px;">Deploys keep the ${maxDeployments || 5} most recent snapshots.${history.length >= (maxDeployments || 5) ? ' You\'re at the limit — the next deploy will prune the oldest.' : ''}</div>`}
+        </div>
       </div>
     `;
-  })();
 
-  panel.innerHTML = `
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">${svg('rocket', 13, 2.2)} Deployments</div>
-        ${canDeploy ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">${svg('rocket', 10, 2.4)} Deploy</button>` : ''}
-      </div>
-      <div class="card-body flush">
-        ${currentBlock}
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">${svg('clock', 13, 2.2)} History (${history.length}${maxDeployments ? ` of ${maxDeployments}` : ''})</div>
-        <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshHistory">${svg('refresh', 10, 2.2)}</button>
-      </div>
-      <div class="card-body tight">
-        ${history.length === 0
-          ? emptyState('clock', 'No deployments', 'Deploy your project to start building history.')
-          : `<div class="row-list">${history.map(d => renderDeploymentRow(d, currentId, previewIds)).join('')}</div>
-             <div class="field-hint" style="margin-top:8px;">Deploys keep the ${maxDeployments || 5} most recent snapshots.${history.length >= (maxDeployments || 5) ? ' You\'re at the limit — the next deploy will prune the oldest.' : ''}</div>`}
-      </div>
-    </div>
-  `;
-
-  $('btnDeployNow')?.addEventListener('click', deployNow);
-  $('btnRedeployNow')?.addEventListener('click', deployNow);
-  $('btnPushFirst')?.addEventListener('click', () => {
-    if (S.syncState === 'orphan') pushOrphanToServer();
-    else if (S.syncState === 'local') promoteLocalProject();
-  });
-  $('btnRefreshHistory')?.addEventListener('click', () => {
-    S.deployCache = { history: null, currentId: null, total: 0, at: 0, maxDeployments: 5 };
-    renderPanel();
-  });
-  $('btnTakeOffline')?.addEventListener('click', takeOffline);
-  $('btnCopyLiveUrl')?.addEventListener('click', () => {
-    const url = current?.url || '';
-    if (!url) return;
-    if (copyToClipboard(url)) toast('URL copied', 'success', 1200);
-    else toast('Copy failed', 'error');
-  });
-  panel.querySelectorAll('[data-copy-text]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (copyToClipboard(btn.dataset.copyText)) toast('Copied', 'success', 1200);
+    $('btnDeployNow')?.addEventListener('click', deployNow);
+    $('btnRedeployNow')?.addEventListener('click', deployNow);
+    $('btnPushFirst')?.addEventListener('click', () => {
+      if (S.syncState === 'orphan') pushOrphanToServer();
+      else if (S.syncState === 'local') promoteLocalProject();
+    });
+    $('btnRefreshHistory')?.addEventListener('click', () => {
+      S.deployCache = { history: null, currentId: null, total: 0, at: 0, maxDeployments: 5 };
+      renderPanel();
+    });
+    $('btnTakeOffline')?.addEventListener('click', takeOffline);
+    $('btnCopyLiveUrl')?.addEventListener('click', () => {
+      const url = current?.url || '';
+      if (!url) return;
+      if (copyToClipboard(url)) toast('URL copied', 'success', 1200);
       else toast('Copy failed', 'error');
     });
-  });
-  panel.querySelectorAll('[data-redeploy]').forEach(btn => {
-    btn.addEventListener('click', () => redeployVersion(btn.dataset.redeploy));
-  });
-  panel.querySelectorAll('[data-delete-deploy]').forEach(btn => {
-    btn.addEventListener('click', () => confirmDeleteDeployment(btn.dataset.deleteDeploy));
-  });
-  panel.querySelectorAll('[data-preview-deploy]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const url = buildProjectUrl({ deploymentId: btn.dataset.previewDeploy });
-      if (url) window.open(url, '_blank', 'noopener');
-    });
-  });
-    panel.querySelectorAll('[data-preview-menu]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openDeploymentLinks(btn.dataset.previewMenu, btn);
-    });
-  });
-}
 
-function openDeploymentLinks(deploymentId, anchor) {
-  const urls = buildDeploymentUrls(deploymentId);
-  if (!urls) { toast('URLs unavailable — missing username or slug', 'warning'); return; }
-
-  const existing = document.querySelector('.deployment-links-popover');
-  if (existing) existing.remove();
-
-  const pop = el('div', { class: 'deployment-links-popover' });
-  const rows = [
-    { label: 'Preview (clean URL)',   value: urls.clean, icon: 'eye' },
-    { label: 'Preview (direct)',      value: urls.serve, icon: 'code' },
-    { label: 'Open in new tab',       value: urls.clean, icon: 'external', open: true },
-  ];
-  for (const row of rows) {
-    const btn = el('button', {
-      class: 'deployment-links-item', type: 'button',
-      onclick: () => {
-        if (row.open) {
-          window.open(row.value, '_blank', 'noopener');
+    panel.addEventListener('click', (e) => {
+      const copyBtn = e.target.closest('[data-copy-text]');
+      if (copyBtn) {
+        e.stopPropagation();
+        const text = copyBtn.getAttribute('data-copy-text');
+        if (copyToClipboard(text)) {
+          toast('Copied', 'success', 1000);
+          copyBtn.classList.add('copied');
+          setTimeout(() => copyBtn.classList.remove('copied'), 900);
         } else {
-          if (copyToClipboard(row.value)) toast('Copied', 'success', 1000);
-          else toast('Copy failed', 'error');
+          toast('Copy failed', 'error');
         }
-        pop.remove();
-      },
-    },
-      el('span', { class: 'deployment-links-icon' }, ''),
-      el('span', { class: 'deployment-links-label' }, row.label),
-      el('code', { class: 'deployment-links-value' }, row.value)
-    );
-    btn.querySelector('.deployment-links-icon').innerHTML = svg(row.icon, 12, 2.2);
-    pop.appendChild(btn);
-  }
+        return;
+      }
 
-  const rect = anchor.getBoundingClientRect();
-  pop.style.top = (rect.bottom + window.scrollY + 4) + 'px';
-  pop.style.left = Math.max(8, rect.right - 300 + window.scrollX) + 'px';
-  document.body.appendChild(pop);
+      const toggleBtn = e.target.closest('[data-deploy-toggle]');
+      if (toggleBtn) {
+        e.stopPropagation();
+        const id = toggleBtn.getAttribute('data-deploy-toggle');
+        toggleDeploymentRow(id);
+        return;
+      }
 
-  setTimeout(() => {
-    document.addEventListener('click', function handler(ev) {
-      if (!pop.contains(ev.target) && ev.target !== anchor) {
-        pop.remove();
-        document.removeEventListener('click', handler);
+      const rowEl = e.target.closest('[data-deploy-row]');
+      if (rowEl && !e.target.closest('a, button[data-redeploy], button[data-delete-deploy]')) {
+        const id = rowEl.getAttribute('data-deploy-row');
+        toggleDeploymentRow(id);
+        return;
+      }
+
+      const redeployBtn = e.target.closest('[data-redeploy]');
+      if (redeployBtn) {
+        e.stopPropagation();
+        redeployVersion(redeployBtn.getAttribute('data-redeploy'));
+        return;
+      }
+
+      const deleteBtn = e.target.closest('[data-delete-deploy]');
+      if (deleteBtn) {
+        e.stopPropagation();
+        confirmDeleteDeployment(deleteBtn.getAttribute('data-delete-deploy'));
+        return;
       }
     });
-  }, 50);
-}
+  }
 
-  function buildDeploymentUrls(deploymentId) {
-  const user = getOwnerUsername();
-  const slug = S.project?.slug || '';
-  if (!user || !slug) return null;
-  const base = `${BASE_URL}/${encodeURIComponent(user)}/project/${encodeURIComponent(slug)}/`;
-  return {
-    clean: base + '?from=' + encodeURIComponent(deploymentId),
-    serve: `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(S.pid)}&path=index.html&from=${encodeURIComponent(deploymentId)}`,
-    bare:  base,
-  };
-}
+  function toggleDeploymentRow(deploymentId) {
+    if (!S._expandedDeployments) S._expandedDeployments = new Set();
 
-function renderDeploymentRow(d, currentId, previewIds) {
-  const isCurrent = d.id === currentId;
-  const canPreview = previewIds.has(d.id);
-  const hasSnapshot = d.hasSnapshot === true;
-  const isLegacy = !d.versionId;
-  return `<div class="row-item">
-    <div class="row-icon">${svg(isCurrent ? 'check' : isLegacy ? 'file' : 'rocket', 13, 2.2)}</div>
-    <div class="row-content">
-      <div class="row-title">${d.versionId ? `v${escapeHTML(d.versionId.slice(-6))}` : 'Legacy deploy'}
-        ${isCurrent ? '<span class="badge success" style="margin-left:5px;font-size:8px;">CURRENT</span>' : ''}
-        ${!hasSnapshot ? '<span class="badge neutral" style="margin-left:5px;font-size:8px;">NO SNAPSHOT</span>' : ''}
+    if (S._expandedDeployments.has(deploymentId)) S._expandedDeployments.delete(deploymentId);
+    else S._expandedDeployments.add(deploymentId);
+
+    const list = document.getElementById('deployHistoryList');
+    if (!list) return;
+
+    const cached = S.deployCache.history || [];
+    const currentId = S.deployCache.currentId;
+    const previewIds = new Set(
+      cached.filter(d => d.hasSnapshot === true).slice(0, 3).map(d => d.id)
+    );
+
+    list.innerHTML = cached
+      .map(d => renderDeploymentRow(d, currentId, previewIds))
+      .join('');
+  }
+
+  function renderDeploymentRow(d, currentId, previewIds) {
+    const isCurrent = d.id === currentId;
+    const hasSnapshot = d.hasSnapshot === true;
+    const isLegacy = !d.versionId;
+    const isExpanded = S._expandedDeployments && S._expandedDeployments.has(d.id);
+
+    const urls = buildDeploymentUrls(d.id);
+    const cleanUrl = d.previewUrl || urls?.clean || null;
+    const directUrl = urls?.serve || null;
+
+    const at = d.deployedAt ? new Date(d.deployedAt) : null;
+    const timeStr = at ? at.toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    }) : '—';
+
+    const versionShort = d.versionId ? String(d.versionId).slice(-8) : null;
+
+    const rowHtml = `
+      <div class="deploy-row ${isExpanded ? 'expanded' : ''} ${isCurrent ? 'current' : ''}" data-deploy-row="${escapeAttr(d.id)}">
+        <button class="deploy-chevron" type="button" data-deploy-toggle="${escapeAttr(d.id)}" aria-label="Toggle details" aria-expanded="${isExpanded}">
+          ${svg('chevronRight', 11, 2.6)}
+        </button>
+        <div class="deploy-icon">${svg(isCurrent ? 'check' : isLegacy ? 'file' : 'rocket', 13, 2.2)}</div>
+        <div class="deploy-info">
+          <div class="deploy-title">
+            ${versionShort ? `v${escapeHTML(versionShort)}` : 'Legacy deploy'}
+            ${isCurrent ? '<span class="badge success" style="font-size:8px;">CURRENT</span>' : ''}
+            ${!hasSnapshot ? '<span class="badge neutral" style="font-size:8px;">NO SNAPSHOT</span>' : ''}
+          </div>
+          <div class="deploy-sub">${timeAgo(d.deployedAt)} · ${escapeHTML(d.state || 'READY')}</div>
+        </div>
+        <div class="deploy-actions">
+          ${cleanUrl ? `<button class="btn btn-ghost btn-icon" data-copy-text="${escapeAttr(cleanUrl)}" title="Copy clean URL" type="button">${svg('copy', 10, 2.2)}</button>` : ''}
+          ${cleanUrl ? `<a class="btn btn-ghost btn-icon" href="${escapeAttr(cleanUrl)}" target="_blank" rel="noopener" title="Open preview" type="button">${svg('external', 10, 2.2)}</a>` : ''}
+          ${S.isEditor && !isCurrent && hasSnapshot && d.versionId
+            ? `<button class="btn btn-ghost btn-icon" data-redeploy="${escapeAttr(d.versionId)}" title="Redeploy this version" type="button">${svg('refresh', 10, 2.2)}</button>`
+            : ''}
+          ${S.isOwner
+            ? `<button class="btn btn-ghost btn-icon" data-delete-deploy="${escapeAttr(d.id)}" title="Delete" type="button" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>`
+            : ''}
+        </div>
       </div>
-      <div class="row-sub">${timeAgo(d.deployedAt)} · ${escapeHTML(d.state || 'READY')}</div>
-    </div>
-    <div class="row-actions">
-      ${canPreview ? `<button class="btn btn-ghost btn-sm btn-icon" data-preview-menu="${escapeAttr(d.id)}" aria-label="Deployment links" title="Deployment links">${svg('link', 10, 2.2)}</button>` : ''}
-      ${S.isEditor && !isCurrent && d.versionId && hasSnapshot ? `<button class="btn btn-ghost btn-sm btn-icon" data-redeploy="${escapeAttr(d.versionId)}" aria-label="Redeploy" title="Redeploy">${svg('refresh', 10, 2.2)}</button>` : ''}
-      ${S.isOwner ? `<button class="btn btn-ghost btn-sm btn-icon" data-delete-deploy="${escapeAttr(d.id)}" aria-label="Delete" title="Delete" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>` : ''}
-    </div>
-  </div>`;
-}
+    `;
+
+    const detailHtml = isExpanded ? `
+      <div class="deploy-detail" data-deploy-detail="${escapeAttr(d.id)}">
+        ${!hasSnapshot ? `
+          <div class="deploy-detail-note">
+            ${svg('alert', 12, 2.4)}
+            <span>This deployment was created before snapshots were captured. Historic preview is unavailable — redeploy this version to snapshot it.</span>
+          </div>
+        ` : ''}
+
+        <div class="deploy-detail-row">
+          <span class="deploy-detail-label">Deployed</span>
+          <span class="deploy-detail-value">${escapeHTML(timeStr)}</span>
+          <span></span>
+        </div>
+
+        <div class="deploy-detail-row">
+          <span class="deploy-detail-label">State</span>
+          <span class="deploy-detail-value">${escapeHTML(d.state || 'READY')}</span>
+          <span></span>
+        </div>
+
+        <div class="deploy-detail-row">
+          <span class="deploy-detail-label">Version</span>
+          <span class="deploy-detail-value ${!d.versionId ? 'empty' : ''}">${escapeHTML(d.versionId || 'not recorded')}</span>
+          ${d.versionId ? `<button class="deploy-detail-copy" type="button" data-copy-text="${escapeAttr(d.versionId)}" title="Copy version ID">${svg('copy', 10, 2.4)}</button>` : '<span></span>'}
+        </div>
+
+        <div class="deploy-detail-row">
+          <span class="deploy-detail-label">Deployment</span>
+          <span class="deploy-detail-value">${escapeHTML(d.id)}</span>
+          <button class="deploy-detail-copy" type="button" data-copy-text="${escapeAttr(d.id)}" title="Copy deployment ID">${svg('copy', 10, 2.4)}</button>
+        </div>
+
+        ${cleanUrl ? `
+          <div class="deploy-detail-row">
+            <span class="deploy-detail-label">Preview URL</span>
+            <span class="deploy-detail-value">${escapeHTML(cleanUrl)}</span>
+            <button class="deploy-detail-copy" type="button" data-copy-text="${escapeAttr(cleanUrl)}" title="Copy preview URL">${svg('copy', 10, 2.4)}</button>
+          </div>
+        ` : ''}
+
+        ${directUrl ? `
+          <div class="deploy-detail-row">
+            <span class="deploy-detail-label">Direct URL</span>
+            <span class="deploy-detail-value">${escapeHTML(directUrl)}</span>
+            <button class="deploy-detail-copy" type="button" data-copy-text="${escapeAttr(directUrl)}" title="Copy direct URL">${svg('copy', 10, 2.4)}</button>
+          </div>
+        ` : ''}
+
+        <div class="deploy-detail-actions">
+          ${cleanUrl ? `
+            <a class="btn btn-sm btn-primary" href="${escapeAttr(cleanUrl)}" target="_blank" rel="noopener">
+              ${svg('external', 10, 2.2)}
+              <span class="lbl-desktop">Open preview</span>
+              <span class="lbl-mobile">Open</span>
+            </a>
+            <button class="btn btn-sm btn-secondary" type="button" data-copy-text="${escapeAttr(cleanUrl)}">
+              ${svg('copy', 10, 2.2)}
+              <span class="lbl-desktop">Copy clean URL</span>
+              <span class="lbl-mobile">Copy</span>
+            </button>
+          ` : ''}
+          ${directUrl ? `
+            <button class="btn btn-sm btn-secondary" type="button" data-copy-text="${escapeAttr(directUrl)}">
+              ${svg('copy', 10, 2.2)}
+              <span class="lbl-desktop">Copy direct URL</span>
+              <span class="lbl-mobile">Direct</span>
+            </button>
+          ` : ''}
+          ${S.isEditor && !isCurrent && hasSnapshot && d.versionId ? `
+            <button class="btn btn-sm btn-secondary" type="button" data-redeploy="${escapeAttr(d.versionId)}">
+              ${svg('refresh', 10, 2.2)} Redeploy
+            </button>
+          ` : ''}
+          ${S.isOwner ? `
+            <button class="btn btn-sm btn-ghost" type="button" data-delete-deploy="${escapeAttr(d.id)}" style="color:var(--theme-danger);">
+              ${svg('trash', 10, 2.2)} Delete
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    ` : '';
+
+    return rowHtml + detailHtml;
+  }
 
   async function confirmDeleteDeployment(deploymentId) {
     if (!S.isOwner || !S.online) return;
@@ -3707,6 +3800,7 @@ function renderDeploymentRow(d, currentId, previewIds) {
         if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
         toast('Deleted', 'success');
         S.deployCache = { history: null, currentId: null, total: 0, at: 0, maxDeployments: 5 };
+        S._expandedDeployments.delete(deploymentId);
         renderPanel();
       } catch (err) { hideLoading(); toast(err.message || 'Delete failed', 'error'); }
     });
@@ -3717,106 +3811,106 @@ function renderDeploymentRow(d, currentId, previewIds) {
   // ═══════════════════════════════════════════════════════════
 
   async function renderCommitsPanel(panel) {
-  if (!gate(panel, { label: 'Commits', requiresOnline: false })) return;
-  panel.innerHTML = skeletonCard(4);
+    if (!gate(panel, { label: 'Commits', requiresOnline: false })) return;
+    panel.innerHTML = skeletonCard(4);
 
-  let versions = [];
-  let files = [];
-  try { [versions, files] = await Promise.all([IDB.listVersions(S.pid), IDB.listFiles(S.pid)]); } catch {}
-  bumpTabCount('commits', versions.length);
+    let versions = [];
+    let files = [];
+    try { [versions, files] = await Promise.all([IDB.listVersions(S.pid), IDB.listFiles(S.pid)]); } catch {}
+    bumpTabCount('commits', versions.length);
 
-  const canEdit = S.isEditor && !S.isLocalOnly;
-  const realFiles = files.filter(f => !isSystemFile(f.path));
+    const canEdit = S.isEditor && !S.isLocalOnly;
+    const realFiles = files.filter(f => !isSystemFile(f.path));
 
-  let changeCount = 0;
-  if (versions.length > 0) {
-    const lastFiles = versions[0].files || {};
-    for (const f of realFiles) {
-      if (lastFiles[f.path] !== (f.content || '')) changeCount++;
+    let changeCount = 0;
+    if (versions.length > 0) {
+      const lastFiles = versions[0].files || {};
+      for (const f of realFiles) {
+        if (lastFiles[f.path] !== (f.content || '')) changeCount++;
+      }
+      for (const p of Object.keys(lastFiles)) {
+        if (!realFiles.find(f => f.path === p) && p !== NOTES_PATH) changeCount++;
+      }
+    } else if (realFiles.length > 0) {
+      changeCount = realFiles.length;
     }
-    for (const p of Object.keys(lastFiles)) {
-      if (!realFiles.find(f => f.path === p) && p !== NOTES_PATH) changeCount++;
-    }
-  } else if (realFiles.length > 0) {
-    changeCount = realFiles.length;
-  }
 
-  const emptyDesc = canEdit
-    ? "Commit a snapshot of your current files to start tracking history."
-    : "Owner hasn't committed any versions yet.";
+    const emptyDesc = canEdit
+      ? "Commit a snapshot of your current files to start tracking history."
+      : "Owner hasn't committed any versions yet.";
 
-  panel.innerHTML = `
-    ${changeCount > 0 && canEdit ? `
-      <div class="card" style="border-color:var(--theme-primary);">
-        <div class="card-body" style="display:flex;align-items:center;gap:10px;">
-          <div style="color:var(--theme-primary);">${svg('git-commit', 18, 2.2)}</div>
-          <div style="flex:1;font-size:11.5px;color:var(--theme-text-secondary);">
-            ${changeCount} file${changeCount === 1 ? '' : 's'} changed since last commit
+    panel.innerHTML = `
+      ${changeCount > 0 && canEdit ? `
+        <div class="card" style="border-color:var(--theme-primary);">
+          <div class="card-body" style="display:flex;align-items:center;gap:10px;">
+            <div style="color:var(--theme-primary);">${svg('git-commit', 18, 2.2)}</div>
+            <div style="flex:1;font-size:11.5px;color:var(--theme-text-secondary);">
+              ${changeCount} file${changeCount === 1 ? '' : 's'} changed since last commit
+            </div>
+            <button class="btn btn-sm btn-primary" id="btnCommitNow">Commit now</button>
           </div>
-          <button class="btn btn-sm btn-primary" id="btnCommitNow">Commit now</button>
         </div>
-      </div>
-    ` : ''}
+      ` : ''}
 
-    ${versions.length === 0 ? `
-      <div class="card"><div class="card-body">
-        ${emptyState('git-commit', 'No commits yet', emptyDesc,
-          canEdit ? `<button class="btn btn-primary btn-sm" id="btnFirstCommit" style="margin-top:8px;">${svg('git-commit', 10, 2.4)} Commit now</button>` : '')}
-      </div></div>
-    ` : `
-      <div class="commits-list">
-        ${versions.map((v, idx) => {
-          const prev = versions[idx + 1];
-          const isDeploy = v.kind === 'deploy';
-          const fileCount = Object.keys(v.files || {}).length;
-          let add = 0, rem = 0;
-          if (prev) {
-            for (const [p, content] of Object.entries(v.files || {})) {
-              const before = (prev.files || {})[p] || '';
-              const beforeLines = before.split('\n').length;
-              const afterLines = String(content || '').split('\n').length;
-              if (afterLines > beforeLines) add += afterLines - beforeLines;
-              if (beforeLines > afterLines) rem += beforeLines - afterLines;
+      ${versions.length === 0 ? `
+        <div class="card"><div class="card-body">
+          ${emptyState('git-commit', 'No commits yet', emptyDesc,
+            canEdit ? `<button class="btn btn-primary btn-sm" id="btnFirstCommit" style="margin-top:8px;">${svg('git-commit', 10, 2.4)} Commit now</button>` : '')}
+        </div></div>
+      ` : `
+        <div class="commits-list">
+          ${versions.map((v, idx) => {
+            const prev = versions[idx + 1];
+            const isDeploy = v.kind === 'deploy';
+            const fileCount = Object.keys(v.files || {}).length;
+            let add = 0, rem = 0;
+            if (prev) {
+              for (const [p, content] of Object.entries(v.files || {})) {
+                const before = (prev.files || {})[p] || '';
+                const beforeLines = before.split('\n').length;
+                const afterLines = String(content || '').split('\n').length;
+                if (afterLines > beforeLines) add += afterLines - beforeLines;
+                if (beforeLines > afterLines) rem += beforeLines - afterLines;
+              }
             }
-          }
-          return `
-            <div class="commit-row ${isDeploy ? 'commit-deploy' : ''}">
-              <div class="commit-header">
-                <div class="commit-icon">${svg(isDeploy ? 'rocket' : 'git-commit', 13, 2.2)}</div>
-                <div class="commit-info">
-                  <div class="commit-message">${escapeHTML(v.message || 'Untitled')}</div>
-                  <div class="commit-meta">
-                    ${isDeploy ? '<span class="vis-badge private" style="font-size:8px;">DEPLOY</span>' : ''}
-                    <span>${timeAgo(v.createdAt)}</span>
-                    <span>·</span>
-                    <span>${fileCount} file${fileCount === 1 ? '' : 's'}</span>
-                    ${add || rem ? `<span>·</span><span style="color:var(--theme-success);">+${add}</span><span style="color:var(--theme-danger);">−${rem}</span>` : ''}
+            return `
+              <div class="commit-row ${isDeploy ? 'commit-deploy' : ''}">
+                <div class="commit-header">
+                  <div class="commit-icon">${svg(isDeploy ? 'rocket' : 'git-commit', 13, 2.2)}</div>
+                  <div class="commit-info">
+                    <div class="commit-message">${escapeHTML(v.message || 'Untitled')}</div>
+                    <div class="commit-meta">
+                      ${isDeploy ? '<span class="vis-badge private" style="font-size:8px;">DEPLOY</span>' : ''}
+                      <span>${timeAgo(v.createdAt)}</span>
+                      <span>·</span>
+                      <span>${fileCount} file${fileCount === 1 ? '' : 's'}</span>
+                      ${add || rem ? `<span>·</span><span style="color:var(--theme-success);">+${add}</span><span style="color:var(--theme-danger);">−${rem}</span>` : ''}
+                    </div>
                   </div>
                 </div>
+                <div class="commit-actions">
+                  ${S.isEditor && S.online && S.syncState === 'synced' && v.kind !== 'deploy' ? `
+                    <button class="btn btn-sm btn-secondary" data-commit-redeploy="${escapeAttr(v.vid)}">${svg('rocket', 10, 2.2)} Redeploy</button>
+                  ` : ''}
+                  ${canEdit ? `<button class="btn btn-sm btn-secondary" data-commit-restore="${escapeAttr(v.vid)}">${svg('refresh', 10, 2.2)} Restore</button>` : ''}
+                  ${prev ? `<button class="btn btn-sm btn-ghost" data-commit-diff="${escapeAttr(prev.vid)}|${escapeAttr(v.vid)}">${svg('code', 10, 2.2)} Diff</button>` : ''}
+                </div>
               </div>
-              <div class="commit-actions">
-                ${S.isEditor && S.online && S.syncState === 'synced' && v.kind !== 'deploy' ? `
-                  <button class="btn btn-sm btn-secondary" data-commit-redeploy="${escapeAttr(v.vid)}">${svg('rocket', 10, 2.2)} Redeploy</button>
-                ` : ''}
-                ${canEdit ? `<button class="btn btn-sm btn-secondary" data-commit-restore="${escapeAttr(v.vid)}">${svg('refresh', 10, 2.2)} Restore</button>` : ''}
-                ${prev ? `<button class="btn btn-sm btn-ghost" data-commit-diff="${escapeAttr(prev.vid)}|${escapeAttr(v.vid)}">${svg('code', 10, 2.2)} Diff</button>` : ''}
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `}
-  `;
+            `;
+          }).join('')}
+        </div>
+      `}
+    `;
 
-  panel.querySelectorAll('[data-commit-redeploy]').forEach(btn => {
-    btn.addEventListener('click', () => redeployVersion(btn.dataset.commitRedeploy));
-  });
-  panel.querySelectorAll('[data-commit-restore]').forEach(btn => {
-    btn.addEventListener('click', () => restoreCommit(btn.dataset.commitRestore));
-  });
-  $('btnCommitNow')?.addEventListener('click', openCommitDialog);
-  $('btnFirstCommit')?.addEventListener('click', openCommitDialog);
-}
+    panel.querySelectorAll('[data-commit-redeploy]').forEach(btn => {
+      btn.addEventListener('click', () => redeployVersion(btn.dataset.commitRedeploy));
+    });
+    panel.querySelectorAll('[data-commit-restore]').forEach(btn => {
+      btn.addEventListener('click', () => restoreCommit(btn.dataset.commitRestore));
+    });
+    $('btnCommitNow')?.addEventListener('click', openCommitDialog);
+    $('btnFirstCommit')?.addEventListener('click', openCommitDialog);
+  }
 
   async function restoreCommit(versionId) {
     const version = await IDB.getVersion(versionId);
@@ -3850,7 +3944,6 @@ function renderDeploymentRow(d, currentId, previewIds) {
           }).catch(() => {});
         }
 
-        // Prune old auto-snapshots beyond 5
         const allVersions = await IDB.listVersions(S.pid);
         const autos = allVersions.filter(v => v.vid?.startsWith('v_auto_')).slice(5);
         for (const v of autos) {
@@ -3869,130 +3962,125 @@ function renderDeploymentRow(d, currentId, previewIds) {
   }
 
   async function openCommitDialog() {
-  if (!S.isEditor) { toast('Read-only', 'warning'); return; }
+    if (!S.isEditor) { toast('Read-only', 'warning'); return; }
 
-  let files = [], versions = [];
-  try {
-    [files, versions] = await Promise.all([IDB.listFiles(S.pid), IDB.listVersions(S.pid)]);
-  } catch (err) {
-    toast('Could not read project files', 'error');
-    return;
-  }
+    let files = [], versions = [];
+    try {
+      [files, versions] = await Promise.all([IDB.listFiles(S.pid), IDB.listVersions(S.pid)]);
+    } catch (err) {
+      toast('Could not read project files', 'error');
+      return;
+    }
 
-  // ✅ FIX: compare against the last *user* commit, not deploy snapshots.
-  // Deploy snapshots have kind === 'deploy' and shouldn't be the diff baseline.
-  const lastUserCommit = versions.find(v => v.kind !== 'deploy') || null;
-  const baselineFiles = lastUserCommit?.files || {};
+    const lastUserCommit = versions.find(v => v.kind !== 'deploy') || null;
+    const baselineFiles = lastUserCommit?.files || {};
 
-  const changes = [];
-  for (const f of files) {
-    if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
-    const before = baselineFiles[f.path] || '';
-    const after = f.content || '';
-    if (before === after) continue;
-    const beforeLines = before.split('\n').length;
-    const afterLines = after.split('\n').length;
-    changes.push({
-      path: f.path,
-      add: Math.max(0, afterLines - beforeLines),
-      rem: Math.max(0, beforeLines - afterLines),
+    const changes = [];
+    for (const f of files) {
+      if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
+      const before = baselineFiles[f.path] || '';
+      const after = f.content || '';
+      if (before === after) continue;
+      const beforeLines = before.split('\n').length;
+      const afterLines = after.split('\n').length;
+      changes.push({
+        path: f.path,
+        add: Math.max(0, afterLines - beforeLines),
+        rem: Math.max(0, beforeLines - afterLines),
+      });
+    }
+
+    const totalAdd = changes.reduce((s, c) => s + c.add, 0);
+    const totalRem = changes.reduce((s, c) => s + c.rem, 0);
+    const autoMsg = changes.length === 0
+      ? `checkpoint: snapshot at ${new Date().toLocaleTimeString()}`
+      : changes.length === 1
+        ? `edit: ${changes[0].path.split('/').pop()} (+${changes[0].add}, −${changes[0].rem})`
+        : `edit: ${changes.length} files (+${totalAdd}, −${totalRem})`;
+
+    const changesHtml = changes.length === 0
+      ? `<div style="padding:14px;background:var(--theme-glass-bg);border-radius:8px;font-size:11.5px;color:var(--theme-text-tertiary);text-align:center;">
+          No file changes since last commit.<br>
+          <span style="font-size:10.5px;">You can still commit a checkpoint of the current state.</span>
+        </div>`
+      : `<div class="commit-changes">
+          ${changes.map(c => `
+            <div class="commit-change-row">
+              <span class="icon">${svg(fileIconName(c.path), 10, 2.2)}</span>
+              <span class="name">${escapeHTML(c.path)}</span>
+              <span class="stat">
+                <span class="add">+${c.add}</span> <span class="rem">−${c.rem}</span>
+              </span>
+            </div>
+          `).join('')}
+        </div>`;
+
+    openModal(`
+      <div class="modal-title">Commit ${changes.length === 0 ? 'checkpoint' : `${changes.length} file${changes.length === 1 ? '' : 's'}`}</div>
+      <div class="modal-desc">Snapshot the current state as a commit.</div>
+      <div class="field">
+        <label class="field-label">Message</label>
+        <input class="input" id="commitMsg" value="${escapeAttr(autoMsg)}" maxlength="200">
+      </div>
+      <div class="field">
+        <label class="field-label">${changes.length === 0 ? 'No changes' : 'Changes'}</label>
+        ${changesHtml}
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="commitSubmit">${svg('check', 10, 2.4)} Commit</button>
+      </div>
+    `);
+
+    $('commitSubmit').addEventListener('click', async () => {
+      const message = ($('commitMsg').value || autoMsg).trim();
+      const btn = $('commitSubmit');
+      btn.disabled = true;
+      btn.innerHTML = 'Committing…';
+
+      try {
+        const snapshot = {};
+        for (const f of files) {
+          if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
+          snapshot[f.path] = f.content || '';
+        }
+        const vid = `v_${Date.now()}`;
+        const versionData = { message, files: snapshot, createdAt: Date.now() };
+
+        await IDB.putVersion({ vid, pid: S.pid, ...versionData });
+
+        let serverSynced = false;
+        if (S.online && S.session && !S.isLocalOnly) {
+          try {
+            const res = await apiFetch(API_HOST + '?action=project/sync-back', {
+              method: 'POST',
+              body: JSON.stringify({ pid: S.pid, versions: { [vid]: versionData } }),
+            });
+            serverSynced = res.ok && res.data?.success;
+          } catch {
+            serverSynced = false;
+          }
+        }
+
+        if (!serverSynced) {
+          await enqueueSync('version-commit', { vid, data: versionData });
+        } else {
+          markSynced(S.pid);
+          updateHeader();
+        }
+
+        closeModal();
+        toast(serverSynced ? 'Committed' : 'Committed locally — will sync when online', 'success');
+        bumpTabCount('commits', versions.length + 1);
+        if (S.activeTab === 'commits') renderPanel();
+      } catch (err) {
+        console.error('[Commit]', err);
+        toast(err.message || 'Commit failed', 'error');
+        btn.disabled = false;
+        btn.innerHTML = `${svg('check', 10, 2.4)} Commit`;
+      }
     });
   }
-
-  // ✅ FIX: if no changes, still show the dialog with a clear message and
-  // an option to force-commit the current state (useful as a manual checkpoint).
-  const totalAdd = changes.reduce((s, c) => s + c.add, 0);
-  const totalRem = changes.reduce((s, c) => s + c.rem, 0);
-  const autoMsg = changes.length === 0
-    ? `checkpoint: snapshot at ${new Date().toLocaleTimeString()}`
-    : changes.length === 1
-      ? `edit: ${changes[0].path.split('/').pop()} (+${changes[0].add}, −${changes[0].rem})`
-      : `edit: ${changes.length} files (+${totalAdd}, −${totalRem})`;
-
-  const changesHtml = changes.length === 0
-    ? `<div style="padding:14px;background:var(--theme-glass-bg);border-radius:8px;font-size:11.5px;color:var(--theme-text-tertiary);text-align:center;">
-        No file changes since last commit.<br>
-        <span style="font-size:10.5px;">You can still commit a checkpoint of the current state.</span>
-      </div>`
-    : `<div class="commit-changes">
-        ${changes.map(c => `
-          <div class="commit-change-row">
-            <span class="icon">${svg(fileIconName(c.path), 10, 2.2)}</span>
-            <span class="name">${escapeHTML(c.path)}</span>
-            <span class="stat">
-              <span class="add">+${c.add}</span> <span class="rem">−${c.rem}</span>
-            </span>
-          </div>
-        `).join('')}
-      </div>`;
-
-  openModal(`
-    <div class="modal-title">Commit ${changes.length === 0 ? 'checkpoint' : `${changes.length} file${changes.length === 1 ? '' : 's'}`}</div>
-    <div class="modal-desc">Snapshot the current state as a commit.</div>
-    <div class="field">
-      <label class="field-label">Message</label>
-      <input class="input" id="commitMsg" value="${escapeAttr(autoMsg)}" maxlength="200">
-    </div>
-    <div class="field">
-      <label class="field-label">${changes.length === 0 ? 'No changes' : 'Changes'}</label>
-      ${changesHtml}
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="commitSubmit">${svg('check', 10, 2.4)} Commit</button>
-    </div>
-  `);
-
-  $('commitSubmit').addEventListener('click', async () => {
-    const message = ($('commitMsg').value || autoMsg).trim();
-    const btn = $('commitSubmit');
-    btn.disabled = true;
-    btn.innerHTML = 'Committing…';
-
-    try {
-      const snapshot = {};
-      for (const f of files) {
-        if (isSystemFile(f.path) && f.path !== NOTES_PATH) continue;
-        snapshot[f.path] = f.content || '';
-      }
-      const vid = `v_${Date.now()}`;
-      const versionData = { message, files: snapshot, createdAt: Date.now() };
-
-      // ✅ FIX: ALWAYS write locally first. This guarantees the commit appears
-      // in the UI regardless of network/server availability.
-      await IDB.putVersion({ vid, pid: S.pid, ...versionData });
-
-      // ✅ FIX: attempt server sync as a best-effort. If it fails, queue for later.
-      // Never throw after the local write succeeded.
-      let serverSynced = false;
-      if (S.online && S.session && !S.isLocalOnly) {
-        try {
-          const res = await apiFetch(API_HOST + '?action=project/sync-back', {
-            method: 'POST',
-            body: JSON.stringify({ pid: S.pid, versions: { [vid]: versionData } }),
-          });
-          serverSynced = res.ok && res.data?.success;
-        } catch {
-          serverSynced = false;
-        }
-      }
-
-      if (!serverSynced) {
-        await enqueueSync('version-commit', { vid, data: versionData });
-      }
-
-      closeModal();
-      toast(serverSynced ? 'Committed' : 'Committed locally — will sync when online', 'success');
-      bumpTabCount('commits', versions.length + 1);
-      if (S.activeTab === 'commits') renderPanel();
-    } catch (err) {
-      console.error('[Commit]', err);
-      toast(err.message || 'Commit failed', 'error');
-      btn.disabled = false;
-      btn.innerHTML = `${svg('check', 10, 2.4)} Commit`;
-    }
-  });
-}
 
   // ═══════════════════════════════════════════════════════════
   // ANALYTICS PANEL
@@ -4072,127 +4160,121 @@ function renderDeploymentRow(d, currentId, previewIds) {
   // ═══════════════════════════════════════════════════════════
 
   async function renderSharingPanel(panel) {
-  if (!gate(panel, { label: 'Sharing', requiresOnline: false })) return;
-  const vis = S.project.visibility || {};
-  const collaborators = S.project.roles || {};
-  const publicUrl = buildProjectShareUrl() || '';
-  const pid = S.pid;
+    if (!gate(panel, { label: 'Sharing', requiresOnline: false })) return;
+    const vis = S.project.visibility || {};
+    const collaborators = S.project.roles || {};
+    const publicUrl = buildProjectShareUrl() || '';
+    const pid = S.pid;
 
-  // Format the PID for display: keep it fully selectable, but truncate
-  // visually if it's very long so it doesn't break the card layout.
-  const pidDisplay = pid.length > 44 ? pid.slice(0, 44) + '…' : pid;
+    const pidDisplay = pid.length > 44 ? pid.slice(0, 44) + '…' : pid;
 
-  panel.innerHTML = `
-    <div class="card">
-      <div class="card-header"><div class="card-title">${svg('eye', 13, 2.2)} Visibility</div></div>
-      <div class="card-body">
-        ${['profile', 'liveSite', 'code', 'languages', 'db'].map(axis => `
-          <div class="toggle-row">
-            <div class="toggle-info">
-              <div class="toggle-title">${escapeHTML(axisLabel(axis))}</div>
-              <div class="toggle-desc">${escapeHTML(axisDesc(axis))}</div>
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header"><div class="card-title">${svg('eye', 13, 2.2)} Visibility</div></div>
+        <div class="card-body">
+          ${['profile', 'liveSite', 'code', 'languages', 'db'].map(axis => `
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-title">${escapeHTML(axisLabel(axis))}</div>
+                <div class="toggle-desc">${escapeHTML(axisDesc(axis))}</div>
+              </div>
+              <button class="switch ${vis[axis] === 'public' ? 'on' : ''}" data-vis-axis="${escapeAttr(axis)}" aria-label="Toggle ${escapeAttr(axis)}"></button>
             </div>
-            <button class="switch ${vis[axis] === 'public' ? 'on' : ''}" data-vis-axis="${escapeAttr(axis)}" aria-label="Toggle ${escapeAttr(axis)}"></button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">${svg('share', 13, 2.2)} Share link</div></div>
+        <div class="card-body">
+          <div style="display:flex;gap:5px;">
+            <input class="input mono" value="${escapeAttr(publicUrl)}" readonly>
+            <button class="btn btn-secondary btn-icon" id="btnCopyShare" aria-label="Copy">${svg('copy', 12, 2.2)}</button>
           </div>
-        `).join('')}
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><div class="card-title">${svg('share', 13, 2.2)} Share link</div></div>
-      <div class="card-body">
-        <div style="display:flex;gap:5px;">
-          <input class="input mono" value="${escapeAttr(publicUrl)}" readonly>
-          <button class="btn btn-secondary btn-icon" id="btnCopyShare" aria-label="Copy">${svg('copy', 12, 2.2)}</button>
+          <div class="field-hint" style="margin-top:5px;">Requires profile visibility: public.</div>
         </div>
-        <div class="field-hint" style="margin-top:5px;">Requires profile visibility: public.</div>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">${svg('key', 13, 2.2)} Project ID</div>
-        <button class="btn btn-ghost btn-icon" id="btnCopyPidHeader" aria-label="Copy project ID" title="Copy project ID" type="button">
-          ${svg('copy', 12, 2.2)}
-        </button>
-      </div>
-      <div class="card-body">
-        <div class="pid-display" id="pidDisplay" title="${escapeAttr(pid)}">
-          <code class="mono">${escapeHTML(pidDisplay)}</code>
-        </div>
-        <div class="field-hint" style="margin-top:6px;">
-          Used in API calls, invite links, and support requests. Immutable — safe to share.
-        </div>
-        <button class="btn btn-secondary btn-block btn-sm" id="btnCopyPid" type="button" style="margin-top:10px;">
-          ${svg('copy', 10, 2.2)} Copy ID
-        </button>
-      </div>
-    </div>
-
-    ${S.isOwner ? `
       <div class="card">
         <div class="card-header">
-          <div class="card-title">${svg('user', 13, 2.2)} Collaborators (${Object.keys(collaborators).length})</div>
-          <button class="btn btn-sm btn-secondary" id="btnInviteCollab">${svg('plus', 10, 2.4)} Invite</button>
+          <div class="card-title">${svg('key', 13, 2.2)} Project ID</div>
+          <button class="btn btn-ghost btn-icon" id="btnCopyPidHeader" aria-label="Copy project ID" title="Copy project ID" type="button">
+            ${svg('copy', 12, 2.2)}
+          </button>
         </div>
-        <div class="card-body tight">
-          ${Object.keys(collaborators).length === 0
-            ? emptyState('user', 'No collaborators', 'Invite others to work on this project.')
-            : `<div class="row-list">${Object.entries(collaborators).map(([uid, role]) => `
-              <div class="row-item">
-                <div class="collab-avatar">${escapeHTML(uid.slice(-2).toUpperCase())}</div>
-                <div class="row-content">
-                  <div class="row-title mono" style="font-size:10px;">${escapeHTML(uid)}</div>
-                  <div class="row-sub">${escapeHTML(role)}</div>
-                </div>
-                <button class="btn btn-ghost btn-sm btn-icon" data-remove-collab="${escapeAttr(uid)}" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>
-              </div>`).join('')}</div>`}
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><div class="card-title">${svg('key', 13, 2.2)} API key</div></div>
         <div class="card-body">
-          <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">
-            ${S.project.apiKeyHash ? 'Active' : 'Not generated'}
+          <div class="pid-display" id="pidDisplay" title="${escapeAttr(pid)}">
+            <code class="mono">${escapeHTML(pidDisplay)}</code>
           </div>
-          <button class="btn btn-sm btn-secondary" id="btnGenApiKey">${svg('key', 10, 2.2)} ${S.project.apiKeyHash ? 'Regenerate' : 'Generate'} key</button>
+          <div class="field-hint" style="margin-top:6px;">
+            Used in API calls, invite links, and support requests. Immutable — safe to share.
+          </div>
+          <button class="btn btn-secondary btn-block btn-sm" id="btnCopyPid" type="button" style="margin-top:10px;">
+            ${svg('copy', 10, 2.2)} Copy ID
+          </button>
         </div>
       </div>
-    ` : ''}
-  `;
 
-  // Existing handlers
-  document.querySelectorAll('[data-vis-axis]').forEach(btn => {
-    btn.addEventListener('click', () => toggleVisibility(btn.dataset.visAxis, btn));
-  });
-  $('btnCopyShare')?.addEventListener('click', () => {
-    if (copyToClipboard(publicUrl)) toast('Link copied', 'success', 1200);
-    else toast('Copy failed', 'error');
-  });
-  $('btnInviteCollab')?.addEventListener('click', openInviteModal);
-  document.querySelectorAll('[data-remove-collab]').forEach(btn => {
-    btn.addEventListener('click', () => confirmRemoveCollab(btn.dataset.removeCollab));
-  });
-  $('btnGenApiKey')?.addEventListener('click', generateApiKey);
+      ${S.isOwner ? `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('user', 13, 2.2)} Collaborators (${Object.keys(collaborators).length})</div>
+            <button class="btn btn-sm btn-secondary" id="btnInviteCollab">${svg('plus', 10, 2.4)} Invite</button>
+          </div>
+          <div class="card-body tight">
+            ${Object.keys(collaborators).length === 0
+              ? emptyState('user', 'No collaborators', 'Invite others to work on this project.')
+              : `<div class="row-list">${Object.entries(collaborators).map(([uid, role]) => `
+                <div class="row-item">
+                  <div class="collab-avatar">${escapeHTML(uid.slice(-2).toUpperCase())}</div>
+                  <div class="row-content">
+                    <div class="row-title mono" style="font-size:10px;">${escapeHTML(uid)}</div>
+                    <div class="row-sub">${escapeHTML(role)}</div>
+                  </div>
+                  <button class="btn btn-ghost btn-sm btn-icon" data-remove-collab="${escapeAttr(uid)}" style="color:var(--theme-danger);">${svg('trash', 10, 2.2)}</button>
+                </div>`).join('')}</div>`}
+          </div>
+        </div>
 
-  // ── NEW: Project ID copy handlers ──
-  const copyPid = () => {
-    if (copyToClipboard(pid)) toast('Project ID copied', 'success', 1400);
-    else toast('Copy failed', 'error');
-  };
+        <div class="card">
+          <div class="card-header"><div class="card-title">${svg('key', 13, 2.2)} API key</div></div>
+          <div class="card-body">
+            <div style="font-size:11px;color:var(--theme-text-tertiary);margin-bottom:8px;">
+              ${S.project.apiKeyHash ? 'Active' : 'Not generated'}
+            </div>
+            <button class="btn btn-sm btn-secondary" id="btnGenApiKey">${svg('key', 10, 2.2)} ${S.project.apiKeyHash ? 'Regenerate' : 'Generate'} key</button>
+          </div>
+        </div>
+      ` : ''}
+    `;
 
-  $('btnCopyPid')?.addEventListener('click', copyPid);
-  $('btnCopyPidHeader')?.addEventListener('click', copyPid);
+    document.querySelectorAll('[data-vis-axis]').forEach(btn => {
+      btn.addEventListener('click', () => toggleVisibility(btn.dataset.visAxis, btn));
+    });
+    $('btnCopyShare')?.addEventListener('click', () => {
+      if (copyToClipboard(publicUrl)) toast('Link copied', 'success', 1200);
+      else toast('Copy failed', 'error');
+    });
+    $('btnInviteCollab')?.addEventListener('click', openInviteModal);
+    document.querySelectorAll('[data-remove-collab]').forEach(btn => {
+      btn.addEventListener('click', () => confirmRemoveCollab(btn.dataset.removeCollab));
+    });
+    $('btnGenApiKey')?.addEventListener('click', generateApiKey);
 
-  // Clicking the pid itself also copies (matches chip pattern elsewhere)
-  $('pidDisplay')?.addEventListener('click', () => {
-    // On mobile, allow native selection instead of copying so users can
-    // grab a partial pid if they really want to. On desktop, click = copy.
-    const isTouch = matchMedia('(pointer: coarse)').matches;
-    if (!isTouch) copyPid();
-  });
-}
+    const copyPid = () => {
+      if (copyToClipboard(pid)) toast('Project ID copied', 'success', 1400);
+      else toast('Copy failed', 'error');
+    };
+
+    $('btnCopyPid')?.addEventListener('click', copyPid);
+    $('btnCopyPidHeader')?.addEventListener('click', copyPid);
+
+    $('pidDisplay')?.addEventListener('click', () => {
+      const isTouch = matchMedia('(pointer: coarse)').matches;
+      if (!isTouch) copyPid();
+    });
+  }
+
   function axisLabel(axis) {
     return { profile: 'Show in profile', liveSite: 'Live site link', code: 'Code viewer', languages: 'Language breakdown', db: 'JSON database API' }[axis] || axis;
   }
@@ -4846,54 +4928,54 @@ fetch('${API_HOST}?action=db/set', {
   }
 
   async function renderNotesPanel(panel) {
-  if (!S.isEditor) {
-    panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('lock', 'Read-only', "You don't have permission to view notes.")}</div></div>`;
-    return;
-  }
-  panel.innerHTML = skeletonCard(3);
+    if (!S.isEditor) {
+      panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('lock', 'Read-only', "You don't have permission to view notes.")}</div></div>`;
+      return;
+    }
+    panel.innerHTML = skeletonCard(3);
 
-  const data = await readNotes();
-  const sorted = [...data.notes].sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    return (b.updatedAt || 0) - (a.updatedAt || 0);
-  });
-  bumpTabCount('notes', sorted.length);
+    const data = await readNotes();
+    const sorted = [...data.notes].sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
+    bumpTabCount('notes', sorted.length);
 
-  if (sorted.length === 0) {
-    panel.innerHTML = `<div class="card"><div class="card-body">
-      ${emptyState('file-text', 'No notes yet', 'Jot down ideas, snippets, or TODOs.',
-        `<button class="btn btn-primary btn-sm" id="btnNewNote" style="margin-top:8px;">${svg('plus', 12, 2.4)} New note</button>`)}
-    </div></div>`;
+    if (sorted.length === 0) {
+      panel.innerHTML = `<div class="card"><div class="card-body">
+        ${emptyState('file-text', 'No notes yet', 'Jot down ideas, snippets, or TODOs.',
+          `<button class="btn btn-primary btn-sm" id="btnNewNote" style="margin-top:8px;">${svg('plus', 12, 2.4)} New note</button>`)}
+      </div></div>`;
+      $('btnNewNote')?.addEventListener('click', () => openNoteEditor(null));
+      return;
+    }
+
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('file-text', 13, 2.2)} Notes (${sorted.length})</div>
+          <button class="btn btn-sm btn-primary" id="btnNewNote">${svg('plus', 10, 2.4)} New</button>
+        </div>
+        <div class="card-body">
+          ${sorted.map(note => `
+            <button class="note-card" data-note-id="${escapeAttr(note.id)}" type="button" style="--note-accent:${noteAccentColor(note.color)};">
+              <div class="note-card-title">${escapeHTML(note.title || 'Untitled')}</div>
+              <div class="note-card-preview">${escapeHTML((note.body || '').slice(0, 140) || 'Empty note')}</div>
+              <div class="note-card-meta">
+                ${note.pinned ? `<span class="note-pin">${svg('bookmark', 9, 2.4)}</span>` : ''}
+                <span>${timeAgo(note.updatedAt || note.createdAt || 0)}</span>
+              </div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    panel.querySelectorAll('[data-note-id]').forEach(btn => {
+      btn.addEventListener('click', () => openNoteEditor(btn.dataset.noteId));
+    });
     $('btnNewNote')?.addEventListener('click', () => openNoteEditor(null));
-    return;
   }
-
-  panel.innerHTML = `
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">${svg('file-text', 13, 2.2)} Notes (${sorted.length})</div>
-        <button class="btn btn-sm btn-primary" id="btnNewNote">${svg('plus', 10, 2.4)} New</button>
-      </div>
-      <div class="card-body">
-        ${sorted.map(note => `
-          <button class="note-card" data-note-id="${escapeAttr(note.id)}" type="button" style="--note-accent:${noteAccentColor(note.color)};">
-            <div class="note-card-title">${escapeHTML(note.title || 'Untitled')}</div>
-            <div class="note-card-preview">${escapeHTML((note.body || '').slice(0, 140) || 'Empty note')}</div>
-            <div class="note-card-meta">
-              ${note.pinned ? `<span class="note-pin">${svg('bookmark', 9, 2.4)}</span>` : ''}
-              <span>${timeAgo(note.updatedAt || note.createdAt || 0)}</span>
-            </div>
-          </button>
-        `).join('')}
-      </div>
-    </div>
-  `;
-
-  panel.querySelectorAll('[data-note-id]').forEach(btn => {
-    btn.addEventListener('click', () => openNoteEditor(btn.dataset.noteId));
-  });
-  $('btnNewNote')?.addEventListener('click', () => openNoteEditor(null));
-}
 
   function renderMarkdownSafe(text) {
     let src = String(text ?? '');
@@ -4969,7 +5051,6 @@ fetch('${API_HOST}?action=db/set', {
     };
     const startInEdit = !existing || !(note.body || '').trim();
 
-    // ═══ Back-button support via history.pushState ═══
     S._noteHistoryPushed = true;
     try {
       history.pushState({ noteOpen: true }, '', location.href);
@@ -5572,7 +5653,6 @@ fetch('${API_HOST}?action=db/set', {
       if (document.visibilityState === 'visible') loadNotificationStats();
     }, 60000);
 
-    // Flush note editor on unload
     window.addEventListener('beforeunload', (e) => {
       const noteOverlay = document.querySelector('.note-editor-overlay.open');
       if (noteOverlay) {
@@ -5582,11 +5662,9 @@ fetch('${API_HOST}?action=db/set', {
       }
     });
 
-    // Popstate — for note editor back button
     window.addEventListener('popstate', (e) => {
       const noteOverlay = document.querySelector('.note-editor-overlay.open');
       if (noteOverlay && S._noteHistoryPushed) {
-        // User pressed back while note editor open — close it
         S._noteHistoryPushed = false;
         noteOverlay.querySelector('.note-editor-back')?.click();
       }
@@ -5667,14 +5745,10 @@ fetch('${API_HOST}?action=db/set', {
     renderPanel();
     wireGlobal();
 
-        loadNotificationStats().catch(() => {});
+    loadNotificationStats().catch(() => {});
     refreshSyncQueueCount().catch(() => {});
     if (S.online && S.syncQueueCount > 0) flushSyncQueue();
 
-    // ─── OFFLINE-FIRST: auto-promote local projects ─────────────
-    // When the dashboard is opened while signed in and online, promote
-    // any local_* projects so their "not synced" badge disappears without
-    // the user having to visit the editor first.
     if (S.session && S.online && !S.isLocalOnly) {
       import('/js/create-project.js').then(mod => {
         if (typeof mod.promoteQueuedLocalProjects === 'function') {
@@ -5683,8 +5757,6 @@ fetch('${API_HOST}?action=db/set', {
       }).catch(() => {});
     }
 
-    // Also promote when the network comes back online mid-session.
-    // Register once at boot so we don't stack listeners on re-renders.
     window.addEventListener('online', () => {
       if (S.session && !S.isLocalOnly) {
         import('/js/create-project.js').then(mod => {
@@ -5694,7 +5766,6 @@ fetch('${API_HOST}?action=db/set', {
         }).catch(() => {});
       }
     });
-    // ─── END offline-first promotion ────────────────────────────
   }
 
   document.addEventListener('DOMContentLoaded', boot);
