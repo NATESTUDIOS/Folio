@@ -14,10 +14,6 @@
       "destination": "/api/host?action=serve&username=:username&project=:projectname"
     },
     {
-      "source": "/:username((?!api$|_next$|icons$|screenshots$|js$|css$|syntax\\.json$|manifest\\.json$|manifest\\.webmanifest$|browserconfig\\.xml$|sw\\.js$|service-worker\\.js$|firebase-messaging-sw\\.js$|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|install\\.js$|update\\.js$|fcm-client\\.js$|notifications\\.js$|.*\\.html$|ai$|register$|profile$|project$|tools$|settings$|analytics$|offline$|invite$|notifications$|p$)[^/]+)/:project/:file",
-      "destination": "/api/host?action=share&username=:username&project=:project&file=:file"
-    },
-    {
       "source": "/:username((?!api$|_next$|icons$|screenshots$|js$|css$|syntax\\.json$|manifest\\.json$|manifest\\.webmanifest$|browserconfig\\.xml$|sw\\.js$|service-worker\\.js$|firebase-messaging-sw\\.js$|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|install\\.js$|update\\.js$|fcm-client\\.js$|notifications\\.js$|.*\\.html$|ai$|register$|profile$|project$|tools$|settings$|analytics$|offline$|invite$|notifications$|p$)[^/]+)/:project",
       "destination": "/api/host?action=share&username=:username&project=:project"
     },
