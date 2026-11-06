@@ -2494,43 +2494,6 @@ function isTextExt(p) {
     "jsx",
   ].includes(ext);
 }
-// ── Data URI decode helpers ──────────────────────────────────────────
-// Binary files (images, PDFs, fonts, etc.) are stored in Firebase as
-// data: URIs (from FileReader.readAsDataURL on the client). When a
-// visitor requests one over HTTP, we must decode the base64 payload
-// back into real bytes — otherwise the browser receives the literal
-// text "data:image/jpeg;base64,/9j/..." and its image decoder fails.
-
-const DATA_URI_RE = /^data:([^;,]*)?(;base64)?,([\s\S]*)$/;
-
-/**
- * Returns { mime, body } if `content` is a data URI, else null.
- * `body` is a Buffer (base64 path) or a Buffer of decoded URI text.
- */
-function tryDecodeDataUri(content) {
-  if (typeof content !== "string") return null;
-  const m = content.match(DATA_URI_RE);
-  if (!m) return null;
-
-  const declaredMime =
-    (m[1] || "application/octet-stream").trim() || "application/octet-stream";
-  const isBase64 = !!m[2];
-  const payload = m[3];
-
-  try {
-    const body = isBase64
-      ? Buffer.from(payload, "base64")
-      : Buffer.from(decodeURIComponent(payload), "utf8");
-
-    // Sanity: empty payload with a declared image mime is suspicious,
-    // but we return it anyway — the browser will just show a broken
-    // icon, which matches what the old behavior produced.
-    return { mime: declaredMime, body, isBase64 };
-  } catch (err) {
-    log("host.datauri_decode_failed", { message: err.message });
-    return null;
-  }
-}
 
 /**
  * Best-effort byte-size of a stored file's content. For data URIs,
@@ -6206,16 +6169,16 @@ export default async function handler(req, res) {
       return await handleFileList(req, res, reqId);
     if (method === "GET" && action === "file/get")
       return await handleFileGet(req, res, reqId);
-    if (method === "POST" && action === "file/delete")
-      if (method === "POST" && action === "file/save")
-        return await handleFileSave(req, res, reqId);
-    if (method === "POST" && action === "migrate-images")
-      return await handleMigrateImages(req, res, reqId);
-    return await handleFileDelete(req, res, reqId);
-    if (method === "GET" && action === "project/hydrate")
-      return await handleProjectHydrate(req, res, reqId);
-    if (method === "GET" && action === "serve")
-      return await handleServe(req, res, reqId);
+if (method === "POST" && action === "file/delete")
+  return await handleFileDelete(req, res, reqId);
+if (method === "POST" && action === "file/save")
+  return await handleFileSave(req, res, reqId);
+if (method === "POST" && action === "migrate-images")
+  return await handleMigrateImages(req, res, reqId);
+if (method === "GET" && action === "project/hydrate")
+  return await handleProjectHydrate(req, res, reqId);
+if (method === "GET" && action === "serve")
+  return await handleServe(req, res, reqId);
 
     if (method === "POST" && action === "db/set")
       return await handleDbSet(req, res, reqId);
