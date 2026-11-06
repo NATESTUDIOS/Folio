@@ -721,6 +721,7 @@ function formatBytes(n) {
 function estimateBytes(content) {
   if (!content) return 0;
   if (typeof content !== 'string') content = String(content);
+  if (/^https?:\/\//i.test(content)) return content.length;
   if (content.startsWith('data:')) {
     const comma = content.indexOf(',');
     const b64 = comma >= 0 ? content.slice(comma + 1) : content;
@@ -2808,10 +2809,13 @@ async function renderTreeNodes(container, node, depth) {
     if (isSystemFile(file.path)) continue;
     const isActive = file.path === S.activeFile;
     const fileRow = el('div', {
-      class: `tree-node${isActive ? ' active' : ''}`,
-      style: `--depth:${depth}`,
-      onclick: () => workspace.openFile(file.path),
-    },
+  class: `tree-node${isActive ? ' active' : ''}`,
+  style: `--depth:${depth}`,
+  onclick: () => {
+    workspace.openFile(file.path);
+    if (window.innerWidth < 1024) closeSidebar();
+  },
+},
       el('span', { class: 'icon' }, icon(fileIconName(file.path), 12)),
       el('span', { class: 'name' }, file.name),
       el('div', { class: 'actions' },
@@ -3090,32 +3094,58 @@ async function renderInfoPanel(container) {
   deployments.appendChild(deployRow);
 
   // History with popover
-  if (cached && cached.deployments.length > 0) {
-    const hist = el('div', { class: 'deploy-history' });
-    const histHeader = el('div', { class: 'deploy-history-header' },
-      el('span', {}, `History (${cached.deployments.length} / ${cached.maxDeployments || 5})`),
-      el('button', {
-        class: 'deploy-history-action', type: 'button', title: 'Open dashboard',
-        onclick: () => { window.location.href = '/project?pid=' + encodeURIComponent(p.pid) + '#/deployments'; },
-      }, icon('external', 10))
-    );
-    hist.appendChild(histHeader);
-    for (const d of cached.deployments.slice(0, 5)) {
-      const isCurrent = d.id === cached.currentId;
-      const row = el('div', { class: `deploy-history-row${isCurrent ? ' current' : ''}` },
+if (cached && cached.deployments.length > 0) {
+  const hist = el('div', { class: 'deploy-history' });
+
+  hist.appendChild(el('div', { class: 'deploy-history-header' },
+    el('span', { class: 'deploy-history-title' }, 'History'),
+    el('span', { class: 'deploy-history-count' }, `${cached.deployments.length} / ${cached.maxDeployments || 5}`),
+    el('button', {
+      class: 'deploy-history-open', type: 'button', title: 'Open dashboard',
+      onclick: () => { window.location.href = '/project?pid=' + encodeURIComponent(p.pid) + '#/deployments'; },
+    }, icon('external', 10))
+  ));
+
+  const list = el('div', { class: 'deploy-history-list' });
+  for (const d of cached.deployments.slice(0, 5)) {
+    const isCurrent = d.id === cached.currentId;
+    const stateLabel = isCurrent ? 'Current' : (d.state || 'READY');
+    const stateClass = isCurrent
+      ? 'current'
+      : /offline/i.test(stateLabel)
+        ? 'offline'
+        : 'ready';
+
+    const row = el('div', {
+      class: `deploy-history-row${isCurrent ? ' current' : ''}`,
+      role: 'button',
+      tabindex: '0',
+      onclick: (e) => { if (!e.target.closest('button')) openDeploymentLinks(d.id, e.currentTarget); },
+      onkeydown: (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openDeploymentLinks(d.id, e.currentTarget);
+        }
+      },
+    },
+      el('span', { class: `deploy-history-dot ${stateClass}` }),
+      el('div', { class: 'deploy-history-info' },
         el('span', { class: 'deploy-history-time' }, relativeTime(d.deployedAt)),
-        el('span', { class: 'deploy-history-status' }, isCurrent ? 'Current' : (d.state || 'READY')),
-        el('button', {
-          class: 'deploy-history-action',
-          type: 'button',
-          title: 'Deployment links',
-          onclick: (e) => { e.stopPropagation(); openDeploymentLinks(d.id, e.currentTarget); },
-        }, icon('link', 10))
-      );
-      hist.appendChild(row);
-    }
-    deployments.appendChild(hist);
+        el('span', { class: `deploy-history-status ${stateClass}` }, stateLabel)
+      ),
+      el('button', {
+        class: 'deploy-history-action',
+        type: 'button',
+        title: 'Deployment links',
+        'aria-label': 'Deployment links',
+        onclick: (e) => { e.stopPropagation(); openDeploymentLinks(d.id, e.currentTarget); },
+      }, icon('link', 10))
+    );
+    list.appendChild(row);
   }
+  hist.appendChild(list);
+  deployments.appendChild(hist);
+}
 
   // Meta tags form
   const metaSection = el('div', { class: 'meta-form' });
@@ -3483,7 +3513,26 @@ async function importFile() {
             r.readAsDataURL(file);
           });
         }
-        await db.putFile(S.currentProject.pid, file.name, content);
+
+        // Send to host — it uploads binaries via flier and returns the stored content
+        let storedContent = content;
+        const canServerSave = S.session && S.online && !/^local_/.test(S.currentProject.pid);
+        if (canServerSave) {
+          const save = await apiFetch(API_HOST + '?action=file/save', {
+            method: 'POST',
+            body: JSON.stringify({
+              pid: S.currentProject.pid,
+              path: file.name,
+              content,
+            }),
+          });
+          if (!save.ok || !save.data?.success) {
+            throw new Error(save.data?.error || 'Save failed');
+          }
+          storedContent = save.data.content || content;
+        }
+
+        await db.putFile(S.currentProject.pid, file.name, storedContent);
         budget -= file.size;
         imported++;
       } catch (err) {
@@ -4676,13 +4725,15 @@ async function buildPreviewHtml(fileToPreview = null) {
     return match;
   });
 
-  html = html.replace(/<script([^>]*)src=["']([^"']+\.js)["']([^>]*)>\s*<\/script>/gi, (match, before, src, after) => {
-    const key = src.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
-    if (fileMapLower[key] != null) {
-      return TAG_SCRIPT_OPEN + '\n' + fileMapLower[key] + '\n' + TAG_SCRIPT_CLOSE;
-    }
-    return match;
-  });
+  html = html.replace(/<img([^>]*)src=["']([^"']+)["']([^>]*)>/gi, (match, before, src, after) => {
+  if (src.startsWith('data:') || /^https?:\/\//i.test(src)) return match;
+  const key = src.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
+  const content = fileMapLower[key];
+  if (content && (content.startsWith('data:') || /^https?:\/\//i.test(content))) {
+    return `<img${before}src="${content}"${after}>`;
+  }
+  return match;
+});
 
   html = html.replace(/<img([^>]*)src=["']([^"']+)["']([^>]*)>/gi, (match, before, src, after) => {
     if (src.startsWith('data:')) return match;
@@ -4695,17 +4746,17 @@ async function buildPreviewHtml(fileToPreview = null) {
   });
 
   html = html.replace(/<style>([\s\S]*?)<\/style>/gi, (match, css) => {
-    const inlinedCss = css.replace(/url\(\s*["']?([^"')]+)["']?\s*\)/gi, (m, ref) => {
-      if (ref.startsWith('data:') || ref.startsWith('http')) return m;
-      const key = ref.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
-      const content = fileMapLower[key];
-      if (content && content.startsWith('data:')) {
-        return `url("${content}")`;
-      }
-      return m;
-    });
-    return `<style>${inlinedCss}</style>`;
+  const inlinedCss = css.replace(/url\(\s*["']?([^"')]+)["']?\s*\)/gi, (m, ref) => {
+    if (ref.startsWith('data:') || ref.startsWith('http')) return m;
+    const key = ref.replace(/^\.\//, '').replace(/^\//, '').toLowerCase();
+    const content = fileMapLower[key];
+    if (content && (content.startsWith('data:') || /^https?:\/\//i.test(content))) {
+      return `url("${content}")`;
+    }
+    return m;
   });
+  return `<style>${inlinedCss}</style>`;
+});
 
   const bridge =
     TAG_SCRIPT_OPEN + '\n' +

@@ -579,15 +579,16 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   function estimateBytes(content) {
-    if (!content) return 0;
-    if (typeof content !== 'string') content = String(content);
-    if (content.startsWith('data:')) {
-      const comma = content.indexOf(',');
-      const b64 = comma >= 0 ? content.slice(comma + 1) : content;
-      return Math.floor(b64.length * 0.75);
-    }
-    try { return new Blob([content]).size; } catch { return content.length; }
+  if (!content) return 0;
+  if (typeof content !== 'string') content = String(content);
+  if (/^https?:\/\//i.test(content)) return content.length;
+  if (content.startsWith('data:')) {
+    const comma = content.indexOf(',');
+    const b64 = comma >= 0 ? content.slice(comma + 1) : content;
+    return Math.floor(b64.length * 0.75);
   }
+  try { return new Blob([content]).size; } catch { return content.length; }
+}
 
   function fileIconName(path) {
     const ext = (path.split('.').pop() || '').toLowerCase();
@@ -3220,43 +3221,65 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   }
 
   async function handleFileUpload(e, panel) {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (files.length === 0) return;
-    if (!S.isEditor && !S.isLocalOnly) { toast('Read-only', 'warning'); return; }
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if (files.length === 0) return;
+  if (!S.isEditor && !S.isLocalOnly) { toast('Read-only', 'warning'); return; }
 
-    showLoading('Uploading', `0 / ${files.length}`);
-    let uploaded = 0;
-    let skipped = 0;
-    const fileMap = {};
-    for (const file of files) {
-      try {
-        const text = await file.text();
-        await IDB.putFile(S.pid, file.name, text);
-        fileMap[file.name] = text;
-        uploaded++;
-        $('loadingDesc').textContent = `${uploaded} / ${files.length}`;
-      } catch { skipped++; }
-    }
-    if (Object.keys(fileMap).length > 0) {
-      if (S.online && S.session && !S.isLocalOnly && S.syncState === 'synced') {
-        try {
-          await apiFetch(API_HOST + '?action=project/sync-back', {
-            method: 'POST',
-            body: JSON.stringify({ pid: S.pid, files: fileMap }),
-          });
-        } catch {}
+  showLoading('Uploading', `0 / ${files.length}`);
+  let uploaded = 0;
+  let skipped = 0;
+
+  for (const file of files) {
+    try {
+      const isBinary = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif|pdf|woff2?|ttf|otf|mp4|webm|mp3|wav|ogg)$/i.test(file.name);
+      let content;
+
+      if (!isBinary) {
+        content = await file.text();
       } else {
-        for (const [path, content] of Object.entries(fileMap)) {
-          await enqueueSync('file-save', { path, content });
+        if (file.size > 5 * 1024 * 1024) {
+          toast(`${file.name} exceeds 5 MB`, 'error', 3000);
+          skipped++;
+          continue;
         }
+        content = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result);
+          r.onerror = rej;
+          r.readAsDataURL(file);
+        });
       }
+
+      // Route through host — it uploads binaries via flier
+      const canServerSave = S.session && S.online && !S.isLocalOnly && S.syncState === 'synced';
+      if (canServerSave) {
+        const save = await apiFetch(API_HOST + '?action=file/save', {
+          method: 'POST',
+          body: JSON.stringify({ pid: S.pid, path: file.name, content }),
+        });
+        if (!save.ok || !save.data?.success) {
+          throw new Error(save.data?.error || 'Save failed');
+        }
+        content = save.data.content || content;
+      } else {
+        await enqueueSync('file-save', { path: file.name, content });
+      }
+
+      await IDB.putFile(S.pid, file.name, content);
+      uploaded++;
+      $('loadingDesc').textContent = `${uploaded} / ${files.length}`;
+    } catch (err) {
+      console.error('Upload failed:', file.name, err);
+      skipped++;
     }
-    hideLoading();
-    toast(`Uploaded ${uploaded}${skipped ? ` (${skipped} skipped)` : ''}`, uploaded > 0 ? 'success' : 'warning');
-    await refreshFileCount();
-    renderPanel();
   }
+
+  hideLoading();
+  toast(`Uploaded ${uploaded}${skipped ? ` (${skipped} skipped)` : ''}`, uploaded > 0 ? 'success' : 'warning');
+  await refreshFileCount();
+  renderPanel();
+}
 
   function openInEditor(filePath) {
     const url = new URL('/', location.origin);
