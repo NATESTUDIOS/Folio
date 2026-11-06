@@ -609,6 +609,7 @@ const S = {
   sidebarPanel: 'files', sidebarOpen: false, symbolsOpen: false,
   ctrlLatch: false,
   deploymentCache: new Map(),
+deploymentCacheAttempt: new Map(),
   notesCorruptWarned: false,
   syncState: 'idle',      // 'idle' | 'synced' | 'needs-pull' | 'needs-push' | 'offline'
   serverFileCount: 0,
@@ -1673,6 +1674,8 @@ async function loadProjectFromUrl(pid) {
 
 async function loadDeploymentHistoryFor(pid) {
   if (!S.session || !navigator.onLine) return;
+  // Record the attempt — prevents infinite retry loop on failure.
+  S.deploymentCacheAttempt.set(pid, Date.now());
   try {
     const res = await apiFetch(API_HOST + '?action=deployment/history&pid=' + encodeURIComponent(pid));
     if (res.ok && res.data?.success) {
@@ -1681,8 +1684,23 @@ async function loadDeploymentHistoryFor(pid) {
         currentId: res.data.currentDeploymentId || null,
         maxDeployments: res.data.maxDeployments || 5,
       });
+    } else {
+      // Cache an empty result so we never hot-loop. Manual refresh still works.
+      S.deploymentCache.set(pid, {
+        deployments: [],
+        currentId: null,
+        maxDeployments: 5,
+        _error: res.data?.error || `HTTP ${res.status}`,
+      });
     }
-  } catch {}
+  } catch (err) {
+    S.deploymentCache.set(pid, {
+      deployments: [],
+      currentId: null,
+      maxDeployments: 5,
+      _error: err.message || 'NETWORK_ERROR',
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2891,6 +2909,132 @@ function openDeploymentLinks(deploymentId, anchor) {
   }, 50);
 }
 
+  function buildDeploymentsSection(p, cached) {
+  const deployments = el('div', { class: 'info-deployments' });
+
+  deployments.appendChild(el('div', { class: 'sidebar-section-title' },
+    el('span', {}, 'Deployments'),
+    el('div', { class: 'actions' },
+      el('button', {
+        class: 'act', type: 'button', title: 'Deploy now',
+        onclick: () => hostProject(),
+      }, icon('rocket', 12))
+    )
+  ));
+
+  const deployUrl = p.deployment?.url;
+  const isLive = deployUrl && p.deployment?.state !== 'OFFLINE';
+  const isOffline = p.deployment?.state === 'OFFLINE';
+
+  const deployRow = el('div', { class: 'info-deployment-current' });
+  if (isLive) {
+    deployRow.appendChild(el('div', { class: 'deploy-status live' },
+      el('span', { class: 'deploy-dot' }), 'Live'
+    ));
+    const urlLink = el('a', {
+      class: 'deploy-url',
+      href: deployUrl,
+      target: '_blank',
+      rel: 'noopener',
+    }, deployUrl);
+    deployRow.appendChild(urlLink);
+    deployRow.appendChild(el('button', {
+      class: 'btn btn-ghost btn-sm', type: 'button',
+      onclick: () => {
+        try { navigator.clipboard.writeText(deployUrl); toast('URL copied', 'success', 1200); } catch {}
+      },
+    }, icon('copy', 10), ' Copy'));
+  } else if (isOffline) {
+    deployRow.appendChild(el('div', { class: 'deploy-status offline' },
+      el('span', { class: 'deploy-dot' }), 'Offline'
+    ));
+    deployRow.appendChild(el('button', {
+      class: 'btn btn-primary btn-sm', type: 'button',
+      onclick: () => hostProject(),
+    }, 'Deploy to go live'));
+  } else if (S.syncState === 'needs-pull') {
+    deployRow.appendChild(el('div', { class: 'deploy-status offline' },
+      el('span', { class: 'deploy-dot' }), 'Sync first'
+    ));
+    deployRow.appendChild(el('button', {
+      class: 'btn btn-primary btn-sm', type: 'button',
+      onclick: () => pullFromServerInEditor(),
+    }, icon('refresh', 10), ' Sync'));
+  } else {
+    deployRow.appendChild(el('div', { class: 'deploy-status offline' },
+      el('span', { class: 'deploy-dot' }), 'Not deployed'
+    ));
+    deployRow.appendChild(el('button', {
+      class: 'btn btn-primary btn-sm', type: 'button',
+      onclick: () => hostProject(),
+    }, icon('rocket', 10), ' Deploy'));
+  }
+  deployments.appendChild(deployRow);
+
+  if (cached && cached.deployments?.length > 0) {
+    const hist = el('div', { class: 'deploy-history' });
+
+    hist.appendChild(el('div', { class: 'deploy-history-header' },
+      el('span', { class: 'deploy-history-title' }, 'History'),
+      el('span', { class: 'deploy-history-count' }, `${cached.deployments.length} / ${cached.maxDeployments || 5}`),
+      el('button', {
+        class: 'deploy-history-open', type: 'button', title: 'Open dashboard',
+        onclick: () => { window.location.href = '/project?pid=' + encodeURIComponent(p.pid) + '#/deployments'; },
+      }, icon('external', 10))
+    ));
+
+    const list = el('div', { class: 'deploy-history-list' });
+    for (const d of cached.deployments.slice(0, 5)) {
+      const isCurrent = d.id === cached.currentId;
+      const stateLabel = isCurrent ? 'Current' : (d.state || 'READY');
+      const stateClass = isCurrent
+        ? 'current'
+        : /offline/i.test(stateLabel)
+          ? 'offline'
+          : 'ready';
+
+      const row = el('div', {
+        class: `deploy-history-row${isCurrent ? ' current' : ''}`,
+        role: 'button',
+        tabindex: '0',
+        onclick: (e) => { if (!e.target.closest('button')) openDeploymentLinks(d.id, e.currentTarget); },
+        onkeydown: (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openDeploymentLinks(d.id, e.currentTarget);
+          }
+        },
+      },
+        el('span', { class: `deploy-history-dot ${stateClass}` }),
+        el('div', { class: 'deploy-history-info' },
+          el('span', { class: 'deploy-history-time' }, relativeTime(d.deployedAt)),
+          el('span', { class: `deploy-history-status ${stateClass}` }, stateLabel)
+        ),
+        el('button', {
+          class: 'deploy-history-action',
+          type: 'button',
+          title: 'Deployment links',
+          'aria-label': 'Deployment links',
+          onclick: (e) => { e.stopPropagation(); openDeploymentLinks(d.id, e.currentTarget); },
+        }, icon('link', 10))
+      );
+      list.appendChild(row);
+    }
+    hist.appendChild(list);
+    deployments.appendChild(hist);
+  } else if (cached?._error) {
+    deployments.appendChild(el('div', {
+      class: 'empty-state',
+      style: 'padding:12px 6px',
+    },
+      el('div', { class: 'empty-state-title', style: 'font-size:11px' }, 'History unavailable'),
+      el('div', { class: 'empty-state-desc', style: 'font-size:10px' }, cached._error)
+    ));
+  }
+
+  return deployments;
+  }
+  
 async function renderInfoPanel(container) {
   if (!S.currentProject) {
     container.appendChild(el('div', { class: 'empty-state', style: 'padding:20px 6px' },
@@ -3026,126 +3170,24 @@ async function renderInfoPanel(container) {
     : `${formatBytes(totalLimit - totalBytes)} remaining`
   ));
 
-  // Deployments
-  const deployments = el('div', { class: 'info-deployments' });
-  deployments.appendChild(el('div', { class: 'sidebar-section-title' },
-    el('span', {}, 'Deployments'),
-    el('div', { class: 'actions' },
-      el('button', {
-        class: 'act', type: 'button', title: 'Deploy now',
-        onclick: () => hostProject(),
-      }, icon('rocket', 12))
-    )
-  ));
-
-  // Refresh cache in background if stale
+  // Deployments — cached, no infinite loop
   const cached = S.deploymentCache.get(p.pid);
-  if (!cached && S.online && S.session) {
-    loadDeploymentHistoryFor(p.pid).then(() => refreshInfoIfOpen()).catch(() => {});
-  }
+  const lastAttempt = S.deploymentCacheAttempt.get(p.pid) || 0;
+  const COOLDOWN_MS = 30_000;
 
-  const deployUrl = p.deployment?.url;
-  const isLive = deployUrl && p.deployment?.state !== 'OFFLINE';
-  const isOffline = p.deployment?.state === 'OFFLINE';
-
-  const deployRow = el('div', { class: 'info-deployment-current' });
-  if (isLive) {
-    deployRow.appendChild(el('div', { class: 'deploy-status live' },
-      el('span', { class: 'deploy-dot' }), 'Live'
-    ));
-    const urlLink = el('a', {
-      class: 'deploy-url',
-      href: deployUrl,
-      target: '_blank',
-      rel: 'noopener',
-    }, deployUrl);
-    deployRow.appendChild(urlLink);
-    deployRow.appendChild(el('button', {
-      class: 'btn btn-ghost btn-sm', type: 'button',
-      onclick: () => {
-        try { navigator.clipboard.writeText(deployUrl); toast('URL copied', 'success', 1200); } catch {}
-      },
-    }, icon('copy', 10), ' Copy'));
-  } else if (isOffline) {
-    deployRow.appendChild(el('div', { class: 'deploy-status offline' },
-      el('span', { class: 'deploy-dot' }), 'Offline'
-    ));
-    deployRow.appendChild(el('button', {
-      class: 'btn btn-primary btn-sm', type: 'button',
-      onclick: () => hostProject(),
-    }, 'Deploy to go live'));
-  } else if (S.syncState === 'needs-pull') {
-    deployRow.appendChild(el('div', { class: 'deploy-status offline' },
-      el('span', { class: 'deploy-dot' }), 'Sync first'
-    ));
-    deployRow.appendChild(el('button', {
-      class: 'btn btn-primary btn-sm', type: 'button',
-      onclick: () => pullFromServerInEditor(),
-    }, icon('refresh', 10), ' Sync'));
-  } else {
-    deployRow.appendChild(el('div', { class: 'deploy-status offline' },
-      el('span', { class: 'deploy-dot' }), 'Not deployed'
-    ));
-    deployRow.appendChild(el('button', {
-      class: 'btn btn-primary btn-sm', type: 'button',
-      onclick: () => hostProject(),
-    }, icon('rocket', 10), ' Deploy'));
-  }
-  deployments.appendChild(deployRow);
-
-  // History with popover
-if (cached && cached.deployments.length > 0) {
-  const hist = el('div', { class: 'deploy-history' });
-
-  hist.appendChild(el('div', { class: 'deploy-history-header' },
-    el('span', { class: 'deploy-history-title' }, 'History'),
-    el('span', { class: 'deploy-history-count' }, `${cached.deployments.length} / ${cached.maxDeployments || 5}`),
-    el('button', {
-      class: 'deploy-history-open', type: 'button', title: 'Open dashboard',
-      onclick: () => { window.location.href = '/project?pid=' + encodeURIComponent(p.pid) + '#/deployments'; },
-    }, icon('external', 10))
-  ));
-
-  const list = el('div', { class: 'deploy-history-list' });
-  for (const d of cached.deployments.slice(0, 5)) {
-    const isCurrent = d.id === cached.currentId;
-    const stateLabel = isCurrent ? 'Current' : (d.state || 'READY');
-    const stateClass = isCurrent
-      ? 'current'
-      : /offline/i.test(stateLabel)
-        ? 'offline'
-        : 'ready';
-
-    const row = el('div', {
-      class: `deploy-history-row${isCurrent ? ' current' : ''}`,
-      role: 'button',
-      tabindex: '0',
-      onclick: (e) => { if (!e.target.closest('button')) openDeploymentLinks(d.id, e.currentTarget); },
-      onkeydown: (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          openDeploymentLinks(d.id, e.currentTarget);
+  if (!cached && S.online && S.session && Date.now() - lastAttempt > COOLDOWN_MS) {
+    loadDeploymentHistoryFor(p.pid).then(() => {
+      if (S.sidebarPanel === 'info' && S.currentProject?.pid === p.pid) {
+        const deploymentsEl = container.querySelector('.info-deployments');
+        if (deploymentsEl) {
+          const fresh = buildDeploymentsSection(p, S.deploymentCache.get(p.pid));
+          deploymentsEl.replaceWith(fresh);
         }
-      },
-    },
-      el('span', { class: `deploy-history-dot ${stateClass}` }),
-      el('div', { class: 'deploy-history-info' },
-        el('span', { class: 'deploy-history-time' }, relativeTime(d.deployedAt)),
-        el('span', { class: `deploy-history-status ${stateClass}` }, stateLabel)
-      ),
-      el('button', {
-        class: 'deploy-history-action',
-        type: 'button',
-        title: 'Deployment links',
-        'aria-label': 'Deployment links',
-        onclick: (e) => { e.stopPropagation(); openDeploymentLinks(d.id, e.currentTarget); },
-      }, icon('link', 10))
-    );
-    list.appendChild(row);
+      }
+    }).catch(() => {});
   }
-  hist.appendChild(list);
-  deployments.appendChild(hist);
-}
+
+  const deployments = buildDeploymentsSection(p, cached);
 
   // Meta tags form
   const metaSection = el('div', { class: 'meta-form' });
