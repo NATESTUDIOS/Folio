@@ -41,6 +41,8 @@
     "@resvg/resvg-js": "^2.6.2",
     "cheerio": "^1.0.0",
     "firebase-admin": "^13.0.1",
+"@sparticuz/chromium": "^123.0.1",
+"puppeteer-core": "^22.0.0",
     "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
