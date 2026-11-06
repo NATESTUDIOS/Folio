@@ -3222,3 +3222,97 @@ svg { display: block; }
   overflow-wrap: anywhere;
   margin-bottom: 0;
 }
+/* ═══════════════════════════════════════════════════════════
+   DB / SECRETS DOCS — tables
+   ═══════════════════════════════════════════════════════════ */
+
+.db-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+  border: 1px solid var(--theme-card-border);
+  background: var(--theme-surface-card);
+  margin: 4px 0 8px;
+}
+
+.db-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 11px;
+  min-width: 340px;
+  color: var(--theme-text-secondary);
+}
+
+.db-table thead {
+  background: var(--theme-glass-bg);
+}
+
+.db-table th {
+  text-align: left;
+  padding: 9px 12px;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--theme-text-tertiary);
+  border-bottom: 1px solid var(--theme-divider);
+  white-space: nowrap;
+}
+
+.db-table th:first-child {
+  border-top-left-radius: 8px;
+}
+
+.db-table th:last-child {
+  border-top-right-radius: 8px;
+}
+
+.db-table td {
+  padding: 9px 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--theme-text-secondary);
+  border-bottom: 1px solid var(--theme-divider);
+  vertical-align: top;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.db-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.db-table tbody tr:hover {
+  background: var(--theme-glass-bg);
+}
+
+.db-table strong {
+  color: var(--theme-text);
+  font-weight: 700;
+}
+
+.db-table code,
+.db-table .mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 3px;
+  color: var(--theme-text);
+  white-space: nowrap;
+}
+
+/* On very narrow screens, allow the wrapper to scroll horizontally */
+@media (max-width: 480px) {
+  .db-table {
+    min-width: 300px;
+  }
+  .db-table th,
+  .db-table td {
+    padding: 8px 10px;
+    font-size: 10.5px;
+  }
+}
