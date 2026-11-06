@@ -116,6 +116,9 @@ const GENERATE_DAILY_LIMIT_UID = 70;
 const UPLOAD_DAILY_LIMIT_IP = 5;
 const UPLOAD_DAILY_LIMIT_UID = 30;
 
+const PROJECT_UPLOAD_DAILY_LIMIT_IP = 20;
+const PROJECT_UPLOAD_DAILY_LIMIT_UID = 200;
+
 const THUMB_RATE_LIMIT_IP = 60;
 const THUMB_RATE_WINDOW_MS = 60 * 60 * 1000;
 
@@ -134,7 +137,7 @@ const THUMB_CACHE_TTL = 60 * 60 * 1000;
 const SCENE_CACHE_MAX = 100;
 const SCENE_CACHE_TTL = 30 * 60 * 1000;
 
-const UPLOAD_MAX_BYTES = 1 * 1024 * 1024;
+const UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 const UPLOAD_MAX_EDGE = 4096;
 const UPLOAD_MAX_ICON_EDGE = 512; 
 // ═══════════════════════════════════════════════════════════════════
@@ -1046,6 +1049,8 @@ const RL_GENERATE_IP = new Map();
 const RL_GENERATE_UID = new Map();
 const RL_UPLOAD_IP = new Map();
 const RL_UPLOAD_UID = new Map();
+const RL_PROJECT_UPLOAD_IP = new Map();
+const RL_PROJECT_UPLOAD_UID = new Map();
 const RL_THUMB_IP = new Map();
 
 function rateLimit(id, max) {
@@ -1146,7 +1151,7 @@ function setRateHeaders(res, rl, bucket, scope) {
 if (typeof setInterval === "function") {
   const sweep = setInterval(() => {
     const now = Date.now();
-    for (const map of [RL, AVATAR_RL, AVATAR_CUSTOM_RL, RL_GENERATE_IP, RL_GENERATE_UID, RL_UPLOAD_IP, RL_UPLOAD_UID, RL_THUMB_IP]) {
+    for (const map of [RL, AVATAR_RL, AVATAR_CUSTOM_RL, RL_GENERATE_IP, RL_GENERATE_UID, RL_UPLOAD_IP, RL_UPLOAD_UID, RL_PROJECT_UPLOAD_IP, RL_PROJECT_UPLOAD_UID, RL_THUMB_IP]) {
       for (const [key, bucket] of map) {
         const resetAt = bucket.resetAt ? new Date(bucket.resetAt).getTime() : (bucket.start + RATE_WINDOW_MS);
         if (now >= resetAt + RATE_WINDOW_MS) map.delete(key);
@@ -3312,52 +3317,102 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── UPLOAD ──
-  if (action === "upload") {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+// ── UPLOAD ──
+if (action === "upload") {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    const quotaMap = identity.isAuth ? RL_UPLOAD_UID : RL_UPLOAD_IP;
-    const quotaKey = identity.isAuth ? `up:uid:${identity.uid}` : `up:ip:${ipHash(req)}`;
-    const quotaLimit = identity.isAuth ? UPLOAD_DAILY_LIMIT_UID : UPLOAD_DAILY_LIMIT_IP;
-    const quota = checkDailyQuota(quotaMap, quotaKey, quotaLimit);
-    setRateHeaders(res, { limit: quota.limit, remaining: quota.remaining, resetAt: quota.resetAt }, "upload", identity.isAuth ? "uid" : "ip");
-    if (!quota.ok) {
-      return res.status(429).json({
-        success: false, error: "Daily upload limit reached",
-        limit: quota.limit, scope: identity.isAuth ? "uid" : "ip", bucket: "upload", resetAt: quota.resetAt,
-      });
-    }
+  const scope = String(req.body?.scope || "asset");   // "asset" | "project"
 
-    const { dataUrl, kind } = req.body || {};
-    const validation = validateUpload(dataUrl, kind);
-    if (!validation.ok) {
-      return res.status(validation.status || 400).json({
-        success: false, error: validation.error,
-        remaining: quota.remaining, limit: quota.limit, resetAt: quota.resetAt,
-      });
-    }
+  const quotaMap = scope === "project"
+    ? (identity.isAuth ? RL_PROJECT_UPLOAD_UID : RL_PROJECT_UPLOAD_IP)
+    : (identity.isAuth ? RL_UPLOAD_UID : RL_UPLOAD_IP);
+  const quotaKey = scope === "project"
+    ? (identity.isAuth ? `proj_up:uid:${identity.uid}` : `proj_up:ip:${ipHash(req)}`)
+    : (identity.isAuth ? `up:uid:${identity.uid}` : `up:ip:${ipHash(req)}`);
+  const quotaLimit = scope === "project"
+    ? (identity.isAuth ? PROJECT_UPLOAD_DAILY_LIMIT_UID : PROJECT_UPLOAD_DAILY_LIMIT_IP)
+    : (identity.isAuth ? UPLOAD_DAILY_LIMIT_UID : UPLOAD_DAILY_LIMIT_IP);
 
-    const safeKind = kind === "icon" ? "icon" : "image";
-    const name = sanitizeUploadName(`upload_${safeKind}_${(identity.uid || ipHash(req)).slice(0, 8)}_${Date.now()}`);
-
-    try {
-      const uploaded = await uploadPng(validation.buffer, name, reqId);
-      const url = uploaded.url || uploaded.display_url;
-      if (!url || !String(url).startsWith("https://")) {
-        return res.status(502).json({ success: false, error: "Upload returned no URL", remaining: quota.remaining, limit: quota.limit });
-      }
-      return res.status(200).json({
-        success: true, url, display_url: uploaded.display_url || url,
-        bytes: validation.buffer.length, mime: validation.mime,
-        width: uploaded.width || null, height: uploaded.height || null,
-        remaining: quota.remaining, limit: quota.limit, resetAt: quota.resetAt,
-      });
-    } catch (err) {
-      log("upload.error", { reqId, message: err.message });
-      return res.status(err.status || 500).json({ success: false, error: err.message || "Upload failed", remaining: quota.remaining, limit: quota.limit });
-    }
+  const quota = checkDailyQuota(quotaMap, quotaKey, quotaLimit);
+  setRateHeaders(res, { limit: quota.limit, remaining: quota.remaining, resetAt: quota.resetAt }, "upload", identity.isAuth ? "uid" : "ip");
+  if (!quota.ok) {
+    return res.status(429).json({
+      success: false, error: "Daily upload limit reached",
+      limit: quota.limit, scope: identity.isAuth ? "uid" : "ip", bucket: scope, resetAt: quota.resetAt,
+    });
   }
 
+  const { dataUrl, kind } = req.body || {};
+  const validation = validateUpload(dataUrl, kind);
+  if (!validation.ok) {
+    return res.status(validation.status || 400).json({
+      success: false, error: validation.error,
+      remaining: quota.remaining, limit: quota.limit, resetAt: quota.resetAt,
+    });
+  }
+
+  const safeKind = kind === "icon" ? "icon" : "image";
+
+  // Project uploads may supply a descriptive name (from the original file path).
+  // Asset uploads (avatars, covers) keep the auto-generated name.
+  const clientName = scope === "project" && typeof req.body?.name === "string"
+    ? req.body.name
+    : null;
+  const name = sanitizeUploadName(
+    clientName
+      ? clientName
+      : `upload_${safeKind}_${(identity.uid || ipHash(req)).slice(0, 8)}_${Date.now()}`
+  );
+
+  try {
+    const uploaded = await uploadPng(validation.buffer, name, reqId);
+    const url = uploaded.url || uploaded.display_url;
+    if (!url || !String(url).startsWith("https://")) {
+      return res.status(502).json({ success: false, error: "Upload returned no URL", remaining: quota.remaining, limit: quota.limit });
+    }
+    return res.status(200).json({
+      success: true, url, display_url: uploaded.display_url || url,
+      bytes: validation.buffer.length, mime: validation.mime,
+      width: uploaded.width || null, height: uploaded.height || null,
+      remaining: quota.remaining, limit: quota.limit, resetAt: quota.resetAt,
+    });
+  } catch (err) {
+    log("upload.error", { reqId, message: err.message });
+    return res.status(err.status || 500).json({ success: false, error: err.message || "Upload failed", remaining: quota.remaining, limit: quota.limit });
+  }
+}
+
+// ── DELETE ──
+if (action === "delete") {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (!isAdmin(req)) return res.status(401).json({ success: false, error: "Admin credentials required" });
+
+  const { url } = req.body || {};
+  if (!url || typeof url !== "string" || !/^https:\/\//.test(url)) {
+    return res.status(400).json({ success: false, error: "Invalid url" });
+  }
+
+  try {
+    const del = await fetch("https://kx-services.vercel.app/api/tools/imagedelete", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": process.env.ADMIN_API_KEY || "",
+      },
+      body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!del.ok) {
+      log("flier.delete_http", { reqId, status: del.status, url });
+      return res.status(502).json({ success: false, error: `CDN HTTP ${del.status}` });
+    }
+    return res.status(200).json({ success: true, deleted: url });
+  } catch (err) {
+    log("flier.delete_failed", { reqId, url, message: err.message });
+    return res.status(502).json({ success: false, error: err.message || "Delete failed" });
+  }
+}
+  
   // ── SCENES (admin) ──
   if (action === "scenes") {
     if (!isAdmin(req)) return res.status(401).json({ success: false, error: "Admin credentials required" });

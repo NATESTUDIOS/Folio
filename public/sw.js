@@ -1,4 +1,3 @@
-
 'use strict';
 
 // ============================================================
@@ -6,12 +5,51 @@
 // Offline-first application shell, navigation, assets and FCM
 // ============================================================
 
-const CACHE_VERSION = '2026-11-04-1';
+const CACHE_VERSION = '2026-11-04-2';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 
 const CACHE_BUILT_AT = Date.now();
 
 const NAVIGATION_TIMEOUT = 5000;
+
+// ============================================================
+// LIVE-SITE DETECTION
+// ============================================================
+//
+// Live sites are user-published sites served from Folio but rendered
+// as standalone pages in a normal browser tab. They must NEVER be
+// intercepted by the PWA service worker, otherwise the SW's app-shell
+// scope swallows them and they render inside the installed app window.
+//
+// URL shape: /:username/project/:projectname[/...]
+//
+// This matches:
+//   /alice/project/my-site
+//   /alice/project/my-site/
+//   /alice/project/my-site/about.html
+//   /alice/project/my-site/css/style.css?from=db_xyz
+//   /alice/project/my-site?v=abc
+//
+// It intentionally does NOT match:
+//   /alice                       (profile — stays in PWA)
+//   /alice/my-site               (details page — stays in PWA)
+//   /alice/project               (would be a 2-segment URL, no slug)
+//
+// It also catches the ?from= historic-preview query on ANY path so
+// deployment snapshots are always fetched fresh from the server.
+
+const LIVE_SITE_PATH_RE = /^\/[^/]+\/project\/[^/]+(\/|$)/;
+
+function isLiveSiteRequest(url) {
+  try {
+    if (url.origin !== self.location.origin) return false;
+    if (LIVE_SITE_PATH_RE.test(url.pathname)) return true;
+    if (url.searchParams.has('from')) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 // ============================================================
 // ALLOWED EXTERNAL HOSTS
@@ -149,6 +187,12 @@ function shouldBypass(url, request) {
   if (request.headers.get('range')) return true;
 
   if (url.protocol === 'chrome-extension:') return true;
+
+  // Live sites and historic previews: never intercept. The browser
+  // handles them as a normal top-level navigation and, if opened from
+  // a link inside the installed PWA on mobile, gets handed off to the
+  // browser's default handler by the platform.
+  if (isLiveSiteRequest(url)) return true;
 
   // External hosts must be explicitly allowed.
   if (url.origin !== self.location.origin) {
@@ -1528,6 +1572,14 @@ self.addEventListener('notificationclick', event => {
     }
 
     const finalTarget = new URL(absoluteUrl);
+
+    // If the notification points at a live site, hand it off to the
+    // browser instead of navigating an existing PWA window. Live sites
+    // are independent pages, not part of the app shell.
+    if (isLiveSiteRequest(finalTarget)) {
+      await self.clients.openWindow(absoluteUrl);
+      return;
+    }
 
     const targetPath =
       finalTarget.pathname + finalTarget.search;
