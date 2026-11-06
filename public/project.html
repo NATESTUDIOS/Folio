@@ -5143,23 +5143,50 @@ async function renderSecretsPanel(panel) {
 
   const { keys = [], count = 0, encryptionEnabled = false } = res.data;
   const visibilityMode = S.project?.visibility?.secrets || 'off';
+  const dbVisibility = S.project?.visibility?.db || 'private';
 
   panel.innerHTML = `
+    <!-- ── Intro card ── -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">${svg('key', 13, 2.2)} Secrets</div>
+        <span class="vis-badge ${visibilityMode === 'inject' ? 'public' : 'private'}">
+          ${visibilityMode === 'inject' ? 'Injected' : visibilityMode === 'private' ? 'Private' : 'Off'}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="field-hint" style="line-height:1.6;">
+          Store API keys, tokens, connection strings, and anything else you would
+          put in a <code class="mono">.env</code> file. Secrets are encrypted at rest,
+          never served through the file system, and never included in exports or
+          historic previews.
+          <br><br>
+          <strong>Do not store app data here.</strong> For users, notes, settings, or
+          counters, use the <strong>Data</strong> tab (JSON database). Secrets are
+          for values that must stay hidden.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Encryption warning (only if not configured) ── -->
     ${!encryptionEnabled ? `
       <div class="card" style="border-color:var(--theme-warning);">
         <div class="card-body" style="display:flex;gap:8px;align-items:flex-start;">
           <div style="color:var(--theme-warning);flex-shrink:0;">${svg('alertCircle', 16, 2.2)}</div>
           <div style="font-size:11.5px;color:var(--theme-text-secondary);line-height:1.5;">
             <strong>Encryption is not configured on the server.</strong>
-            Secrets are stored as plaintext in the database. Ask the platform admin to set <code class="mono">FOLIO_SECRETS_KEY</code> before storing sensitive values.
+            Secrets are stored as plaintext in the database. Ask the platform
+            admin to set <code class="mono">FOLIO_SECRETS_KEY</code> before
+            storing sensitive values.
           </div>
         </div>
       </div>
     ` : ''}
 
+    <!-- ── Key list ── -->
     <div class="card">
       <div class="card-header">
-        <div class="card-title">${svg('key', 13, 2.2)} Secrets (${count})</div>
+        <div class="card-title">${svg('key', 13, 2.2)} Stored secrets (${count})</div>
         <button class="btn btn-sm btn-primary" id="btnNewSecret" type="button">${svg('plus', 10, 2.4)} New</button>
       </div>
       <div class="card-body tight">
@@ -5187,6 +5214,7 @@ async function renderSecretsPanel(panel) {
       </div>
     </div>
 
+    <!-- ── Injection card ── -->
     <div class="card">
       <div class="card-header">
         <div class="card-title">${svg('terminal', 13, 2.2)} Injection</div>
@@ -5212,31 +5240,115 @@ async function renderSecretsPanel(panel) {
       </div>
     </div>
 
+    <!-- ── Usage / API reference ── -->
     <div class="card">
       <div class="card-header"><div class="card-title">${svg('code', 13, 2.2)} Usage</div></div>
       <div class="card-body">
-        <div class="db-snippet">// In your deployed app.js
+        <div class="db-doc">
+          <h4 class="db-doc-h">In your deployed code</h4>
+          <div class="db-doc-item">
+            <code class="db-doc-signature">window.__SECRETS__</code>
+            <div class="db-doc-desc">
+              Available only when <strong>Injection</strong> is enabled.
+              A frozen object of key/value pairs. Undefined otherwise.
+            </div>
+          </div>
+          <div class="db-snippet">// In your deployed app.js
 const GROQ_KEY = window.__SECRETS__?.GROQ_API_KEY;
 if (!GROQ_KEY) throw new Error('Missing GROQ_API_KEY');
 
-// From client code, use the API
-const res = await fetch('${API_HOST}?action=secrets/get&pid=${S.pid}', {
-  headers: { Authorization: 'Bearer ' + sessionToken },
-});
-// response: { entries: { KEY: { value, hasValue, note } } }</div>
+fetch('https://api.groq.com/openai/v1/chat/completions', {
+  headers: { Authorization: 'Bearer ' + GROQ_KEY },
+  // ...
+});</div>
+
+          <h4 class="db-doc-h">From the API</h4>
+
+          <div class="db-doc-item">
+            <code class="db-doc-signature">GET /api/host?action=secrets/list&pid=${S.pid}</code>
+            <div class="db-doc-desc">
+              Returns key names and metadata — no values. Owner/editor only.
+            </div>
+          </div>
+
+          <div class="db-doc-item">
+            <code class="db-doc-signature">GET /api/host?action=secrets/get&pid=${S.pid}</code>
+            <div class="db-doc-desc">
+              Returns decrypted values. Owner only. Rate-limited tightly
+              (20 requests/hour). Do not call this on every page load —
+              use injection instead.
+            </div>
+          </div>
+
+          <div class="db-doc-item">
+            <code class="db-doc-signature">POST /api/host?action=secrets/set</code>
+            <div class="db-doc-desc">
+              Body: <code class="mono">{ pid, key, value, note? }</code>. Owner only.
+              Keys must be <code class="mono">UPPER_SNAKE_CASE</code>. Values are
+              capped at 16 KB. Total storage capped at 512 KB per project.
+            </div>
+          </div>
+
+          <div class="db-doc-item">
+            <code class="db-doc-signature">POST /api/host?action=secrets/delete</code>
+            <div class="db-doc-desc">
+              Body: <code class="mono">{ pid, key }</code>. Owner only.
+            </div>
+          </div>
+
+          <h4 class="db-doc-h">Rules</h4>
+          <ul class="db-doc-list">
+            <li><strong>Never in the file system.</strong> Secrets live at <code class="mono">secrets/${S.pid}</code>, not in <code class="mono">files/${S.pid}</code>. No URL path can reach them.</li>
+            <li><strong>Never in exports.</strong> <code class="mono">.folio</code> and <code class="mono">.zip</code> exports exclude them.</li>
+            <li><strong>Never in <code class="mono">?from=</code> previews.</strong> Historic deployment previews do not inject secrets, even if the live site does.</li>
+            <li><strong>Never via <code class="mono">db/get</code>.</strong> The JSON database and the secrets vault are different trees.</li>
+            <li><strong>Editors can see key names but not values.</strong> Only the owner can read decrypted values.</li>
+            <li><strong>Encrypted at rest</strong> with AES-256-GCM and a per-project key derived from <code class="mono">FOLIO_SECRETS_KEY</code>.</li>
+          </ul>
+
+          <h4 class="db-doc-h">When to use Secrets vs. the DB</h4>
+          <div class="db-table-wrap">
+            <table class="db-table">
+              <thead><tr><th>Value</th><th>Store in</th></tr></thead>
+              <tbody>
+                <tr><td>Groq / OpenAI / Stripe API key</td><td><strong>Secrets</strong></td></tr>
+                <tr><td>OAuth client secret</td><td><strong>Secrets</strong></td></tr>
+                <tr><td>DB connection string</td><td><strong>Secrets</strong></td></tr>
+                <tr><td>Admin password (hashed)</td><td><strong>Secrets</strong></td></tr>
+                <tr><td>User profiles, notes, todos</td><td>JSON DB</td></tr>
+                <tr><td>App settings, counters, flags</td><td>JSON DB</td></tr>
+                <tr><td>Public API keys with rate limits</td><td>Either — Secrets + injection, or JSON DB if visibility is acceptable</td></tr>
+                <tr><td>Image URLs, CDN links</td><td>JSON DB</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
+    </div>
+
+    <!-- ── Cross-link to DB docs ── -->
+    <div class="db-doc-footer">
+      <strong>Looking for app data?</strong> The JSON database
+      (<code class="mono">db/*</code> endpoints) stores users, notes, settings,
+      and anything else your app needs at runtime. See the
+      <button type="button" class="link-btn" id="btnGoToData">Data tab</button>
+      for the full DB reference.
     </div>
   `;
 
+  // ── Wiring ──
   $('btnNewSecret')?.addEventListener('click', () => openSecretEditor(null));
   $('btnFirstSecret')?.addEventListener('click', () => openSecretEditor(null));
+
   panel.querySelectorAll('[data-secret-edit]').forEach(btn => {
     btn.addEventListener('click', () => openSecretEditor(btn.dataset.secretEdit));
   });
   panel.querySelectorAll('[data-secret-delete]').forEach(btn => {
     btn.addEventListener('click', () => confirmDeleteSecret(btn.dataset.secretDelete));
   });
+
   $('secretInjectToggle')?.addEventListener('click', toggleSecretInjection);
+  $('btnGoToData')?.addEventListener('click', () => switchTab('data'));
 }
 
 async function openSecretEditor(keyToEdit) {
