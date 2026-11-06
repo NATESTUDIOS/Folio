@@ -4551,7 +4551,7 @@ function serializeDocsSection(rootEl) {
   async function renderDataPanel(panel) {
   if (!gate(panel, { label: 'Data' })) return;
 
-  // ── Pre-flight: local projects and unsynced states can't use the DB ──
+  // Local-only projects and unsynced states can't use the DB
   if (S.isLocalOnly) {
     panel.innerHTML = `<div class="card"><div class="card-body">
       ${emptyState(
@@ -4703,14 +4703,15 @@ function serializeDocsSection(rootEl) {
         <div id="dbSchemaWrap" ${S.dbTab === 'schema' ? '' : 'style="display:none;"'}>
           <div class="db-json">${schema ? escapeHTML(JSON.stringify(schema, null, 2)) : 'No schema defined.\n\nSchema is optional metadata — data works without it.'}</div>
         </div>
+
         <div id="dbApiWrap" ${S.dbTab === 'api' ? '' : 'style="display:none;"'}>
-  <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
-    <button class="btn btn-sm btn-ghost" id="btnCopyDbDocs" type="button" data-copy-docs="dbApiDoc">
-      ${svg('copy', 10, 2.2)} Copy docs
-    </button>
-  </div>
-  <div class="db-doc" id="dbApiDoc">
-    <h4 class="db-doc-h">Endpoints</h4>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+            <button class="btn btn-sm btn-ghost" id="btnCopyDbDocs" type="button" data-copy-docs="dbApiDoc">
+              ${svg('copy', 10, 2.2)} Copy docs
+            </button>
+          </div>
+          <div class="db-doc" id="dbApiDoc">
+            <h4 class="db-doc-h">Endpoints</h4>
 
             <div class="db-doc-item">
               <code class="db-doc-signature">GET /api/host?action=db/get&pid=${S.pid}</code>
@@ -4819,6 +4820,7 @@ fetch('${API_HOST}?action=db/cas', {
     value: 'running'
   })
 });</div>
+
             <div class="db-doc-footer">
               <strong>Secrets:</strong> see <code class="mono">GET/POST /api/host?action=secrets/*</code>
               in the <button type="button" class="link-btn" id="btnGoToSecrets">Secrets tab</button>.
@@ -4833,7 +4835,7 @@ fetch('${API_HOST}?action=db/cas', {
       </div>
     </div>
 
-    <!-- ── Warning: null-array quirk ── -->
+    <!-- ── Warning: storage almost full ── -->
     ${pct > 80 ? `
       <div class="card" style="border-color:var(--theme-warning);">
         <div class="card-body" style="display:flex;gap:10px;align-items:flex-start;">
@@ -4870,13 +4872,12 @@ fetch('${API_HOST}?action=db/cas', {
     renderDataPanelContent(panel, schema);
   });
 
-  // ── Save ──
+  // ── Save (full replace — requires mode: "replace" on the server) ──
   $('btnDbSave')?.addEventListener('click', async () => {
     const btn = $('btnDbSave');
     btn.disabled = true;
     btn.textContent = 'Saving…';
     try {
-      // Full-document replace — explicit mode required by the server
       const res = await apiFetch(API_HOST + '?action=db/set', {
         method: 'POST',
         body: JSON.stringify({ pid: S.pid, data: S.dbData, mode: 'replace' }),
