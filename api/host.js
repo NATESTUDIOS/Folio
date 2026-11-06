@@ -152,6 +152,7 @@ const RATE_LIMITS = {
   fileGet: { max: 120, window: 60 * 60 * 1000 },
   fileList: { max: 120, window: 60 * 60 * 1000 },
   fileDelete: { max: 60, window: 60 * 60 * 1000 },
+  fileSave: { max: 300, window: 60 * 60 * 1000 },
   projectHydrate: { max: 60, window: 60 * 60 * 1000 },
   serve: { max: 1200, window: 60 * 1000 },
   clientError: { max: 20, window: 60 * 1000 },
@@ -894,7 +895,101 @@ function computeLanguageBreakdown(files) {
 
 const FLIER_INTERNAL_URL =
   process.env.FLIER_INTERNAL_URL || `${BASE_URL}/api/flier`;
+// ═══════════════════════════════════════════════════════════════════
+// FLIER UPLOAD BRIDGE — server-to-server
+// ═══════════════════════════════════════════════════════════════════
 
+const DATA_URI_RE = /^data:([^;,]*)?(;base64)?,([\s\S]*)$/;
+
+function tryDecodeDataUri(content) {
+  if (typeof content !== "string") return null;
+  const m = content.match(DATA_URI_RE);
+  if (!m) return null;
+  const declaredMime =
+    (m[1] || "application/octet-stream").trim() || "application/octet-stream";
+  const isBase64 = !!m[2];
+  const payload = m[3];
+  try {
+    const body = isBase64
+      ? Buffer.from(payload, "base64")
+      : Buffer.from(decodeURIComponent(payload), "utf8");
+    return { mime: declaredMime, body, isBase64 };
+  } catch (err) {
+    log("host.datauri_decode_failed", { message: err.message });
+    return null;
+  }
+}
+
+async function uploadViaFlier(dataUri, name, reqId) {
+  if (typeof dataUri !== "string" || !dataUri.startsWith("data:")) {
+    throw Object.assign(new Error("Not a data URI"), { status: 400 });
+  }
+
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}/api/flier?action=upload`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": process.env.ADMIN_API_KEY || "",
+      },
+      body: JSON.stringify({
+        dataUrl: dataUri,
+        kind: "image",
+        scope: "project",
+        name: String(name || `asset_${Date.now()}`).slice(0, 60),
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (err) {
+    log("host.flier_upload.network", { reqId, message: err.message });
+    throw Object.assign(new Error("Upload service unreachable"), {
+      status: 502,
+    });
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    log("host.flier_upload.http", {
+      reqId,
+      status: res.status,
+      body: text.slice(0, 200),
+    });
+    throw Object.assign(new Error(`Upload service HTTP ${res.status}`), {
+      status: res.status === 429 ? 429 : 502,
+    });
+  }
+
+  const json = await res.json().catch(() => ({}));
+  const url = json?.url || json?.data?.url || json?.display_url;
+  if (!url || !/^https:\/\//.test(url)) {
+    log("host.flier_upload.bad_response", { reqId, response: json });
+    throw Object.assign(new Error("Upload service returned no URL"), {
+      status: 502,
+    });
+  }
+
+  return url;
+}
+
+async function deleteViaFlier(url, reqId) {
+  if (!url || typeof url !== "string") return false;
+  try {
+    const res = await fetch(`${BASE_URL}/api/flier?action=delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": process.env.ADMIN_API_KEY || "",
+      },
+      body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(8000),
+    });
+    return res.ok;
+  } catch (err) {
+    log("host.flier_delete.error", { reqId, url, message: err.message });
+    return false;
+  }
+}
 function ogSignature(...parts) {
   const raw = parts.map((p) => String(p ?? "")).join("|");
   return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16);
@@ -2417,7 +2512,8 @@ function tryDecodeDataUri(content) {
   const m = content.match(DATA_URI_RE);
   if (!m) return null;
 
-  const declaredMime = (m[1] || "application/octet-stream").trim() || "application/octet-stream";
+  const declaredMime =
+    (m[1] || "application/octet-stream").trim() || "application/octet-stream";
   const isBase64 = !!m[2];
   const payload = m[3];
 
@@ -2546,8 +2642,12 @@ async function renderFolderListing(
     const rest = f.path.slice(prefix.length);
     if (!rest) continue;
     const slash = rest.indexOf("/");
-if (slash < 0)
-  direct.push({ name: rest, path: f.path, size: contentByteLength(f.content) });
+    if (slash < 0)
+      direct.push({
+        name: rest,
+        path: f.path,
+        size: contentByteLength(f.content),
+      });
     else subFolders.add(rest.slice(0, slash));
   }
   direct.sort((a, b) => a.name.localeCompare(b.name));
@@ -2884,23 +2984,31 @@ async function handleServe(req, res, reqId) {
   }
 
   // ── Other files ──
-  // Binary files are stored as data: URIs (client's FileReader.readAsDataURL).
-  // We must decode the base64 payload before sending, or the browser receives
-  // the literal text "data:image/jpeg;base64,..." and its decoder fails.
   res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300");
 
-  let body = content;
-  let resolvedMime = mime;
-
-  const decoded = tryDecodeDataUri(content);
-  if (decoded) {
-    body = decoded.body;
-    resolvedMime = decoded.mime;
-    res.setHeader("Content-Type", resolvedMime);
-    res.setHeader("Content-Length", String(body.length));
+  // Hosted CDN URL → redirect browser to fetch from CDN directly.
+  if (/^https?:\/\//i.test(content)) {
+    return res.redirect(302, content);
   }
 
-  if (isBinaryMime(resolvedMime)) {
+  // Legacy data URI → decode and serve real bytes.
+  const decoded = tryDecodeDataUri(content);
+  if (decoded) {
+    res.setHeader("Content-Type", decoded.mime);
+    res.setHeader("Content-Length", String(decoded.body.length));
+    if (isBinaryMime(decoded.mime) && req.query?.download === "1") {
+      const fname = relPath.split("/").pop() || "file";
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fname.replace(/"/g, "")}"`,
+      );
+    }
+    res.setHeader("Accept-Ranges", "none");
+    return res.status(200).send(decoded.body);
+  }
+
+  // Plain text (JS, JSON, etc. — HTML/CSS already returned above).
+  if (isBinaryMime(mime)) {
     if (req.query?.download === "1") {
       const fname = relPath.split("/").pop() || "file";
       res.setHeader(
@@ -2910,7 +3018,7 @@ async function handleServe(req, res, reqId) {
     }
     res.setHeader("Accept-Ranges", "none");
   }
-  return res.status(200).send(body);
+  return res.status(200).send(content);
 }
 
 // =========================================================================
@@ -3318,6 +3426,15 @@ async function handleProjectsDelete(req, res, reqId) {
   } catch {}
 
   try {
+    await deleteProjectCdnAssets(pid, reqId);
+  } catch (err) {
+    log("host.projects_delete.cdn_cleanup_failed", {
+      pid,
+      message: err.message,
+    });
+  }
+
+  try {
     await deleteProjectRecord(pid, access.uid);
     invalidateProject(pid);
     if (collaborators.length) {
@@ -3587,17 +3704,18 @@ async function handleProjectExport(req, res, reqId) {
   });
 
   for (const [filePath, content] of Object.entries(filesObj)) {
-  let buf;
-  const decoded = tryDecodeDataUri(content);
-  if (decoded) {
-    buf = decoded.body;
-  } else {
-    buf = typeof content === "string"
-      ? Buffer.from(content, "utf8")
-      : Buffer.from(String(content));
+    let buf;
+    const decoded = tryDecodeDataUri(content);
+    if (decoded) {
+      buf = decoded.body;
+    } else {
+      buf =
+        typeof content === "string"
+          ? Buffer.from(content, "utf8")
+          : Buffer.from(String(content));
+    }
+    entries.push({ name: `files/${filePath}`, data: buf });
   }
-  entries.push({ name: `files/${filePath}`, data: buf });
-}
 
   if (format === "folio" && !publicOnly) {
     for (const [vid, v] of Object.entries(versionsObj)) {
@@ -3673,13 +3791,36 @@ async function handleProjectSyncBack(req, res, reqId) {
       await Promise.allSettled(
         batch.map(async ([p, c]) => {
           try {
+            let stored = c;
+
+            // If client sent a data URI for a binary file, upload it to the CDN first.
+            if (
+              c.startsWith("data:image/") ||
+              c.startsWith("data:application/pdf") ||
+              c.startsWith("data:font/") ||
+              c.startsWith("data:video/") ||
+              c.startsWith("data:audio/")
+            ) {
+              try {
+                stored = await uploadViaFlier(c, p.split("/").pop(), reqId);
+              } catch (err) {
+                log("host.sync_back.upload_failed", {
+                  pid,
+                  path: p,
+                  message: err.message,
+                });
+                result.filesSkipped++;
+                return;
+              }
+            }
+
             await db
               .ref(
                 `files/${pid}/${sanitizeFirebasePath(p.replace(/\//g, "__"))}`,
               )
               .set({
                 path: p,
-                content: c,
+                content: stored,
                 updatedAt: Date.now(),
               });
             result.filesWritten++;
@@ -3969,6 +4110,174 @@ async function handleFileDelete(req, res, reqId) {
   });
   invalidateProject(pid);
   return res.status(200).json({ success: true });
+}
+
+async function handleFileSave(req, res, reqId) {
+  const { pid, path: filePath, content } = req.body || {};
+
+  if (!pid || !filePath || typeof content !== "string") {
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid, path, or content" });
+  }
+  if (!isValidFilePath(filePath)) {
+    return res.status(400).json({ success: false, error: "Invalid path" });
+  }
+  if (!(await enforceRate(req, res, "fileSave", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "editor");
+  if (!access) return;
+
+  // Decide what to store
+  let storedContent = content;
+  let uploadedUrl = null;
+
+  const isDataUri = content.startsWith("data:");
+  const isBinaryData =
+    isDataUri &&
+    (content.startsWith("data:image/") ||
+      content.startsWith("data:application/pdf") ||
+      content.startsWith("data:font/") ||
+      content.startsWith("data:video/") ||
+      content.startsWith("data:audio/"));
+
+  if (isBinaryData) {
+    try {
+      uploadedUrl = await uploadViaFlier(
+        content,
+        filePath.split("/").pop(),
+        reqId,
+      );
+    } catch (err) {
+      return res.status(err.status || 500).json({
+        success: false,
+        error: err.message || "Upload failed",
+      });
+    }
+    storedContent = uploadedUrl;
+  } else if (content.length > MAX_SERVE_FILE_BYTES) {
+    return res.status(413).json({
+      success: false,
+      error: `Content exceeds ${Math.round(MAX_SERVE_FILE_BYTES / 1024)} KB`,
+    });
+  }
+
+  // Persist
+  try {
+    await db
+      .ref(
+        `files/${pid}/${sanitizeFirebasePath(filePath.replace(/\//g, "__"))}`,
+      )
+      .set({ path: filePath, content: storedContent, updatedAt: Date.now() });
+  } catch (err) {
+    log("host.file_save.write_failed", { reqId, pid, message: err.message });
+    return res.status(500).json({ success: false, error: "Write failed" });
+  }
+
+  await touchProject(pid);
+  await logProjectEvent(pid, access.uid, "file", "file.saved", {
+    path: filePath,
+    bytes: storedContent.length,
+    uploaded: !!uploadedUrl,
+  });
+
+  return res.status(200).json({
+    success: true,
+    path: filePath,
+    content: storedContent,
+    url: uploadedUrl,
+  });
+}
+
+async function handleMigrateImages(req, res, reqId) {
+  if (!isAdminRequest(req)) {
+    return res
+      .status(401)
+      .json({ success: false, error: "Admin credentials required" });
+  }
+  const pid = String(req.body?.pid || req.query?.pid || "").trim();
+  if (!pid)
+    return res.status(400).json({ success: false, error: "Missing pid" });
+
+  const filesSnap = await db.ref(`files/${pid}`).once("value");
+  if (!filesSnap.exists()) {
+    return res.status(200).json({ success: true, migrated: 0, total: 0 });
+  }
+
+  const entries = [];
+  filesSnap.forEach((child) => {
+    const v = child.val();
+    if (!v || typeof v.content !== "string") return;
+    if (!v.content.startsWith("data:image/")) return;
+    entries.push({
+      key: child.key,
+      path: v.path || child.key,
+      content: v.content,
+    });
+  });
+
+  let migrated = 0;
+  const errors = [];
+
+  for (const e of entries) {
+    try {
+      const url = await uploadViaFlier(
+        e.content,
+        e.path.split("/").pop(),
+        reqId,
+      );
+      await db.ref(`files/${pid}/${e.key}`).update({
+        content: url,
+        migratedAt: Date.now(),
+      });
+      migrated++;
+    } catch (err) {
+      errors.push({ path: e.path, error: err.message });
+    }
+  }
+
+  log("host.migrate_images.done", {
+    reqId,
+    pid,
+    migrated,
+    total: entries.length,
+    failed: errors.length,
+  });
+
+  return res.status(200).json({
+    success: true,
+    pid,
+    total: entries.length,
+    migrated,
+    failed: errors.length,
+    errors: errors.slice(0, 20),
+  });
+}
+
+async function deleteProjectCdnAssets(pid, reqId) {
+  const snap = await db
+    .ref(`files/${pid}`)
+    .once("value")
+    .catch(() => null);
+  if (!snap?.exists()) return { total: 0, deleted: 0 };
+
+  const urls = [];
+  snap.forEach((child) => {
+    const v = child.val();
+    if (v && typeof v.content === "string" && /^https?:\/\//i.test(v.content)) {
+      urls.push(v.content);
+    }
+  });
+  if (urls.length === 0) return { total: 0, deleted: 0 };
+
+  let deleted = 0;
+  for (const url of urls) {
+    const ok = await deleteViaFlier(url, reqId);
+    if (ok) deleted++;
+  }
+
+  log("host.cdn_assets_deleted", { reqId, pid, total: urls.length, deleted });
+  return { total: urls.length, deleted };
 }
 // =========================================================================
 // PROJECT HYDRATE — one-shot file+version pull for offline-first clients
@@ -5898,7 +6207,11 @@ export default async function handler(req, res) {
     if (method === "GET" && action === "file/get")
       return await handleFileGet(req, res, reqId);
     if (method === "POST" && action === "file/delete")
-      return await handleFileDelete(req, res, reqId);
+      if (method === "POST" && action === "file/save")
+        return await handleFileSave(req, res, reqId);
+    if (method === "POST" && action === "migrate-images")
+      return await handleMigrateImages(req, res, reqId);
+    return await handleFileDelete(req, res, reqId);
     if (method === "GET" && action === "project/hydrate")
       return await handleProjectHydrate(req, res, reqId);
     if (method === "GET" && action === "serve")
