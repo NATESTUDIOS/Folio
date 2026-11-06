@@ -298,18 +298,19 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   ];
 
   const OWNER_TABS = [
-    { id: 'overview', label: 'Overview', icon: 'info' },
-    { id: 'files', label: 'Files', icon: 'folder', countKey: 'files' },
-    { id: 'deployments', label: 'Deploys', icon: 'rocket', countKey: 'deployments' },
-    { id: 'commits', label: 'Commits', icon: 'git-commit', countKey: 'commits' },
-    { id: 'analytics', label: 'Analytics', icon: 'chart' },
-    { id: 'sharing', label: 'Sharing', icon: 'share' },
-    { id: 'data', label: 'Data', icon: 'database' },
-    { id: 'notes', label: 'Notes', icon: 'file-text', countKey: 'notes' },
-    { id: 'logs', label: 'Logs', icon: 'list', countKey: 'logs' },
-    { id: 'downloads', label: 'Downloads', icon: 'download' },
-    { id: 'danger', label: 'Danger', icon: 'alert' },
-  ];
+  { id: 'overview', label: 'Overview', icon: 'info' },
+  { id: 'files', label: 'Files', icon: 'folder', countKey: 'files' },
+  { id: 'deployments', label: 'Deploys', icon: 'rocket', countKey: 'deployments' },
+  { id: 'commits', label: 'Commits', icon: 'git-commit', countKey: 'commits' },
+  { id: 'analytics', label: 'Analytics', icon: 'chart' },
+  { id: 'sharing', label: 'Sharing', icon: 'share' },
+  { id: 'data', label: 'Data', icon: 'database' },
+  { id: 'secrets', label: 'Secrets', icon: 'key' },
+  { id: 'notes', label: 'Notes', icon: 'file-text', countKey: 'notes' },
+  { id: 'logs', label: 'Logs', icon: 'list', countKey: 'logs' },
+  { id: 'downloads', label: 'Downloads', icon: 'download' },
+  { id: 'danger', label: 'Danger', icon: 'alert' },
+];
   const SHARED_TABS = [
     { id: 'overview', label: 'Overview', icon: 'info' },
     { id: 'files', label: 'Files', icon: 'folder', countKey: 'files' },
@@ -366,6 +367,9 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
     'lock-open': '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
     'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
+  key: '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>',
+eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+'eye-off': '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
   };
 
   function svg(name, size = 14, sw = 2.2) {
@@ -1454,19 +1458,20 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
     inner.innerHTML = `<div class="panel active" id="panel-${tab}"></div>`;
     const panel = $('panel-' + tab);
     const loaders = {
-      overview: renderOverviewPanel,
-      files: renderFilesPanel,
-      deployments: renderDeploymentsPanel,
-      commits: renderCommitsPanel,
-      analytics: renderAnalyticsPanel,
-      sharing: renderSharingPanel,
-      data: renderDataPanel,
-      notes: renderNotesPanel,
-      logs: renderLogsPanel,
-      downloads: renderDownloadsPanel,
-      download: renderDownloadSharedPanel,
-      danger: renderDangerPanel,
-    };
+  overview: renderOverviewPanel,
+  files: renderFilesPanel,
+  deployments: renderDeploymentsPanel,
+  commits: renderCommitsPanel,
+  analytics: renderAnalyticsPanel,
+  sharing: renderSharingPanel,
+  data: renderDataPanel,
+  secrets: renderSecretsPanel,
+  notes: renderNotesPanel,
+  logs: renderLogsPanel,
+  downloads: renderDownloadsPanel,
+  download: renderDownloadSharedPanel,
+  danger: renderDangerPanel,
+};
     const loader = loaders[tab];
     if (!loader) return;
     try {
@@ -4433,211 +4438,410 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   // ═══════════════════════════════════════════════════════════
 
   async function renderDataPanel(panel) {
-    if (!gate(panel, { label: 'Data' })) return;
-    if (S.syncState !== 'synced') {
-      panel.innerHTML = `<div class="card"><div class="card-body">
-        ${emptyState('upload', 'Data needs a server project', 'Push this project to the server first to enable the JSON database.',
-          `<button class="btn btn-primary" id="btnPushForData" style="margin-top:8px;">${svg('upload', 12, 2.4)} ${S.syncState === 'orphan' ? 'Push to server' : 'Sync to account'}</button>`)}
-      </div></div>`;
-      $('btnPushForData')?.addEventListener('click', () => {
-        if (S.syncState === 'orphan') pushOrphanToServer();
-        else if (S.syncState === 'local') promoteLocalProject();
-      });
+  if (!gate(panel, { label: 'Data' })) return;
+
+  // ── Pre-flight: local projects and unsynced states can't use the DB ──
+  if (S.isLocalOnly) {
+    panel.innerHTML = `<div class="card"><div class="card-body">
+      ${emptyState(
+        'upload',
+        'Data needs a server project',
+        'Push this project to the server first to enable the JSON database.',
+        `<button class="btn btn-primary" id="btnPushForData" style="margin-top:8px;">${svg('upload', 12, 2.4)} Sync to account</button>`
+      )}
+    </div></div>`;
+    $('btnPushForData')?.addEventListener('click', () => promoteLocalProject());
+    return;
+  }
+  if (S.syncState !== 'synced') {
+    panel.innerHTML = `<div class="card"><div class="card-body">
+      ${emptyState(
+        'upload',
+        'Data needs a server project',
+        'Push this project to the server first to enable the JSON database.',
+        `<button class="btn btn-primary" id="btnPushForData" style="margin-top:8px;">${svg('upload', 12, 2.4)} ${S.syncState === 'orphan' ? 'Push to server' : 'Sync to account'}</button>`
+      )}
+    </div></div>`;
+    $('btnPushForData')?.addEventListener('click', () => {
+      if (S.syncState === 'orphan') pushOrphanToServer();
+      else if (S.syncState === 'local') promoteLocalProject();
+    });
+    return;
+  }
+
+  panel.innerHTML = skeletonCard(4);
+  try {
+    const res = await apiFetch(API_HOST + '?action=db/get&pid=' + encodeURIComponent(S.pid));
+    if (!res.ok || !res.data?.success) {
+      panel.innerHTML = `<div class="card"><div class="card-body">${
+        emptyState('database', "Couldn't load data", res.data?.error || 'Try refreshing.')
+      }</div></div>`;
       return;
     }
-    panel.innerHTML = skeletonCard(4);
-    try {
-      const res = await apiFetch(API_HOST + '?action=db/get&pid=' + encodeURIComponent(S.pid));
-      if (!res.ok || !res.data?.success) {
-        panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('database', "Couldn't load data", res.data?.error || 'Try refreshing.')}</div></div>`;
-        return;
-      }
-      const { data, schema } = res.data;
-      S.dbData = data || {};
-      S.dbStats = { calls: res.data.calls || null, rateLimit: res.data.rateLimit || null, space: res.data.space || null };
-      if (!S.dbSnapshot) S.dbSnapshot = JSON.parse(JSON.stringify(S.dbData));
-      S.dbDirty = false;
 
-      renderDataPanelContent(panel, schema);
-    } catch (err) {
-      panel.innerHTML = `<div class="card"><div class="card-body">${emptyState('database', "Couldn't load data", err.message)}</div></div>`;
-    }
+    const { data, schema } = res.data;
+    S.dbData = data || {};
+    S.dbStats = {
+      calls: res.data.calls || null,
+      rateLimit: res.data.rateLimit || null,
+      space: res.data.space || null,
+    };
+    if (!S.dbSnapshot) S.dbSnapshot = JSON.parse(JSON.stringify(S.dbData));
+    S.dbDirty = false;
+
+    renderDataPanelContent(panel, schema);
+  } catch (err) {
+    panel.innerHTML = `<div class="card"><div class="card-body">${
+      emptyState('database', "Couldn't load data", err.message)
+    }</div></div>`;
   }
+}
 
   function renderDataPanelContent(panel, schema) {
-    const d = S.dbStats;
-    const used = d.space?.used || JSON.stringify(S.dbData).length;
-    const limit = d.space?.limit || 15 * 1024 * 1024;
-    const pct = d.space?.percentUsed || Math.min(100, (used / limit) * 100);
-    const barClass = pct > 85 ? 'danger' : pct > 60 ? 'warn' : '';
+  const d = S.dbStats;
+  const used = d.space?.used || JSON.stringify(S.dbData).length;
+  const limit = d.space?.limit || 15 * 1024 * 1024;
+  const pct = d.space?.percentUsed || Math.min(100, (used / limit) * 100);
+  const barClass = pct > 85 ? 'danger' : pct > 60 ? 'warn' : '';
 
-    panel.innerHTML = `
-      <div class="db-stats-grid">
-        <div class="db-stat-tile">
-          <div class="db-stat-label">Storage</div>
-          <div class="db-stat-value ${pct > 85 ? 'danger' : pct > 60 ? 'warn' : ''}">${formatBytes(used)}</div>
-          <div class="db-stat-subtext">of ${formatBytes(limit)}</div>
-          <div class="db-stat-bar"><div class="db-stat-bar-fill ${barClass}" style="width:${pct}%"></div></div>
-        </div>
-        <div class="db-stat-tile">
-          <div class="db-stat-label">Writes</div>
-          <div class="db-stat-value">${d.calls ? formatNumber(d.calls.total || 0) : '—'}</div>
-          <div class="db-stat-subtext">${d.calls ? formatNumber(d.calls.today || 0) + ' today' : 'updates after first save'}</div>
-        </div>
-        <div class="db-stat-tile">
-          <div class="db-stat-label">Rate limit</div>
-          <div class="db-stat-value">${d.rateLimit ? `${d.rateLimit.remaining}/${d.rateLimit.limit}` : '—'}</div>
-          <div class="db-stat-subtext">per hour</div>
+  panel.innerHTML = `
+    <!-- ── Intro / what this is ── -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">${svg('database', 13, 2.2)} JSON database</div>
+        <span class="vis-badge ${S.project.visibility?.db === 'public' ? 'public' : 'private'}">
+          ${S.project.visibility?.db === 'public' ? 'Public reads' : 'Private'}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="field-hint" style="line-height:1.6;">
+          A per-project key/value store backed by Firebase Realtime Database.
+          Up to <strong>15 MB</strong> per project. Editable from this tab,
+          readable from any client via the <code class="mono">db/*</code> API endpoints,
+          and — if enabled — readable publicly when the project's
+          <strong>DB visibility</strong> is set to public.
+          <br><br>
+          <strong>Looking for secrets?</strong>
+          API keys, tokens, and other sensitive values belong in the
+          <strong>Secrets</strong> tab, not here. Secrets are encrypted at rest,
+          never served through the file system, and never exported.
+          See <strong>Data → API reference</strong> below for the exact behavior,
+          or open the Secrets tab to manage them.
         </div>
       </div>
+    </div>
 
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">${svg('database', 13, 2.2)} JSON database</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;">
-            <button class="btn btn-sm btn-ghost" id="btnDbReadOnlyToggle" style="color:${S.dbReadOnly ? 'var(--theme-warning)' : 'var(--theme-text-tertiary)'}">
-              ${svg(S.dbReadOnly ? 'lock' : 'edit', 10, 2.2)} ${S.dbReadOnly ? 'Read-only' : 'Edit'}
-            </button>
-            ${S.dbDirty ? `<button class="btn btn-sm btn-ghost" id="btnDbUndo">${svg('refresh', 10, 2.2)} Undo</button>` : ''}
-            <button class="btn btn-sm btn-primary" id="btnDbSave" ${S.dbDirty ? '' : 'disabled'}>${svg('check', 10, 2.4)} ${S.dbDirty ? 'Save' : 'Saved'}</button>
-          </div>
+    <!-- ── Storage / writes / rate limit stats ── -->
+    <div class="db-stats-grid">
+      <div class="db-stat-tile">
+        <div class="db-stat-label">Storage</div>
+        <div class="db-stat-value ${pct > 85 ? 'danger' : pct > 60 ? 'warn' : ''}">${formatBytes(used)}</div>
+        <div class="db-stat-subtext">of ${formatBytes(limit)}</div>
+        <div class="db-stat-bar"><div class="db-stat-bar-fill ${barClass}" style="width:${pct}%"></div></div>
+      </div>
+      <div class="db-stat-tile">
+        <div class="db-stat-label">Writes</div>
+        <div class="db-stat-value">${d.calls ? formatNumber(d.calls.total || 0) : '—'}</div>
+        <div class="db-stat-subtext">${d.calls ? formatNumber(d.calls.today || 0) + ' today' : 'updates after first save'}</div>
+      </div>
+      <div class="db-stat-tile">
+        <div class="db-stat-label">Rate limit</div>
+        <div class="db-stat-value">${d.rateLimit ? `${d.rateLimit.remaining}/${d.rateLimit.limit}` : '—'}</div>
+        <div class="db-stat-subtext">per minute</div>
+      </div>
+    </div>
+
+    <!-- ── Main editor card ── -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">${svg('database', 13, 2.2)} Database editor</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-ghost" id="btnDbReadOnlyToggle" style="color:${S.dbReadOnly ? 'var(--theme-warning)' : 'var(--theme-text-tertiary)'}">
+            ${svg(S.dbReadOnly ? 'lock' : 'edit', 10, 2.2)} ${S.dbReadOnly ? 'Read-only' : 'Edit'}
+          </button>
+          ${S.dbDirty ? `<button class="btn btn-sm btn-ghost" id="btnDbUndo">${svg('refresh', 10, 2.2)} Undo</button>` : ''}
+          <button class="btn btn-sm btn-primary" id="btnDbSave" ${S.dbDirty ? '' : 'disabled'}>${svg('check', 10, 2.4)} ${S.dbDirty ? 'Save' : 'Saved'}</button>
         </div>
-        <div class="card-body">
-          <div class="db-tabs">
-            <button class="db-tab ${S.dbTab === 'tree' ? 'active' : ''}" data-db-tab="tree">Tree</button>
-            <button class="db-tab ${S.dbTab === 'raw' ? 'active' : ''}" data-db-tab="raw">Raw</button>
-            <button class="db-tab ${S.dbTab === 'schema' ? 'active' : ''}" data-db-tab="schema">Schema</button>
-            <button class="db-tab ${S.dbTab === 'api' ? 'active' : ''}" data-db-tab="api">API</button>
-          </div>
+      </div>
+      <div class="card-body">
+        <div class="db-tabs">
+          <button class="db-tab ${S.dbTab === 'tree' ? 'active' : ''}" data-db-tab="tree">Tree</button>
+          <button class="db-tab ${S.dbTab === 'raw' ? 'active' : ''}" data-db-tab="raw">Raw</button>
+          <button class="db-tab ${S.dbTab === 'schema' ? 'active' : ''}" data-db-tab="schema">Schema</button>
+          <button class="db-tab ${S.dbTab === 'api' ? 'active' : ''}" data-db-tab="api">API</button>
+        </div>
 
-          ${(S.dbTab === 'tree' || S.dbTab === 'raw') ? `
-            <div class="db-toolbar">
-              <input class="input db-search" id="dbSearch" placeholder="Search keys or values…" value="${escapeAttr(S.dbSearch)}">
-              ${S.dbTab === 'tree' && !S.dbReadOnly ? `
-                <button class="btn btn-sm btn-ghost" id="btnDbExpand">${svg('chevron-down', 10, 2.2)} ${S.dbExpanded.size > 0 ? 'Collapse' : 'Expand'}</button>
-                <button class="btn btn-sm btn-ghost" id="btnDbAddKey">${svg('plus', 10, 2.4)} Add key</button>
-              ` : ''}
-              ${S.dbTab === 'raw' ? `
-                <button class="btn btn-sm btn-ghost" id="btnDbCopy">${svg('copy', 10, 2.2)} Copy</button>
-                <button class="btn btn-sm btn-ghost" id="btnDbExport">${svg('download', 10, 2.2)} Export</button>
-              ` : ''}
+        ${(S.dbTab === 'tree' || S.dbTab === 'raw') ? `
+          <div class="db-toolbar">
+            <input class="input db-search" id="dbSearch" placeholder="Search keys or values…" value="${escapeAttr(S.dbSearch)}">
+            ${S.dbTab === 'tree' && !S.dbReadOnly ? `
+              <button class="btn btn-sm btn-ghost" id="btnDbExpand">${svg('chevron-down', 10, 2.2)} ${S.dbExpanded.size > 0 ? 'Collapse' : 'Expand'}</button>
+              <button class="btn btn-sm btn-ghost" id="btnDbAddKey">${svg('plus', 10, 2.4)} Add key</button>
+            ` : ''}
+            ${S.dbTab === 'raw' ? `
+              <button class="btn btn-sm btn-ghost" id="btnDbCopy">${svg('copy', 10, 2.2)} Copy</button>
+              <button class="btn btn-sm btn-ghost" id="btnDbExport">${svg('download', 10, 2.2)} Export</button>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        <div id="dbTreeWrap" ${S.dbTab === 'tree' ? '' : 'style="display:none;"'}></div>
+        <div id="dbRawWrap" ${S.dbTab === 'raw' ? '' : 'style="display:none;"'}>
+          <textarea class="textarea mono" id="dbRawEditor" style="min-height:300px;font-family:var(--font-mono);font-size:11px;" ${S.dbReadOnly ? 'readonly' : ''}>${escapeHTML(JSON.stringify(S.dbData, null, 2))}</textarea>
+        </div>
+        <div id="dbSchemaWrap" ${S.dbTab === 'schema' ? '' : 'style="display:none;"'}>
+          <div class="db-json">${schema ? escapeHTML(JSON.stringify(schema, null, 2)) : 'No schema defined.\n\nSchema is optional metadata — data works without it.'}</div>
+        </div>
+        <div id="dbApiWrap" ${S.dbTab === 'api' ? '' : 'style="display:none;"'}>
+          <div class="db-doc">
+            <h4 class="db-doc-h">Endpoints</h4>
+
+            <div class="db-doc-item">
+              <code class="db-doc-signature">GET /api/host?action=db/get&pid=${S.pid}</code>
+              <div class="db-doc-desc">Reads the full database. Requires the project API key
+                (<code class="mono">X-Project-Key</code>) or a valid session.
+                Public if the project's <strong>DB visibility</strong> is set to public.</div>
             </div>
-          ` : ''}
 
-          <div id="dbTreeWrap" ${S.dbTab === 'tree' ? '' : 'style="display:none;"'}></div>
-          <div id="dbRawWrap" ${S.dbTab === 'raw' ? '' : 'style="display:none;"'}>
-            <textarea class="textarea mono" id="dbRawEditor" style="min-height:300px;font-family:var(--font-mono);font-size:11px;" ${S.dbReadOnly ? 'readonly' : ''}>${escapeHTML(JSON.stringify(S.dbData, null, 2))}</textarea>
-          </div>
-          <div id="dbSchemaWrap" ${S.dbTab === 'schema' ? '' : 'style="display:none;"'}>
-            <div class="db-json">${schema ? escapeHTML(JSON.stringify(schema, null, 2)) : 'No schema defined.\n\nSchema is optional metadata — data works without it.'}</div>
-          </div>
-          <div id="dbApiWrap" ${S.dbTab === 'api' ? '' : 'style="display:none;"'}>
-            <div class="db-snippet">// Read entire DB
-fetch('${API_HOST}?action=db/get&pid=${S.pid}')
-  .then(r => r.json())
-  .then(({ data }) => console.log(data));
+            <div class="db-doc-item">
+              <code class="db-doc-signature">POST /api/host?action=db/set</code>
+              <div class="db-doc-desc">Two shapes:
+                <br>• <code class="mono">{ pid, key, value }</code> — merge at a specific path. Safe. Preferred for single writes.
+                <br>• <code class="mono">{ pid, data, mode: "merge" }</code> — merge an object into the root.
+                <br>• <code class="mono">{ pid, data, mode: "replace" }</code> — replace the entire document. Destructive; a snapshot is captured automatically.
+              </div>
+            </div>
 
-// Write a value
+            <div class="db-doc-item">
+              <code class="db-doc-signature">POST /api/host?action=db/batch</code>
+              <div class="db-doc-desc">Atomic multi-path write. Body: <code class="mono">{ pid, updates: [{ key, value }, ...] }</code>. Up to 100 paths, 2 MB per call. Use this instead of looping <code class="mono">db/set</code>.</div>
+            </div>
+
+            <div class="db-doc-item">
+              <code class="db-doc-signature">POST /api/host?action=db/cas</code>
+              <div class="db-doc-desc">Compare-and-swap. Body: <code class="mono">{ pid, key, expected, value }</code>.
+                Writes only if the current value matches <code class="mono">expected</code> (use <code class="mono">null</code> for "must not exist").
+                Returns <code class="mono">409</code> on conflict.</div>
+            </div>
+
+            <div class="db-doc-item">
+              <code class="db-doc-signature">POST /api/host?action=db/increment</code>
+              <div class="db-doc-desc">Atomic numeric increment. Body: <code class="mono">{ pid, key, by }</code>.
+                Returns the new value. Safe under concurrency.</div>
+            </div>
+
+            <div class="db-doc-item">
+              <code class="db-doc-signature">GET /api/host?action=db/list&pid=${S.pid}&path=…</code>
+              <div class="db-doc-desc">Paginated reads. Supports <code class="mono">orderBy</code>, <code class="mono">limit</code>, <code class="mono">startAt</code>, <code class="mono">endAt</code>.</div>
+            </div>
+
+            <div class="db-doc-item">
+              <code class="db-doc-signature">POST /api/host?action=db/backup</code>
+              <div class="db-doc-desc">Snapshots the current DB to <code class="mono">projectBackups/${S.pid}</code>. Kept for 10 generations.</div>
+            </div>
+
+            <h4 class="db-doc-h">Notes</h4>
+            <ul class="db-doc-list">
+              <li>Arrays are not supported by Firebase RTDB — they become <code class="mono">{"0": …, "1": …}</code> on write. Use object keys instead of indices.</li>
+              <li>Writing <code class="mono">null</code> deletes the path. This is how you remove a key.</li>
+              <li>Firebase RTDB key segments cannot contain <code class="mono">. # $ / [ ]</code>. Writes to such paths fail with a clear error.</li>
+              <li><strong>Secrets are separate.</strong> Do not store API keys or tokens here. Use the <strong>Secrets</strong> tab instead — it's encrypted at rest, never served through the file system, and never included in exports.</li>
+            </ul>
+
+            <h4 class="db-doc-h">Example</h4>
+            <div class="db-snippet">// Read the whole DB
+fetch('${API_HOST}?action=db/get&pid=${S.pid}', {
+  headers: { 'X-Project-Key': 'YOUR_API_KEY' }
+}).then(r => r.json()).then(({ data }) => console.log(data));
+
+// Write a value at a path (safe — merges at the path)
 fetch('${API_HOST}?action=db/set', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'X-Project-Key': 'YOUR_API_KEY' },
-  body: JSON.stringify({ pid: '${S.pid}', key: 'users/0/name', value: 'Alice' })
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Project-Key': 'YOUR_API_KEY'
+  },
+  body: JSON.stringify({
+    pid: '${S.pid}',
+    key: 'users/0/name',
+    value: 'Alice'
+  })
 });
 
-// Delete: same call with value: null
-// Merge: { pid, data: {...}, mode: 'merge' }<button id="btnCopyApiSnippet">Copy</button></div>
-          </div>
+// Atomic multi-write
+fetch('${API_HOST}?action=db/batch', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Project-Key': 'YOUR_API_KEY' },
+  body: JSON.stringify({
+    pid: '${S.pid}',
+    updates: [
+      { key: 'users/0/name', value: 'Alice' },
+      { key: 'counters/users', value: 1 }
+    ]
+  })
+});
 
-          <div class="db-byte-row ${pct > 80 ? 'warn' : ''}">
-            <span>${formatBytes(used)} / ${formatBytes(limit)} · ${pct.toFixed(1)}%</span>
-            <span>${S.dbDirty ? '● Unsaved changes' : 'Saved'}</span>
+// Atomic increment
+fetch('${API_HOST}?action=db/increment', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Project-Key': 'YOUR_API_KEY' },
+  body: JSON.stringify({
+    pid: '${S.pid}',
+    key: 'counters/views',
+    by: 1
+  })
+});
+
+// Compare-and-swap (only writes if current === expected)
+fetch('${API_HOST}?action=db/cas', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Project-Key': 'YOUR_API_KEY' },
+  body: JSON.stringify({
+    pid: '${S.pid}',
+    key: 'state',
+    expected: 'idle',
+    value: 'running'
+  })
+});</div>
+            <div class="db-doc-footer">
+              <strong>Secrets:</strong> see <code class="mono">GET/POST /api/host?action=secrets/*</code>
+              in the <button type="button" class="link-btn" id="btnGoToSecrets">Secrets tab</button>.
+            </div>
+          </div>
+        </div>
+
+        <div class="db-byte-row ${pct > 80 ? 'warn' : ''}">
+          <span>${formatBytes(used)} / ${formatBytes(limit)} · ${pct.toFixed(1)}%</span>
+          <span>${S.dbDirty ? '● Unsaved changes' : 'Saved'}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Warning: null-array quirk ── -->
+    ${pct > 80 ? `
+      <div class="card" style="border-color:var(--theme-warning);">
+        <div class="card-body" style="display:flex;gap:10px;align-items:flex-start;">
+          <div style="color:var(--theme-warning);flex-shrink:0;">${svg('alert', 16, 2.4)}</div>
+          <div style="font-size:11.5px;color:var(--theme-text-secondary);line-height:1.55;">
+            <strong>Storage is ${pct.toFixed(0)}% full.</strong>
+            ${pct > 95 ? 'Writes may be rejected soon. Delete unused keys or run a backup and prune.'
+              : 'Consider cleaning up unused keys or exporting and pruning.'}
           </div>
         </div>
       </div>
-    `;
+    ` : ''}
+  `;
 
-    document.querySelectorAll('[data-db-tab]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        S.dbTab = btn.dataset.dbTab;
-        renderDataPanelContent(panel, schema);
+  // ── Tab switcher ──
+  document.querySelectorAll('[data-db-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      S.dbTab = btn.dataset.dbTab;
+      renderDataPanelContent(panel, schema);
+    });
+  });
+
+  // ── Read-only toggle ──
+  $('btnDbReadOnlyToggle')?.addEventListener('click', () => {
+    S.dbReadOnly = !S.dbReadOnly;
+    renderDataPanelContent(panel, schema);
+  });
+
+  // ── Undo ──
+  $('btnDbUndo')?.addEventListener('click', () => {
+    S.dbData = JSON.parse(JSON.stringify(S.dbSnapshot));
+    S.dbDirty = false;
+    toast('Reverted', 'info');
+    renderDataPanelContent(panel, schema);
+  });
+
+  // ── Save ──
+  $('btnDbSave')?.addEventListener('click', async () => {
+    const btn = $('btnDbSave');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      // Full-document replace — explicit mode required by the server
+      const res = await apiFetch(API_HOST + '?action=db/set', {
+        method: 'POST',
+        body: JSON.stringify({ pid: S.pid, data: S.dbData, mode: 'replace' }),
       });
-    });
-
-    $('btnDbReadOnlyToggle')?.addEventListener('click', () => { S.dbReadOnly = !S.dbReadOnly; renderDataPanelContent(panel, schema); });
-    $('btnDbUndo')?.addEventListener('click', () => {
-      S.dbData = JSON.parse(JSON.stringify(S.dbSnapshot));
+      if (!res.ok || !res.data?.success) {
+        throw new Error(res.data?.error || 'Save failed');
+      }
+      S.dbSnapshot = JSON.parse(JSON.stringify(S.dbData));
       S.dbDirty = false;
-      toast('Reverted', 'info');
+      toast('Saved', 'success');
       renderDataPanelContent(panel, schema);
-    });
-    $('btnDbSave')?.addEventListener('click', async () => {
-      const btn = $('btnDbSave');
-      btn.disabled = true;
-      btn.textContent = 'Saving…';
-      try {
-        const res = await apiFetch(API_HOST + '?action=db/set', {
-          method: 'POST',
-          body: JSON.stringify({ pid: S.pid, data: S.dbData }),
-        });
-        if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Save failed');
-        S.dbSnapshot = JSON.parse(JSON.stringify(S.dbData));
-        S.dbDirty = false;
-        toast('Saved', 'success');
-        renderDataPanelContent(panel, schema);
-      } catch (err) {
-        toast(err.message || 'Save failed', 'error');
-        btn.disabled = false;
-        btn.textContent = 'Save';
-      }
-    });
+    } catch (err) {
+      toast(err.message || 'Save failed', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Save';
+    }
+  });
 
-    $('dbSearch')?.addEventListener('input', debounce((e) => {
-      S.dbSearch = e.target.value;
-      renderDbTree();
-    }, 150));
-    $('btnDbExpand')?.addEventListener('click', () => {
-      if (S.dbExpanded.size > 0) S.dbExpanded.clear();
-      else Object.keys(S.dbData).forEach(k => S.dbExpanded.add(k));
-      renderDbTree();
-    });
-    $('btnDbAddKey')?.addEventListener('click', () => {
-      const key = prompt('New top-level key:');
-      if (!key || !key.trim()) return;
-      if (S.dbData[key.trim()] !== undefined) { toast('Key exists', 'error'); return; }
-      S.dbData[key.trim()] = '';
-      S.dbExpanded.add(key.trim());
+  // ── Search ──
+  $('dbSearch')?.addEventListener('input', debounce((e) => {
+    S.dbSearch = e.target.value;
+    renderDbTree();
+  }, 150));
+
+  // ── Expand / collapse ──
+  $('btnDbExpand')?.addEventListener('click', () => {
+    if (S.dbExpanded.size > 0) S.dbExpanded.clear();
+    else Object.keys(S.dbData).forEach(k => S.dbExpanded.add(k));
+    renderDbTree();
+  });
+
+  // ── Add top-level key ──
+  $('btnDbAddKey')?.addEventListener('click', () => {
+    const key = prompt('New top-level key:');
+    if (!key || !key.trim()) return;
+    if (S.dbData[key.trim()] !== undefined) {
+      toast('Key exists', 'error');
+      return;
+    }
+    S.dbData[key.trim()] = '';
+    S.dbExpanded.add(key.trim());
+    S.dbDirty = true;
+    renderDataPanelContent(panel, schema);
+  });
+
+  // ── Copy raw ──
+  $('btnDbCopy')?.addEventListener('click', () => {
+    if (copyToClipboard(JSON.stringify(S.dbData, null, 2))) {
+      toast('Copied', 'success', 1200);
+    }
+  });
+
+  // ── Export raw ──
+  $('btnDbExport')?.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(S.dbData, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `db_${S.pid}.json`;
+    a.click();
+    toast('Exported', 'success');
+  });
+
+  // ── Raw editor input ──
+  $('dbRawEditor')?.addEventListener('input', (e) => {
+    try {
+      S.dbData = JSON.parse(e.target.value);
       S.dbDirty = true;
-      renderDataPanelContent(panel, schema);
-    });
-    $('btnDbCopy')?.addEventListener('click', () => {
-      if (copyToClipboard(JSON.stringify(S.dbData, null, 2))) toast('Copied', 'success', 1200);
-    });
-    $('btnDbExport')?.addEventListener('click', () => {
-      const blob = new Blob([JSON.stringify(S.dbData, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `db_${S.pid}.json`;
-      a.click();
-      toast('Exported', 'success');
-    });
-    $('dbRawEditor')?.addEventListener('input', (e) => {
-      try {
-        S.dbData = JSON.parse(e.target.value);
-        S.dbDirty = true;
-        const saveBtn = $('btnDbSave');
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = svg('check', 10, 2.4) + ' Save'; }
-      } catch {}
-    });
-    $('btnCopyApiSnippet')?.addEventListener('click', () => {
-      const el = document.querySelector('.db-snippet');
-      if (el) {
-        const text = el.textContent.replace('Copy', '').trim();
-        if (copyToClipboard(text)) toast('Copied', 'success', 1200);
+      const saveBtn = $('btnDbSave');
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = svg('check', 10, 2.4) + ' Save';
       }
-    });
+    } catch {}
+  });
 
-    if (S.dbTab === 'tree') renderDbTree();
-  }
+  // ── Go to Secrets tab from the API reference ──
+  $('btnGoToSecrets')?.addEventListener('click', () => switchTab('secrets'));
+
+  // ── Initial render of the tree ──
+  if (S.dbTab === 'tree') renderDbTree();
+}
 
   function renderDbTree() {
     const wrap = $('dbTreeWrap');
@@ -4913,6 +5117,266 @@ fetch('${API_HOST}?action=db/set', {
     else delete cur[parts[parts.length - 1]];
   }
 
+  // ═══════════════════════════════════════════════════════════
+// SECRETS PANEL
+// ═══════════════════════════════════════════════════════════
+
+async function renderSecretsPanel(panel) {
+  if (!gate(panel, { label: 'Secrets' })) return;
+
+  if (!S.isOwner) {
+    panel.innerHTML = `<div class="card"><div class="card-body">
+      ${emptyState('lock', 'Owner only', 'Only the project owner can view and manage secrets.')}
+    </div></div>`;
+    return;
+  }
+
+  panel.innerHTML = skeletonCard(4);
+
+  const res = await apiFetch(API_HOST + '?action=secrets/list&pid=' + encodeURIComponent(S.pid));
+  if (!res.ok || !res.data?.success) {
+    panel.innerHTML = `<div class="card"><div class="card-body">${
+      emptyState('alertCircle', "Couldn't load secrets", res.data?.error || 'Try refreshing.')
+    }</div></div>`;
+    return;
+  }
+
+  const { keys = [], count = 0, encryptionEnabled = false } = res.data;
+  const visibilityMode = S.project?.visibility?.secrets || 'off';
+
+  panel.innerHTML = `
+    ${!encryptionEnabled ? `
+      <div class="card" style="border-color:var(--theme-warning);">
+        <div class="card-body" style="display:flex;gap:8px;align-items:flex-start;">
+          <div style="color:var(--theme-warning);flex-shrink:0;">${svg('alertCircle', 16, 2.2)}</div>
+          <div style="font-size:11.5px;color:var(--theme-text-secondary);line-height:1.5;">
+            <strong>Encryption is not configured on the server.</strong>
+            Secrets are stored as plaintext in the database. Ask the platform admin to set <code class="mono">FOLIO_SECRETS_KEY</code> before storing sensitive values.
+          </div>
+        </div>
+      </div>
+    ` : ''}
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">${svg('key', 13, 2.2)} Secrets (${count})</div>
+        <button class="btn btn-sm btn-primary" id="btnNewSecret" type="button">${svg('plus', 10, 2.4)} New</button>
+      </div>
+      <div class="card-body tight">
+        ${keys.length === 0
+          ? emptyState(
+              'key',
+              'No secrets yet',
+              'Store API keys, tokens, and config that should never appear in source code.',
+              `<button class="btn btn-primary btn-sm" id="btnFirstSecret" style="margin-top:8px;">${svg('plus', 10, 2.4)} Add your first secret</button>`
+            )
+          : `<div class="row-list">${keys.map(k => `
+              <div class="row-item">
+                <div class="row-icon">${svg('key', 13, 2.2)}</div>
+                <div class="row-content">
+                  <div class="row-title mono" style="font-size:11px;">${escapeHTML(k.key)}</div>
+                  <div class="row-sub">
+                    ${k.note ? escapeHTML(k.note) : '<span style="opacity:0.6;">No note</span>'}
+                    · updated ${timeAgo(k.updatedAt)}
+                  </div>
+                </div>
+                <button class="btn btn-ghost btn-icon" data-secret-edit="${escapeAttr(k.key)}" title="Edit" type="button">${svg('edit', 11, 2.2)}</button>
+                <button class="btn btn-ghost btn-icon" data-secret-delete="${escapeAttr(k.key)}" title="Delete" type="button" style="color:var(--theme-danger);">${svg('trash', 11, 2.2)}</button>
+              </div>
+            `).join('')}</div>`}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">${svg('terminal', 13, 2.2)} Injection</div>
+        <span class="vis-badge ${visibilityMode === 'inject' ? 'public' : 'private'}">
+          ${visibilityMode === 'inject' ? 'Injected' : visibilityMode === 'private' ? 'Private' : 'Off'}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="field-hint" style="margin-bottom:8px;line-height:1.55;">
+          ${visibilityMode === 'inject'
+            ? 'Secrets are currently <strong>injected</strong> into every HTML response as <code class="mono">window.__SECRETS__</code>. <strong>Anyone visiting your live site can read them.</strong> Only use this for public API keys with usage limits.'
+            : visibilityMode === 'private'
+              ? 'Secrets are <strong>private</strong>. Not injected. Only accessible via the Secrets API for owners/editors.'
+              : 'Secrets are <strong>off</strong>. Not injected. Only accessible via the Secrets API for owners/editors.'}
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-title">Inject into live site</div>
+            <div class="toggle-desc">Serve <code class="mono">window.__SECRETS__</code> in deployed HTML</div>
+          </div>
+          <button class="switch ${visibilityMode === 'inject' ? 'on' : ''}" id="secretInjectToggle" type="button" aria-label="Toggle secret injection"></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">${svg('code', 13, 2.2)} Usage</div></div>
+      <div class="card-body">
+        <div class="db-snippet">// In your deployed app.js
+const GROQ_KEY = window.__SECRETS__?.GROQ_API_KEY;
+if (!GROQ_KEY) throw new Error('Missing GROQ_API_KEY');
+
+// From client code, use the API
+const res = await fetch('${API_HOST}?action=secrets/get&pid=${S.pid}', {
+  headers: { Authorization: 'Bearer ' + sessionToken },
+});
+// response: { entries: { KEY: { value, hasValue, note } } }</div>
+      </div>
+    </div>
+  `;
+
+  $('btnNewSecret')?.addEventListener('click', () => openSecretEditor(null));
+  $('btnFirstSecret')?.addEventListener('click', () => openSecretEditor(null));
+  panel.querySelectorAll('[data-secret-edit]').forEach(btn => {
+    btn.addEventListener('click', () => openSecretEditor(btn.dataset.secretEdit));
+  });
+  panel.querySelectorAll('[data-secret-delete]').forEach(btn => {
+    btn.addEventListener('click', () => confirmDeleteSecret(btn.dataset.secretDelete));
+  });
+  $('secretInjectToggle')?.addEventListener('click', toggleSecretInjection);
+}
+
+async function openSecretEditor(keyToEdit) {
+  const isEdit = !!keyToEdit;
+  let currentNote = '';
+  let currentValue = '';
+
+  if (isEdit) {
+    const res = await apiFetch(API_HOST + '?action=secrets/get&pid=' + encodeURIComponent(S.pid));
+    if (res.ok && res.data?.success && res.data.entries?.[keyToEdit]) {
+      const entry = res.data.entries[keyToEdit];
+      currentValue = entry.value || '';
+      currentNote = entry.note || '';
+    }
+  }
+
+  openModal(`
+    <div class="modal-title">${isEdit ? 'Edit secret' : 'New secret'}</div>
+    <div class="modal-desc">Stored encrypted. Never served through the file system.</div>
+    <div class="field">
+      <label class="field-label">Key (UPPER_SNAKE_CASE)</label>
+      <input class="input mono" id="secretKey" value="${escapeAttr(keyToEdit || '')}" ${isEdit ? 'readonly' : ''} placeholder="GROQ_API_KEY" autocomplete="off" spellcheck="false">
+    </div>
+<div class="field">
+  <label class="field-label">Value</label>
+  <div class="secret-value-row">
+    <input class="input mono" id="secretValue" type="password" value="${escapeAttr(currentValue)}" placeholder="sk-..." autocomplete="new-password" spellcheck="false">
+    <button class="btn btn-secondary btn-icon" type="button" id="toggleSecretValue" aria-label="Show value">${svg('eye', 12, 2.2)}</button>
+  </div>
+</div>
+    <div class="field">
+      <label class="field-label">Note (optional)</label>
+      <input class="input" id="secretNote" value="${escapeAttr(currentNote)}" placeholder="What is this for?" maxlength="200">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()" type="button">Cancel</button>
+      <button class="btn btn-primary" id="secretSave" type="button">${isEdit ? 'Update' : 'Create'}</button>
+    </div>
+  `);
+
+  $('toggleSecretValue')?.addEventListener('click', () => {
+    const input = $('secretValue');
+    input.type = input.type === 'password' ? 'text' : 'password';
+  });
+
+  $('secretSave')?.addEventListener('click', async () => {
+    const btn = $('secretSave');
+    const key = $('secretKey').value.trim();
+    const value = $('secretValue').value;
+    const note = $('secretNote').value.trim();
+
+    if (!key) { toast('Key is required', 'error'); return; }
+    if (!/^[A-Z][A-Z0-9_]{0,127}$/.test(key)) {
+      toast('Key must be UPPER_SNAKE_CASE (letters, numbers, underscores)', 'error');
+      return;
+    }
+    if (!value) { toast('Value is required', 'error'); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const res = await apiFetch(API_HOST + '?action=secrets/set', {
+      method: 'POST',
+      body: JSON.stringify({ pid: S.pid, key, value, note: note || null }),
+    });
+
+    if (!res.ok || !res.data?.success) {
+      toast(res.data?.error || 'Failed to save secret', 'error');
+      btn.disabled = false;
+      btn.textContent = isEdit ? 'Update' : 'Create';
+      return;
+    }
+
+    closeModal();
+    toast(isEdit ? 'Secret updated' : 'Secret created', 'success');
+    renderPanel();
+  });
+}
+
+function confirmDeleteSecret(key) {
+  confirmModal(
+    `Delete ${key}?`,
+    'This secret will be removed. The deployed site will lose access immediately.',
+    'Delete',
+    true,
+    async () => {
+      const res = await apiFetch(API_HOST + '?action=secrets/delete', {
+        method: 'POST',
+        body: JSON.stringify({ pid: S.pid, key }),
+      });
+      if (!res.ok || !res.data?.success) {
+        toast(res.data?.error || 'Failed to delete secret', 'error');
+        return;
+      }
+      toast('Secret deleted', 'success');
+      renderPanel();
+    }
+  );
+}
+
+async function toggleSecretInjection() {
+  const current = S.project?.visibility?.secrets || 'off';
+  const next = current === 'inject' ? 'private' : 'inject';
+
+  if (next === 'inject') {
+    const ok = await new Promise((resolve) => {
+      openModal(`
+  <div class="modal-title" style="color:var(--theme-warning);">${svg('alert', 16, 2.4)} Inject secrets into live site?</div>
+  <div class="modal-desc" style="line-height:1.6;">
+    Any visitor to your live site will be able to read these secrets by viewing the page source.
+    <br><br>
+    <strong>Only enable this if:</strong>
+    <ul class="warn-list">
+      <li>Your secrets are public API keys with usage limits</li>
+      <li>You accept that anyone can read them</li>
+      <li>The keys can be revoked and rotated</li>
+    </ul>
+  </div>
+  <div class="modal-actions">
+    <button class="btn btn-secondary" onclick="closeModal();window.__secretToggleResolve(false)" type="button">Cancel</button>
+    <button class="btn btn-danger" onclick="closeModal();window.__secretToggleResolve(true)" type="button">Enable injection</button>
+  </div>
+`);
+      window.__secretToggleResolve = (v) => { resolve(v); delete window.__secretToggleResolve; };
+    });
+    if (!ok) return;
+  }
+
+  const res = await apiFetch(API_HOST + '?action=visibility', {
+    method: 'POST',
+    body: JSON.stringify({ pid: S.pid, visibility: { secrets: next } }),
+  });
+  if (!res.ok || !res.data?.success) {
+    toast(res.data?.error || 'Failed to update visibility', 'error');
+    return;
+  }
+  S.project.visibility = { ...S.project.visibility, secrets: next };
+  toast(`Secrets ${next === 'inject' ? 'injected' : 'private'}`, 'success');
+  renderPanel();
+}
   // ═══════════════════════════════════════════════════════════
   // NOTES PANEL
   // ═══════════════════════════════════════════════════════════
