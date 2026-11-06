@@ -9,6 +9,12 @@
 //  Per-key visibility:
 //    "private" (default) — appears only in ENV (server-side)
 //    "public"            — appears in ENV AND window.__SECRETS__ (frontend)
+//
+//  Reserved names:
+//    A fixed set of names is auto-injected at runtime by api/run.js
+//    (PROJECT_ID, PROJECT_URL, FOLIO_BASE_URL, etc.). Users cannot
+//    create secrets with these names — setSecret rejects them unless
+//    called with { allowReserved: true } (used only for FOLIO_API_KEY).
 // ═══════════════════════════════════════════════════════════════════
 
 import crypto from "node:crypto";
@@ -20,12 +26,33 @@ const MASTER_KEY = MASTER_KEY_HEX ? Buffer.from(MASTER_KEY_HEX, "hex") : null;
 const ENCRYPTION_ENABLED = !!MASTER_KEY && MASTER_KEY.length === 32;
 
 const MAX_KEY_LENGTH = 128;
-const MAX_VALUE_BYTES = 16 * 1024;   // 16 KB per value
-const MAX_TOTAL_BYTES = 512 * 1024;  // 512 KB total per project
+const MAX_VALUE_BYTES = 16 * 1024;
+const MAX_TOTAL_BYTES = 512 * 1024;
 const MAX_COUNT = 50;
-const KEY_PATTERN = /^[A-Z][A-Z0-9_]{0,127}$/;   // SCREAMING_SNAKE_CASE
+const KEY_PATTERN = /^[A-Z][A-Z0-9_]{0,127}$/;
 
 const VALID_VISIBILITIES = new Set(["private", "public"]);
+
+/**
+ * Names that api/run.js auto-injects at runtime.
+ * Users cannot create secrets with these names (except FOLIO_API_KEY,
+ * which is written internally by handleApiKeyGenerate).
+ */
+export const RESERVED_ENV_NAMES = new Set([
+  "PROJECT_ID",
+  "PROJECT_NAME",
+  "PROJECT_SLUG",
+  "PROJECT_URL",
+  "OWNER_USERNAME",
+  "OWNER_UID",
+  "DEPLOYMENT_ID",
+  "DEPLOYMENT_URL",
+  "FOLIO_BASE_URL",
+  "FOLIO_API_URL",
+  "API_ROUTE",
+  "REQUEST_ID",
+  "FOLIO_API_KEY",
+]);
 
 // ── Encryption ────────────────────────────────────────────────────
 
@@ -138,7 +165,7 @@ export async function readSecrets(pid) {
 /**
  * Read all secrets for the runtime sandbox (ENV object).
  * Returns a flat object { KEY: value } with all secrets (public + private).
- * Throws if any entry fails to decrypt.
+ * Throws if any entry fails to decrypt — never injects a partial set.
  */
 export async function readAllSecrets(pid) {
   const { entries } = await readSecrets(pid);
@@ -155,7 +182,6 @@ export async function readAllSecrets(pid) {
 /**
  * Read only secrets marked "public", decrypted.
  * Used by handleServe to inject window.__SECRETS__ into HTML.
- * Returns { KEY: value } for public entries only.
  */
 export async function readPublicSecrets(pid) {
   const { entries } = await readSecrets(pid);
@@ -169,8 +195,8 @@ export async function readPublicSecrets(pid) {
 }
 
 /**
- * Read only secrets marked "public", encrypted (still as stored).
- * Used for the dashboard's "public keys" panel.
+ * Read only secrets marked "public", without decrypting.
+ * Used for the dashboard's "public keys" summary.
  */
 export async function listPublicKeys(pid) {
   const snap = await db.ref(`secrets/${pid}/entries`).once("value");
@@ -195,12 +221,31 @@ export async function listPublicKeys(pid) {
  * @param {string} value
  * @param {string|null} note
  * @param {string} visibility  "private" (default) or "public"
+ * @param {object} opts        { allowReserved: boolean } — bypass reserved-name check
  */
-export async function setSecret(pid, uid, key, value, note = null, visibility = "private") {
+export async function setSecret(
+  pid,
+  uid,
+  key,
+  value,
+  note = null,
+  visibility = "private",
+  opts = {},
+) {
   const keyErr = validateKey(key);
   if (keyErr) throw Object.assign(new Error(keyErr), { status: 400 });
   const valueErr = validateValue(value);
   if (valueErr) throw Object.assign(new Error(valueErr), { status: 400 });
+
+  // Reserved-name check (bypassed only for internal writes, e.g. FOLIO_API_KEY)
+  if (!opts.allowReserved && RESERVED_ENV_NAMES.has(key)) {
+    throw Object.assign(
+      new Error(
+        `"${key}" is a reserved name — it is auto-injected at runtime and cannot be overridden.`,
+      ),
+      { status: 400 },
+    );
+  }
 
   const vis = normalizeVisibility(visibility);
   if (!vis) {
@@ -210,7 +255,6 @@ export async function setSecret(pid, uid, key, value, note = null, visibility = 
     );
   }
 
-  // Read existing for createdAt preservation and total-size check
   const existing = await readSecrets(pid);
 
   // Count limit (only for new keys)
@@ -221,7 +265,7 @@ export async function setSecret(pid, uid, key, value, note = null, visibility = 
     );
   }
 
-  // Total size limit
+  // Total size limit (excluding the key being replaced)
   let totalBytes = Buffer.byteLength(value, "utf8");
   for (const [k, e] of Object.entries(existing.entries)) {
     if (k === key) continue;
@@ -253,7 +297,6 @@ export async function setSecret(pid, uid, key, value, note = null, visibility = 
 
 /**
  * Update a secret's visibility without re-entering the value.
- * Used by the dashboard toggle.
  */
 export async function updateSecretVisibility(pid, uid, key, visibility) {
   const vis = normalizeVisibility(visibility);
@@ -307,7 +350,6 @@ export async function deleteAllSecrets(pid) {
 
 /**
  * Get metadata for all stored secrets (no values).
- * Includes visibility so the dashboard can show which are public.
  */
 export async function listSecretKeys(pid) {
   const snap = await db.ref(`secrets/${pid}/entries`).once("value");
@@ -333,4 +375,8 @@ export async function listSecretKeys(pid) {
 
 export function isEncryptionEnabled() {
   return ENCRYPTION_ENABLED;
+}
+
+export function getReservedEnvNames() {
+  return [...RESERVED_ENV_NAMES];
 }
