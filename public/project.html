@@ -641,6 +641,117 @@ eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy
       return ok;
     } catch { return false; }
   }
+  // ── Docs → plaintext serializer ─────────────────────────────────────
+// Walks a subtree rendered with .db-doc* classes and produces markdown-
+// flavored text suitable for pasting into a README, chat, or .md file.
+function serializeDocsSection(rootEl) {
+  if (!rootEl) return '';
+  const out = [];
+  const push = (line = '') => out.push(line);
+  const blank = () => { if (out.length && out[out.length - 1] !== '') push(''); };
+
+  const walk = (node, depth = 0) => {
+    if (!node) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      const t = node.textContent.replace(/\s+/g, ' ');
+      if (t.trim()) out[out.length - 1] = (out[out.length - 1] || '') + t;
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node;
+    const tag = el.tagName.toLowerCase();
+    const cls = el.className || '';
+
+    if (el.classList.contains('db-doc-h')) {
+      blank();
+      push(`## ${el.textContent.trim()}`);
+      push('');
+      return;
+    }
+    if (el.classList.contains('db-doc-item')) {
+      // Signature + description
+      const sig = el.querySelector('.db-doc-signature');
+      const desc = el.querySelector('.db-doc-desc');
+      if (sig) {
+        push('```');
+        push(sig.textContent.trim());
+        push('```');
+      }
+      if (desc) {
+        // Inline-wrap code tags with backticks
+        push(normalizeInlineCode(desc));
+        push('');
+      }
+      return;
+    }
+    if (el.classList.contains('db-doc-list')) {
+      for (const li of el.querySelectorAll(':scope > li')) {
+        push(`- ${normalizeInlineCode(li)}`);
+      }
+      push('');
+      return;
+    }
+    if (el.classList.contains('db-doc-footer')) {
+      blank();
+      push(`> ${normalizeInlineCode(el)}`);
+      push('');
+      return;
+    }
+    if (el.classList.contains('db-snippet')) {
+      // Code block
+      push('```js');
+      // Strip any copy buttons that may have been injected
+      const clone = el.cloneNode(true);
+      clone.querySelectorAll('button').forEach(b => b.remove());
+      push(clone.textContent.replace(/^\n+|\n+$/g, ''));
+      push('```');
+      push('');
+      return;
+    }
+    if (el.classList.contains('db-table')) {
+      const rows = [];
+      for (const tr of el.querySelectorAll('tr')) {
+        const cells = [...tr.querySelectorAll('th, td')].map(c => c.textContent.trim());
+        rows.push(`| ${cells.join(' | ')} |`);
+        if (tr.querySelector('th')) {
+          rows.push(`| ${cells.map(() => '---').join(' | ')} |`);
+        }
+      }
+      push(rows.join('\n'));
+      push('');
+      return;
+    }
+    if (el.classList.contains('db-table-wrap')) {
+      const t = el.querySelector('.db-table');
+      if (t) walk(t, depth);
+      return;
+    }
+
+    // Generic fallthrough: recurse
+    for (const child of el.childNodes) walk(child, depth + 1);
+  };
+
+  const normalizeInlineCode = (el) => {
+    // Replace <code>children</code> with `text` in the stringified content
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('code').forEach(c => {
+      const span = document.createTextNode('`' + c.textContent.trim() + '`');
+      c.replaceWith(span);
+    });
+    clone.querySelectorAll('strong').forEach(s => {
+      const span = document.createTextNode('**' + s.textContent.trim() + '**');
+      s.replaceWith(span);
+    });
+    clone.querySelectorAll('br').forEach(b => b.replaceWith(document.createTextNode(' ')));
+    return clone.textContent.replace(/\s+/g, ' ').trim();
+  };
+
+  for (const child of rootEl.childNodes) walk(child);
+
+  // Collapse multiple blank lines
+  const text = out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return text;
+}
 
   // ═══════════════════════════════════════════════════════════
   // SESSION / API
@@ -4593,8 +4704,13 @@ eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy
           <div class="db-json">${schema ? escapeHTML(JSON.stringify(schema, null, 2)) : 'No schema defined.\n\nSchema is optional metadata — data works without it.'}</div>
         </div>
         <div id="dbApiWrap" ${S.dbTab === 'api' ? '' : 'style="display:none;"'}>
-          <div class="db-doc">
-            <h4 class="db-doc-h">Endpoints</h4>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+    <button class="btn btn-sm btn-ghost" id="btnCopyDbDocs" type="button" data-copy-docs="dbApiDoc">
+      ${svg('copy', 10, 2.2)} Copy docs
+    </button>
+  </div>
+  <div class="db-doc" id="dbApiDoc">
+    <h4 class="db-doc-h">Endpoints</h4>
 
             <div class="db-doc-item">
               <code class="db-doc-signature">GET /api/host?action=db/get&pid=${S.pid}</code>
@@ -5240,11 +5356,17 @@ async function renderSecretsPanel(panel) {
       </div>
     </div>
 
-    <!-- ── Usage / API reference ── -->
-    <div class="card">
-      <div class="card-header"><div class="card-title">${svg('code', 13, 2.2)} Usage</div></div>
-      <div class="card-body">
-        <div class="db-doc">
+<!-- ── Usage / API reference ── -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">${svg('code', 13, 2.2)} Usage</div>
+    <button class="btn btn-sm btn-ghost" id="btnCopySecretsDocs" type="button" data-copy-docs="secretsDoc">
+      ${svg('copy', 10, 2.2)} Copy docs
+    </button>
+  </div>
+  <div class="card-body">
+    <div class="db-doc" id="secretsDoc">
+        
           <h4 class="db-doc-h">In your deployed code</h4>
           <div class="db-doc-item">
             <code class="db-doc-signature">window.__SECRETS__</code>
@@ -6206,71 +6328,99 @@ async function toggleSecretInjection() {
   // ═══════════════════════════════════════════════════════════
 
   function wireGlobal() {
-    $('modalOverlay').addEventListener('click', (e) => {
-      if (e.target === $('modalOverlay')) closeModal();
-    });
-    document.addEventListener('click', (e) => {
-      if (e.target.matches('[data-modal-close]')) closeModal();
-    });
+  $('modalOverlay').addEventListener('click', (e) => {
+    if (e.target === $('modalOverlay')) closeModal();
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target.matches('[data-modal-close]')) closeModal();
+  });
 
-    $('btnDeploy')?.addEventListener('click', () => {
-      if (S.project?.deployment?.url) window.open(S.project.deployment.url, '_blank', 'noopener');
-      else deployNow();
-    });
-    $('btnBell')?.addEventListener('click', () => window.open('/notifications', '_blank', 'noopener'));
-    $('btnMore')?.addEventListener('click', openMoreMenu);
-    $('headerIdentity')?.addEventListener('click', openEditProjectModal);
-    $('emptyProjectRetry')?.addEventListener('click', () => location.reload());
+  // ── Copy-docs button (delegated) ──
+  // Registered once per page load. Works after any panel re-render
+  // because it finds the target by id at click time.
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-copy-docs]');
+    if (!btn) return;
+    const targetId = btn.getAttribute('data-copy-docs');
+    const docEl = document.getElementById(targetId);
+    if (!docEl) return;
 
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        if ($('modalOverlay').classList.contains('active')) { closeModal(); return; }
-      }
-      if (!e.target.closest || !e.target.closest('#topTabsBar')) return;
-      const idx = S.tabs.findIndex(t => t.id === S.activeTab);
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        switchTab(S.tabs[Math.min(idx + 1, S.tabs.length - 1)].id);
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        switchTab(S.tabs[Math.max(idx - 1, 0)].id);
-      }
-    });
+    const text = serializeDocsSection(docEl);
+    if (!text) {
+      toast('Nothing to copy', 'warning');
+      return;
+    }
 
-    const updateOnline = () => {
-      S.online = navigator.onLine;
-      $('offlineBanner').classList.toggle('visible', !S.online);
-      updateModeBanner();
-      if (S.online) flushSyncQueue();
-    };
-    window.addEventListener('online', updateOnline);
-    window.addEventListener('offline', updateOnline);
-    updateOnline();
+    const ok = copyToClipboard(text);
+    if (ok) {
+      const original = btn.innerHTML;
+      btn.innerHTML = `${svg('check', 10, 2.4)} Copied`;
+      btn.disabled = true;
+      setTimeout(() => {
+        btn.innerHTML = original;
+        btn.disabled = false;
+      }, 1400);
+    }
+  });
 
-    if (S.bellTimer) clearInterval(S.bellTimer);
-    S.bellTimer = setInterval(() => {
-      if (document.visibilityState === 'visible') loadNotificationStats();
-    }, 60000);
+  $('btnDeploy')?.addEventListener('click', () => {
+    if (S.project?.deployment?.url) window.open(S.project.deployment.url, '_blank', 'noopener');
+    else deployNow();
+  });
+  $('btnBell')?.addEventListener('click', () => window.open('/notifications', '_blank', 'noopener'));
+  $('btnMore')?.addEventListener('click', openMoreMenu);
+  $('headerIdentity')?.addEventListener('click', openEditProjectModal);
+  $('emptyProjectRetry')?.addEventListener('click', () => location.reload());
 
-    window.addEventListener('beforeunload', (e) => {
-      const noteOverlay = document.querySelector('.note-editor-overlay.open');
-      if (noteOverlay) {
-        e.preventDefault();
-        e.returnValue = '';
-        return '';
-      }
-    });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if ($('modalOverlay').classList.contains('active')) { closeModal(); return; }
+    }
+    if (!e.target.closest || !e.target.closest('#topTabsBar')) return;
+    const idx = S.tabs.findIndex(t => t.id === S.activeTab);
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      switchTab(S.tabs[Math.min(idx + 1, S.tabs.length - 1)].id);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      switchTab(S.tabs[Math.max(idx - 1, 0)].id);
+    }
+  });
 
-    window.addEventListener('popstate', (e) => {
-      const noteOverlay = document.querySelector('.note-editor-overlay.open');
-      if (noteOverlay && S._noteHistoryPushed) {
-        S._noteHistoryPushed = false;
-        noteOverlay.querySelector('.note-editor-back')?.click();
-      }
-    });
+  const updateOnline = () => {
+    S.online = navigator.onLine;
+    $('offlineBanner').classList.toggle('visible', !S.online);
+    updateModeBanner();
+    if (S.online) flushSyncQueue();
+  };
+  window.addEventListener('online', updateOnline);
+  window.addEventListener('offline', updateOnline);
+  updateOnline();
 
-    startSyncFlushLoop();
-  }
+  if (S.bellTimer) clearInterval(S.bellTimer);
+  S.bellTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') loadNotificationStats();
+  }, 60000);
+
+  window.addEventListener('beforeunload', (e) => {
+    const noteOverlay = document.querySelector('.note-editor-overlay.open');
+    if (noteOverlay) {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    }
+  });
+
+  window.addEventListener('popstate', (e) => {
+    const noteOverlay = document.querySelector('.note-editor-overlay.open');
+    if (noteOverlay && S._noteHistoryPushed) {
+      S._noteHistoryPushed = false;
+      noteOverlay.querySelector('.note-editor-back')?.click();
+    }
+  });
+
+  startSyncFlushLoop();
+}
 
   // ═══════════════════════════════════════════════════════════
   // BOOT
