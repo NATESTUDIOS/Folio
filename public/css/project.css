@@ -2929,6 +2929,7 @@ svg { display: block; }
   word-break: break-all;
   line-height: 1.35;
 }
+
 /* ═══════════════════════════════════════════════════════════
    SECRETS PANEL
    ═══════════════════════════════════════════════════════════ */
@@ -3055,8 +3056,11 @@ svg { display: block; }
 .modal-desc ul.warn-list li::marker {
   color: var(--theme-warning);
 }
+
 /* ═══════════════════════════════════════════════════════════
-   DB DOCUMENTATION (Data tab → API)
+   DB / SECRETS DOCUMENTATION
+   Used by: Data tab → API sub-tab
+            Secrets tab → Usage card
    ═══════════════════════════════════════════════════════════ */
 
 .db-doc {
@@ -3071,7 +3075,7 @@ svg { display: block; }
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: var(--theme-text-tertiary);
-  margin: 10px 0 2px;
+  margin: 12px 0 2px;
 }
 .db-doc-h:first-child { margin-top: 0; }
 
@@ -3102,7 +3106,6 @@ svg { display: block; }
   line-height: 1.6;
   word-break: break-word;
 }
-
 .db-doc-desc code,
 .db-doc-desc .mono {
   font-family: var(--font-mono);
@@ -3168,113 +3171,66 @@ svg { display: block; }
   font-size: inherit;
 }
 .link-btn:hover { color: var(--theme-primary-hover); }
-/* ═══════════════════════════════════════════════════════════
-   DB / SECRETS DOCS — missing pieces
-   ═══════════════════════════════════════════════════════════ */
 
-/* Decision table ("When to use Secrets vs. the DB") */
-.db-table-wrap {
-  overflow-x: auto;
-  border-radius: 8px;
-  border: 1px solid var(--theme-card-border);
-  -webkit-overflow-scrolling: touch;
-}
-
-.db-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-  min-width: 320px;
-}
-
-.db-table thead {
-  background: var(--theme-glass-bg);
-}
-
-.db-table th {
-  text-align: left;
-  padding: 8px 12px;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--theme-text-tertiary);
-  border-bottom: 1px solid var(--theme-divider);
-}
-
-.db-table td {
-  padding: 8px 12px;
-  color: var(--theme-text-secondary);
-  border-bottom: 1px solid var(--theme-divider);
-  line-height: 1.5;
-  overflow-wrap: break-word;
-}
-.db-table tbody tr:last-child td { border-bottom: none; }
-.db-table strong {
-  color: var(--theme-text);
-  font-weight: 700;
-}
-
-/* Snippet inside a doc block should wrap, not scroll */
-.db-doc .db-snippet {
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  margin-bottom: 0;
-}
 /* ═══════════════════════════════════════════════════════════
    DB / SECRETS DOCS — tables
+   Visible grid, zebra striping, column dividers, header band.
+   This block is the authoritative table style.
    ═══════════════════════════════════════════════════════════ */
 
 .db-table-wrap {
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border-radius: 8px;
-  border: 1px solid var(--theme-card-border);
-  background: var(--theme-surface-card);
-  margin: 4px 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--theme-glass-border);
+  background: var(--theme-surface-card-solid);
+  margin: 6px 0 10px;
 }
 
 .db-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
   border-spacing: 0;
-  font-size: 11px;
+  font-size: 11.5px;
   min-width: 340px;
   color: var(--theme-text-secondary);
+  table-layout: auto;
 }
 
+/* Header row */
 .db-table thead {
-  background: var(--theme-glass-bg);
+  background: var(--theme-surface-elevated);
 }
 
 .db-table th {
   text-align: left;
-  padding: 9px 12px;
+  padding: 10px 12px;
   font-size: 9.5px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--theme-text-tertiary);
-  border-bottom: 1px solid var(--theme-divider);
+  color: var(--theme-text-secondary);
+  border-bottom: 1px solid var(--theme-glass-border);
   white-space: nowrap;
+  line-height: 1.4;
 }
 
 .db-table th:first-child {
-  border-top-left-radius: 8px;
+  border-top-left-radius: 9px;
 }
 
 .db-table th:last-child {
-  border-top-right-radius: 8px;
+  border-top-right-radius: 9px;
 }
 
+/* Body cells */
 .db-table td {
-  padding: 9px 12px;
-  font-size: 11px;
+  padding: 10px 12px;
+  font-size: 11.5px;
   line-height: 1.5;
   color: var(--theme-text-secondary);
-  border-bottom: 1px solid var(--theme-divider);
+  border-bottom: 1px solid var(--theme-glass-border);
   vertical-align: top;
   overflow-wrap: break-word;
   word-break: normal;
@@ -3284,13 +3240,33 @@ svg { display: block; }
   border-bottom: none;
 }
 
+/* Vertical column dividers */
+.db-table th + th,
+.db-table td + td {
+  border-left: 1px solid var(--theme-glass-border);
+}
+
+/* Zebra striping */
+.db-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+[data-theme="light"] .db-table tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.02);
+}
+
 .db-table tbody tr:hover {
   background: var(--theme-glass-bg);
 }
 
+/* Strong / verdict cells */
 .db-table strong {
   color: var(--theme-text);
   font-weight: 700;
+}
+
+/* The second column in the "when to use" table is the verdict — accent it */
+.db-table tbody td:last-child strong {
+  color: var(--theme-primary);
 }
 
 .db-table code,
@@ -3305,14 +3281,23 @@ svg { display: block; }
   white-space: nowrap;
 }
 
-/* On very narrow screens, allow the wrapper to scroll horizontally */
+/* Mobile: allow horizontal scroll inside the wrapper only */
 @media (max-width: 480px) {
   .db-table {
     min-width: 300px;
+    font-size: 11px;
   }
   .db-table th,
   .db-table td {
     padding: 8px 10px;
     font-size: 10.5px;
   }
+}
+
+/* Snippet inside a doc block should wrap, not scroll */
+.db-doc .db-snippet {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  margin-bottom: 0;
 }
