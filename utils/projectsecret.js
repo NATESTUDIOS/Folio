@@ -1,10 +1,14 @@
-// utils/projectSecrets.js
+// utils/projectsecret.js
 // ═══════════════════════════════════════════════════════════════════
 //  Folio Project Secrets — encrypted storage for per-project env vars
 //  ────────────────────────────────────────────────────────────────
 //  Path: secrets/{pid}/entries/{KEY}
 //  Storage: AES-256-GCM (if FOLIO_SECRETS_KEY is set), plaintext fallback
-//  Access: owner/editor only, unless visibility.secrets === "inject"
+//  Access: owner writes; editors see names only
+//
+//  Per-key visibility:
+//    "private" (default) — appears only in ENV (server-side)
+//    "public"            — appears in ENV AND window.__SECRETS__ (frontend)
 // ═══════════════════════════════════════════════════════════════════
 
 import crypto from "node:crypto";
@@ -18,9 +22,13 @@ const ENCRYPTION_ENABLED = !!MASTER_KEY && MASTER_KEY.length === 32;
 const MAX_KEY_LENGTH = 128;
 const MAX_VALUE_BYTES = 16 * 1024;   // 16 KB per value
 const MAX_TOTAL_BYTES = 512 * 1024;  // 512 KB total per project
+const MAX_COUNT = 50;
 const KEY_PATTERN = /^[A-Z][A-Z0-9_]{0,127}$/;   // SCREAMING_SNAKE_CASE
 
+const VALID_VISIBILITIES = new Set(["private", "public"]);
+
 // ── Encryption ────────────────────────────────────────────────────
+
 function deriveProjectKey(pid) {
   return crypto.createHmac("sha256", MASTER_KEY).update(String(pid)).digest();
 }
@@ -56,6 +64,7 @@ function decrypt(stored, pid) {
 }
 
 // ── Validation ────────────────────────────────────────────────────
+
 function validateKey(key) {
   if (typeof key !== "string") return "Key must be a string";
   if (key.length > MAX_KEY_LENGTH) return "Key is too long";
@@ -73,12 +82,19 @@ function validateValue(value) {
   return null;
 }
 
+function normalizeVisibility(v) {
+  if (v === undefined || v === null) return "private";
+  const s = String(v).toLowerCase();
+  if (!VALID_VISIBILITIES.has(s)) return null;
+  return s;
+}
+
 // ── Public API ────────────────────────────────────────────────────
 
 /**
- * Read all secrets for a project, decrypted.
- * Returns { entries: { KEY: { value, note, createdAt, updatedAt } }, meta: {...} }
- * Throws if any entry fails to decrypt (e.g. master key rotated incorrectly).
+ * Read all secrets for a project, decrypted, with metadata.
+ * Returns { entries: { KEY: { value, note, visibility, createdAt, updatedAt } }, meta }
+ * Throws if any entry fails to decrypt.
  */
 export async function readSecrets(pid) {
   const snap = await db.ref(`secrets/${pid}`).once("value");
@@ -93,6 +109,7 @@ export async function readSecrets(pid) {
       entries[key] = {
         value: decrypt(stored, pid),
         note: stored.note || null,
+        visibility: stored.visibility || "private",
         createdAt: stored.createdAt || null,
         updatedAt: stored.updatedAt || null,
       };
@@ -101,6 +118,7 @@ export async function readSecrets(pid) {
       entries[key] = {
         value: null,
         note: stored.note || null,
+        visibility: stored.visibility || "private",
         createdAt: stored.createdAt || null,
         updatedAt: stored.updatedAt || null,
         error: "decrypt_failed",
@@ -118,38 +136,92 @@ export async function readSecrets(pid) {
 }
 
 /**
- * Read only the values, ready for injection. Throws on any decryption
- * failure so we don't inject partial secrets (safer to inject nothing
- * than a half-broken set).
+ * Read all secrets for the runtime sandbox (ENV object).
+ * Returns a flat object { KEY: value } with all secrets (public + private).
+ * Throws if any entry fails to decrypt.
  */
-export async function readSecretsForInjection(pid) {
-  const snap = await db.ref(`secrets/${pid}`).once("value");
-  if (!snap.exists()) return {};
-  const raw = snap.val() || {};
-  const rawEntries = raw.entries || {};
-  const out = {};
-  for (const [key, stored] of Object.entries(rawEntries)) {
-    const value = decrypt(stored, pid);
-    if (value === null) {
+export async function readAllSecrets(pid) {
+  const { entries } = await readSecrets(pid);
+  const env = {};
+  for (const [key, entry] of Object.entries(entries)) {
+    if (entry.error) {
       throw new Error(`Failed to decrypt secret: ${key}`);
     }
-    out[key] = value;
+    env[key] = entry.value;
   }
-  return out;
+  return env;
 }
 
 /**
- * Set (create or update) a secret. Caller must have already checked
- * role permission — this function does no auth.
+ * Read only secrets marked "public", decrypted.
+ * Used by handleServe to inject window.__SECRETS__ into HTML.
+ * Returns { KEY: value } for public entries only.
  */
-export async function setSecret(pid, uid, key, value, note = null) {
+export async function readPublicSecrets(pid) {
+  const { entries } = await readSecrets(pid);
+  const pub = {};
+  for (const [key, entry] of Object.entries(entries)) {
+    if (entry.visibility === "public" && !entry.error) {
+      pub[key] = entry.value;
+    }
+  }
+  return pub;
+}
+
+/**
+ * Read only secrets marked "public", encrypted (still as stored).
+ * Used for the dashboard's "public keys" panel.
+ */
+export async function listPublicKeys(pid) {
+  const snap = await db.ref(`secrets/${pid}/entries`).once("value");
+  if (!snap.exists()) return [];
+  const keys = [];
+  snap.forEach((child) => {
+    const v = child.val() || {};
+    if (v.visibility === "public") {
+      keys.push({ key: child.key, note: v.note || null, updatedAt: v.updatedAt || null });
+    }
+  });
+  return keys;
+}
+
+/**
+ * Set (create or update) a secret.
+ * Caller must have already checked role permission.
+ *
+ * @param {string} pid
+ * @param {string} uid
+ * @param {string} key
+ * @param {string} value
+ * @param {string|null} note
+ * @param {string} visibility  "private" (default) or "public"
+ */
+export async function setSecret(pid, uid, key, value, note = null, visibility = "private") {
   const keyErr = validateKey(key);
   if (keyErr) throw Object.assign(new Error(keyErr), { status: 400 });
   const valueErr = validateValue(value);
   if (valueErr) throw Object.assign(new Error(valueErr), { status: 400 });
 
-  // Enforce total size limit
+  const vis = normalizeVisibility(visibility);
+  if (!vis) {
+    throw Object.assign(
+      new Error('visibility must be "private" or "public"'),
+      { status: 400 },
+    );
+  }
+
+  // Read existing for createdAt preservation and total-size check
   const existing = await readSecrets(pid);
+
+  // Count limit (only for new keys)
+  if (!(key in existing.entries) && Object.keys(existing.entries).length >= MAX_COUNT) {
+    throw Object.assign(
+      new Error(`Maximum ${MAX_COUNT} secrets per project`),
+      { status: 400 },
+    );
+  }
+
+  // Total size limit
   let totalBytes = Buffer.byteLength(value, "utf8");
   for (const [k, e] of Object.entries(existing.entries)) {
     if (k === key) continue;
@@ -167,13 +239,48 @@ export async function setSecret(pid, uid, key, value, note = null) {
   const stored = {
     ...encrypted,
     note: note ? String(note).slice(0, 200) : null,
+    visibility: vis,
     createdAt: existing.entries[key]?.createdAt || now,
     updatedAt: now,
   };
+
   await db.ref(`secrets/${pid}/entries/${key}`).set(stored);
   await db.ref(`secrets/${pid}/lastUpdated`).set(now);
   await db.ref(`secrets/${pid}/lastUpdatedBy`).set(uid);
-  return { key, updatedAt: now };
+
+  return { key, visibility: vis, updatedAt: now };
+}
+
+/**
+ * Update a secret's visibility without re-entering the value.
+ * Used by the dashboard toggle.
+ */
+export async function updateSecretVisibility(pid, uid, key, visibility) {
+  const vis = normalizeVisibility(visibility);
+  if (!vis) {
+    throw Object.assign(
+      new Error('visibility must be "private" or "public"'),
+      { status: 400 },
+    );
+  }
+
+  const ref = db.ref(`secrets/${pid}/entries/${key}`);
+  const snap = await ref.once("value");
+  if (!snap.exists()) {
+    throw Object.assign(new Error("Secret not found"), { status: 404 });
+  }
+
+  const current = snap.val() || {};
+  if (current.visibility === vis) {
+    return { key, visibility: vis, updatedAt: current.updatedAt || null, changed: false };
+  }
+
+  const now = Date.now();
+  await ref.update({ visibility: vis, updatedAt: now });
+  await db.ref(`secrets/${pid}/lastUpdated`).set(now);
+  await db.ref(`secrets/${pid}/lastUpdatedBy`).set(uid);
+
+  return { key, visibility: vis, updatedAt: now, changed: true };
 }
 
 /**
@@ -199,23 +306,29 @@ export async function deleteAllSecrets(pid) {
 }
 
 /**
- * Get a summary of stored secret keys (no values) for display.
+ * Get metadata for all stored secrets (no values).
+ * Includes visibility so the dashboard can show which are public.
  */
 export async function listSecretKeys(pid) {
   const snap = await db.ref(`secrets/${pid}/entries`).once("value");
-  if (!snap.exists()) return { keys: [], count: 0 };
+  if (!snap.exists()) return { keys: [], count: 0, publicCount: 0 };
+
   const keys = [];
+  let publicCount = 0;
   snap.forEach((child) => {
     const v = child.val() || {};
+    const vis = v.visibility || "private";
+    if (vis === "public") publicCount++;
     keys.push({
       key: child.key,
       note: v.note || null,
+      visibility: vis,
       createdAt: v.createdAt || null,
       updatedAt: v.updatedAt || null,
     });
   });
   keys.sort((a, b) => a.key.localeCompare(b.key));
-  return { keys, count: keys.length };
+  return { keys, count: keys.length, publicCount };
 }
 
 export function isEncryptionEnabled() {
