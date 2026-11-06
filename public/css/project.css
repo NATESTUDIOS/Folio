@@ -3168,3 +3168,57 @@ svg { display: block; }
   font-size: inherit;
 }
 .link-btn:hover { color: var(--theme-primary-hover); }
+/* ═══════════════════════════════════════════════════════════
+   DB / SECRETS DOCS — missing pieces
+   ═══════════════════════════════════════════════════════════ */
+
+/* Decision table ("When to use Secrets vs. the DB") */
+.db-table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--theme-card-border);
+  -webkit-overflow-scrolling: touch;
+}
+
+.db-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  min-width: 320px;
+}
+
+.db-table thead {
+  background: var(--theme-glass-bg);
+}
+
+.db-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--theme-text-tertiary);
+  border-bottom: 1px solid var(--theme-divider);
+}
+
+.db-table td {
+  padding: 8px 12px;
+  color: var(--theme-text-secondary);
+  border-bottom: 1px solid var(--theme-divider);
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+.db-table tbody tr:last-child td { border-bottom: none; }
+.db-table strong {
+  color: var(--theme-text);
+  font-weight: 700;
+}
+
+/* Snippet inside a doc block should wrap, not scroll */
+.db-doc .db-snippet {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  margin-bottom: 0;
+}
