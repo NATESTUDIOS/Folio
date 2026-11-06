@@ -1,7 +1,23 @@
 // api/host.js
+// ═══════════════════════════════════════════════════════════════════
+//  Folio — Host API
+//  ────────────────────────────────────────────────────────────────
+//  Single entry point for all project operations:
+//    - Deploy (files + api/*.js + manifests)
+//    - Serve (public files, secret injection)
+//    - Files, versions, DB, secrets, api keys, invites, visibility
+//    - System routes (api/_system.js templates)
+//
+//  ⚠  BASE_URL is defined ONCE at the top of this file.
+//  ⚠  Change it there when you move to a custom domain.
+//  ⚠  Do not hardcode "foliostudios.vercel.app" anywhere else.
+// ═══════════════════════════════════════════════════════════════════
+
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import net from "node:net";
+import dns from "node:dns/promises";
 import { db } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import * as projectDb from "../utils/projectdb.js";
@@ -31,11 +47,19 @@ import {
 } from "../utils/users.js";
 
 // =========================================================================
-// CONSTANTS
+// BASE URL — the only place it's defined
 // =========================================================================
 
+const BASE_URL =
+  process.env.BASE_URL ||
+  process.env.NEXT_PUBLIC_BASE_URL ||
+  "https://foliostudios.vercel.app";
+
 const API_NAME = "host";
-const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
+
+// =========================================================================
+// CONSTANTS
+// =========================================================================
 
 const INVITE_TTL_DAYS = 7;
 const INVITE_TTL_MS = INVITE_TTL_DAYS * 24 * 60 * 60 * 1000;
@@ -63,46 +87,47 @@ const CLIENT_ERROR_RATE_WINDOW_MS = 60_000;
 const BOT_UA_RE =
   /bot|crawler|spider|preview|curl|wget|python-requests|httpclient/i;
 
-const RESERVED_USERNAMES = new Set([
-  "api",
-  "p",
-  "register",
-  "profile",
-  "project",
-  "tools",
-  "settings",
-  "analytics",
-  "offline",
-  "invite",
-  "notifications",
-  "icons",
-  "js",
-  "css",
-  "_next",
-  "manifest.json",
-  "sitemap.xml",
-  "robots.txt",
-  "favicon.ico",
-  "sw.js",
-  "firebase-messaging-sw.js",
+// ── API folder (private runtime) ────────────────────────────────────
+
+const MAX_API_FILES = 10;
+const MAX_API_FILE_BYTES = 50 * 1024;
+const MAX_API_TOTAL_BYTES = 200 * 1024;
+const MAX_ALLOW_LINES_PER_FILE = 20;
+const MAX_UNIQUE_ALLOW_HOSTS = 50;
+const API_SYSTEM_FILENAME = "_system.js";
+
+const RESERVED_API_NAMES = new Set([
+  "index.js", "run.js",
+  "health.js", "whoami.js", "files.js", "status.js", "version.js", "robots.js",
 ]);
+
+const BUILTIN_ALLOWED_HOSTS = new Set([
+  "api.openai.com",
+  "api.groq.com",
+  "api.anthropic.com",
+  "api.stripe.com",
+  "api.supabase.co",
+  "api.resend.com",
+]);
+
+const FOLIO_INTERNAL_HOSTS = new Set([
+  "folio",
+  new URL(BASE_URL).hostname,
+]);
+
+// ── Reserved usernames and slugs ────────────────────────────────────
+
+const RESERVED_USERNAMES = new Set([
+  "api", "p", "register", "profile", "project", "tools", "settings",
+  "analytics", "offline", "invite", "notifications", "icons", "js", "css",
+  "_next", "manifest.json", "sitemap.xml", "robots.txt", "favicon.ico",
+  "sw.js", "firebase-messaging-sw.js",
+]);
+
 const RESERVED_SLUGS = new Set([
-  "api",
-  "p",
-  "register",
-  "profile",
-  "project",
-  "projects",
-  "tools",
-  "settings",
-  "analytics",
-  "offline",
-  "invite",
-  "notifications",
-  "icons",
-  "js",
-  "css",
-  "_next",
+  "api", "p", "register", "profile", "project", "projects", "tools",
+  "settings", "analytics", "offline", "invite", "notifications", "icons",
+  "js", "css", "_next",
 ]);
 
 function slugifyProjectName(name) {
@@ -162,6 +187,9 @@ const RATE_LIMITS = {
   secretsGet:    { max: 20,  window: 60 * 60 * 1000 },
   secretsSet:    { max: 20,  window: 60 * 60 * 1000 },
   secretsDelete: { max: 20,  window: 60 * 60 * 1000 },
+  secretsVisibility: { max: 60, window: 60 * 60 * 1000 },
+  apiRoutes: { max: 120, window: 60 * 60 * 1000 },
+  apiSystemDefault: { max: 120, window: 60 * 60 * 1000 },
   dbBatch: { max: 100, window: 60 * 1000 },
   dbCas: { max: 200, window: 60 * 1000 },
   dbIncrement: { max: 300, window: 60 * 1000 },
@@ -170,6 +198,10 @@ const RATE_LIMITS = {
   dbSet: { max: 300, window: 60 * 1000 },
   dbGet: { max: 600, window: 60 * 1000 },
 };
+
+// =========================================================================
+// RATE LIMITER
+// =========================================================================
 
 async function checkRateLimit(identifier, action) {
   const config = RATE_LIMITS[action];
@@ -260,7 +292,7 @@ function isAdminRequest(req) {
 }
 
 // =========================================================================
-// IN-PROCESS CACHES (non-DB)
+// IN-PROCESS CACHES
 // =========================================================================
 
 const PROJECT_CACHE = new Map();
@@ -312,7 +344,7 @@ async function maybePruneProjectLogs(pid) {
 }
 
 // =========================================================================
-// STORAGE WARNING HOOK — wires projectDb to host's notification system
+// STORAGE WARNING HOOK
 // =========================================================================
 
 projectDb.setStorageWarningHandler(async (pid, size, limit) => {
@@ -334,7 +366,290 @@ projectDb.setStorageWarningHandler(async (pid, size, limit) => {
 });
 
 // =========================================================================
-// HELPERS
+// API FOLDER HELPERS
+// =========================================================================
+
+function analyzeApiFiles(apiFiles) {
+  const valid = {};
+  const rejected = [];
+  let totalBytes = 0;
+
+  const names = Object.keys(apiFiles).sort();
+
+  for (const name of names) {
+    const content = apiFiles[name];
+
+    if (typeof content !== "string") {
+      rejected.push({ name, reason: "not a string" });
+      continue;
+    }
+    if (!/\.js$/i.test(name)) {
+      rejected.push({ name, reason: "must end in .js" });
+      continue;
+    }
+    if (name !== name.toLowerCase()) {
+      rejected.push({ name, reason: "must be lowercase" });
+      continue;
+    }
+    if (name.includes("/")) {
+      rejected.push({ name, reason: "no subfolders in api/" });
+      continue;
+    }
+    if (RESERVED_API_NAMES.has(name)) {
+      rejected.push({ name, reason: "reserved name" });
+      continue;
+    }
+    if (name.startsWith("_") && name !== API_SYSTEM_FILENAME) {
+      rejected.push({ name, reason: "underscore prefix reserved for _system.js" });
+      continue;
+    }
+    if (!/^[a-z0-9_\-]+\.js$/.test(name)) {
+      rejected.push({ name, reason: "invalid characters" });
+      continue;
+    }
+
+    // @allow line count check
+    const allowMatches = content.match(/^\s*\/\/\s*@allow\s+\S+\s*$/gm) || [];
+    if (allowMatches.length > MAX_ALLOW_LINES_PER_FILE) {
+      rejected.push({
+        name,
+        reason: `exceeds ${MAX_ALLOW_LINES_PER_FILE} @allow lines`,
+      });
+      continue;
+    }
+
+    const bytes = Buffer.byteLength(content, "utf8");
+    if (bytes > MAX_API_FILE_BYTES) {
+      rejected.push({ name, reason: `exceeds ${MAX_API_FILE_BYTES / 1024} KB` });
+      continue;
+    }
+    if (totalBytes + bytes > MAX_API_TOTAL_BYTES) {
+      rejected.push({ name, reason: `total would exceed ${MAX_API_TOTAL_BYTES / 1024} KB` });
+      continue;
+    }
+    if (Object.keys(valid).length >= MAX_API_FILES) {
+      rejected.push({ name, reason: `exceeds ${MAX_API_FILES}-file limit` });
+      continue;
+    }
+
+    valid[name] = content;
+    totalBytes += bytes;
+  }
+
+  return {
+    valid,
+    rejected,
+    totalFiles: Object.keys(valid).length,
+    totalBytes,
+  };
+}
+
+const ALLOW_LINE_RE = /^\s*\/\/\s*@allow\s+(\S+)\s*$/gm;
+
+function extractAllowHosts(source) {
+  const hosts = new Set();
+  let match;
+  ALLOW_LINE_RE.lastIndex = 0;
+  while ((match = ALLOW_LINE_RE.exec(source)) !== null) {
+    hosts.add(match[1].toLowerCase().trim());
+  }
+  return [...hosts];
+}
+
+function isPrivateOrReservedIp(ip) {
+  if (net.isIPv4(ip)) {
+    const parts = ip.split(".").map(Number);
+    const [a, b] = parts;
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a >= 224 && a <= 239) ||
+      a >= 240
+    );
+  }
+  if (net.isIPv6(ip)) {
+    const lower = ip.toLowerCase();
+    return (
+      lower === "::1" ||
+      lower === "::" ||
+      lower.startsWith("fc") ||
+      lower.startsWith("fd") ||
+      lower.startsWith("fe8") ||
+      lower.startsWith("fe9") ||
+      lower.startsWith("fea") ||
+      lower.startsWith("feb")
+    );
+  }
+  return true;
+}
+
+async function validateAllowHost(host) {
+  if (!host || typeof host !== "string") {
+    return { ok: false, reason: "Missing host" };
+  }
+  if (host.length > 253) {
+    return { ok: false, reason: "Host too long" };
+  }
+  if (/^https?:\/\//i.test(host)) {
+    return { ok: false, reason: "Scheme not allowed (hostname only)" };
+  }
+  if (host.includes(":")) {
+    return { ok: false, reason: "Port not allowed" };
+  }
+  if (host.includes("/")) {
+    return { ok: false, reason: "Path not allowed" };
+  }
+  if (host.includes("*")) {
+    return { ok: false, reason: "Wildcards not supported" };
+  }
+  if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(host)) {
+    return { ok: false, reason: "Invalid hostname format" };
+  }
+
+  // Reject Folio's own infra
+  if (FOLIO_INTERNAL_HOSTS.has(host) || host.endsWith(".vercel.app")) {
+    return { ok: false, reason: "Folio infrastructure not allowed" };
+  }
+
+  // DNS resolution
+  let ips;
+  try {
+    ips = await dns.lookup(host, { all: true });
+  } catch (err) {
+    return { ok: false, reason: `Cannot resolve: ${err.code || err.message}` };
+  }
+  if (!ips || ips.length === 0) {
+    return { ok: false, reason: "No IPs resolved" };
+  }
+  for (const { address } of ips) {
+    if (isPrivateOrReservedIp(address)) {
+      return { ok: false, reason: `Resolves to private/reserved IP (${address})` };
+    }
+  }
+
+  // HTTPS reachability (HEAD, 5s)
+  try {
+    await fetch(`https://${host}/`, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(5000),
+      redirect: "manual",
+    });
+  } catch (err) {
+    return { ok: false, reason: `Does not respond to HTTPS: ${err.message}` };
+  }
+
+  return { ok: true };
+}
+
+function getDefaultSystemJs() {
+  return `// api/_system.js
+// Runs in a browser sandbox. All standard browser globals are available.
+// REQ is the request. ENV is the project's secrets. return is the response.
+
+if (REQ.route === "health") {
+  return {
+    status: "ok",
+    pid: REQ.pid,
+    deployed: REQ.deployedAt,
+    responseMs: Date.now() - REQ.startTime,
+  };
+}
+
+if (REQ.route === "whoami") {
+  return {
+    pid: REQ.pid,
+    name: REQ.projectName,
+    deployedAt: REQ.deployedAt,
+    apiVersion: 1,
+  };
+}
+
+if (REQ.route === "files") {
+  return FILES;
+}
+
+if (REQ.route === "status") {
+  return {
+    status: "ok",
+    pid: REQ.pid,
+    deployed: REQ.deployedAt,
+    responseMs: Date.now() - REQ.startTime,
+    region: REQ.region,
+    runtime: "chromium",
+    apiFiles: REQ.apiFileCount,
+    publicFiles: REQ.publicFileCount,
+    lastError: REQ.lastError,
+    lastErrorAt: REQ.lastErrorAt,
+  };
+}
+
+if (REQ.route === "version") {
+  return {
+    deploymentId: REQ.deploymentId,
+    deployedAt: REQ.deployedAt,
+    versionId: REQ.versionId,
+    gitCommit: REQ.gitCommit,
+    url: REQ.deploymentUrl,
+  };
+}
+
+if (REQ.route === "robots") {
+  return {
+    __contentType: "text/plain",
+    __body: "User-agent: *\\nAllow: /\\nDisallow: /api/\\n",
+  };
+}
+
+throw new Error("Unknown system route: " + REQ.route);
+`;
+}
+
+async function buildPublicFileList(pid) {
+  const snap = await db.ref(`files/${pid}`).once("value");
+  const files = [];
+  let totalBytes = 0;
+
+  if (snap.exists()) {
+    snap.forEach((child) => {
+      const v = child.val() || {};
+      const p = v.path || child.key.replace(/__/g, "/");
+      if (!p) return;
+      if (p.startsWith("api/") || p === "api") return;
+      if (p === "notes.json") return;
+      if (/(^|\/)\.gitkeep$/i.test(p) || /(^|\/)\.keep$/i.test(p)) return;
+
+      const bytes = Buffer.byteLength(String(v.content || ""), "utf8");
+      files.push({ path: p, bytes, type: mimeFor(p) });
+      totalBytes += bytes;
+    });
+  }
+
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  return {
+    files,
+    count: files.length,
+    totalBytes,
+    updatedAt: Date.now(),
+  };
+}
+
+function buildApiRoutes(apiFiles) {
+  const system = ["health", "whoami", "files", "status", "version", "robots"];
+  const user = Object.keys(apiFiles)
+    .filter((name) => name !== API_SYSTEM_FILENAME)
+    .map((name) => name.replace(/\.js$/, ""))
+    .sort();
+
+  return { system, user, updatedAt: Date.now() };
+}
+
+// =========================================================================
+// SHARED HELPERS
 // =========================================================================
 
 const FALLBACK_OG = { project: null, profile: null };
@@ -522,7 +837,7 @@ ${robotsNoIndex ? '<meta name="robots" content="noindex,nofollow">' : ""}
 }
 
 // =========================================================================
-// META — single source of truth
+// META
 // =========================================================================
 
 const META_KEYS_BY_NAME = new Set([
@@ -691,10 +1006,10 @@ async function getProjectOwnerUsername(pid, project) {
 function buildProjectCleanUrl(username, project, pid = null) {
   if (!username) return null;
   const slug = project?.slug || "";
-  if (slug) return `${BASE_URL}/${encodeURIComponent(username)}/${encodeURIComponent(slug)}`;
+  if (slug) return `${BASE_URL}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}`;
   const fallbackPid = pid || project?.pid || null;
   if (!fallbackPid) return `${BASE_URL}/${encodeURIComponent(username)}`;
-  return `${BASE_URL}/p/${encodeURIComponent(fallbackPid)}`;
+  return `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(fallbackPid)}&path=index.html`;
 }
 
 function buildLiveSiteUrl(username, project) {
@@ -1598,7 +1913,7 @@ async function pruneDeployments(pid) {
   }
 }
 
-async function writeFilesInBatches(pid, fileMap, reqId) {
+async function writeFilesInBatches(pid, fileMap, reqId, { tree = "files" } = {}) {
   const entries = Object.entries(fileMap);
   let written = 0;
   const skipped = [];
@@ -1609,18 +1924,102 @@ async function writeFilesInBatches(pid, fileMap, reqId) {
         if (typeof c !== "string") { skipped.push(p); return; }
         if (!isValidFilePath(p)) { skipped.push(p); return; }
         try {
-          await db.ref(`files/${pid}/${sanitizeFirebasePath(p.replace(/\//g, "__"))}`).set({
+          await db.ref(`${tree}/${pid}/${sanitizeFirebasePath(p.replace(/\//g, "__"))}`).set({
             path: p, content: c, updatedAt: Date.now(),
           });
           written++;
         } catch (err) {
-          log("host.deploy.file_failed", { reqId, pid, filePath: p, message: err.message });
+          log("host.deploy.file_failed", { reqId, pid, tree, filePath: p, message: err.message });
           skipped.push(p);
         }
       }),
     );
   }
   return { written, skipped };
+}
+
+async function validateAndStoreAllowHosts(pid, apiFiles) {
+  // Collect all @allow hosts across all files
+  const allHosts = new Set();
+  const declaredBy = new Map(); // host -> Set of files
+
+  for (const [name, content] of Object.entries(apiFiles)) {
+    const hosts = extractAllowHosts(content);
+    for (const host of hosts) {
+      allHosts.add(host);
+      if (!declaredBy.has(host)) declaredBy.set(host, new Set());
+      declaredBy.get(host).add(name);
+    }
+  }
+
+  if (allHosts.size > MAX_UNIQUE_ALLOW_HOSTS) {
+    return {
+      ok: false,
+      reason: `Too many @allow hosts (${allHosts.size}). Max is ${MAX_UNIQUE_ALLOW_HOSTS}.`,
+    };
+  }
+
+  const results = [];
+
+  for (const host of allHosts) {
+    // Built-in hosts are pre-approved
+    if (BUILTIN_ALLOWED_HOSTS.has(host)) {
+      results.push({ host, ok: true, builtin: true });
+      continue;
+    }
+
+    const validation = await validateAllowHost(host);
+    results.push({
+      host,
+      ok: validation.ok,
+      reason: validation.reason,
+      builtin: false,
+    });
+  }
+
+  const failures = results.filter((r) => !r.ok);
+  if (failures.length > 0) {
+    return {
+      ok: false,
+      reason: `Host validation failed`,
+      violations: failures.map((f) => ({
+        host: f.host,
+        reason: f.reason,
+        files: [...(declaredBy.get(f.host) || [])],
+      })),
+    };
+  }
+
+  // All good — write the manifest
+  const manifest = {};
+  for (const r of results) {
+    if (r.builtin) continue; // built-ins aren't stored
+    manifest[r.host] = {
+      declaredBy: [...(declaredBy.get(r.host) || [])],
+      validatedAt: Date.now(),
+      validatedOk: true,
+    };
+  }
+
+  // Read existing manifest, merge, remove hosts no longer referenced
+  const existingSnap = await db.ref(`projects/${pid}/allowedHosts`).once("value");
+  const existing = existingSnap.exists() ? existingSnap.val() : {};
+
+  const updates = {};
+  for (const [host, meta] of Object.entries(manifest)) {
+    updates[`projects/${pid}/allowedHosts/${host}`] = meta;
+  }
+  for (const host of Object.keys(existing)) {
+    if (!manifest[host]) {
+      updates[`projects/${pid}/allowedHosts/${host}`] = null;
+    }
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await db.ref().update(updates);
+  }
+
+  return { ok: true, hosts: Object.keys(manifest) };
 }
 
 async function handleDeploy(req, res, reqId) {
@@ -1637,12 +2036,54 @@ async function handleDeploy(req, res, reqId) {
   const project = await getProjectCached(pid);
   if (!project) return res.status(404).json({ success: false, error: "Project not found" });
 
-  let totalBytes = 0;
-  const acceptedFiles = {};
+  // ── Split api/* from regular files ────────────────────────────────
+  const apiFiles = {};
+  const regularFiles = {};
+
   for (const [p, c] of Object.entries(files)) {
     if (typeof c !== "string") continue;
     if (c.length > DEPLOY_MAX_FILE_BYTES) continue;
     if (!isValidFilePath(p)) continue;
+
+    if (p.startsWith("api/")) {
+      const rel = p.slice(4);
+      if (!rel.includes("/")) {
+        apiFiles[rel] = c;
+      }
+      // Subfolders under api/ are silently dropped
+    } else {
+      regularFiles[p] = c;
+    }
+  }
+
+  // ── Validate API files ────────────────────────────────────────────
+  const apiAnalysis = analyzeApiFiles(apiFiles);
+  if (apiAnalysis.rejected.length > 0) {
+    return res.status(400).json({
+      success: false,
+      error: "API file validation failed",
+      rejected: apiAnalysis.rejected,
+    });
+  }
+
+  // ── Validate @allow hosts ─────────────────────────────────────────
+  const allowResult = await validateAndStoreAllowHosts(pid, apiAnalysis.valid);
+  if (!allowResult.ok) {
+    return res.status(400).json({
+      success: false,
+      error: allowResult.reason,
+      violations: allowResult.violations || [],
+    });
+  }
+
+  // ── Auto-inject _system.js ────────────────────────────────────────
+  if (!apiAnalysis.valid[API_SYSTEM_FILENAME]) {
+    apiAnalysis.valid[API_SYSTEM_FILENAME] = getDefaultSystemJs();
+  }
+
+  // ── Total size check ──────────────────────────────────────────────
+  let totalBytes = 0;
+  for (const [p, c] of Object.entries(regularFiles)) {
     totalBytes += c.length;
     if (totalBytes > DEPLOY_MAX_TOTAL_BYTES) {
       try {
@@ -1652,47 +2093,72 @@ async function handleDeploy(req, res, reqId) {
         success: false,
         error: "Project too large to deploy",
         limit: DEPLOY_MAX_TOTAL_BYTES,
-        hint: "Split into smaller projects or remove large assets.",
       });
     }
-    acceptedFiles[p] = c;
   }
 
-  if (Object.keys(acceptedFiles).length === 0) {
-    try {
-      await notifyDeployFailed(access, pid, project.name, "no valid files in payload", 400);
-    } catch {}
+  if (Object.keys(regularFiles).length === 0 && Object.keys(apiAnalysis.valid).length === 0) {
     return res.status(400).json({ success: false, error: "No valid files to deploy" });
+  }
+
+  // ── Ensure version ────────────────────────────────────────────────
+  const allFiles = { ...regularFiles };
+  for (const [name, content] of Object.entries(apiAnalysis.valid)) {
+    allFiles[`api/${name}`] = content;
   }
 
   let resolvedVid = null;
   try {
-    resolvedVid = await ensureDeployVersion(pid, acceptedFiles, versionId);
+    resolvedVid = await ensureDeployVersion(pid, allFiles, versionId);
   } catch (err) {
     log("host.deploy.version_failed", { pid, message: err.message });
     resolvedVid = null;
   }
 
-  const { written, skipped } = await writeFilesInBatches(pid, acceptedFiles, reqId);
-  if (written === 0) {
+  // ── Write regular files to files/{pid} ───────────────────────────
+  const regularWrite = await writeFilesInBatches(pid, regularFiles, reqId, { tree: "files" });
+
+  // ── Write api files to api-files/{pid} ───────────────────────────
+  const apiWrite = await writeFilesInBatches(pid, apiAnalysis.valid, reqId, { tree: "api-files" });
+
+  const totalWritten = regularWrite.written + apiWrite.written;
+  if (totalWritten === 0) {
     try {
       await notifyDeployFailed(access, pid, project.name, "no files written", 500);
     } catch {}
     return res.status(500).json({ success: false, error: "No files were written" });
   }
 
+  // ── Write manifests ──────────────────────────────────────────────
+  let publicFileList = null;
   try {
-    await ensureProjectLanguages(pid, project, acceptedFiles);
+    publicFileList = await buildPublicFileList(pid);
+    await db.ref(`projects/${pid}/publicFileList`).set(publicFileList);
+  } catch (err) {
+    log("host.deploy.public_file_list_failed", { pid, message: err.message });
+  }
+
+  try {
+    const apiRoutes = buildApiRoutes(apiAnalysis.valid);
+    await db.ref(`projects/${pid}/apiRoutes`).set(apiRoutes);
+  } catch (err) {
+    log("host.deploy.api_routes_failed", { pid, message: err.message });
+  }
+
+  // ── Thumbnail + languages + OG ───────────────────────────────────
+  try {
+    await ensureProjectLanguages(pid, project, regularFiles);
   } catch (err) {
     log("host.deploy.languages_failed", { pid, message: err.message });
   }
   try {
-    await ensureProjectThumbnail(pid, acceptedFiles);
+    await ensureProjectThumbnail(pid, regularFiles);
   } catch (err) {
     log("host.deploy.thumbnail_failed", { pid, message: err.message });
   }
   await invalidateProjectOgImage(pid).catch(() => {});
 
+  // ── Compute storage used (public files only) ─────────────────────
   let storageUsed = 0;
   try {
     const fSnap = await db.ref(`files/${pid}`).once("value");
@@ -1732,12 +2198,14 @@ async function handleDeploy(req, res, reqId) {
 
   await logProjectEvent(pid, access.uid, "deploy", "project.deployed", {
     url: cleanUrl, versionId: resolvedVid,
-    filesWritten: written, filesSkipped: skipped.length,
+    filesWritten: totalWritten,
+    apiFilesWritten: apiWrite.written,
+    filesSkipped: regularWrite.skipped.length + apiWrite.skipped.length,
   });
   await maybePruneProjectLogs(pid);
 
   try {
-    await ensureDeploymentThumbnail(pid, deploymentId, acceptedFiles);
+    await ensureDeploymentThumbnail(pid, deploymentId, regularFiles);
   } catch (err) {
     log("host.deploy.deployment_thumb_failed", { pid, deploymentId, message: err.message });
   }
@@ -1758,8 +2226,16 @@ async function handleDeploy(req, res, reqId) {
   } catch {}
 
   return res.status(202).json({
-    success: true, deploymentId, url: cleanUrl, serveUrl,
-    versionId: resolvedVid, filesWritten: written, filesSkipped: skipped.length,
+    success: true,
+    deploymentId,
+    url: cleanUrl,
+    serveUrl,
+    versionId: resolvedVid,
+    filesWritten: totalWritten,
+    filesSkipped: regularWrite.skipped.length + apiWrite.skipped.length,
+    apiFileCount: apiAnalysis.totalFiles + 1, // +1 for _system.js
+    apiRejected: apiAnalysis.rejected,
+    allowedHosts: allowResult.hosts || [],
   });
 }
 
@@ -2143,6 +2619,15 @@ async function handleServe(req, res, reqId) {
     return res.send(body);
   };
 
+  // ── Block api/* and secrets/* paths (defense in depth) ──────────
+  const initialPath = String(req.query?.path || "").replace(/^\/+/, "");
+  if (initialPath.startsWith("api/") || initialPath === "api") {
+    return sendText(404, "Not found");
+  }
+  if (initialPath.startsWith("secrets") || initialPath === "secrets") {
+    return sendText(404, "Not found");
+  }
+
   let username = String(req.query?.username || "").trim().toLowerCase();
   let projectSlug = String(req.query?.project || "").trim();
   let pid = String(req.query?.pid || "").trim();
@@ -2299,75 +2784,72 @@ async function handleServe(req, res, reqId) {
   }
 
   if (/\.html?$/i.test(relPath)) {
-  let html = content;
-  try {
-    let meta = await resolveProjectMeta(pid, project);
-
-    if (fromId) {
-      try {
-        const dThumb = await db
-          .ref(`projects/${pid}/deployments/${fromId}/thumbnail/url`)
-          .once("value");
-        if (dThumb?.exists() && isValidOgUrl(dThumb.val())) {
-          meta = { ...meta, ogImage: dThumb.val() };
-        }
-      } catch {}
-    }
-
-    const canonicalPath =
-      relPath === "index.html" || relPath === "index.htm" ? "" : relPath;
-    const baseCanonical = buildLiveSiteUrlForPath(
-      ownerUsername,
-      project,
-      canonicalPath,
-    );
-    const canonicalUrl = fromId
-      ? `${baseCanonical}?from=${encodeURIComponent(fromId)}`
-      : baseCanonical;
-
-    html = injectMetaIntoHtml(html, {
-      project,
-      meta,
-      canonicalUrl,
-      robotsNoIndex: !!fromId || !liveSitePublic,
-    });
-  } catch (err) {
-    log("host.serve.meta_failed", { pid, message: err.message });
-  }
-  html = injectTracker(html, pid);
-  html = rewriteRelativeUrls(html, {
-    pid,
-    username: ownerUsername,
-    slug: project.slug,
-    currentPath: relPath,
-    cacheKey,
-    fromId,
-  });
-
-  // ── Inject secrets (opt-in per project via visibility.secrets) ──
-  // Must be injected AFTER rewriteRelativeUrls so the injected script
-  // isn't accidentally rewritten. And AFTER injectTracker for the same reason.
-  if (project.visibility?.secrets === "inject" && !fromId) {
+    let html = content;
     try {
-      const secrets = await projectSecrets.readSecretsForInjection(pid);
-      if (secrets && Object.keys(secrets).length > 0) {
-        const payload = JSON.stringify(secrets).replace(/</g, "\\u003c");
-        const script = `<script>window.__SECRETS__=Object.freeze(${payload});</script>`;
-        if (/<\/head>/i.test(html)) {
-          html = html.replace(/<\/head>/i, script + "\n</head>");
-        } else {
-          html = script + html;
-        }
-      }
-    } catch (err) {
-      log("host.serve.secrets_inject_failed", { pid, message: err.message });
-      // Don't fail the request — inject nothing rather than partial secrets
-    }
-  }
+      let meta = await resolveProjectMeta(pid, project);
 
-  res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-  return res.status(200).send(html);
-}
+      if (fromId) {
+        try {
+          const dThumb = await db
+            .ref(`projects/${pid}/deployments/${fromId}/thumbnail/url`)
+            .once("value");
+          if (dThumb?.exists() && isValidOgUrl(dThumb.val())) {
+            meta = { ...meta, ogImage: dThumb.val() };
+          }
+        } catch {}
+      }
+
+      const canonicalPath =
+        relPath === "index.html" || relPath === "index.htm" ? "" : relPath;
+      const baseCanonical = buildLiveSiteUrlForPath(
+        ownerUsername,
+        project,
+        canonicalPath,
+      );
+      const canonicalUrl = fromId
+        ? `${baseCanonical}?from=${encodeURIComponent(fromId)}`
+        : baseCanonical;
+
+      html = injectMetaIntoHtml(html, {
+        project,
+        meta,
+        canonicalUrl,
+        robotsNoIndex: !!fromId || !liveSitePublic,
+      });
+    } catch (err) {
+      log("host.serve.meta_failed", { pid, message: err.message });
+    }
+    html = injectTracker(html, pid);
+    html = rewriteRelativeUrls(html, {
+      pid,
+      username: ownerUsername,
+      slug: project.slug,
+      currentPath: relPath,
+      cacheKey,
+      fromId,
+    });
+
+    // ── Inject public secrets (only from live deployment) ───────
+    if (!fromId) {
+      try {
+        const publicSecrets = await projectSecrets.readPublicSecrets(pid);
+        if (publicSecrets && Object.keys(publicSecrets).length > 0) {
+          const payload = JSON.stringify(publicSecrets).replace(/</g, "\\u003c");
+          const script = `<script>window.__SECRETS__=Object.freeze(${payload});</script>`;
+          if (/<\/head>/i.test(html)) {
+            html = html.replace(/<\/head>/i, script + "\n</head>");
+          } else {
+            html = script + html;
+          }
+        }
+      } catch (err) {
+        log("host.serve.secrets_inject_failed", { pid, message: err.message });
+      }
+    }
+
+    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+    return res.status(200).send(html);
+  }
 
   if (/\.css$/i.test(relPath)) {
     const rewritten = rewriteCssUrls(content, {
@@ -2404,6 +2886,62 @@ async function handleServe(req, res, reqId) {
     res.setHeader("Accept-Ranges", "none");
   }
   return res.status(200).send(content);
+}
+
+// =========================================================================
+// API SYSTEM DEFAULT + API ROUTES
+// =========================================================================
+
+async function handleApiSystemDefault(req, res, reqId) {
+  res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
+  res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+  try {
+    const p = path.join(process.cwd(), "public", "api-system-default.js");
+    const content = fs.readFileSync(p, "utf8");
+    return res.status(200).send(content);
+  } catch {
+    return res.status(200).send(getDefaultSystemJs());
+  }
+}
+
+async function handleApiRoutes(req, res, reqId) {
+  const pid = String(req.query?.pid || "").trim();
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+
+  const access = await requireProjectRole(req, res, pid, "viewer");
+  if (!access) return;
+
+  const [routesSnap, hostsSnap, filesSnap] = await Promise.all([
+    db.ref(`projects/${pid}/apiRoutes`).once("value"),
+    db.ref(`projects/${pid}/allowedHosts`).once("value"),
+    db.ref(`projects/${pid}/publicFileList`).once("value"),
+  ]);
+
+  const routes = routesSnap.exists() ? routesSnap.val() : { system: [], user: [] };
+  const hosts = hostsSnap.exists() ? hostsSnap.val() : {};
+  const publicFiles = filesSnap.exists() ? filesSnap.val() : { files: [], count: 0, totalBytes: 0 };
+
+  return res.status(200).json({
+    success: true,
+    system: routes.system || [],
+    user: routes.user || [],
+    maxFiles: MAX_API_FILES,
+    baseUrl: `${BASE_URL}/api/${encodeURIComponent(pid)}`,
+    allowedHosts: {
+      builtin: [...BUILTIN_ALLOWED_HOSTS],
+      declared: Object.entries(hosts).map(([host, meta]) => ({
+        host,
+        declaredBy: meta.declaredBy || [],
+        validatedAt: meta.validatedAt,
+        validatedOk: meta.validatedOk === true,
+      })),
+    },
+    publicFiles: {
+      files: publicFiles.files || [],
+      count: publicFiles.count || 0,
+      totalBytes: publicFiles.totalBytes || 0,
+    },
+  });
 }
 
 // =========================================================================
@@ -2620,33 +3158,6 @@ async function handleProjectsUpdate(req, res, reqId) {
     } catch {}
   }
 
-  try {
-    const audience = await getProjectAudience(pid);
-    const others = audience.uids.filter((u) => u !== access.uid);
-    if (others.length) {
-      const touched = Object.keys(patch).filter((k) => ["name", "description", "iconUrl"].includes(k));
-      if (touched.length) {
-        let imageUrl = null;
-        try {
-          const t = await db.ref(`projects/${pid}/ogImage/url`).once("value").catch(() => null);
-          if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
-        } catch {}
-        const ownerUsername = await getProjectOwnerUsername(pid, { ...existing, ...patch });
-        const link = ownerUsername && (patch.slug || existing.slug)
-          ? buildProjectCleanUrl(ownerUsername, { ...existing, ...patch }, pid)
-          : `${BASE_URL}/project?pid=${pid}`;
-        await notifyMany("project", others, {
-          title: "Project details updated",
-          body: `Someone updated ${touched.join(", ")} on a project you collaborate on.`,
-          imageUrl, link,
-          extra: { pid, fields: touched },
-          dedupeKey: `project_update_${pid}_${touched.join("_")}`,
-          dedupeTtlMs: 60 * 1000,
-        });
-      }
-    }
-  } catch {}
-
   const p = await getProjectCached(pid);
   const { apiKeyHash, ...safe } = p || {};
   return res.status(200).json({ success: true, project: { pid, ...safe } });
@@ -2710,12 +3221,9 @@ async function handleProjectsDelete(req, res, reqId) {
     log("host.projects_delete.cdn_cleanup_failed", { pid, message: err.message });
   }
   try {
-  await projectSecrets.deleteAllSecrets(pid);
-} catch (err) {
-  log("host.projects_delete.secrets_cleanup_failed", {
-    pid,
-    message: err.message,
-  });
+    await projectSecrets.deleteAllSecrets(pid);
+  } catch (err) {
+    log("host.projects_delete.secrets_cleanup_failed", { pid, message: err.message });
   }
 
   try {
@@ -3112,29 +3620,11 @@ async function handleProjectSyncBack(req, res, reqId) {
     await invalidateProjectOgImage(pid).catch(() => {});
   }
 
-  try {
-    if (result.filesWritten > 0 || result.versionsWritten > 0 || result.dbWritten || result.schemaWritten) {
-      const audience = await getProjectAudience(pid);
-      const others = audience.uids.filter((u) => u !== access.uid);
-      if (others.length) {
-        const thumb = await db.ref(`projects/${pid}/thumbnail/url`).once("value").catch(() => null);
-        const imageUrl = thumb?.exists() && isValidOgUrl(thumb.val()) ? thumb.val() : null;
-        await notifyMany("project", others, {
-          title: "Project updated from sync",
-          body: `${result.filesWritten} file(s) synced back${result.versionsWritten ? `, ${result.versionsWritten} version(s)` : ""}${result.dbWritten ? ", DB imported" : ""}.`,
-          imageUrl,
-          link: `${BASE_URL}/project?pid=${pid}`,
-          extra: { pid, ...result },
-        });
-      }
-    }
-  } catch {}
-
   return res.status(200).json({ success: true, ...result });
 }
 
 // =========================================================================
-// FILES — list / get / delete / save / migrate
+// FILES
 // =========================================================================
 
 async function canAccessProjectFromReq(req) {
@@ -3178,6 +3668,8 @@ async function handleFileList(req, res, reqId) {
     filesSnap.forEach((child) => {
       const v = child.val() || {};
       const p = v.path || child.key.replace(/__/g, "/");
+      // Never expose api/* files through the file list
+      if (p.startsWith("api/")) return;
       if (enforceFileList) {
         const safePath = sanitizeFirebasePath(p.replace(/\//g, "__"));
         if (!publicFiles[safePath]) return;
@@ -3207,6 +3699,11 @@ async function handleFileGet(req, res, reqId) {
   }
   if (!isValidFilePath(filePath)) return res.status(400).json({ success: false, error: "Invalid path" });
   if (!(await enforceRate(req, res, "fileGet", `pid_${pid}`))) return;
+
+  // Never serve api/* files
+  if (filePath.startsWith("api/")) {
+    return res.status(404).json({ success: false, error: "File not found" });
+  }
 
   let role = null;
   const signedIn = await canAccessProjectFromReq(req);
@@ -3253,8 +3750,13 @@ async function handleFileDelete(req, res, reqId) {
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
-  const safePath = sanitizeFirebasePath(filePath.replace(/\//g, "__"));
-  await db.ref(`files/${pid}/${safePath}`).remove();
+  // Route to the correct tree
+  const isApi = filePath.startsWith("api/");
+  const tree = isApi ? "api-files" : "files";
+  const rel = isApi ? filePath.slice(4) : filePath;
+  const safePath = sanitizeFirebasePath(rel.replace(/\//g, "__"));
+
+  await db.ref(`${tree}/${pid}/${safePath}`).remove();
   await touchProject(pid);
   await logProjectEvent(pid, access.uid, "file", "file.deleted", { path: filePath });
   invalidateProject(pid);
@@ -3271,6 +3773,10 @@ async function handleFileSave(req, res, reqId) {
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
+  const isApi = filePath.startsWith("api/");
+  const tree = isApi ? "api-files" : "files";
+  const rel = isApi ? filePath.slice(4) : filePath;
+
   let storedContent = content;
   let uploadedUrl = null;
 
@@ -3283,7 +3789,7 @@ async function handleFileSave(req, res, reqId) {
     content.startsWith("data:audio/")
   );
 
-  if (isBinaryData) {
+  if (isBinaryData && !isApi) {
     try {
       uploadedUrl = await uploadViaFlier(content, filePath.split("/").pop(), reqId);
     } catch (err) {
@@ -3298,11 +3804,11 @@ async function handleFileSave(req, res, reqId) {
   }
 
   try {
-    await db.ref(`files/${pid}/${sanitizeFirebasePath(filePath.replace(/\//g, "__"))}`).set({
-      path: filePath, content: storedContent, updatedAt: Date.now(),
+    await db.ref(`${tree}/${pid}/${sanitizeFirebasePath(rel.replace(/\//g, "__"))}`).set({
+      path: rel, content: storedContent, updatedAt: Date.now(),
     });
   } catch (err) {
-    log("host.file_save.write_failed", { reqId, pid, message: err.message });
+    log("host.file_save.write_failed", { reqId, pid, tree, message: err.message });
     return res.status(500).json({ success: false, error: "Write failed" });
   }
 
@@ -3400,6 +3906,9 @@ async function handleProjectHydrate(req, res, reqId) {
   if (filesSnap.exists()) {
     filesSnap.forEach((child) => {
       const v = child.val() || {};
+      const p = v.path || child.key.replace(/__/g, "/");
+      // Never hydrate api/* files
+      if (p.startsWith("api/")) return;
       if (v.path && typeof v.content === "string") files[v.path] = v.content;
     });
   }
@@ -3473,6 +3982,8 @@ async function handleProjectCopy(req, res, reqId) {
       const p = v.path;
       const content = v.content || "";
       if (!p) return;
+      // Never copy api/* files
+      if (p.startsWith("api/")) return;
       if (!canFullCopy) {
         const safePath = sanitizeFirebasePath(p.replace(/\//g, "__"));
         if (!publicFiles[safePath]) return;
@@ -3515,27 +4026,6 @@ async function handleProjectCopy(req, res, reqId) {
     sourcePid, copiedFiles, fullCopy: canFullCopy,
   });
 
-  try {
-    if (source.ownerId && source.ownerId !== user.uid) {
-      if (await shouldNotifyOnce(source.ownerId, `fork_${sourcePid}_${user.uid}`, 24 * 60 * 60 * 1000)) {
-        const forker = await getUser(user.uid);
-        const who = forker?.profile?.username ? `@${forker.profile.username}` : "someone";
-        let imageUrl = null;
-        try {
-          const t = await db.ref(`projects/${sourcePid}/ogImage/url`).once("value").catch(() => null);
-          if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
-        } catch {}
-        await callNotify("project", source.ownerId, {
-          title: "Someone copied your project",
-          body: `${who} saved a copy of "${source.name || "your project"}".`,
-          imageUrl,
-          link: `${BASE_URL}/${forker?.profile?.username || ""}/${newProject.slug || ""}`,
-          extra: { sourcePid, newPid: newProject.pid, forkerUid: user.uid },
-        });
-      }
-    }
-  } catch {}
-
   const { apiKeyHash, ...safeNew } = newProject;
   return res.status(200).json({
     success: true, pid: newProject.pid, project: safeNew,
@@ -3544,7 +4034,7 @@ async function handleProjectCopy(req, res, reqId) {
 }
 
 // =========================================================================
-// JSON DB — HTTP wrappers around projectDb
+// JSON DB — HTTP wrappers
 // =========================================================================
 
 async function checkProjectKeyOrRole(req, res, pid, minRole) {
@@ -3574,7 +4064,7 @@ async function handleDbSet(req, res, reqId) {
   if (data !== undefined && mode !== "replace") {
     return res.status(400).json({
       success: false,
-      error: "Full-replace writes require mode='replace'. Use key+value for single-path writes, or data+mode='merge' for partial updates.",
+      error: "Full-replace writes require mode='replace'.",
       rateLimit: rateLimitMeta,
     });
   }
@@ -3758,7 +4248,7 @@ async function handleDbCas(req, res, reqId) {
   if (!("expected" in req.body)) {
     return res.status(400).json({
       success: false,
-      error: "Missing expected field (use null for 'must not exist')",
+      error: "Missing expected field",
     });
   }
   if (!(await enforceRate(req, res, "dbCas", `pid_${pid}`))) return;
@@ -3775,9 +4265,6 @@ async function handleDbCas(req, res, reqId) {
       });
     }
     await touchProject(pid);
-    await logProjectEvent(pid, access.uid === "api" ? null : access.uid, "db", "db.cas", {
-      key, applied: true,
-    });
     return res.status(200).json({ success: true, path: result.path, applied: true });
   } catch (err) {
     log("host.db_cas.error", { reqId, pid, key, message: err.message });
@@ -3861,7 +4348,7 @@ async function handleDbSnapshotList(req, res, reqId) {
   try {
     const result = await projectDb.dbSnapshotList(pid);
     return res.status(200).json({ success: true, ...result });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ success: false, error: "Failed to list snapshots" });
   }
 }
@@ -3909,7 +4396,7 @@ async function handleDbSchema(req, res, reqId) {
 }
 
 // =========================================================================
-// PROJECT SECRETS — encrypted per-project environment variables
+// SECRETS
 // =========================================================================
 
 async function handleSecretsList(req, res, reqId) {
@@ -3920,11 +4407,12 @@ async function handleSecretsList(req, res, reqId) {
   if (!access) return;
 
   try {
-    const { keys, count } = await projectSecrets.listSecretKeys(pid);
+    const { keys, count, publicCount } = await projectSecrets.listSecretKeys(pid);
     return res.status(200).json({
       success: true,
       keys,
       count,
+      publicCount,
       encryptionEnabled: projectSecrets.isEncryptionEnabled(),
     });
   } catch (err) {
@@ -3949,6 +4437,7 @@ async function handleSecretsGet(req, res, reqId) {
         value: isOwner ? entry.value : null,
         hasValue: !!entry.value,
         note: entry.note,
+        visibility: entry.visibility,
         createdAt: entry.createdAt,
         updatedAt: entry.updatedAt,
         error: entry.error || null,
@@ -3967,7 +4456,7 @@ async function handleSecretsGet(req, res, reqId) {
 }
 
 async function handleSecretsSet(req, res, reqId) {
-  const { pid, key, value, note } = req.body || {};
+  const { pid, key, value, note, visibility } = req.body || {};
   if (!pid || !key) {
     return res.status(400).json({ success: false, error: "Missing pid or key" });
   }
@@ -3976,9 +4465,10 @@ async function handleSecretsSet(req, res, reqId) {
   if (!access) return;
 
   try {
-    const result = await projectSecrets.setSecret(pid, access.uid, key, value, note);
+    const result = await projectSecrets.setSecret(pid, access.uid, key, value, note, visibility);
     await logProjectEvent(pid, access.uid, "secret", "secret.set", {
       key,
+      visibility: result.visibility,
       bytes: Buffer.byteLength(String(value || ""), "utf8"),
     });
     return res.status(200).json({ success: true, ...result });
@@ -4013,6 +4503,32 @@ async function handleSecretsDelete(req, res, reqId) {
   }
 }
 
+async function handleSecretsVisibility(req, res, reqId) {
+  const { pid, key, visibility } = req.body || {};
+  if (!pid || !key || !visibility) {
+    return res.status(400).json({ success: false, error: "Missing pid, key, or visibility" });
+  }
+  if (!(await enforceRate(req, res, "secretsVisibility", `pid_${pid}`))) return;
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  try {
+    const result = await projectSecrets.updateSecretVisibility(pid, access.uid, key, visibility);
+    await logProjectEvent(pid, access.uid, "secret", "secret.visibility", {
+      key,
+      visibility: result.visibility,
+      changed: result.changed,
+    });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    log("host.secrets_visibility.error", { reqId, pid, key, message: err.message });
+    return res.status(err.status || 500).json({
+      success: false,
+      error: err.message || "Failed to update visibility",
+    });
+  }
+}
+
 // =========================================================================
 // API KEYS
 // =========================================================================
@@ -4029,7 +4545,25 @@ async function handleApiKeyGenerate(req, res, reqId) {
   const { key, hash } = generateApiKey();
   await db.ref(`projects/${pid}`).update({ apiKeyHash: hash, apiKeyCreatedAt: Date.now() });
   invalidateProject(pid);
-  await logProjectEvent(pid, access.uid, "project", "apikey.generated", {});
+
+  // Store as FOLIO_API_KEY secret (private, internal-write to bypass reserved check)
+  let storedInEnv = false;
+  try {
+    await projectSecrets.setSecret(
+      pid,
+      access.uid,
+      "FOLIO_API_KEY",
+      key,
+      "Auto-generated project API key (used by api/*.js for Folio-internal calls)",
+      "private",
+      { allowReserved: true },
+    );
+    storedInEnv = true;
+  } catch (err) {
+    log("host.apikey.secret_store_failed", { pid, message: err.message });
+  }
+
+  await logProjectEvent(pid, access.uid, "project", "apikey.generated", { storedInEnv });
 
   try {
     const audience = await getProjectAudience(pid);
@@ -4052,7 +4586,12 @@ async function handleApiKeyGenerate(req, res, reqId) {
     });
   } catch {}
 
-  return res.status(200).json({ success: true, key });
+  return res.status(200).json({
+    success: true,
+    key,
+    storedInEnv,
+    warning: storedInEnv ? null : "API key generated but could not be stored in ENV. Delete an unused secret and regenerate.",
+  });
 }
 
 // =========================================================================
@@ -4065,9 +4604,7 @@ const SECRETS_VISIBILITY_VALUES = ["off", "inject", "private"];
 async function handleVisibility(req, res, reqId) {
   const { pid, visibility } = req.body || {};
   if (!pid || typeof visibility !== "object" || visibility === null) {
-    return res
-      .status(400)
-      .json({ success: false, error: "Missing pid or visibility" });
+    return res.status(400).json({ success: false, error: "Missing pid or visibility" });
   }
   if (!(await enforceRate(req, res, "visibility", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "owner");
@@ -4094,41 +4631,11 @@ async function handleVisibility(req, res, reqId) {
     changes[axis] = visibility[axis];
   }
   if (Object.keys(patch).length === 0)
-    return res
-      .status(400)
-      .json({ success: false, error: "No visibility axes to update" });
+    return res.status(400).json({ success: false, error: "No visibility axes to update" });
   patch.updatedAt = Date.now();
   await db.ref(`projects/${pid}`).update(patch);
   invalidateProject(pid);
-  await logProjectEvent(pid, access.uid, "project", "visibility.updated", {
-    changes,
-  });
-
-  try {
-    const significant = ["profile", "liveSite"].filter((a) => changes[a]);
-    if (significant.length) {
-      const audience = await getProjectAudience(pid);
-      const others = audience.uids.filter((u) => u !== access.uid);
-      if (others.length) {
-        const wentPublic = significant.some((a) => changes[a] === "public");
-        let imageUrl = null;
-        try {
-          const t = await db
-            .ref(`projects/${pid}/ogImage/url`)
-            .once("value")
-            .catch(() => null);
-          if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
-        } catch {}
-        await notifyMany("project", others, {
-          title: wentPublic ? "Project went public" : "Project made private",
-          body: `${significant.join(", ")} visibility changed.`,
-          imageUrl,
-          link: `${BASE_URL}/project?pid=${pid}`,
-          extra: { pid, changes },
-        });
-      }
-    }
-  } catch {}
+  await logProjectEvent(pid, access.uid, "project", "visibility.updated", { changes });
 
   return res.status(200).json({ success: true });
 }
@@ -4300,15 +4807,10 @@ async function handleInviteAccept(req, res, reqId) {
       ]);
       const pname = nameSnap.exists() ? nameSnap.val() : "your project";
       const who = acceptorUser?.profile?.username ? `@${acceptorUser.profile.username}` : "Someone";
-      let imageUrl = null;
-      try {
-        const t = await db.ref(`projects/${invite.pid}/thumbnail/url`).once("value").catch(() => null);
-        if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
-      } catch {}
       await callNotify("invite", invite.invitedBy, {
         title: "Invitation accepted",
         body: `${who} joined "${pname}" as ${invite.role}.`,
-        imageUrl, link: `${BASE_URL}/project?pid=${invite.pid}`,
+        link: `${BASE_URL}/project?pid=${invite.pid}`,
         extra: { pid: invite.pid, uid: user.uid, role: invite.role },
       });
     }
@@ -4328,18 +4830,6 @@ async function handleInviteCancel(req, res, reqId) {
   if (!access) return;
   await db.ref(`invites/${found.key}`).remove();
   await logProjectEvent(invite.pid, access.uid, "invite", "invite.cancelled", {});
-  try {
-    if (invite.invitedUid) {
-      const nameSnap = await db.ref(`projects/${invite.pid}/name`).once("value");
-      const pname = nameSnap.exists() ? nameSnap.val() : "a project";
-      await callNotify("invite", invite.invitedUid, {
-        title: "Invitation cancelled",
-        body: `Your invitation to "${pname}" was cancelled.`,
-        link: `${BASE_URL}/projects`,
-        extra: { pid: invite.pid },
-      });
-    }
-  } catch {}
   return res.status(200).json({ success: true });
 }
 
@@ -4353,16 +4843,6 @@ async function handleCollaboratorRemove(req, res, reqId) {
   await db.ref(`users/${targetUid}/projectIds/${pid}`).remove();
   invalidateProject(pid);
   await logProjectEvent(pid, access.uid, "invite", "collaborator.removed", { targetUid });
-  try {
-    const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
-    const pname = nameSnap.exists() ? nameSnap.val() : "a project";
-    await callNotify("project", targetUid, {
-      title: "Removed from project",
-      body: `You no longer have access to "${pname}".`,
-      link: `${BASE_URL}/projects`,
-      extra: { pid },
-    });
-  } catch {}
   return res.status(200).json({ success: true });
 }
 
@@ -4621,49 +5101,59 @@ async function handleShare(req, res, reqId) {
     ? `<div class="og-preview-panel"><div class="og-preview-head"><span class="og-preview-label">Share preview</span><span class="og-preview-badge">${escapeHtml(project.ogImage?.template || "auto")}</span></div><img class="og-preview-image" src="${escapeHtml(ogImageUrl)}" alt="OG preview" loading="lazy" /></div>`
     : "";
 
-  const tmpl = readTemplate("project-template.html");
-  const html = applyTemplate(tmpl, {
-    PROJECT_NAME: project.name || project.slug || "Untitled project",
-    PROJECT_SLUG: project.slug || "",
-    PROJECT_PID: pid,
-    PROJECT_DESCRIPTION: project.description || "",
-    PROJECT_ICON_HTML: { raw: projectIconHtml },
-    LANGUAGES: { raw: langBadges },
-    UPDATED_AT: updatedAgo,
-    CREATED_AT: createdLabel,
-    OWNER_USERNAME: ownerUsername,
-    OWNER_DISPLAY_NAME: ownerDisplayName,
-    OWNER_AVATAR_HTML: { raw: ownerAvatarHtml },
-    OWNER_PROFILE_URL: ownerProfileUrl,
-    VIEWER_IS_OWNER: String(viewerIsOwner),
-    IS_SIGNED_IN: String(isSignedIn),
-    CAN_COPY: String(canCopy),
-    LIVE_SITE_ENABLED: String(!!liveUrl),
-    CODE_ENABLED: String(codePublic),
-    DB_ENABLED: String(dbPublic),
-    LANGUAGES_ENABLED: String(languagesPublic),
-    CTA_HTML: { raw: ctaHtml },
-    LIVE_BUTTON_HTML: { raw: liveButtonHtml },
-    CODE_BUTTON_HTML: { raw: codeButtonHtml },
-    LIVE_BADGE_HTML: { raw: liveBadge },
-    OG_TITLE: project.metaTags?.title || project.name || project.slug || "",
-    OG_DESCRIPTION: resolvedMeta.description || "",
-    OG_IMAGE_META: { raw: ogImageMeta },
-    TWITTER_IMAGE_META: { raw: twitterImageMeta },
-    CANONICAL_URL: detailsUrl,
-    SHARE_URL: detailsUrl,
-    INJECT_PROJECT_SCRIPT: { raw: projectScript },
-    PROJECT_PREVIEW_HTML: { raw: projectPreviewHtml },
-    OG_PREVIEW_HTML: { raw: ogPreviewHtml },
-    PROJECT_THUMBNAIL_URL: projectThumbnailUrl || "",
-    PROJECT_OG_IMAGE_URL: ogImageUrl || "",
-    PROJECT_SCENE: project.ogImage?.scene || "",
-    PROJECT_PALETTE: project.ogImage?.palette || "",
-  });
+  try {
+    const tmpl = readTemplate("project-template.html");
+    const html = applyTemplate(tmpl, {
+      PROJECT_NAME: project.name || project.slug || "Untitled project",
+      PROJECT_SLUG: project.slug || "",
+      PROJECT_PID: pid,
+      PROJECT_DESCRIPTION: project.description || "",
+      PROJECT_ICON_HTML: { raw: projectIconHtml },
+      LANGUAGES: { raw: langBadges },
+      UPDATED_AT: updatedAgo,
+      CREATED_AT: createdLabel,
+      OWNER_USERNAME: ownerUsername,
+      OWNER_DISPLAY_NAME: ownerDisplayName,
+      OWNER_AVATAR_HTML: { raw: ownerAvatarHtml },
+      OWNER_PROFILE_URL: ownerProfileUrl,
+      VIEWER_IS_OWNER: String(viewerIsOwner),
+      IS_SIGNED_IN: String(isSignedIn),
+      CAN_COPY: String(canCopy),
+      LIVE_SITE_ENABLED: String(!!liveUrl),
+      CODE_ENABLED: String(codePublic),
+      DB_ENABLED: String(dbPublic),
+      LANGUAGES_ENABLED: String(languagesPublic),
+      CTA_HTML: { raw: ctaHtml },
+      LIVE_BUTTON_HTML: { raw: liveButtonHtml },
+      CODE_BUTTON_HTML: { raw: codeButtonHtml },
+      LIVE_BADGE_HTML: { raw: liveBadge },
+      OG_TITLE: project.metaTags?.title || project.name || project.slug || "",
+      OG_DESCRIPTION: resolvedMeta.description || "",
+      OG_IMAGE_META: { raw: ogImageMeta },
+      TWITTER_IMAGE_META: { raw: twitterImageMeta },
+      CANONICAL_URL: detailsUrl,
+      SHARE_URL: detailsUrl,
+      INJECT_PROJECT_SCRIPT: { raw: projectScript },
+      PROJECT_PREVIEW_HTML: { raw: projectPreviewHtml },
+      OG_PREVIEW_HTML: { raw: ogPreviewHtml },
+      PROJECT_THUMBNAIL_URL: projectThumbnailUrl || "",
+      PROJECT_OG_IMAGE_URL: ogImageUrl || "",
+      PROJECT_SCENE: project.ogImage?.scene || "",
+      PROJECT_PALETTE: project.ogImage?.palette || "",
+    });
 
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
-  return res.status(200).send(html);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
+    return res.status(200).send(html);
+  } catch (err) {
+    log("host.share.template_failed", { pid, message: err.message });
+    return sendHtmlPage(res, {
+      title: project.name || "Project",
+      heading: project.name || "Project",
+      message: project.description || "A project on Folio.",
+      status: 200, robotsNoIndex: false,
+    });
+  }
 }
 
 async function handleProfilePublic(req, res, reqId) {
@@ -4843,38 +5333,48 @@ async function handleProfilePublic(req, res, reqId) {
     ? `<link rel="preload" as="image" href="${escapeHtml(user.profile.avatarUrl)}">`
     : "";
 
-  const tmpl = readTemplate("profile-template.html");
-  const html = applyTemplate(tmpl, {
-    DISPLAY_NAME: user.profile?.displayName || username,
-    USERNAME: username,
-    AVATAR_HTML: { raw: avatarHtml },
-    BIO_BLOCK: { raw: bioBlock },
-    LINKS_BLOCK: { raw: linksBlock },
-    OWNER_CONTROLS: { raw: ownerControls },
-    PROJECT_GRID: { raw: grid },
-    PROJECT_COUNT: String(projectList.length),
-    JOINED_AT: formatDate(user.createdAt, { withDay: true }),
-    VIEWER_IS_OWNER: String(isOwner),
-    IS_SIGNED_IN: String(isSignedIn),
-    SHARE_PROFILE_HTML: { raw: shareProfileHtml },
-    SIGNIN_CTA_HTML: { raw: signInCtaHtml },
-    OG_TITLE: user.profile?.displayName || username,
-    OG_DESCRIPTION: user.profile?.bio || "",
-    OG_IMAGE_META: { raw: ogImageMeta },
-    TWITTER_IMAGE_META: { raw: twitterImageMeta },
-    CANONICAL_URL: `${BASE_URL}/${username}`,
-    PROFILE_URL: `${BASE_URL}/${username}`,
-    INJECT_PROFILE_SCRIPT: { raw: profileScript },
-    PROFILE_AVATAR_PRELOAD_HTML: { raw: avatarPreloadHtml },
-    PROFILE_AVATAR_URL: user.profile?.avatarUrl || "",
-    PROFILE_OG_IMAGE_URL: profileOgImage || "",
-    PROFILE_SCENE: user.profile?.ogImage?.scene || "",
-    PROFILE_PALETTE: user.profile?.ogImage?.palette || "",
-  });
+  try {
+    const tmpl = readTemplate("profile-template.html");
+    const html = applyTemplate(tmpl, {
+      DISPLAY_NAME: user.profile?.displayName || username,
+      USERNAME: username,
+      AVATAR_HTML: { raw: avatarHtml },
+      BIO_BLOCK: { raw: bioBlock },
+      LINKS_BLOCK: { raw: linksBlock },
+      OWNER_CONTROLS: { raw: ownerControls },
+      PROJECT_GRID: { raw: grid },
+      PROJECT_COUNT: String(projectList.length),
+      JOINED_AT: formatDate(user.createdAt, { withDay: true }),
+      VIEWER_IS_OWNER: String(isOwner),
+      IS_SIGNED_IN: String(isSignedIn),
+      SHARE_PROFILE_HTML: { raw: shareProfileHtml },
+      SIGNIN_CTA_HTML: { raw: signInCtaHtml },
+      OG_TITLE: user.profile?.displayName || username,
+      OG_DESCRIPTION: user.profile?.bio || "",
+      OG_IMAGE_META: { raw: ogImageMeta },
+      TWITTER_IMAGE_META: { raw: twitterImageMeta },
+      CANONICAL_URL: `${BASE_URL}/${username}`,
+      PROFILE_URL: `${BASE_URL}/${username}`,
+      INJECT_PROFILE_SCRIPT: { raw: profileScript },
+      PROFILE_AVATAR_PRELOAD_HTML: { raw: avatarPreloadHtml },
+      PROFILE_AVATAR_URL: user.profile?.avatarUrl || "",
+      PROFILE_OG_IMAGE_URL: profileOgImage || "",
+      PROFILE_SCENE: user.profile?.ogImage?.scene || "",
+      PROFILE_PALETTE: user.profile?.ogImage?.palette || "",
+    });
 
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
-  return res.status(200).send(html);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
+    return res.status(200).send(html);
+  } catch (err) {
+    log("host.profile.template_failed", { username, message: err.message });
+    return sendHtmlPage(res, {
+      title: user.profile?.displayName || username,
+      heading: user.profile?.displayName || username,
+      message: user.profile?.bio || "A creator on Folio.",
+      status: 200, robotsNoIndex: false,
+    });
+  }
 }
 
 async function handleView(req, res, reqId) {
@@ -4930,7 +5430,7 @@ async function handleLogs(req, res, reqId) {
 }
 
 // =========================================================================
-// CLIENT ERROR REPORTING
+// CLIENT ERROR
 // =========================================================================
 
 const CLIENT_ERROR_RL = new Map();
@@ -5070,15 +5570,22 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "db/restore-snapshot")
       return await handleDbSnapshotRestore(req, res, reqId);
 
-if (method === "GET" && action === "secrets/list")
-  return await handleSecretsList(req, res, reqId);
-if (method === "GET" && action === "secrets/get")
-  return await handleSecretsGet(req, res, reqId);
-if (method === "POST" && action === "secrets/set")
-  return await handleSecretsSet(req, res, reqId);
-if (method === "POST" && action === "secrets/delete")
-  return await handleSecretsDelete(req, res, reqId);
-    
+    if (method === "GET" && action === "secrets/list")
+      return await handleSecretsList(req, res, reqId);
+    if (method === "GET" && action === "secrets/get")
+      return await handleSecretsGet(req, res, reqId);
+    if (method === "POST" && action === "secrets/set")
+      return await handleSecretsSet(req, res, reqId);
+    if (method === "POST" && action === "secrets/delete")
+      return await handleSecretsDelete(req, res, reqId);
+    if (method === "POST" && action === "secrets/visibility")
+      return await handleSecretsVisibility(req, res, reqId);
+
+    if (method === "GET" && action === "api-system-default")
+      return await handleApiSystemDefault(req, res, reqId);
+    if (method === "GET" && action === "api-routes")
+      return await handleApiRoutes(req, res, reqId);
+
     if (method === "POST" && action === "apikey/generate")
       return await handleApiKeyGenerate(req, res, reqId);
     if (method === "POST" && action === "visibility")
@@ -5141,4 +5648,5 @@ export {
   rewriteCssUrls,
   injectMetaIntoHtml,
   getProjectCached,
+  BASE_URL,
 };
