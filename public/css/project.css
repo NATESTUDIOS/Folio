@@ -2929,3 +2929,242 @@ svg { display: block; }
   word-break: break-all;
   line-height: 1.35;
 }
+/* ═══════════════════════════════════════════════════════════
+   SECRETS PANEL
+   ═══════════════════════════════════════════════════════════ */
+
+#panel-secrets .row-item {
+  padding: 10px 12px;
+  min-height: 48px;
+}
+
+#panel-secrets .row-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-tertiary);
+}
+
+#panel-secrets .row-title.mono {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+#panel-secrets .row-sub {
+  font-size: 10.5px;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+/* Warning card at top when encryption is not configured */
+#panel-secrets > .card[style*="theme-warning"] {
+  background: var(--theme-warning-soft);
+}
+
+/* Injection toggle row gets a top border to separate it from the empty-state */
+#panel-secrets .toggle-row {
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--theme-divider);
+}
+
+/* Inline code inside toggle-desc */
+#panel-secrets .toggle-desc code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--theme-glass-bg);
+  border-radius: 3px;
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text-secondary);
+}
+
+/* Usage snippet inside the Secrets panel — ensure long strings wrap */
+#panel-secrets .db-snippet {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.65;
+}
+
+/* Alert icon inside the warning card */
+#panel-secrets .card-body > div[style*="flex-shrink"] svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Empty-state: tighten the button that follows it */
+#panel-secrets .empty-state .btn {
+  margin-top: 4px;
+}
+
+/* Owner-only card */
+#panel-secrets .card-body .empty-state {
+  padding: 24px 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SECRET EDITOR MODAL
+   ═══════════════════════════════════════════════════════════ */
+
+.secret-value-row {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.secret-value-row > .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.secret-value-row > .btn-icon {
+  min-width: 36px;
+  min-height: 36px;
+  height: auto;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+/* The eye toggle sits beside a password input — keep them visually aligned */
+.secret-value-row > .input[type="password"],
+.secret-value-row > .input[type="text"] {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INJECTION WARNING LIST (modal)
+   ═══════════════════════════════════════════════════════════ */
+
+.modal-desc ul.warn-list {
+  margin: 10px 0 0 20px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--theme-text-secondary);
+}
+
+.modal-desc ul.warn-list li {
+  margin-bottom: 5px;
+}
+
+.modal-desc ul.warn-list li::marker {
+  color: var(--theme-warning);
+}
+/* ═══════════════════════════════════════════════════════════
+   DB DOCUMENTATION (Data tab → API)
+   ═══════════════════════════════════════════════════════════ */
+
+.db-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.db-doc-h {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--theme-text-tertiary);
+  margin: 10px 0 2px;
+}
+.db-doc-h:first-child { margin-top: 0; }
+
+.db-doc-item {
+  padding: 10px 12px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.db-doc-signature {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--theme-primary);
+  background: transparent;
+  padding: 0;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.db-doc-desc {
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.db-doc-desc code,
+.db-doc-desc .mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 3px;
+  color: var(--theme-text);
+  white-space: nowrap;
+}
+
+.db-doc-list {
+  list-style: disc;
+  padding-left: 20px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  line-height: 1.65;
+}
+.db-doc-list li { margin-bottom: 5px; }
+.db-doc-list li::marker { color: var(--theme-primary); }
+.db-doc-list code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 3px;
+  color: var(--theme-text);
+}
+
+.db-doc-footer {
+  padding: 10px 12px;
+  background: var(--theme-primary-soft);
+  border: 1px solid var(--theme-primary-glow);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  line-height: 1.6;
+  margin-top: 6px;
+}
+.db-doc-footer code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--theme-glass-bg);
+  border-radius: 3px;
+  border: 1px solid var(--theme-card-border);
+  color: var(--theme-text);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--theme-primary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+}
+.link-btn:hover { color: var(--theme-primary-hover); }
