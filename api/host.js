@@ -2399,6 +2399,54 @@ function isTextExt(p) {
     "jsx",
   ].includes(ext);
 }
+// ── Data URI decode helpers ──────────────────────────────────────────
+// Binary files (images, PDFs, fonts, etc.) are stored in Firebase as
+// data: URIs (from FileReader.readAsDataURL on the client). When a
+// visitor requests one over HTTP, we must decode the base64 payload
+// back into real bytes — otherwise the browser receives the literal
+// text "data:image/jpeg;base64,/9j/..." and its image decoder fails.
+
+const DATA_URI_RE = /^data:([^;,]*)?(;base64)?,([\s\S]*)$/;
+
+/**
+ * Returns { mime, body } if `content` is a data URI, else null.
+ * `body` is a Buffer (base64 path) or a Buffer of decoded URI text.
+ */
+function tryDecodeDataUri(content) {
+  if (typeof content !== "string") return null;
+  const m = content.match(DATA_URI_RE);
+  if (!m) return null;
+
+  const declaredMime = (m[1] || "application/octet-stream").trim() || "application/octet-stream";
+  const isBase64 = !!m[2];
+  const payload = m[3];
+
+  try {
+    const body = isBase64
+      ? Buffer.from(payload, "base64")
+      : Buffer.from(decodeURIComponent(payload), "utf8");
+
+    // Sanity: empty payload with a declared image mime is suspicious,
+    // but we return it anyway — the browser will just show a broken
+    // icon, which matches what the old behavior produced.
+    return { mime: declaredMime, body, isBase64 };
+  } catch (err) {
+    log("host.datauri_decode_failed", { message: err.message });
+    return null;
+  }
+}
+
+/**
+ * Best-effort byte-size of a stored file's content. For data URIs,
+ * returns the decoded byte length (not the inflated base64 length).
+ * For plain strings, returns UTF-8 byte length.
+ */
+function contentByteLength(content) {
+  if (typeof content !== "string") return 0;
+  const decoded = tryDecodeDataUri(content);
+  if (decoded) return decoded.body.length;
+  return Buffer.byteLength(content, "utf8");
+}
 
 async function readFileFromSource(pid, path, contentMap) {
   if (contentMap) {
@@ -2498,8 +2546,8 @@ async function renderFolderListing(
     const rest = f.path.slice(prefix.length);
     if (!rest) continue;
     const slash = rest.indexOf("/");
-    if (slash < 0)
-      direct.push({ name: rest, path: f.path, size: f.content.length });
+if (slash < 0)
+  direct.push({ name: rest, path: f.path, size: contentByteLength(f.content) });
     else subFolders.add(rest.slice(0, slash));
   }
   direct.sort((a, b) => a.name.localeCompare(b.name));
@@ -2836,8 +2884,23 @@ async function handleServe(req, res, reqId) {
   }
 
   // ── Other files ──
+  // Binary files are stored as data: URIs (client's FileReader.readAsDataURL).
+  // We must decode the base64 payload before sending, or the browser receives
+  // the literal text "data:image/jpeg;base64,..." and its decoder fails.
   res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300");
-  if (isBinaryMime(mime)) {
+
+  let body = content;
+  let resolvedMime = mime;
+
+  const decoded = tryDecodeDataUri(content);
+  if (decoded) {
+    body = decoded.body;
+    resolvedMime = decoded.mime;
+    res.setHeader("Content-Type", resolvedMime);
+    res.setHeader("Content-Length", String(body.length));
+  }
+
+  if (isBinaryMime(resolvedMime)) {
     if (req.query?.download === "1") {
       const fname = relPath.split("/").pop() || "file";
       res.setHeader(
@@ -2847,7 +2910,7 @@ async function handleServe(req, res, reqId) {
     }
     res.setHeader("Accept-Ranges", "none");
   }
-  return res.status(200).send(content);
+  return res.status(200).send(body);
 }
 
 // =========================================================================
@@ -3524,12 +3587,17 @@ async function handleProjectExport(req, res, reqId) {
   });
 
   for (const [filePath, content] of Object.entries(filesObj)) {
-    const buf =
-      typeof content === "string"
-        ? Buffer.from(content, "utf8")
-        : Buffer.from(String(content));
-    entries.push({ name: `files/${filePath}`, data: buf });
+  let buf;
+  const decoded = tryDecodeDataUri(content);
+  if (decoded) {
+    buf = decoded.body;
+  } else {
+    buf = typeof content === "string"
+      ? Buffer.from(content, "utf8")
+      : Buffer.from(String(content));
   }
+  entries.push({ name: `files/${filePath}`, data: buf });
+}
 
   if (format === "folio" && !publicOnly) {
     for (const [vid, v] of Object.entries(versionsObj)) {
