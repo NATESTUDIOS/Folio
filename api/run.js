@@ -5,18 +5,18 @@
 //  POST /api/{pid}/{route}
 //
 //  Runs user-authored api/*.js in headless Chromium.
-//  Full browser platform: fetch, import, Image, OffscreenCanvas,
-//  DOMParser, crypto.subtle, WebAssembly, Blob, FileReader, URL.
+//  Full browser platform available: fetch, import, Image,
+//  OffscreenCanvas, DOMParser, crypto.subtle, WebAssembly, Blob,
+//  FileReader, URL, setTimeout, etc.
 //
 //  ⚠  LATENCY NOTE
 //  On Vercel free tier, every invocation launches Chromium fresh
-//  (~1.5–2s cold start) because serverless functions cannot keep
-//  processes alive between calls. Warm invocations do not exist
-//  on free tier. Expect ~2s per /api/* call.
+//  (~1.5–2s cold start). Serverless functions cannot keep processes
+//  alive between calls on free tier. Expect ~2s per /api/* call.
 //
 //  If you need ~150ms warm starts, deploy this file to Railway,
 //  Fly Machines, or a self-hosted VPS running a persistent Node
-//  process — the code works unchanged.
+//  process — the code works unchanged there.
 //
 //  Timeout budget (10s total):
 //    - Chromium launch:    ~1500ms
@@ -24,7 +24,16 @@
 //    - User code:           up to ~7500ms
 //    - Response read:       ~100ms
 //
-//  If user code exceeds ~7.5s, the request times out.
+//  ENV layout (injected as window.ENV):
+//    Reserved (auto, read-only):
+//      PROJECT_ID, PROJECT_NAME, PROJECT_SLUG, PROJECT_URL
+//      OWNER_USERNAME, OWNER_UID
+//      DEPLOYMENT_ID, DEPLOYMENT_URL
+//      FOLIO_BASE_URL, FOLIO_API_URL
+//      API_ROUTE, REQUEST_ID
+//      FOLIO_API_KEY  (if generated)
+//    User secrets (from vault):
+//      Any user-defined keys (e.g. OPENAI_API_KEY)
 // ═══════════════════════════════════════════════════════════════════
 
 import crypto from "node:crypto";
@@ -39,13 +48,19 @@ import {
   hashIp,
   sanitizeFirebasePath,
   logProjectEvent,
+  getUser,
 } from "../utils/users.js";
 import * as projectSecrets from "../utils/projectsecret.js";
 import * as projectDb from "../utils/projectdb.js";
 
 // =========================================================================
-// CONSTANTS
+// CONFIG
 // =========================================================================
+
+const BASE_URL =
+  process.env.BASE_URL ||
+  process.env.NEXT_PUBLIC_BASE_URL ||
+  "https://foliostudios.vercel.app";
 
 const INVOKE_TIMEOUT_MS = 10000;
 const USER_CODE_TIMEOUT_MS = 7000;
@@ -71,10 +86,10 @@ const ALLOWED_IMPORT_HOSTS = new Set([
   "unpkg.com",
 ]);
 
-const FOLIO_INTERNAL_HOSTS = new Set([
-  "folio",
-  "foliostudios.vercel.app",
-]);
+// Derived from BASE_URL so custom domains work automatically
+let _folioHost = null;
+try { _folioHost = new URL(BASE_URL).hostname.toLowerCase(); } catch {}
+const FOLIO_INTERNAL_HOSTS = new Set(["folio", _folioHost].filter(Boolean));
 
 const RATE_LIMITS = {
   perSessionPerRoute: { max: 10, window: 60 * 1000 },
@@ -83,8 +98,6 @@ const RATE_LIMITS = {
   perProjectDay: { max: 2000, window: 24 * 60 * 60 * 1000 },
   perProjectPerRouteHour: { max: 100, window: 60 * 60 * 1000 },
 };
-
-const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
 
 // =========================================================================
 // RATE LIMITING
@@ -151,7 +164,14 @@ async function authenticate(req, pid) {
   if (apiKey && typeof apiKey === "string") {
     try {
       const ok = await verifyProjectKey(pid, apiKey);
-      if (ok) return { uid: null, role: "editor", via: "api-key", sessionId: `key_${hashIp(getClientIp(req))}` };
+      if (ok) {
+        return {
+          uid: null,
+          role: "editor",
+          via: "api-key",
+          sessionId: `key_${hashIp(getClientIp(req))}`,
+        };
+      }
     } catch {}
   }
 
@@ -187,39 +207,45 @@ function extractAllowHosts(source) {
 }
 
 // =========================================================================
-// HOST VALIDATION (only used for drift check; deploy already validated)
+// RESERVED ENV BUILDER
 // =========================================================================
 
-function isPrivateOrReservedIp(ip) {
-  if (net.isIPv4(ip)) {
-    const parts = ip.split(".").map(Number);
-    const [a, b] = parts;
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a >= 224 && a <= 239) ||
-      a >= 240
-    );
+function buildProjectUrl(ownerUsername, slug, pid) {
+  if (ownerUsername && slug) {
+    return `${BASE_URL}/${encodeURIComponent(ownerUsername)}/project/${encodeURIComponent(slug)}`;
   }
-  if (net.isIPv6(ip)) {
-    const lower = ip.toLowerCase();
-    return (
-      lower === "::1" ||
-      lower === "::" ||
-      lower.startsWith("fc") ||
-      lower.startsWith("fd") ||
-      lower.startsWith("fe8") ||
-      lower.startsWith("fe9") ||
-      lower.startsWith("fea") ||
-      lower.startsWith("feb")
-    );
+  return `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=index.html`;
+}
+
+async function buildReservedEnv(pid, project, deployment, route, reqId) {
+  let ownerUsername = project.ownerUsername || null;
+  if (!ownerUsername && project.ownerId) {
+    try {
+      const owner = await getUser(project.ownerId);
+      ownerUsername = owner?.profile?.username || null;
+      if (ownerUsername) {
+        // Cache for next invocation
+        db.ref(`projects/${pid}/ownerUsername`).set(ownerUsername).catch(() => {});
+      }
+    } catch {}
   }
-  return true;
+
+  const projectUrl = buildProjectUrl(ownerUsername, project.slug, pid);
+
+  return {
+    PROJECT_ID: pid,
+    PROJECT_NAME: project.name || null,
+    PROJECT_SLUG: project.slug || null,
+    PROJECT_URL: projectUrl,
+    OWNER_USERNAME: ownerUsername,
+    OWNER_UID: project.ownerId || null,
+    DEPLOYMENT_ID: deployment?.deploymentId || null,
+    DEPLOYMENT_URL: deployment?.url || projectUrl,
+    FOLIO_BASE_URL: BASE_URL,
+    FOLIO_API_URL: `${BASE_URL}/api`,
+    API_ROUTE: route,
+    REQUEST_ID: reqId,
+  };
 }
 
 // =========================================================================
@@ -244,9 +270,7 @@ async function loadChromiumModules() {
 
 async function launchBrowser() {
   const { chromium, puppeteer } = await loadChromiumModules();
-
   const executablePath = await chromium.executablePath();
-
   const browser = await puppeteer.launch({
     args: [
       ...chromium.args,
@@ -260,7 +284,6 @@ async function launchBrowser() {
     defaultViewport: { width: 1280, height: 720 },
     timeout: CHROMIUM_LAUNCH_TIMEOUT_MS,
   });
-
   return browser;
 }
 
@@ -277,10 +300,10 @@ async function closeBrowserQuietly(browser) {
 }
 
 // =========================================================================
-// INTERNAL DB HANDLER
+// INTERNAL DB HANDLER (in-process, no network)
 // =========================================================================
 
-async function handleInternalDbRequest(pid, url, req, actor) {
+async function handleInternalDbRequest(pid, url, req) {
   const action = url.searchParams.get("action");
   const reqId = newReqId();
 
@@ -403,7 +426,10 @@ async function handleInternalDbRequest(pid, url, req, actor) {
 // =========================================================================
 
 function escapeJsonForInline(obj) {
-  return JSON.stringify(obj).replace(/</g, "\\u003c").replace(/\u2028|\u2029/g, "");
+  return JSON.stringify(obj)
+    .replace(/</g, "\\u003c")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 }
 
 function buildPageHtml({ userCode, env, files, reqObj }) {
@@ -464,16 +490,14 @@ ${userCode}
 }
 
 // =========================================================================
-// PAGE SETUP + EXECUTION
+// PAGE EXECUTION
 // =========================================================================
 
-async function runInPage(browser, { html, allowedHostsSet, pid, actor, reqId, route }) {
+async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
   const page = await browser.newPage();
-
   const fetchHosts = new Set();
 
   try {
-    // Set up request interception
     await page.setRequestInterception(true);
 
     page.on("request", async (request) => {
@@ -481,12 +505,16 @@ async function runInPage(browser, { html, allowedHostsSet, pid, actor, reqId, ro
         const urlObj = new URL(request.url());
         const host = urlObj.hostname.toLowerCase();
 
-        // data:, about:, blob: allowed (page-origin resources)
-        if (urlObj.protocol === "data:" || urlObj.protocol === "about:" || urlObj.protocol === "blob:") {
+        // Allow page-origin resources
+        if (
+          urlObj.protocol === "data:" ||
+          urlObj.protocol === "about:" ||
+          urlObj.protocol === "blob:"
+        ) {
           return await request.continue();
         }
 
-        // Folio internal (in-process DB resolution)
+        // Folio internal — resolve db/* in-process
         if (FOLIO_INTERNAL_HOSTS.has(host)) {
           if (
             urlObj.pathname === "/api/host" &&
@@ -502,7 +530,6 @@ async function runInPage(browser, { html, allowedHostsSet, pid, actor, reqId, ro
                 pid,
                 urlObj,
                 { body: reqBody, method: request.method() },
-                actor,
               );
               return await request.respond({
                 status: result.status,
@@ -539,13 +566,11 @@ async function runInPage(browser, { html, allowedHostsSet, pid, actor, reqId, ro
       }
     });
 
-    // Load the page
     await page.setContent(html, {
       waitUntil: "domcontentloaded",
       timeout: PAGE_SETUP_TIMEOUT_MS,
     });
 
-    // Wait for the result
     await page.waitForFunction(
       () => window.__RESULT__ !== undefined,
       { timeout: USER_CODE_TIMEOUT_MS, polling: 50 },
@@ -568,7 +593,7 @@ async function runInPage(browser, { html, allowedHostsSet, pid, actor, reqId, ro
 }
 
 // =========================================================================
-// PROJECT METADATA LOADER
+// LOADERS
 // =========================================================================
 
 async function loadInvocationContext(pid, route) {
@@ -583,7 +608,9 @@ async function loadInvocationContext(pid, route) {
 
   const project = { pid, ...projectSnap.val() };
   const deployment = deploymentSnap.exists() ? deploymentSnap.val() : null;
-  const publicFiles = publicFilesSnap.exists() ? publicFilesSnap.val() : { files: [], count: 0, totalBytes: 0 };
+  const publicFiles = publicFilesSnap.exists()
+    ? publicFilesSnap.val()
+    : { files: [], count: 0, totalBytes: 0 };
   const apiRoutes = apiRoutesSnap.exists() ? apiRoutesSnap.val() : { system: [], user: [] };
 
   const isSystemRoute = Array.isArray(apiRoutes.system) && apiRoutes.system.includes(route);
@@ -591,10 +618,6 @@ async function loadInvocationContext(pid, route) {
 
   return { project, deployment, publicFiles, apiRoutes, isSystemRoute, isUserRoute };
 }
-
-// =========================================================================
-// ROUTE FILE LOADER
-// =========================================================================
 
 async function loadRouteFile(pid, route) {
   const safeKey = sanitizeFirebasePath(`api/${route}.js`.replace(/\//g, "__"));
@@ -611,13 +634,18 @@ async function loadRouteFile(pid, route) {
 export default async function handler(req, res) {
   const reqId = newReqId();
   const startTime = Date.now();
+
   res.setHeader("X-Request-Id", reqId);
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Project-Key, X-Recursion-Depth");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Project-Key, X-Recursion-Depth, X-Caller-Route",
+  );
+
   if (req.method === "OPTIONS") return res.status(204).end();
 
-  // ── Parse URL: /api/{pid}/{route} ─────────────────────────────────
+  // ── Parse URL ────────────────────────────────────────────────────
   const urlPath = String(req.url || "").split("?")[0];
   const parts = urlPath.replace(/^\/api\/?/, "").split("/").filter(Boolean);
   const pid = parts[0];
@@ -630,102 +658,97 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: "Invalid route name" });
   }
 
-  // ── Recursion depth ──────────────────────────────────────────────
+  // ── Recursion depth ─────────────────────────────────────────────
   const depthHeader = String(req.headers["x-recursion-depth"] || "0");
   const depth = Math.max(0, Math.min(10, parseInt(depthHeader, 10) || 0));
   if (depth >= MAX_RECURSION_DEPTH) {
     return res.status(508).json({ success: false, error: "Recursion limit exceeded", route });
   }
 
-  // ── Auth ─────────────────────────────────────────────────────────
+  // ── Auth ────────────────────────────────────────────────────────
   const actor = await authenticate(req, pid);
   if (!actor) {
     return res.status(401).json({ success: false, error: "Authentication required" });
   }
 
-  // ── Rate limit ───────────────────────────────────────────────────
-  const rate = await enforceRate(actor.sessionId, pid, route).catch(() => ({ allowed: false, retryAfter: 60 }));
+  // ── Rate limit ──────────────────────────────────────────────────
+  const rate = await enforceRate(actor.sessionId, pid, route).catch(() => ({
+    allowed: false,
+    retryAfter: 60,
+  }));
   if (!rate.allowed) {
     res.setHeader("Retry-After", String(rate.retryAfter || 60));
-    return res.status(429).json({ success: false, error: "Rate limit exceeded", retryAfter: rate.retryAfter });
+    return res.status(429).json({
+      success: false,
+      error: "Rate limit exceeded",
+      retryAfter: rate.retryAfter,
+    });
   }
 
-  // ── Load invocation context ──────────────────────────────────────
+  // ── Load invocation context ─────────────────────────────────────
   const ctx = await loadInvocationContext(pid, route);
   if (!ctx) {
     return res.status(404).json({ success: false, error: "Project not found" });
   }
-
   if (!ctx.isSystemRoute && !ctx.isUserRoute) {
     return res.status(404).json({ success: false, error: "Route not found", route });
   }
 
-  // ── Load route file ──────────────────────────────────────────────
+  // ── Load route file ─────────────────────────────────────────────
   const userCode = await loadRouteFile(pid, route);
   if (!userCode || !userCode.trim()) {
     return res.status(404).json({ success: false, error: "Route file not found", route });
   }
 
-  // ── Parse @allow + build allowed host set ────────────────────────
+  // ── Build allowed-hosts set from manifest ───────────────────────
   let declaredHostsSet = new Set();
   let driftDetected = false;
 
   try {
     const fileHosts = extractAllowHosts(userCode);
+    const allowedHostsSnap = await db.ref(`projects/${pid}/allowedHosts`).once("value");
+    const manifest = allowedHostsSnap.exists() ? allowedHostsSnap.val() : {};
 
-    if (fileHosts.length > 0) {
-      const allowedHostsSnap = await db.ref(`projects/${pid}/allowedHosts`).once("value");
-      const manifest = allowedHostsSnap.exists() ? allowedHostsSnap.val() : {};
+    for (const host of fileHosts) {
+      const entry = manifest[host];
+      if (entry && entry.validatedOk) {
+        declaredHostsSet.add(host);
+      } else {
+        driftDetected = true;
+      }
+    }
 
-      for (const host of fileHosts) {
-        const entry = manifest[host];
-        if (entry && entry.validatedOk) {
-          declaredHostsSet.add(host);
-        } else {
-          // Host is in the file but not in the manifest — drift
-          driftDetected = true;
-        }
-      }
-    } else {
-      // No @allow lines — still include any manifest hosts validated for other files
-      const allowedHostsSnap = await db.ref(`projects/${pid}/allowedHosts`).once("value");
-      if (allowedHostsSnap.exists()) {
-        const manifest = allowedHostsSnap.val();
-        for (const [host, meta] of Object.entries(manifest)) {
-          if (meta && meta.validatedOk) declaredHostsSet.add(host);
-        }
-      }
+    // Also include any other manifest hosts that have been validated
+    for (const [host, meta] of Object.entries(manifest)) {
+      if (meta && meta.validatedOk) declaredHostsSet.add(host);
     }
 
     if (driftDetected) {
       log("run.host_drift_detected", { reqId, pid, route });
-      logProjectEvent(pid, actor.uid || null, "api", "host_drift_detected", { route }).catch(() => {});
+      logProjectEvent(pid, actor.uid || null, "api", "host_drift_detected", { route }).catch(
+        () => {},
+      );
     }
   } catch (err) {
     log("run.allow_parse_failed", { reqId, pid, route, message: err.message });
     return res.status(500).json({ success: false, error: "Failed to parse @allow hosts" });
   }
 
-  // ── Load secrets (ENV) ───────────────────────────────────────────
+  // ── Load ENV: reserved vars + user secrets ──────────────────────
   let env = {};
   try {
-    env = await projectSecrets.readAllSecrets(pid);
-    // readAllSecrets returns values keyed by name; also strip metadata
-    const plain = {};
-    for (const [k, v] of Object.entries(env || {})) {
-      if (v && typeof v === "object" && "value" in v) {
-        plain[k] = v.value;
-      } else {
-        plain[k] = v;
-      }
-    }
-    env = plain;
+    const reserved = await buildReservedEnv(pid, ctx.project, ctx.deployment, route, reqId);
+    const userSecrets = await projectSecrets.readAllSecrets(pid);
+
+    // Merge: reserved wins over user secrets if there's a collision
+    // (shouldn't happen — setSecret rejects reserved names)
+    env = { ...userSecrets, ...reserved };
   } catch (err) {
     log("run.secrets_failed", { reqId, pid, message: err.message });
     return res.status(500).json({ success: false, error: "Failed to load secrets" });
   }
 
-  // ── Build request object for the page ────────────────────────────
+  // ── Build REQ object ────────────────────────────────────────────
   const reqObj = {
     route,
     method: req.method,
@@ -741,7 +764,8 @@ export default async function handler(req, res) {
     versionId: ctx.deployment?.versionId || null,
     gitCommit: ctx.deployment?.gitCommit || null,
     deploymentUrl: ctx.deployment?.url || null,
-    apiFileCount: (ctx.apiRoutes?.user?.length || 0) + (ctx.apiRoutes?.system?.length || 0),
+    apiFileCount:
+      (ctx.apiRoutes?.user?.length || 0) + (ctx.apiRoutes?.system?.length || 0),
     publicFileCount: ctx.publicFiles?.count || 0,
     publicFileList: ctx.publicFiles?.files || [],
     region: process.env.VERCEL_REGION || null,
@@ -754,21 +778,15 @@ export default async function handler(req, res) {
     caller: depth > 0 ? { route: req.headers["x-caller-route"] || null, depth } : undefined,
   };
 
-  // ── Build HTML ───────────────────────────────────────────────────
   const files = {
     files: ctx.publicFiles?.files || [],
     count: ctx.publicFiles?.count || 0,
     totalBytes: ctx.publicFiles?.totalBytes || 0,
   };
 
-  const html = buildPageHtml({
-    userCode,
-    env,
-    files,
-    reqObj,
-  });
+  const html = buildPageHtml({ userCode, env, files, reqObj });
 
-  // ── Check body size ──────────────────────────────────────────────
+  // Body size check
   const bodyBytes = JSON.stringify(reqObj.body).length;
   if (bodyBytes > MAX_REQUEST_BODY_BYTES) {
     return res.status(413).json({
@@ -777,7 +795,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── Launch Chromium and run ──────────────────────────────────────
+  // ── Execute ─────────────────────────────────────────────────────
   let browser = null;
   let runResult = null;
 
@@ -787,9 +805,7 @@ export default async function handler(req, res) {
       html,
       allowedHostsSet: declaredHostsSet,
       pid,
-      actor,
       reqId,
-      route,
     });
   } catch (err) {
     log("run.launch_or_execute_failed", { reqId, pid, route, message: err.message });
@@ -806,7 +822,7 @@ export default async function handler(req, res) {
 
   const durationMs = Date.now() - startTime;
 
-  // ── Handle runtime failure ───────────────────────────────────────
+  // ── Handle failure ──────────────────────────────────────────────
   if (!runResult.ok) {
     const status = runResult.isTimeout ? 504 : 500;
     const message = runResult.isTimeout ? "Function timed out" : "Function threw an error";
@@ -824,14 +840,22 @@ export default async function handler(req, res) {
       fetchHosts: runResult.fetchHosts || [],
     }).catch(() => {});
 
-    log("run.execution_failed", { reqId, pid, route, status, durationMs, message });
+    log("run.execution_failed", {
+      reqId,
+      pid,
+      route,
+      status,
+      durationMs,
+      message: runResult.errorMessage,
+    });
 
     return res.status(status).json({ success: false, error: message, route });
   }
 
-  // ── Emit response ────────────────────────────────────────────────
+  // ── Emit response ───────────────────────────────────────────────
   const { result } = runResult;
-  const responseBody = typeof result.body === "string" ? result.body : JSON.stringify(result.body);
+  const responseBody =
+    typeof result.body === "string" ? result.body : JSON.stringify(result.body);
   const responseBytes = Buffer.byteLength(responseBody, "utf8");
 
   if (responseBytes > MAX_RESPONSE_BYTES) {
@@ -864,6 +888,7 @@ export default async function handler(req, res) {
   res.setHeader("Content-Type", result.contentType || "application/json");
   res.setHeader("X-Execution-Time", String(durationMs));
   res.setHeader("X-Fetch-Hosts", (runResult.fetchHosts || []).join(","));
+
   return res.status(result.status || 200).send(responseBody);
 }
 
@@ -873,8 +898,8 @@ export default async function handler(req, res) {
 
 export const config = {
   runtime: "nodejs",
-  // Chromium + V8 + user code needs memory
   memory: 1024,
-  // 10s max on free tier
   maxDuration: 10,
 };
+
+export { BASE_URL };
