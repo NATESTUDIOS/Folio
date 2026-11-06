@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { db } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import * as projectDb from "../utils/projectdb.js";
+import * as projectSecrets from "../utils/projectsecret.js";
 import {
   requireAuth,
   requireProjectRole,
@@ -157,6 +158,10 @@ const RATE_LIMITS = {
   projectHydrate: { max: 60, window: 60 * 60 * 1000 },
   serve: { max: 1200, window: 60 * 1000 },
   clientError: { max: 20, window: 60 * 1000 },
+  secretsList:   { max: 60,  window: 60 * 60 * 1000 },
+  secretsGet:    { max: 20,  window: 60 * 60 * 1000 },
+  secretsSet:    { max: 20,  window: 60 * 60 * 1000 },
+  secretsDelete: { max: 20,  window: 60 * 60 * 1000 },
   dbBatch: { max: 100, window: 60 * 1000 },
   dbCas: { max: 200, window: 60 * 1000 },
   dbIncrement: { max: 300, window: 60 * 1000 },
@@ -2294,35 +2299,75 @@ async function handleServe(req, res, reqId) {
   }
 
   if (/\.html?$/i.test(relPath)) {
-    let html = content;
-    try {
-      let meta = await resolveProjectMeta(pid, project);
-      if (fromId) {
-        try {
-          const dThumb = await db.ref(`projects/${pid}/deployments/${fromId}/thumbnail/url`).once("value");
-          if (dThumb?.exists() && isValidOgUrl(dThumb.val())) {
-            meta = { ...meta, ogImage: dThumb.val() };
-          }
-        } catch {}
-      }
-      const canonicalPath = relPath === "index.html" || relPath === "index.htm" ? "" : relPath;
-      const baseCanonical = buildLiveSiteUrlForPath(ownerUsername, project, canonicalPath);
-      const canonicalUrl = fromId ? `${baseCanonical}?from=${encodeURIComponent(fromId)}` : baseCanonical;
-      html = injectMetaIntoHtml(html, {
-        project, meta, canonicalUrl,
-        robotsNoIndex: !!fromId || !liveSitePublic,
-      });
-    } catch (err) {
-      log("host.serve.meta_failed", { pid, message: err.message });
+  let html = content;
+  try {
+    let meta = await resolveProjectMeta(pid, project);
+
+    if (fromId) {
+      try {
+        const dThumb = await db
+          .ref(`projects/${pid}/deployments/${fromId}/thumbnail/url`)
+          .once("value");
+        if (dThumb?.exists() && isValidOgUrl(dThumb.val())) {
+          meta = { ...meta, ogImage: dThumb.val() };
+        }
+      } catch {}
     }
-    html = injectTracker(html, pid);
-    html = rewriteRelativeUrls(html, {
-      pid, username: ownerUsername, slug: project.slug,
-      currentPath: relPath, cacheKey, fromId,
+
+    const canonicalPath =
+      relPath === "index.html" || relPath === "index.htm" ? "" : relPath;
+    const baseCanonical = buildLiveSiteUrlForPath(
+      ownerUsername,
+      project,
+      canonicalPath,
+    );
+    const canonicalUrl = fromId
+      ? `${baseCanonical}?from=${encodeURIComponent(fromId)}`
+      : baseCanonical;
+
+    html = injectMetaIntoHtml(html, {
+      project,
+      meta,
+      canonicalUrl,
+      robotsNoIndex: !!fromId || !liveSitePublic,
     });
-    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-    return res.status(200).send(html);
+  } catch (err) {
+    log("host.serve.meta_failed", { pid, message: err.message });
   }
+  html = injectTracker(html, pid);
+  html = rewriteRelativeUrls(html, {
+    pid,
+    username: ownerUsername,
+    slug: project.slug,
+    currentPath: relPath,
+    cacheKey,
+    fromId,
+  });
+
+  // ── Inject secrets (opt-in per project via visibility.secrets) ──
+  // Must be injected AFTER rewriteRelativeUrls so the injected script
+  // isn't accidentally rewritten. And AFTER injectTracker for the same reason.
+  if (project.visibility?.secrets === "inject" && !fromId) {
+    try {
+      const secrets = await projectSecrets.readSecretsForInjection(pid);
+      if (secrets && Object.keys(secrets).length > 0) {
+        const payload = JSON.stringify(secrets).replace(/</g, "\\u003c");
+        const script = `<script>window.__SECRETS__=Object.freeze(${payload});</script>`;
+        if (/<\/head>/i.test(html)) {
+          html = html.replace(/<\/head>/i, script + "\n</head>");
+        } else {
+          html = script + html;
+        }
+      }
+    } catch (err) {
+      log("host.serve.secrets_inject_failed", { pid, message: err.message });
+      // Don't fail the request — inject nothing rather than partial secrets
+    }
+  }
+
+  res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+  return res.status(200).send(html);
+}
 
   if (/\.css$/i.test(relPath)) {
     const rewritten = rewriteCssUrls(content, {
@@ -2663,6 +2708,14 @@ async function handleProjectsDelete(req, res, reqId) {
     await deleteProjectCdnAssets(pid, reqId);
   } catch (err) {
     log("host.projects_delete.cdn_cleanup_failed", { pid, message: err.message });
+  }
+  try {
+  await projectSecrets.deleteAllSecrets(pid);
+} catch (err) {
+  log("host.projects_delete.secrets_cleanup_failed", {
+    pid,
+    message: err.message,
+  });
   }
 
   try {
@@ -3856,6 +3909,111 @@ async function handleDbSchema(req, res, reqId) {
 }
 
 // =========================================================================
+// PROJECT SECRETS — encrypted per-project environment variables
+// =========================================================================
+
+async function handleSecretsList(req, res, reqId) {
+  const pid = String(req.query?.pid || "").trim();
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "secretsList", `pid_${pid}`))) return;
+  const access = await requireProjectRole(req, res, pid, "editor");
+  if (!access) return;
+
+  try {
+    const { keys, count } = await projectSecrets.listSecretKeys(pid);
+    return res.status(200).json({
+      success: true,
+      keys,
+      count,
+      encryptionEnabled: projectSecrets.isEncryptionEnabled(),
+    });
+  } catch (err) {
+    log("host.secrets_list.error", { reqId, pid, message: err.message });
+    return res.status(500).json({ success: false, error: "Failed to list secrets" });
+  }
+}
+
+async function handleSecretsGet(req, res, reqId) {
+  const pid = String(req.query?.pid || "").trim();
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (!(await enforceRate(req, res, "secretsGet", `pid_${pid}`))) return;
+  const access = await requireProjectRole(req, res, pid, "editor");
+  if (!access) return;
+
+  try {
+    const { entries, meta } = await projectSecrets.readSecrets(pid);
+    const isOwner = access.role === "owner";
+    const safeEntries = {};
+    for (const [key, entry] of Object.entries(entries)) {
+      safeEntries[key] = {
+        value: isOwner ? entry.value : null,
+        hasValue: !!entry.value,
+        note: entry.note,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+        error: entry.error || null,
+      };
+    }
+    return res.status(200).json({
+      success: true,
+      entries: safeEntries,
+      meta,
+      isOwner,
+    });
+  } catch (err) {
+    log("host.secrets_get.error", { reqId, pid, message: err.message });
+    return res.status(500).json({ success: false, error: "Failed to read secrets" });
+  }
+}
+
+async function handleSecretsSet(req, res, reqId) {
+  const { pid, key, value, note } = req.body || {};
+  if (!pid || !key) {
+    return res.status(400).json({ success: false, error: "Missing pid or key" });
+  }
+  if (!(await enforceRate(req, res, "secretsSet", `pid_${pid}`))) return;
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  try {
+    const result = await projectSecrets.setSecret(pid, access.uid, key, value, note);
+    await logProjectEvent(pid, access.uid, "secret", "secret.set", {
+      key,
+      bytes: Buffer.byteLength(String(value || ""), "utf8"),
+    });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    log("host.secrets_set.error", { reqId, pid, key, message: err.message });
+    return res.status(err.status || 500).json({
+      success: false,
+      error: err.message || "Failed to set secret",
+    });
+  }
+}
+
+async function handleSecretsDelete(req, res, reqId) {
+  const { pid, key } = req.body || {};
+  if (!pid || !key) {
+    return res.status(400).json({ success: false, error: "Missing pid or key" });
+  }
+  if (!(await enforceRate(req, res, "secretsDelete", `pid_${pid}`))) return;
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  try {
+    const result = await projectSecrets.deleteSecret(pid, access.uid, key);
+    await logProjectEvent(pid, access.uid, "secret", "secret.deleted", { key });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    log("host.secrets_delete.error", { reqId, pid, key, message: err.message });
+    return res.status(err.status || 500).json({
+      success: false,
+      error: err.message || "Failed to delete secret",
+    });
+  }
+}
+
+// =========================================================================
 // API KEYS
 // =========================================================================
 
@@ -3901,12 +4059,15 @@ async function handleApiKeyGenerate(req, res, reqId) {
 // VISIBILITY / INVITES / COLLABORATORS / METATAGS
 // =========================================================================
 
-const VISIBILITY_AXES = ["profile", "liveSite", "code", "languages", "db"];
+const VISIBILITY_AXES = ["profile", "liveSite", "code", "languages", "db", "secrets"];
+const SECRETS_VISIBILITY_VALUES = ["off", "inject", "private"];
 
 async function handleVisibility(req, res, reqId) {
   const { pid, visibility } = req.body || {};
   if (!pid || typeof visibility !== "object" || visibility === null) {
-    return res.status(400).json({ success: false, error: "Missing pid or visibility" });
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing pid or visibility" });
   }
   if (!(await enforceRate(req, res, "visibility", `pid_${pid}`))) return;
   const access = await requireProjectRole(req, res, pid, "owner");
@@ -3916,7 +4077,14 @@ async function handleVisibility(req, res, reqId) {
   const changes = {};
   for (const axis of VISIBILITY_AXES) {
     if (visibility[axis] === undefined) continue;
-    if (visibility[axis] !== "public" && visibility[axis] !== "private") {
+    if (axis === "secrets") {
+      if (!SECRETS_VISIBILITY_VALUES.includes(visibility[axis])) {
+        return res.status(400).json({
+          success: false,
+          error: `visibility.secrets must be one of: ${SECRETS_VISIBILITY_VALUES.join(", ")}`,
+        });
+      }
+    } else if (visibility[axis] !== "public" && visibility[axis] !== "private") {
       return res.status(400).json({
         success: false,
         error: `visibility.${axis} must be "public" or "private"`,
@@ -3925,13 +4093,16 @@ async function handleVisibility(req, res, reqId) {
     patch[`visibility/${axis}`] = visibility[axis];
     changes[axis] = visibility[axis];
   }
-  if (Object.keys(patch).length === 0) {
-    return res.status(400).json({ success: false, error: "No visibility axes to update" });
-  }
+  if (Object.keys(patch).length === 0)
+    return res
+      .status(400)
+      .json({ success: false, error: "No visibility axes to update" });
   patch.updatedAt = Date.now();
   await db.ref(`projects/${pid}`).update(patch);
   invalidateProject(pid);
-  await logProjectEvent(pid, access.uid, "project", "visibility.updated", { changes });
+  await logProjectEvent(pid, access.uid, "project", "visibility.updated", {
+    changes,
+  });
 
   try {
     const significant = ["profile", "liveSite"].filter((a) => changes[a]);
@@ -3942,13 +4113,17 @@ async function handleVisibility(req, res, reqId) {
         const wentPublic = significant.some((a) => changes[a] === "public");
         let imageUrl = null;
         try {
-          const t = await db.ref(`projects/${pid}/ogImage/url`).once("value").catch(() => null);
+          const t = await db
+            .ref(`projects/${pid}/ogImage/url`)
+            .once("value")
+            .catch(() => null);
           if (t?.exists() && isValidOgUrl(t.val())) imageUrl = t.val();
         } catch {}
         await notifyMany("project", others, {
           title: wentPublic ? "Project went public" : "Project made private",
           body: `${significant.join(", ")} visibility changed.`,
-          imageUrl, link: `${BASE_URL}/project?pid=${pid}`,
+          imageUrl,
+          link: `${BASE_URL}/project?pid=${pid}`,
           extra: { pid, changes },
         });
       }
@@ -4895,6 +5070,15 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "db/restore-snapshot")
       return await handleDbSnapshotRestore(req, res, reqId);
 
+if (method === "GET" && action === "secrets/list")
+  return await handleSecretsList(req, res, reqId);
+if (method === "GET" && action === "secrets/get")
+  return await handleSecretsGet(req, res, reqId);
+if (method === "POST" && action === "secrets/set")
+  return await handleSecretsSet(req, res, reqId);
+if (method === "POST" && action === "secrets/delete")
+  return await handleSecretsDelete(req, res, reqId);
+    
     if (method === "POST" && action === "apikey/generate")
       return await handleApiKeyGenerate(req, res, reqId);
     if (method === "POST" && action === "visibility")
