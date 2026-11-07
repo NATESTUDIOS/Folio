@@ -42,7 +42,7 @@
     listLimit: 20,
   }, window.FOLIO_NOTIFICATIONS_CONFIG || {});
 
-  const API_BASE = 'https://foliostudios.vercel.app/api/notify';
+  const API_BASE = '/api/notify';
   const STORAGE_SESSION = 'folio.session';
   const LS_KEYS = {
     dismissCount: 'folio.notifPrompt.dismissCount',
