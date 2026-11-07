@@ -2,38 +2,23 @@
 // ═══════════════════════════════════════════════════════════════════
 //  Folio — Private API Runtime (Vercel Serverless / Chromium)
 //  ────────────────────────────────────────────────────────────────
-//  POST /api/{pid}/{route}
+//  Two URL shapes are supported:
 //
-//  Runs user-authored api/*.js in headless Chromium.
-//  Full browser platform available: fetch, import, Image,
-//  OffscreenCanvas, DOMParser, crypto.subtle, WebAssembly, Blob,
-//  FileReader, URL, setTimeout, etc.
+//    1. Friendly:  POST /{username}/project/{slug}/api/{route}
+//       → Vercel rewrite → /api/run?username=…&project=…&route=…
+//       → runtime resolves username + project slug → pid
+//
+//    2. Direct:    POST /api/{pid}/{route}
+//       → Vercel rewrite → /api/run?pid=…&route=…
+//       → runtime uses pid directly (no lookup)
+//
+//  Both produce the same invocation. The direct URL is faster
+//  (no slug resolution); the friendly URL is what users document.
 //
 //  ⚠  LATENCY NOTE
 //  On Vercel free tier, every invocation launches Chromium fresh
 //  (~1.5–2s cold start). Serverless functions cannot keep processes
 //  alive between calls on free tier. Expect ~2s per /api/* call.
-//
-//  If you need ~150ms warm starts, deploy this file to Railway,
-//  Fly Machines, or a self-hosted VPS running a persistent Node
-//  process — the code works unchanged there.
-//
-//  Timeout budget (10s total):
-//    - Chromium launch:    ~1500ms
-//    - Page setup:          ~200ms
-//    - User code:           up to ~7500ms
-//    - Response read:       ~100ms
-//
-//  ENV layout (injected as window.ENV):
-//    Reserved (auto, read-only):
-//      PROJECT_ID, PROJECT_NAME, PROJECT_SLUG, PROJECT_URL
-//      OWNER_USERNAME, OWNER_UID
-//      DEPLOYMENT_ID, DEPLOYMENT_URL
-//      FOLIO_BASE_URL, FOLIO_API_URL
-//      API_ROUTE, REQUEST_ID
-//      FOLIO_API_KEY  (if generated)
-//    User secrets (from vault):
-//      Any user-defined keys (e.g. OPENAI_API_KEY)
 // ═══════════════════════════════════════════════════════════════════
 
 import crypto from "node:crypto";
@@ -86,7 +71,6 @@ const ALLOWED_IMPORT_HOSTS = new Set([
   "unpkg.com",
 ]);
 
-// Derived from BASE_URL so custom domains work automatically
 let _folioHost = null;
 try { _folioHost = new URL(BASE_URL).hostname.toLowerCase(); } catch {}
 const FOLIO_INTERNAL_HOSTS = new Set(["folio", _folioHost].filter(Boolean));
@@ -98,6 +82,91 @@ const RATE_LIMITS = {
   perProjectDay: { max: 2000, window: 24 * 60 * 60 * 1000 },
   perProjectPerRouteHour: { max: 100, window: 60 * 60 * 1000 },
 };
+
+const SLUG_CACHE_TTL = 60 * 1000; // 60 seconds
+const SLUG_CACHE_MAX = 500;
+
+// =========================================================================
+// SLUG RESOLUTION CACHE
+// =========================================================================
+
+const PROJECT_SLUG_CACHE = new Map();
+
+function slugCacheGet(username, slug) {
+  const key = `${username}/${slug}`;
+  const entry = PROJECT_SLUG_CACHE.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.at > SLUG_CACHE_TTL) {
+    PROJECT_SLUG_CACHE.delete(key);
+    return null;
+  }
+  return entry.pid;
+}
+
+function slugCacheSet(username, slug, pid) {
+  if (PROJECT_SLUG_CACHE.size >= SLUG_CACHE_MAX) {
+    const first = PROJECT_SLUG_CACHE.keys().next().value;
+    if (first) PROJECT_SLUG_CACHE.delete(first);
+  }
+  PROJECT_SLUG_CACHE.set(`${username}/${slug}`, { pid, at: Date.now() });
+}
+
+async function resolveProjectBySlug(username, slug) {
+  if (!username || !slug) return null;
+
+  const cached = slugCacheGet(username, slug);
+  if (cached) return cached;
+
+  // Fast path: slug index
+  try {
+    const idxSnap = await db
+      .ref(`projectSlugs/${username}/${slug}`)
+      .once("value");
+    if (idxSnap.exists()) {
+      const pid = idxSnap.val();
+      if (typeof pid === "string" && pid.startsWith("p_")) {
+        slugCacheSet(username, slug, pid);
+        return pid;
+      }
+    }
+  } catch (err) {
+    log("run.slug_index_lookup_failed", { username, slug, message: err.message });
+  }
+
+  // Fallback: scan this user's projects
+  try {
+    const userSnap = await db.ref(`usernames/${username}`).once("value");
+    if (!userSnap.exists()) return null;
+    const uid = userSnap.val();
+    if (!uid) return null;
+
+    const projectsSnap = await db
+      .ref("projects")
+      .orderByChild("ownerId")
+      .equalTo(uid)
+      .once("value");
+    if (!projectsSnap.exists()) return null;
+
+    let foundPid = null;
+    projectsSnap.forEach((child) => {
+      const p = child.val() || {};
+      if (p.slug === slug && p.ownerId === uid) foundPid = child.key;
+    });
+
+    if (foundPid) {
+      // Self-heal the index
+      db.ref(`projectSlugs/${username}/${slug}`)
+        .set(foundPid)
+        .catch(() => {});
+      slugCacheSet(username, slug, foundPid);
+      return foundPid;
+    }
+  } catch (err) {
+    log("run.slug_scan_failed", { username, slug, message: err.message });
+  }
+
+  return null;
+}
 
 // =========================================================================
 // RATE LIMITING
@@ -159,7 +228,6 @@ async function enforceRate(sessionId, pid, route) {
 // =========================================================================
 
 async function authenticate(req, pid) {
-  // Project API key
   const apiKey = req.headers["x-project-key"];
   if (apiKey && typeof apiKey === "string") {
     try {
@@ -175,7 +243,6 @@ async function authenticate(req, pid) {
     } catch {}
   }
 
-  // Session bearer
   const auth = req.headers.authorization || "";
   if (auth.startsWith("Bearer ")) {
     const decoded = verifySession(auth.slice(7).trim());
@@ -224,7 +291,6 @@ async function buildReservedEnv(pid, project, deployment, route, reqId) {
       const owner = await getUser(project.ownerId);
       ownerUsername = owner?.profile?.username || null;
       if (ownerUsername) {
-        // Cache for next invocation
         db.ref(`projects/${pid}/ownerUsername`).set(ownerUsername).catch(() => {});
       }
     } catch {}
@@ -300,7 +366,7 @@ async function closeBrowserQuietly(browser) {
 }
 
 // =========================================================================
-// INTERNAL DB HANDLER (in-process, no network)
+// INTERNAL DB HANDLER
 // =========================================================================
 
 async function handleInternalDbRequest(pid, url, req) {
@@ -505,7 +571,6 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
         const urlObj = new URL(request.url());
         const host = urlObj.hostname.toLowerCase();
 
-        // Allow page-origin resources
         if (
           urlObj.protocol === "data:" ||
           urlObj.protocol === "about:" ||
@@ -514,7 +579,6 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
           return await request.continue();
         }
 
-        // Folio internal — resolve db/* in-process
         if (FOLIO_INTERNAL_HOSTS.has(host)) {
           if (
             urlObj.pathname === "/api/host" &&
@@ -544,12 +608,10 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
           return await request.abort("blockedbyclient");
         }
 
-        // HTTPS only
         if (urlObj.protocol !== "https:") {
           return await request.abort("blockedbyclient");
         }
 
-        // Whitelist check
         if (
           BUILTIN_ALLOWED_HOSTS.has(host) ||
           ALLOWED_IMPORT_HOSTS.has(host) ||
@@ -637,7 +699,7 @@ export default async function handler(req, res) {
 
   res.setHeader("X-Request-Id", reqId);
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Project-Key, X-Recursion-Depth, X-Caller-Route",
@@ -645,33 +707,60 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(204).end();
 
-  // ── Parse URL ────────────────────────────────────────────────────
-  const urlPath = String(req.url || "").split("?")[0];
-  const parts = urlPath.replace(/^\/api\/?/, "").split("/").filter(Boolean);
-  const pid = parts[0];
-  const routeRaw = parts[1] || "";
-  const route = routeRaw.replace(/\.js$/i, "");
+  // ── Parse query params (set by Vercel rewrites) ─────────────────
+  let pid = String(req.query?.pid || "").trim();
+  let username = String(req.query?.username || "").trim().toLowerCase();
+  let projectSlug = String(req.query?.project || "").trim();
+  let route = String(req.query?.route || "").trim();
 
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
-  if (!route) return res.status(400).json({ success: false, error: "Missing route" });
+  // ── Fallback: parse URL directly for /api/{pid}/{route} ─────────
+  // (Needed when the rewrite isn't applied, e.g. local dev, or
+  //  direct calls without query params.)
+  if (!pid && !username) {
+    const urlPath = String(req.url || "").split("?")[0];
+    const parts = urlPath.replace(/^\/api\/?/, "").split("/").filter(Boolean);
+    pid = parts[0] || "";
+    route = route || (parts[1] || "");
+  }
+
+  route = route.replace(/\.js$/i, "").trim();
+
+  // ── Resolve pid from slug if only username + project given ───────
+  let resolutionError = null;
+  if (!pid && username && projectSlug) {
+    pid = await resolveProjectBySlug(username, projectSlug);
+    if (!pid) resolutionError = "Project not found";
+  }
+
+  if (!pid) {
+    return res.status(400).json({
+      success: false,
+      error: resolutionError || "Missing pid or username/project",
+    });
+  }
+
+  if (!route) {
+    return res.status(400).json({ success: false, error: "Missing route" });
+  }
+
   if (!/^[a-z0-9_-]+$/i.test(route)) {
     return res.status(400).json({ success: false, error: "Invalid route name" });
   }
 
-  // ── Recursion depth ─────────────────────────────────────────────
+  // ── Recursion depth ────────────────────────────────────────────
   const depthHeader = String(req.headers["x-recursion-depth"] || "0");
   const depth = Math.max(0, Math.min(10, parseInt(depthHeader, 10) || 0));
   if (depth >= MAX_RECURSION_DEPTH) {
     return res.status(508).json({ success: false, error: "Recursion limit exceeded", route });
   }
 
-  // ── Auth ────────────────────────────────────────────────────────
+  // ── Auth ───────────────────────────────────────────────────────
   const actor = await authenticate(req, pid);
   if (!actor) {
     return res.status(401).json({ success: false, error: "Authentication required" });
   }
 
-  // ── Rate limit ──────────────────────────────────────────────────
+  // ── Rate limit ─────────────────────────────────────────────────
   const rate = await enforceRate(actor.sessionId, pid, route).catch(() => ({
     allowed: false,
     retryAfter: 60,
@@ -685,7 +774,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── Load invocation context ─────────────────────────────────────
+  // ── Load invocation context ────────────────────────────────────
   const ctx = await loadInvocationContext(pid, route);
   if (!ctx) {
     return res.status(404).json({ success: false, error: "Project not found" });
@@ -694,13 +783,13 @@ export default async function handler(req, res) {
     return res.status(404).json({ success: false, error: "Route not found", route });
   }
 
-  // ── Load route file ─────────────────────────────────────────────
+  // ── Load route file ────────────────────────────────────────────
   const userCode = await loadRouteFile(pid, route);
   if (!userCode || !userCode.trim()) {
     return res.status(404).json({ success: false, error: "Route file not found", route });
   }
 
-  // ── Build allowed-hosts set from manifest ───────────────────────
+  // ── Allowed hosts from manifest ────────────────────────────────
   let declaredHostsSet = new Set();
   let driftDetected = false;
 
@@ -718,7 +807,6 @@ export default async function handler(req, res) {
       }
     }
 
-    // Also include any other manifest hosts that have been validated
     for (const [host, meta] of Object.entries(manifest)) {
       if (meta && meta.validatedOk) declaredHostsSet.add(host);
     }
@@ -734,21 +822,18 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: "Failed to parse @allow hosts" });
   }
 
-  // ── Load ENV: reserved vars + user secrets ──────────────────────
+  // ── Build ENV ──────────────────────────────────────────────────
   let env = {};
   try {
     const reserved = await buildReservedEnv(pid, ctx.project, ctx.deployment, route, reqId);
     const userSecrets = await projectSecrets.readAllSecrets(pid);
-
-    // Merge: reserved wins over user secrets if there's a collision
-    // (shouldn't happen — setSecret rejects reserved names)
     env = { ...userSecrets, ...reserved };
   } catch (err) {
     log("run.secrets_failed", { reqId, pid, message: err.message });
     return res.status(500).json({ success: false, error: "Failed to load secrets" });
   }
 
-  // ── Build REQ object ────────────────────────────────────────────
+  // ── Build REQ object ───────────────────────────────────────────
   const reqObj = {
     route,
     method: req.method,
@@ -757,7 +842,10 @@ export default async function handler(req, res) {
       "user-agent": (req.headers["user-agent"] || "").slice(0, 200),
     },
     body: typeof req.body === "object" && req.body !== null ? req.body : {},
+    query: req.query || {},
     pid,
+    username: username || null,
+    projectSlug: projectSlug || null,
     projectName: ctx.project.name || null,
     deployedAt: ctx.deployment?.deployedAt || null,
     deploymentId: ctx.deployment?.deploymentId || null,
@@ -795,7 +883,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── Execute ─────────────────────────────────────────────────────
+  // ── Execute ────────────────────────────────────────────────────
   let browser = null;
   let runResult = null;
 
@@ -822,7 +910,7 @@ export default async function handler(req, res) {
 
   const durationMs = Date.now() - startTime;
 
-  // ── Handle failure ──────────────────────────────────────────────
+  // ── Failure ────────────────────────────────────────────────────
   if (!runResult.ok) {
     const status = runResult.isTimeout ? 504 : 500;
     const message = runResult.isTimeout ? "Function timed out" : "Function threw an error";
@@ -852,7 +940,7 @@ export default async function handler(req, res) {
     return res.status(status).json({ success: false, error: message, route });
   }
 
-  // ── Emit response ───────────────────────────────────────────────
+  // ── Response ───────────────────────────────────────────────────
   const { result } = runResult;
   const responseBody =
     typeof result.body === "string" ? result.body : JSON.stringify(result.body);
