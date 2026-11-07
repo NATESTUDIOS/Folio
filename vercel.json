@@ -3,6 +3,7 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
+    { "source": "/:username([a-z0-9_-]+)/project/:projectname([a-z0-9_-]+)/", "destination": "/api/host?action=serve&username=:username&project=:projectname&path=index.html" },
     { "source": "/:username([a-z0-9_-]+)/project/:projectname([a-z0-9_-]+)/api/:route([a-z0-9_-]+)", "destination": "/api/run?username=:username&project=:projectname&route=:route" },
     { "source": "/api/:pid([a-zA-Z0-9_]+)/:route([a-z0-9_-]+)", "destination": "/api/run?pid=:pid&route=:route" },
 
@@ -14,7 +15,7 @@
     },
     {
       "source": "/:username((?!api$|_next$|icons$|screenshots$|js$|css$|syntax\\.json$|manifest\\.json$|manifest\\.webmanifest$|browserconfig\\.xml$|sw\\.js$|service-worker\\.js$|firebase-messaging-sw\\.js$|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|install\\.js$|update\\.js$|fcm-client\\.js$|notifications\\.js$|.*\\.html$|ai$|register$|profile$|project$|tools$|settings$|analytics$|offline$|invite$|notifications$|p$)[^/]+)/project/:projectname",
-      "destination": "/api/host?action=serve&username=:username&project=:projectname"
+      "destination": "/api/host?action=serve&username=:username&project=:projectname&path=index.html"
     },
     {
       "source": "/:username((?!api$|_next$|icons$|screenshots$|js$|css$|syntax\\.json$|manifest\\.json$|manifest\\.webmanifest$|browserconfig\\.xml$|sw\\.js$|service-worker\\.js$|firebase-messaging-sw\\.js$|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|install\\.js$|update\\.js$|fcm-client\\.js$|notifications\\.js$|.*\\.html$|ai$|register$|profile$|project$|tools$|settings$|analytics$|offline$|invite$|notifications$|p$)[^/]+)/:project",
