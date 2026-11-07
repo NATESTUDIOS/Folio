@@ -2649,15 +2649,131 @@ async function renderFolderListing(res, {
 }
 
 async function handleServe(req, res, reqId) {
-  const username = String(req.query?.username || "").trim().toLowerCase();
-  const projectname = String(req.query?.projectname || "").trim().toLowerCase();
-  const deploymentId = String(req.query?.from || "").trim() || null;
+  const sendText = (status, body) => {
+    res.status(status).setHeader("Content-Type", "text/plain; charset=utf-8");
+    return res.send(body);
+  };
 
-  if (!username || !projectname) {
-    return res.status(400).send("Missing username or projectname");
+  // ── Block api/* and secrets/* paths (defense in depth) ──────────
+  const initialPath = String(req.query?.path || "").replace(/^\/+/, "");
+  if (initialPath.startsWith("api/") || initialPath === "api") {
+    return sendText(404, "Not found");
+  }
+  if (initialPath.startsWith("secrets") || initialPath === "secrets") {
+    return sendText(404, "Not found");
   }
 
-  // ── Normalize path ────────────────────────────────────────────
+  let username = String(req.query?.username || "").trim().toLowerCase();
+  let projectSlug = String(req.query?.project || "").trim();
+  let pid = String(req.query?.pid || "").trim();
+
+  if (username) {
+    try {
+      const prev = await db.ref(`previousUsernames/${username}`).once("value");
+      if (prev.exists() && prev.val() && prev.val() !== username) {
+        const target = `/` + prev.val() + `/project/` + encodeURIComponent(projectSlug);
+        return res.redirect(301, `${BASE_URL}${target}`);
+      }
+    } catch {}
+  }
+
+  if (username && projectSlug) {
+    const found = await findProjectBySlug(username, projectSlug);
+    if (found) {
+      if (found.pid !== pid) pid = found.pid;
+    } else if (pid) {
+      try {
+        const ps = await db.ref(`previousSlugs/${pid}`).once("value");
+        if (ps.exists()) {
+          const map = ps.val() || {};
+          if (map[projectSlug]) {
+            return res.redirect(301, `${BASE_URL}/${username}/project/${map[projectSlug]}`);
+          }
+        }
+      } catch {}
+    } else {
+      return sendHtmlPage(res, {
+        title: "Project not found", heading: "Project not found",
+        message: "The link you followed may be broken, or the project may have been deleted.",
+        icon: "alert", status: 404,
+      });
+    }
+  }
+
+  if (!pid && !username) return sendText(400, "Missing pid or username/project");
+
+  if (!pid && username && projectSlug) {
+    const found = await findProjectBySlug(username, projectSlug);
+    if (!found) {
+      return sendHtmlPage(res, {
+        title: "Project not found", heading: "Project not found",
+        message: "The link you followed may be broken, or the project may have been deleted.",
+        icon: "alert", status: 404,
+      });
+    }
+    pid = found.pid;
+  }
+
+  if (!(await enforceRate(req, res, "serve", ipKey(req)))) return;
+
+  const project = await getProjectCached(pid);
+  if (!project) {
+    return sendHtmlPage(res, {
+      title: "Not found", heading: "Project not found",
+      message: "This project does not exist or has been deleted.",
+      icon: "alert", status: 404,
+    });
+  }
+
+  const signedIn = await canAccessProjectFromReq(req);
+  const canAccessPrivate = signedIn && (signedIn.role === "owner" || signedIn.role === "editor");
+
+  const liveSitePublic = project.visibility?.liveSite === "public";
+  if (!liveSitePublic && !canAccessPrivate) {
+    const ownerUsername =
+      username || project.ownerUsername ||
+      (await getProjectOwnerUsername(pid, project)) || "";
+    if (ownerUsername && project.slug && project.visibility?.profile === "public") {
+      return res.redirect(301, `${BASE_URL}/${ownerUsername}/${project.slug}`);
+    }
+    return sendHtmlPage(res, {
+      title: "Not found", heading: "This site is not live",
+      message: "The owner hasn't published this project's live site publicly.",
+      icon: "lock", status: 404,
+    });
+  }
+
+  const fromId = String(req.query?.from || "").trim();
+  let contentMap = null;
+  if (fromId) {
+    const dSnap = await db.ref(`projects/${pid}/deployments/${fromId}`).once("value");
+    if (!dSnap.exists()) {
+      return sendHtmlPage(res, {
+        title: "Deployment not found", heading: "Deployment not found",
+        message: "This deployment no longer exists.",
+        icon: "alert", status: 404,
+      });
+    }
+    const vid = dSnap.val()?.versionId;
+    if (!vid) {
+      return sendHtmlPage(res, {
+        title: "Snapshot unavailable", heading: "Snapshot unavailable",
+        message: "This deployment was created before snapshots were supported.",
+        icon: "alert", status: 404,
+      });
+    }
+    const vSnap = await db.ref(`versions/${pid}/${vid}`).once("value");
+    if (!vSnap.exists()) {
+      return sendHtmlPage(res, {
+        title: "Snapshot unavailable", heading: "Snapshot unavailable",
+        message: "The snapshot for this deployment has been deleted.",
+        icon: "alert", status: 404,
+      });
+    }
+    contentMap = snapshotToFiles(vSnap.val()?.files);
+  }
+
+  // ── Normalize path ──────────────────────────────────────────
   // Vercel passes `path` in several shapes depending on how the
   // rewrite captured the URL:
   //
@@ -2669,114 +2785,160 @@ async function handleServe(req, res, reqId) {
   //
   // All forms are normalized to a leading-slash-free, trailing-slash-
   // free string. Empty means "serve index.html".
-  let path = String(req.query?.path || "").trim();
-  path = path.replace(/^\/+/, "").replace(/\/+$/, "");
-  if (!path) path = "index.html";
-
-  try {
-    // ── Resolve project ─────────────────────────────────────────
-    const project = await getProjectByUserSlug(username, projectname);
-    if (!project) {
-      return res.status(404).send("Project not found");
-    }
-    const pid = project.pid;
-    const role = await getProjectRoleForRequester(req, pid);
-
-    // ── Public access check ─────────────────────────────────────
-    // Same rules as before — live sites are public, source viewer
-    // requires auth or public visibility.
-    const visibility = project.visibility || {};
-    const isLiveRequest = !!deploymentId || path === "index.html" || /\.html?$/i.test(path);
-    const isOwnerOrEditor = role === "owner" || role === "editor";
-    const isPubliclyViewable = visibility.liveSite === "public" || isLiveRequest;
-
-    if (!isOwnerOrEditor && !isPubliclyViewable) {
-      return res.status(403).send("Access denied");
-    }
-
-    // ── Load files ──────────────────────────────────────────────
-    let files;
-    if (deploymentId) {
-      // Historic deployment snapshot
-      const depSnap = await db.ref(`projects/${pid}/deployments/${deploymentId}`).once("value");
-      const dep = depSnap.exists() ? depSnap.val() : null;
-      if (!dep || !dep.snapshot) {
-        return res.status(404).send("Deployment not found");
-      }
-      files = dep.snapshot;
+  let wantPath = String(req.query?.path || "").trim();
+  wantPath = wantPath.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!wantPath) {
+    if (project.primaryFile) {
+      wantPath = project.primaryFile;
     } else {
-      // Current deployment
-      const filesSnap = await db.ref(`projects/${pid}/files`).once("value");
-      files = filesSnap.exists() ? filesSnap.val() : {};
+      wantPath = "index.html";
     }
-
-    // ── Resolve the file ────────────────────────────────────────
-    let file = files[path];
-    let resolvedPath = path;
-
-    // Fallback 1: try `<path>.html` for extension-less paths
-    if (!file && !/\.[a-z0-9]+$/i.test(path)) {
-      const withHtml = path + ".html";
-      if (files[withHtml]) {
-        file = files[withHtml];
-        resolvedPath = withHtml;
-      }
-    }
-
-    // Fallback 2: try `<path>/index.html` for directory-style paths
-    if (!file && !/\.[a-z0-9]+$/i.test(path)) {
-      const withIndex = path.replace(/\/+$/, "") + "/index.html";
-      if (files[withIndex]) {
-        file = files[withIndex];
-        resolvedPath = withIndex;
-      }
-    }
-
-    // Fallback 3: SPA root fallback for extension-less paths
-    if (!file && !/\.[a-z0-9]+$/i.test(path)) {
-      if (files["index.html"]) {
-        file = files["index.html"];
-        resolvedPath = "index.html";
-      }
-    }
-
-    if (!file) {
-      return res.status(404).send("File not found");
-    }
-
-    // ── Content type ────────────────────────────────────────────
-    const contentType = contentTypeFor(resolvedPath);
-
-    // ── ETag + caching ──────────────────────────────────────────
-    const etag = '"' + sha1(resolvedPath + ":" + (file.updatedAt || "") + ":" + String(file.content || "").length) + '"';
-    if (req.headers["if-none-match"] === etag) {
-      res.setHeader("ETag", etag);
-      return res.status(304).end();
-    }
-
-    // ── Secrets injection (public only) ─────────────────────────
-    let body = file.content;
-    if (contentType.startsWith("text/html")) {
-      body = await injectPublicSecrets(body, pid, project);
-    }
-
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Cache-Control", "public, max-age=60, must-revalidate");
-    res.setHeader("ETag", etag);
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("X-Frame-Options", "SAMEORIGIN");
-    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-
-    // ── Analytics ping (fire-and-forget) ────────────────────────
-    if (contentType.startsWith("text/html")) {
-      logAnalytics(pid, resolvedPath, req, reqId).catch(() => {});
-    }
-
-    return res.status(200).send(body);
-  } catch (err) {
-    console.error(`[serve][${reqId}]`, err);
-    return res.status(500).send("Server error");
   }
+
+  if (!isValidRoutePath(wantPath)) return sendText(400, "Invalid path");
+
+  const resolved = await resolveRequestPath(pid, wantPath, contentMap);
+
+  if (resolved.kind === "folder") {
+    const ownerUsername =
+      username || project.ownerUsername ||
+      (await getProjectOwnerUsername(pid, project)) || "";
+    const cacheKey = fromId || project.deployment?.deploymentId || "dev";
+    return renderFolderListing(res, {
+      pid, project, folderPath: resolved.path, contentMap,
+      username: ownerUsername, slug: project.slug,
+      cacheKey, fromId, canAccessPrivate,
+    });
+  }
+
+  if (resolved.kind === "notfound" || !resolved.content) {
+    return sendHtmlPage(res, {
+      title: "Not found", heading: "Not found",
+      message: "The page you requested doesn't exist.",
+      icon: "alert", status: 404,
+    });
+  }
+
+  const relPath = resolved.path;
+  const content = resolved.content;
+
+  if (content.length > MAX_SERVE_FILE_BYTES) return sendText(413, "File too large to serve");
+
+  const ownerUsername =
+    username || project.ownerUsername ||
+    (await getProjectOwnerUsername(pid, project)) || "";
+  const cacheKey = fromId || project.deployment?.deploymentId || "dev";
+  const mime = mimeFor(relPath);
+
+  res.setHeader("Content-Type", mime);
+  if (fromId) {
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    res.setHeader("X-Folio-Deployment", fromId);
+  }
+
+  if (/\.html?$/i.test(relPath)) {
+    let html = content;
+    try {
+      let meta = await resolveProjectMeta(pid, project);
+
+      if (fromId) {
+        try {
+          const dThumb = await db
+            .ref(`projects/${pid}/deployments/${fromId}/thumbnail/url`)
+            .once("value");
+          if (dThumb?.exists() && isValidOgUrl(dThumb.val())) {
+            meta = { ...meta, ogImage: dThumb.val() };
+          }
+        } catch {}
+      }
+
+      const canonicalPath =
+        relPath === "index.html" || relPath === "index.htm" ? "" : relPath;
+      const baseCanonical = buildLiveSiteUrlForPath(
+        ownerUsername,
+        project,
+        canonicalPath,
+      );
+      const canonicalUrl = fromId
+        ? `${baseCanonical}?from=${encodeURIComponent(fromId)}`
+        : baseCanonical;
+
+      html = injectMetaIntoHtml(html, {
+        project,
+        meta,
+        canonicalUrl,
+        robotsNoIndex: !!fromId || !liveSitePublic,
+      });
+    } catch (err) {
+      log("host.serve.meta_failed", { pid, message: err.message });
+    }
+    html = injectTracker(html, pid);
+    html = rewriteRelativeUrls(html, {
+      pid,
+      username: ownerUsername,
+      slug: project.slug,
+      currentPath: relPath,
+      cacheKey,
+      fromId,
+    });
+
+    // ── Inject public secrets (only from live deployment) ───────
+    if (!fromId) {
+      try {
+        const publicSecrets = await projectSecrets.readPublicSecrets(pid);
+        if (publicSecrets && Object.keys(publicSecrets).length > 0) {
+          const payload = JSON.stringify(publicSecrets).replace(/</g, "\\u003c");
+          const script = `<script>window.__SECRETS__=Object.freeze(${payload});</script>`;
+          if (/<\/head>/i.test(html)) {
+            html = html.replace(/<\/head>/i, script + "\n</head>");
+          } else {
+            html = script + html;
+          }
+        }
+      } catch (err) {
+        log("host.serve.secrets_inject_failed", { pid, message: err.message });
+      }
+    }
+
+    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+    return res.status(200).send(html);
+  }
+
+  if (/\.css$/i.test(relPath)) {
+    const rewritten = rewriteCssUrls(content, {
+      pid, username: ownerUsername, slug: project.slug,
+      currentPath: relPath, cacheKey, fromId,
+    });
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300");
+    return res.status(200).send(rewritten);
+  }
+
+  res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300");
+
+  if (/^https?:\/\//i.test(content)) {
+    return res.redirect(302, content);
+  }
+
+  const decoded = tryDecodeDataUri(content);
+  if (decoded) {
+    res.setHeader("Content-Type", decoded.mime);
+    res.setHeader("Content-Length", String(decoded.body.length));
+    if (isBinaryMime(decoded.mime) && req.query?.download === "1") {
+      const fname = relPath.split("/").pop() || "file";
+      res.setHeader("Content-Disposition", `attachment; filename="${fname.replace(/"/g, "")}"`);
+    }
+    res.setHeader("Accept-Ranges", "none");
+    return res.status(200).send(decoded.body);
+  }
+
+  if (isBinaryMime(mime)) {
+    if (req.query?.download === "1") {
+      const fname = relPath.split("/").pop() || "file";
+      res.setHeader("Content-Disposition", `attachment; filename="${fname.replace(/"/g, "")}"`);
+    }
+    res.setHeader("Accept-Ranges", "none");
+  }
+  return res.status(200).send(content);
 }
 
 // =========================================================================
