@@ -24,7 +24,7 @@
   // CONFIG
   // ═══════════════════════════════════════════════════════════
 
-  const API = 'https://foliostudios.vercel.app/api/notify';
+  const API = '/api/notify';
   const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/10.13.2';
   const FCM_SW_PATH = '/firebase-messaging-sw.js';
 
