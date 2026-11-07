@@ -57,7 +57,7 @@
 // =========================================================================
 
 const API_BASE = (typeof window !== "undefined" && window.FOLIO_API_BASE)
-  || "https://foliostudios.vercel.app/api";
+  || "/api";
 const API_AI = API_BASE + "/ai";
 const API_HOST = API_BASE + "/host";
 
