@@ -3,6 +3,7 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
+    { "source": "/:username([a-z0-9_-]+)/project/:projectname([a-z0-9_-]+)/api/:route([a-z0-9_-]+)", "destination": "/api/run?username=:username&project=:projectname&route=:route" },
     { "source": "/api/:pid([a-zA-Z0-9_]+)/:route([a-z0-9_-]+)", "destination": "/api/run?pid=:pid&route=:route" },
 
     { "source": "/p/:pid", "destination": "/api/host?action=share&pid=:pid" },
