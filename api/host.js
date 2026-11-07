@@ -2170,11 +2170,46 @@ async function handleDeploy(req, res, reqId) {
     }
   } catch {}
 
+  // ── Resolve owner username ───────────────────────────────────────
   const ownerUsername = await getProjectOwnerUsername(pid, project);
   const cleanUrl = ownerUsername
     ? buildProjectCleanUrl(ownerUsername, project, pid)
     : `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
   const serveUrl = `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
+
+  // ═════════════════════════════════════════════════════════════════
+  // ✅ NEW: Write the slug index for the friendly API URL
+  // ═════════════════════════════════════════════════════════════════
+  // Populates projectSlugs/{username}/{slug} = pid so that
+  // api/run.js can resolve /{username}/project/{slug}/api/{route}
+  // without falling back to the slower scan.
+  //
+  // Also removes stale entries when the slug or username changed
+  // since the last deploy (defensive — normally handleProjectsUpdate
+  // already cleans these up, but this catches any drift).
+  if (ownerUsername && project.slug) {
+    try {
+      await db.ref(`projectSlugs/${ownerUsername}/${project.slug}`).set(pid);
+
+      // Remove stale slug entries for this pid under this user
+      // (in case the slug changed without the index being cleaned up)
+      const userSlugsSnap = await db.ref(`projectSlugs/${ownerUsername}`).once("value");
+      if (userSlugsSnap.exists()) {
+        const updates = {};
+        userSlugsSnap.forEach((child) => {
+          if (child.val() === pid && child.key !== project.slug) {
+            updates[`projectSlugs/${ownerUsername}/${child.key}`] = null;
+          }
+        });
+        if (Object.keys(updates).length > 0) {
+          await db.ref().update(updates);
+        }
+      }
+    } catch (err) {
+      // Non-fatal — the runtime resolver self-heals on the first call
+      log("host.deploy.slug_index_failed", { pid, message: err.message });
+    }
+  }
 
   const deploymentId = `db_${pid}_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
   const deploymentRecord = {
@@ -3043,6 +3078,14 @@ async function handleProjectsCreate(req, res, reqId) {
     const ownerUsername = user.profile?.username || null;
     if (ownerUsername) {
       await db.ref(`projects/${project.pid}/ownerUsername`).set(ownerUsername).catch(() => {});
+
+      // ✅ NEW: populate slug index for the friendly API URL
+      //    /{username}/project/{slug}/api/{route}
+      if (project.slug) {
+        await db.ref(`projectSlugs/${ownerUsername}/${project.slug}`)
+          .set(project.pid)
+          .catch(() => {});
+      }
     }
 
     await db.ref(`projects/${project.pid}/ownerId`).set(user.uid).catch(() => {});
@@ -3130,6 +3173,24 @@ async function handleProjectsUpdate(req, res, reqId) {
             }
           }
           if (Object.keys(updates).length) await db.ref().update(updates).catch(() => {});
+
+          // ✅ NEW: update slug index for the friendly API URL
+          //    Remove the old entry, add the new one.
+          try {
+            const ownerUsername = await getProjectOwnerUsername(pid, existing);
+            if (ownerUsername) {
+              if (existing.slug && existing.slug !== newSlug) {
+                await db.ref(`projectSlugs/${ownerUsername}/${existing.slug}`)
+                  .remove()
+                  .catch(() => {});
+              }
+              await db.ref(`projectSlugs/${ownerUsername}/${newSlug}`)
+                .set(pid)
+                .catch(() => {});
+            }
+          } catch (slugIdxErr) {
+            log("host.projects_update.slug_index_failed", { pid, message: slugIdxErr.message });
+          }
         }
       } catch {}
     }
@@ -3214,6 +3275,34 @@ async function handleProjectsDelete(req, res, reqId) {
     const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
     projectName = nameSnap.exists() ? nameSnap.val() : "";
   } catch {}
+
+  // ✅ NEW: clean up slug index entries before delete
+  //    Removes projectSlugs/{username}/{slug} = pid so the friendly
+  //    API URL resolver doesn't return a stale pid after deletion.
+  try {
+    const ownerSnap = await db.ref(`projects/${pid}`).once("value");
+    const ownerId = ownerSnap.val()?.ownerId;
+    if (ownerId) {
+      const owner = await getUser(ownerId);
+      const ownerUsername = owner?.profile?.username;
+      if (ownerUsername) {
+        const slugsSnap = await db.ref(`projectSlugs/${ownerUsername}`).once("value");
+        if (slugsSnap.exists()) {
+          const updates = {};
+          slugsSnap.forEach((child) => {
+            if (child.val() === pid) {
+              updates[`projectSlugs/${ownerUsername}/${child.key}`] = null;
+            }
+          });
+          if (Object.keys(updates).length > 0) {
+            await db.ref().update(updates);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    log("host.projects_delete.slug_index_cleanup_failed", { pid, message: err.message });
+  }
 
   try {
     await deleteProjectCdnAssets(pid, reqId);
