@@ -323,22 +323,24 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
 
   // ── TABS (consolidated: 12 → 8) ──────────────────────────────
   const OWNER_TABS = [
-    { id: 'overview', label: 'Overview', icon: 'info' },
-    { id: 'code', label: 'Code', icon: 'code', countKey: 'files' },
-    { id: 'deploy', label: 'Deploy', icon: 'rocket', countKey: 'deployments' },
-    { id: 'insights', label: 'Insights', icon: 'chart' },
-    { id: 'data', label: 'Data', icon: 'database' },
-    { id: 'secrets', label: 'Secrets', icon: 'key' },
-    { id: 'docs', label: 'Docs', icon: 'file-text' },
-    { id: 'settings', label: 'Settings', icon: 'settings' },
-  ];
+  { id: 'overview', label: 'Overview', icon: 'info' },
+  { id: 'code', label: 'Code', icon: 'code', countKey: 'files' },
+  { id: 'deploy', label: 'Deploy', icon: 'rocket', countKey: 'deployments' },
+  { id: 'api', label: 'API', icon: 'terminal' },
+  { id: 'insights', label: 'Insights', icon: 'chart' },
+  { id: 'data', label: 'Data', icon: 'database' },
+  { id: 'secrets', label: 'Secrets', icon: 'key' },
+  { id: 'docs', label: 'Docs', icon: 'file-text' },
+  { id: 'settings', label: 'Settings', icon: 'settings' },
+];
 
   const SHARED_TABS = [
-    { id: 'overview', label: 'Overview', icon: 'info' },
-    { id: 'code', label: 'Files', icon: 'folder', countKey: 'files' },
-    { id: 'insights', label: 'Insights', icon: 'chart' },
-    { id: 'docs', label: 'Docs', icon: 'file-text' },
-  ];
+  { id: 'overview', label: 'Overview', icon: 'info' },
+  { id: 'code', label: 'Files', icon: 'folder', countKey: 'files' },
+  { id: 'api', label: 'API', icon: 'terminal' },
+  { id: 'insights', label: 'Insights', icon: 'chart' },
+  { id: 'docs', label: 'Docs', icon: 'file-text' },
+];
 
   // ── ICONS ────────────────────────────────────────────────────
   const TAB_ICONS = {
@@ -1491,31 +1493,32 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   // ═══════════════════════════════════════════════════════════
 
   function renderPanel() {
-    if (S.projectState !== 'normal') return;
-    const inner = $('contentInner');
-    const tab = S.activeTab;
-    inner.innerHTML = `<div class="panel active" id="panel-${tab}"></div>`;
-    const panel = $('panel-' + tab);
-    if (!panel) return;
+  if (S.projectState !== 'normal') return;
+  const inner = $('contentInner');
+  const tab = S.activeTab;
+  inner.innerHTML = `<div class="panel active" id="panel-${tab}"></div>`;
+  const panel = $('panel-' + tab);
+  if (!panel) return;
 
-    const loaders = {
-      overview: renderOverviewPanel,
-      code: renderCodePanel,
-      deploy: renderDeployPanel,
-      insights: renderInsightsPanel,
-      data: renderDataPanel,
-      secrets: renderSecretsPanel,
-      settings: renderSettingsPanel,
-    };
-    const loader = loaders[tab];
-    if (!loader) return;
-    try {
-      const r = loader(panel);
-      if (r && r.catch) r.catch(err => panelError(panel, err, tab));
-    } catch (err) {
-      panelError(panel, err, tab);
-    }
+  const loaders = {
+    overview: renderOverviewPanel,
+    code: renderCodePanel,
+    deploy: renderDeployPanel,
+    api: renderApiPanel,
+    insights: renderInsightsPanel,
+    data: renderDataPanel,
+    secrets: renderSecretsPanel,
+    settings: renderSettingsPanel,
+  };
+  const loader = loaders[tab];
+  if (!loader) return;
+  try {
+    const r = loader(panel);
+    if (r && r.catch) r.catch(err => panelError(panel, err, tab));
+  } catch (err) {
+    panelError(panel, err, tab);
   }
+}
 
   function panelError(panel, err, tab) {
     console.error('[Panel]', tab, err);
@@ -2851,311 +2854,340 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   // ═══════════════════════════════════════════════════════════
 
   async function renderDeployPanel(panel) {
-    if (!gate(panel, { label: 'Deploy' })) return;
-    panel.innerHTML = skeletonCard(3) + skeletonCard(6);
+  if (!gate(panel, { label: 'Deploy' })) return;
+  panel.innerHTML = skeletonCard(3) + skeletonCard(6);
 
-    const now = Date.now();
-    let current, history, currentId, total, maxDeployments;
-    if (S.deployCache.history && (now - S.deployCache.at) < DEPLOY_HISTORY_CACHE_TTL) {
-      current = S.deployState;
-      history = S.deployCache.history;
-      currentId = S.deployCache.currentId;
-      total = S.deployCache.total;
-      maxDeployments = S.deployCache.maxDeployments;
-    } else {
-      const [statusRes, historyRes, routesRes] = await Promise.all([
-        apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.pid)),
-        apiFetch(API_HOST + '?action=deployment/history&pid=' + encodeURIComponent(S.pid)),
-        apiFetch(API_HOST + '?action=api-routes&pid=' + encodeURIComponent(S.pid)),
-      ]);
-      current = statusRes.ok ? statusRes.data?.deployment : null;
-      history = historyRes.ok ? (historyRes.data?.deployments || []) : [];
-      currentId = historyRes.ok ? historyRes.data?.currentDeploymentId : null;
-      total = historyRes.ok ? historyRes.data?.total : history.length;
-      maxDeployments = historyRes.ok ? historyRes.data?.maxDeployments : 5;
-      if (routesRes.ok && routesRes.data?.success) {
-        S.apiRoutesCache = routesRes.data;
-      }
-      S.deployCache = { history, currentId, total, maxDeployments, at: now };
-    }
-
-    S.deployState = current;
-    S.project.deployment = current || S.project.deployment;
-    bumpTabCount('deployments', history.length);
-
-    const isLive = current?.url && current.state !== 'OFFLINE';
-    const isOffline = current?.state === 'OFFLINE';
-    const needsRedeploy = current && !current.url && !isOffline;
-    const canDeploy = S.isEditor && S.online && S.syncState === 'synced';
-
-    const currentBlock = (() => {
-      if (isLive) {
-        return `
-          <div class="deploy-row current">
-            <div class="deploy-icon">${svg('check', 13, 2.2)}</div>
-            <div class="deploy-info">
-              <div class="deploy-title">Current deploy <span class="badge success" style="font-size:8px">CURRENT</span></div>
-              <div class="deploy-sub mono" style="font-size:10px;overflow-wrap:anywhere;">${escapeHTML(current.url)}</div>
-              <div class="deploy-sub">${timeAgo(current.deployedAt)} · ${escapeHTML(current.state || 'READY')}</div>
-            </div>
-            <div class="deploy-actions">
-              <button class="btn btn-ghost btn-icon" id="btnCopyLiveUrl" title="Copy URL">${svg('copy', 10, 2.2)}</button>
-              <a class="btn btn-ghost btn-icon" href="${escapeAttr(current.url)}" target="_blank" rel="noopener" title="Open">${svg('external', 10, 2.2)}</a>
-              ${S.isEditor ? `<button class="btn btn-ghost btn-icon" id="btnTakeOffline" title="Take offline">${svg('eyeOff', 10, 2.2)}</button>` : ''}
-            </div>
-          </div>
-        `;
-      }
-      if (needsRedeploy) {
-        return `
-          <div class="deploy-row">
-            <div class="deploy-icon" style="color:var(--theme-warning)">${svg('alert', 13, 2.2)}</div>
-            <div class="deploy-info">
-              <div class="deploy-title">Needs redeploy <span class="badge warning" style="font-size:8px">NO URL</span></div>
-              <div class="deploy-sub">Deployment record exists but has no live URL</div>
-            </div>
-            ${canDeploy ? `<button class="btn btn-primary btn-sm" id="btnRedeployNow">Redeploy</button>` : ''}
-          </div>
-        `;
-      }
-      if (isOffline) {
-        return `
-          <div class="deploy-row">
-            <div class="deploy-icon" style="color:var(--theme-text-tertiary)">${svg('eyeOff', 13, 2.2)}</div>
-            <div class="deploy-info">
-              <div class="deploy-title">Offline</div>
-              <div class="deploy-sub">${current.previousUrl ? 'Last live at: ' + escapeHTML(current.previousUrl) : 'Taken offline'}</div>
-            </div>
-            ${canDeploy ? `<button class="btn btn-primary btn-sm" id="btnDeployNow">Deploy</button>` : ''}
-          </div>
-        `;
-      }
-      if (S.syncState === 'local' || S.syncState === 'orphan') {
-        const hint = S.syncState === 'orphan' ? "This project isn't on the server yet." : "Local projects can't be deployed.";
-        return `
-          <div style="padding:14px;">
-            <div style="font-size:11.5px;color:var(--theme-text-tertiary);margin-bottom:8px;">${hint}</div>
-            <button class="btn btn-primary btn-sm" id="btnPushFirst">Push to server</button>
-          </div>
-        `;
-      }
-      return `
-        <div class="deploy-row">
-          <div class="deploy-icon">${svg('rocket', 13, 2.2)}</div>
-          <div class="deploy-info">
-            <div class="deploy-title">Never deployed</div>
-            <div class="deploy-sub">Deploy to start building history</div>
-          </div>
-          ${canDeploy ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">Deploy</button>` : ''}
-        </div>
-      `;
-    })();
-
-    const apiRoutes = S.apiRoutesCache || null;
-
-    panel.innerHTML = `
-      <div class="panel-section">
-        ${panelSectionHeader('Deployments', 'rocket', `${history.length}${maxDeployments ? ` of ${maxDeployments}` : ''} kept`)}
-
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">${svg('rocket', 13, 2.2)} Current</div>
-            ${canDeploy ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">${svg('rocket', 10, 2.4)} Deploy</button>` : ''}
-          </div>
-          <div class="card-body flush">
-            ${currentBlock}
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">${svg('clock', 13, 2.2)} History</div>
-            <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshHistory" aria-label="Refresh">${svg('refresh', 10, 2.2)}</button>
-          </div>
-          <div class="card-body tight">
-            ${history.length === 0
-              ? emptyState('clock', 'No deployments', 'Deploy your project to start building history.')
-              : `<div class="row-list" id="deployHistoryList">${history.map(d => renderDeploymentRow(d, currentId)).join('')}</div>
-                 <div class="field-hint" style="margin-top:8px;">Deploys keep the ${maxDeployments || 5} most recent snapshots.</div>`}
-          </div>
-        </div>
-      </div>
-
-      ${apiRoutes ? `
-        <div class="panel-section">
-          ${panelSectionHeader('API routes', 'terminal', `${(apiRoutes.user?.length || 0) + (apiRoutes.system?.length || 0)} routes · ${apiRoutes.maxFiles || 10}-file limit`)}
-          <div class="card">
-            <div class="card-body">
-              <div class="api-base-url">
-                <code class="mono">${escapeHTML(apiRoutes.baseUrl || '')}</code>
-                <button class="btn btn-ghost btn-icon" data-copy-text="${escapeAttr(apiRoutes.baseUrl || '')}" aria-label="Copy base URL">${svg('copy', 12, 2.2)}</button>
-              </div>
-
-              ${(apiRoutes.system?.length || 0) > 0 ? `
-                <div class="api-section-title">System routes</div>
-                <div class="api-route-list">
-                  ${apiRoutes.system.map(r => `
-                    <div class="api-route-row">
-                      <span class="api-method">GET</span>
-                      <code class="api-route mono">/api/${escapeHTML(S.pid)}/${escapeHTML(r)}</code>
-                      <span class="api-source">_system.js</span>
-                      <button class="btn btn-ghost btn-icon" data-copy-text="${escapeAttr(`${API_BASE}/${S.pid}/${r}`)}" aria-label="Copy route URL">${svg('copy', 10, 2.2)}</button>
-                    </div>
-                  `).join('')}
-                </div>
-              ` : ''}
-
-              ${(apiRoutes.user?.length || 0) > 0 ? `
-                <div class="api-section-title" style="margin-top:12px;">User routes</div>
-                <div class="api-route-list">
-                  ${apiRoutes.user.map(r => `
-                    <div class="api-route-row">
-                      <span class="api-method post">POST</span>
-                      <code class="api-route mono">/api/${escapeHTML(S.pid)}/${escapeHTML(r)}</code>
-                      <span class="api-source">${escapeHTML(r)}.js</span>
-                      <button class="btn btn-ghost btn-icon" data-copy-text="${escapeAttr(`${API_BASE}/${S.pid}/${r}`)}" aria-label="Copy route URL">${svg('copy', 10, 2.2)}</button>
-                    </div>
-                  `).join('')}
-                </div>
-              ` : `
-                <div class="empty-state" style="padding:20px 8px;">
-                  <div class="empty-state-icon">${svg('terminal', 18, 2)}</div>
-                  <div class="empty-state-title">No user routes yet</div>
-                  <div class="empty-state-desc">Create your first <code class="mono">api/*.js</code> file in the Code tab to add a route.</div>
-                </div>
-              `}
-
-              ${apiRoutes.allowedHosts ? `
-                <details class="api-hosts-details">
-                  <summary>
-                    ${svg('globe', 11, 2.2)}
-                    Allowed hosts
-                    (${(apiRoutes.allowedHosts.builtin?.length || 0) + (apiRoutes.allowedHosts.declared?.length || 0)})
-                  </summary>
-                  <div class="api-hosts-list">
-                    <div class="api-hosts-group">
-                      <div class="api-hosts-group-label">Built-in</div>
-                      ${(apiRoutes.allowedHosts.builtin || []).map(h => `
-                        <div class="api-host-row">
-                          <code class="mono">${escapeHTML(h)}</code>
-                          <span class="badge neutral">built-in</span>
-                        </div>
-                      `).join('')}
-                    </div>
-                    ${(apiRoutes.allowedHosts.declared || []).length > 0 ? `
-                      <div class="api-hosts-group">
-                        <div class="api-hosts-group-label">Declared via @allow</div>
-                        ${(apiRoutes.allowedHosts.declared || []).map(h => `
-                          <div class="api-host-row">
-                            <code class="mono">${escapeHTML(h.host)}</code>
-                            ${h.validatedOk
-                              ? `<span class="badge success">verified</span>`
-                              : `<span class="badge danger">failed check</span>`}
-                            <span class="api-hosts-files">${escapeHTML((h.declaredBy || []).join(', '))}</span>
-                          </div>
-                        `).join('')}
-                      </div>
-                    ` : ''}
-                  </div>
-                </details>
-              ` : ''}
-
-              <div class="field-hint" style="margin-top:10px;">
-                See <button type="button" class="link-btn" id="btnDeployDocs">Docs → Private API</button> for the full reference.
-              </div>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-
-      <div class="panel-section">
-        ${panelSectionHeader('Export', 'download', 'Download your project')}
-        <div class="card">
-          <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
-            <button class="btn btn-primary btn-block" id="btnDownloadFolio">${svg('download', 12, 2.4)} .folio backup</button>
-            <div class="field-hint">Files, versions${S.syncState === 'synced' ? ', JSON DB' : ''}.</div>
-            <button class="btn btn-secondary btn-block" id="btnDownloadZip">${svg('download', 12, 2.4)} .zip (files)</button>
-            <div class="field-hint">Current files only.</div>
-            ${S.syncState === 'synced' ? `<button class="btn btn-secondary btn-block" id="btnDownloadDb">${svg('download', 12, 2.4)} JSON database</button>` : ''}
-          </div>
-        </div>
-      </div>
-    `;
-
-    // ── Wire deployment ────────────────────────────────────────
-    $('btnDeployNow')?.addEventListener('click', deployNow);
-    $('btnRedeployNow')?.addEventListener('click', deployNow);
-    $('btnPushFirst')?.addEventListener('click', () => {
-      if (S.syncState === 'orphan') pushOrphanToServer();
-      else if (S.syncState === 'local') promoteLocalProject();
-    });
-    $('btnRefreshHistory')?.addEventListener('click', () => {
-      S.deployCache = { history: null, currentId: null, total: 0, at: 0, maxDeployments: 5 };
-      renderPanel();
-    });
-    $('btnTakeOffline')?.addEventListener('click', takeOffline);
-    $('btnCopyLiveUrl')?.addEventListener('click', () => {
-      const url = current?.url || '';
-      if (!url) return;
-      if (copyToClipboard(url)) toast('URL copied', 'success', 1200);
-      else toast('Copy failed', 'error');
-    });
-
-    // ── Wire export ────────────────────────────────────────────
-    $('btnDownloadFolio')?.addEventListener('click', async () => {
-      if (S.isLocalOnly || !S.session || S.syncState !== 'synced') await exportLocalFolio();
-      else await downloadProject('folio');
-    });
-    $('btnDownloadZip')?.addEventListener('click', async () => {
-      if (S.isLocalOnly || !S.session || S.syncState !== 'synced') await exportLocalJson();
-      else await downloadProject('zip');
-    });
-    $('btnDownloadDb')?.addEventListener('click', downloadJsonDb);
-
-    // ── Wire docs link ─────────────────────────────────────────
-    $('btnDeployDocs')?.addEventListener('click', () => {
-      openDocsOverlay('private-api');
-    });
-
-    // ── Copy buttons ───────────────────────────────────────────
-    panel.querySelectorAll('[data-copy-text]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (copyToClipboard(btn.dataset.copyText)) toast('Copied', 'success', 1200);
-        else toast('Copy failed', 'error');
-      });
-    });
-
-    // ── Deployment row toggle ─────────────────────────────────
-    panel.addEventListener('click', (e) => {
-      const toggleBtn = e.target.closest('[data-deploy-toggle]');
-      if (toggleBtn) {
-        e.stopPropagation();
-        toggleDeploymentRow(toggleBtn.getAttribute('data-deploy-toggle'));
-        return;
-      }
-
-      const rowEl = e.target.closest('[data-deploy-row]');
-      if (rowEl && !e.target.closest('a, button[data-redeploy], button[data-delete-deploy]')) {
-        toggleDeploymentRow(rowEl.getAttribute('data-deploy-row'));
-        return;
-      }
-
-      const redeployBtn = e.target.closest('[data-redeploy]');
-      if (redeployBtn) {
-        e.stopPropagation();
-        redeployVersion(redeployBtn.getAttribute('data-redeploy'));
-        return;
-      }
-
-      const deleteBtn = e.target.closest('[data-delete-deploy]');
-      if (deleteBtn) {
-        e.stopPropagation();
-        confirmDeleteDeployment(deleteBtn.getAttribute('data-delete-deploy'));
-        return;
-      }
-    });
+  const now = Date.now();
+  let current, history, currentId, total, maxDeployments;
+  if (S.deployCache.history && (now - S.deployCache.at) < DEPLOY_HISTORY_CACHE_TTL) {
+    current = S.deployState;
+    history = S.deployCache.history;
+    currentId = S.deployCache.currentId;
+    total = S.deployCache.total;
+    maxDeployments = S.deployCache.maxDeployments;
+  } else {
+    const [statusRes, historyRes] = await Promise.all([
+      apiFetch(API_HOST + '?action=status&pid=' + encodeURIComponent(S.pid)),
+      apiFetch(API_HOST + '?action=deployment/history&pid=' + encodeURIComponent(S.pid)),
+    ]);
+    current = statusRes.ok ? statusRes.data?.deployment : null;
+    history = historyRes.ok ? (historyRes.data?.deployments || []) : [];
+    currentId = historyRes.ok ? historyRes.data?.currentDeploymentId : null;
+    total = historyRes.ok ? historyRes.data?.total : history.length;
+    maxDeployments = historyRes.ok ? historyRes.data?.maxDeployments : 5;
+    S.deployCache = { history, currentId, total, maxDeployments, at: now };
   }
 
+  S.deployState = current;
+  S.project.deployment = current || S.project.deployment;
+  bumpTabCount('deployments', history.length);
+
+  const isLive = current?.url && current.state !== 'OFFLINE';
+  const isOffline = current?.state === 'OFFLINE';
+  const needsRedeploy = current && !current.url && !isOffline;
+  const canDeploy = S.isEditor && S.online && S.syncState === 'synced';
+
+  const currentBlock = (() => {
+    if (isLive) {
+      return `
+        <div class="deploy-row current">
+          <div class="deploy-icon">${svg('check', 13, 2.2)}</div>
+          <div class="deploy-info">
+            <div class="deploy-title">Current deploy <span class="badge success" style="font-size:8px">CURRENT</span></div>
+            <div class="deploy-sub mono" style="font-size:10px;overflow-wrap:anywhere;">${escapeHTML(current.url)}</div>
+            <div class="deploy-sub">${timeAgo(current.deployedAt)} · ${escapeHTML(current.state || 'READY')}</div>
+          </div>
+          <div class="deploy-actions">
+            <button class="btn btn-ghost btn-icon" id="btnCopyLiveUrl" title="Copy URL">${svg('copy', 10, 2.2)}</button>
+            <a class="btn btn-ghost btn-icon" href="${escapeAttr(current.url)}" target="_blank" rel="noopener" title="Open">${svg('external', 10, 2.2)}</a>
+            ${S.isEditor ? `<button class="btn btn-ghost btn-icon" id="btnTakeOffline" title="Take offline">${svg('eyeOff', 10, 2.2)}</button>` : ''}
+          </div>
+        </div>
+      `;
+    }
+    if (needsRedeploy) {
+      return `
+        <div class="deploy-row">
+          <div class="deploy-icon" style="color:var(--theme-warning)">${svg('alert', 13, 2.2)}</div>
+          <div class="deploy-info">
+            <div class="deploy-title">Needs redeploy <span class="badge warning" style="font-size:8px">NO URL</span></div>
+            <div class="deploy-sub">Deployment record exists but has no live URL</div>
+          </div>
+          ${canDeploy ? `<button class="btn btn-primary btn-sm" id="btnRedeployNow">Redeploy</button>` : ''}
+        </div>
+      `;
+    }
+    if (isOffline) {
+      return `
+        <div class="deploy-row">
+          <div class="deploy-icon" style="color:var(--theme-text-tertiary)">${svg('eyeOff', 13, 2.2)}</div>
+          <div class="deploy-info">
+            <div class="deploy-title">Offline</div>
+            <div class="deploy-sub">${current.previousUrl ? 'Last live at: ' + escapeHTML(current.previousUrl) : 'Taken offline'}</div>
+          </div>
+          ${canDeploy ? `<button class="btn btn-primary btn-sm" id="btnDeployNow">Deploy</button>` : ''}
+        </div>
+      `;
+    }
+    if (S.syncState === 'local' || S.syncState === 'orphan') {
+      const hint = S.syncState === 'orphan' ? "This project isn't on the server yet." : "Local projects can't be deployed.";
+      return `
+        <div style="padding:14px;">
+          <div style="font-size:11.5px;color:var(--theme-text-tertiary);margin-bottom:8px;">${hint}</div>
+          <button class="btn btn-primary btn-sm" id="btnPushFirst">Push to server</button>
+        </div>
+      `;
+    }
+    return `
+      <div class="deploy-row">
+        <div class="deploy-icon">${svg('rocket', 13, 2.2)}</div>
+        <div class="deploy-info">
+          <div class="deploy-title">Never deployed</div>
+          <div class="deploy-sub">Deploy to start building history</div>
+        </div>
+        ${canDeploy ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">Deploy</button>` : ''}
+      </div>
+    `;
+  })();
+
+  panel.innerHTML = `
+    <div class="panel-section">
+      ${panelSectionHeader('Deployments', 'rocket', `${history.length}${maxDeployments ? ` of ${maxDeployments}` : ''} kept`)}
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('rocket', 13, 2.2)} Current</div>
+          ${canDeploy ? `<button class="btn btn-sm btn-primary" id="btnDeployNow">${svg('rocket', 10, 2.4)} Deploy</button>` : ''}
+        </div>
+        <div class="card-body flush">
+          ${currentBlock}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">${svg('clock', 13, 2.2)} History</div>
+          <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshHistory" aria-label="Refresh">${svg('refresh', 10, 2.2)}</button>
+        </div>
+        <div class="card-body tight">
+          ${history.length === 0
+            ? emptyState('clock', 'No deployments', 'Deploy your project to start building history.')
+            : `<div class="row-list" id="deployHistoryList">${history.map(d => renderDeploymentRow(d, currentId)).join('')}</div>
+               <div class="field-hint" style="margin-top:8px;">Deploys keep the ${maxDeployments || 5} most recent snapshots.</div>`}
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      ${panelSectionHeader('Export', 'download', 'Download your project')}
+      <div class="card">
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+          <button class="btn btn-primary btn-block" id="btnDownloadFolio">${svg('download', 12, 2.4)} .folio backup</button>
+          <div class="field-hint">Files, versions${S.syncState === 'synced' ? ', JSON DB' : ''}.</div>
+          <button class="btn btn-secondary btn-block" id="btnDownloadZip">${svg('download', 12, 2.4)} .zip (files)</button>
+          <div class="field-hint">Current files only.</div>
+          ${S.syncState === 'synced' ? `<button class="btn btn-secondary btn-block" id="btnDownloadDb">${svg('download', 12, 2.4)} JSON database</button>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // ── Wire deployment ────────────────────────────────────────
+  $('btnDeployNow')?.addEventListener('click', deployNow);
+  $('btnRedeployNow')?.addEventListener('click', deployNow);
+  $('btnPushFirst')?.addEventListener('click', () => {
+    if (S.syncState === 'orphan') pushOrphanToServer();
+    else if (S.syncState === 'local') promoteLocalProject();
+  });
+  $('btnRefreshHistory')?.addEventListener('click', () => {
+    S.deployCache = { history: null, currentId: null, total: 0, at: 0, maxDeployments: 5 };
+    renderPanel();
+  });
+  $('btnTakeOffline')?.addEventListener('click', takeOffline);
+  $('btnCopyLiveUrl')?.addEventListener('click', () => {
+    const url = current?.url || '';
+    if (!url) return;
+    if (copyToClipboard(url)) toast('URL copied', 'success', 1200);
+    else toast('Copy failed', 'error');
+  });
+
+  // ── Wire export ────────────────────────────────────────────
+  $('btnDownloadFolio')?.addEventListener('click', async () => {
+    if (S.isLocalOnly || !S.session || S.syncState !== 'synced') await exportLocalFolio();
+    else await downloadProject('folio');
+  });
+  $('btnDownloadZip')?.addEventListener('click', async () => {
+    if (S.isLocalOnly || !S.session || S.syncState !== 'synced') await exportLocalJson();
+    else await downloadProject('zip');
+  });
+  $('btnDownloadDb')?.addEventListener('click', downloadJsonDb);
+
+  // ── Deployment row toggle ─────────────────────────────────
+  panel.addEventListener('click', (e) => {
+    const toggleBtn = e.target.closest('[data-deploy-toggle]');
+    if (toggleBtn) {
+      e.stopPropagation();
+      toggleDeploymentRow(toggleBtn.getAttribute('data-deploy-toggle'));
+      return;
+    }
+
+    const rowEl = e.target.closest('[data-deploy-row]');
+    if (rowEl && !e.target.closest('a, button[data-redeploy], button[data-delete-deploy]')) {
+      toggleDeploymentRow(rowEl.getAttribute('data-deploy-row'));
+      return;
+    }
+
+    const redeployBtn = e.target.closest('[data-redeploy]');
+    if (redeployBtn) {
+      e.stopPropagation();
+      redeployVersion(redeployBtn.getAttribute('data-redeploy'));
+      return;
+    }
+
+    const deleteBtn = e.target.closest('[data-delete-deploy]');
+    if (deleteBtn) {
+      e.stopPropagation();
+      confirmDeleteDeployment(deleteBtn.getAttribute('data-delete-deploy'));
+      return;
+    }
+  });
+}
+
+async function renderApiPanel(panel) {
+  if (!gate(panel, { label: 'API' })) return;
+
+  panel.innerHTML = skeletonCard(4);
+
+  const res = await apiFetch(API_HOST + '?action=api-routes&pid=' + encodeURIComponent(S.pid));
+  if (!res.ok || !res.data?.success) {
+    panel.innerHTML = `<div class="card"><div class="card-body">${
+      emptyState('terminal', "Couldn't load API routes", res.data?.error || 'Try refreshing.')
+    }</div></div>`;
+    return;
+  }
+
+  const data = res.data;
+  const system = data.system || [];
+  const user = data.user || [];
+  const baseUrl = data.baseUrl || `${API_BASE}/${S.pid}`;
+  const friendlyBaseUrl = data.friendlyBaseUrl;
+  const directBaseUrl = data.directBaseUrl || `${API_BASE}/${S.pid}`;
+  const maxFiles = data.maxFiles || 10;
+  const totalRoutes = system.length + user.length;
+  const usedFiles = user.length + 1; // +1 for _system.js
+
+  const buildUrl = (route) => `${baseUrl}/${route}`;
+
+  panel.innerHTML = `
+    <div class="panel-section">
+      ${panelSectionHeader('API routes', 'terminal', `${totalRoutes} route${totalRoutes === 1 ? '' : 's'} · ${usedFiles}/${maxFiles} files`)}
+
+      <div class="card">
+        <div class="card-body">
+          <div class="api-base-url">
+            <code class="mono">${escapeHTML(baseUrl)}</code>
+            <button class="btn btn-ghost btn-icon" data-copy-text="${escapeAttr(baseUrl)}" aria-label="Copy base URL">${svg('copy', 12, 2.2)}</button>
+          </div>
+
+          ${friendlyBaseUrl && directBaseUrl && friendlyBaseUrl !== directBaseUrl ? `
+            <div class="field-hint" style="margin-bottom:10px;line-height:1.55;">
+              <strong>Friendly URL</strong> — readable, slug-based:<br>
+              <code class="mono" style="font-size:10px;">${escapeHTML(friendlyBaseUrl)}</code>
+              <br><br>
+              <strong>Direct URL</strong> — pid-based, no lookup:<br>
+              <code class="mono" style="font-size:10px;">${escapeHTML(directBaseUrl)}</code>
+              <br><br>
+              Both work identically. Use either in your frontend.
+            </div>
+          ` : ''}
+
+          ${system.length > 0 ? `
+            <div class="api-section-title">System routes</div>
+            <div class="api-route-list">
+              ${system.map(r => `
+                <div class="api-route-row">
+                  <span class="api-method">GET</span>
+                  <code class="api-route mono">${escapeHTML(buildUrl(r))}</code>
+                  <span class="api-source">_system.js</span>
+                  <button class="btn btn-ghost btn-icon" data-copy-text="${escapeAttr(buildUrl(r))}" aria-label="Copy route URL">${svg('copy', 10, 2.2)}</button>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+
+          ${user.length > 0 ? `
+            <div class="api-section-title" style="margin-top:12px;">User routes</div>
+            <div class="api-route-list">
+              ${user.map(r => `
+                <div class="api-route-row">
+                  <span class="api-method post">POST</span>
+                  <code class="api-route mono">${escapeHTML(buildUrl(r))}</code>
+                  <span class="api-source">${escapeHTML(r)}.js</span>
+                  <button class="btn btn-ghost btn-icon" data-copy-text="${escapeAttr(buildUrl(r))}" aria-label="Copy route URL">${svg('copy', 10, 2.2)}</button>
+                </div>
+              `).join('')}
+            </div>
+          ` : `
+            <div class="empty-state" style="padding:20px 8px;">
+              <div class="empty-state-icon">${svg('terminal', 18, 2)}</div>
+              <div class="empty-state-title">No user routes yet</div>
+              <div class="empty-state-desc">Create your first <code class="mono">api/*.js</code> file in the Code tab to add a route.</div>
+            </div>
+          `}
+
+          ${data.allowedHosts ? `
+            <details class="api-hosts-details">
+              <summary>
+                ${svg('globe', 11, 2.2)}
+                Allowed hosts
+                (${(data.allowedHosts.builtin?.length || 0) + (data.allowedHosts.declared?.length || 0)})
+              </summary>
+              <div class="api-hosts-list">
+                <div class="api-hosts-group">
+                  <div class="api-hosts-group-label">Built-in</div>
+                  ${(data.allowedHosts.builtin || []).map(h => `
+                    <div class="api-host-row">
+                      <code class="mono">${escapeHTML(h)}</code>
+                      <span class="badge neutral">built-in</span>
+                    </div>
+                  `).join('')}
+                </div>
+                ${(data.allowedHosts.declared || []).length > 0 ? `
+                  <div class="api-hosts-group">
+                    <div class="api-hosts-group-label">Declared via @allow</div>
+                    ${(data.allowedHosts.declared || []).map(h => `
+                      <div class="api-host-row">
+                        <code class="mono">${escapeHTML(h.host)}</code>
+                        ${h.validatedOk
+                          ? `<span class="badge success">verified</span>`
+                          : `<span class="badge danger">failed check</span>`}
+                        <span class="api-hosts-files">${escapeHTML((h.declaredBy || []).join(', '))}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : ''}
+              </div>
+            </details>
+          ` : ''}
+
+          <div class="field-hint" style="margin-top:10px;">
+            See <button type="button" class="link-btn" id="btnApiDocs">Docs → Private API</button> for the full reference.
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  panel.querySelectorAll('[data-copy-text]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (copyToClipboard(btn.dataset.copyText)) toast('Copied', 'success', 1200);
+      else toast('Copy failed', 'error');
+    });
+  });
+
+  $('btnApiDocs')?.addEventListener('click', () => openDocsOverlay('private-api'));
+}
+  
   function toggleDeploymentRow(deploymentId) {
     if (!S._expandedDeployments) S._expandedDeployments = new Set();
     if (S._expandedDeployments.has(deploymentId)) S._expandedDeployments.delete(deploymentId);
@@ -3699,7 +3731,7 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
           <div class="field-hint" style="line-height:1.6;">
             A per-project key/value store backed by Firebase Realtime Database.
             Up to <strong>15 MB</strong> per project. Accessible from <code class="mono">api/*.js</code>
-            via <code class="mono">fetch("https://folio/api/host?action=db/...")</code>.
+            via <code class="mono">fetch("/api/host?action=db/...")</code>.
             <br><br>
             <strong>Looking for secrets?</strong> API keys and tokens belong in the
             <strong>Secrets</strong> tab. See <button type="button" class="link-btn" id="btnDataDocs">Docs → Data API</button> for the full reference.
@@ -5954,31 +5986,43 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
   ];
 
   const DOCS_CONTENT = {
-    'getting-started': {
-      title: 'Getting started',
-      body: `
-        <h2>What is this?</h2>
-        <p>Your project has a private backend. Write JavaScript in <code class="mono">api/*.js</code>, deploy, and call it from your frontend via <code class="mono">POST /api/{pid}/{route}</code>.</p>
-        <p>Three things your script can touch:</p>
-        <ul>
-          <li><code class="mono">ENV</code> — your secrets (API keys, tokens)</li>
-          <li><code class="mono">REQ</code> — the incoming request body, method, headers</li>
-          <li><code class="mono">FILES</code> — your public file list</li>
-        </ul>
-        <h2>Your first route</h2>
-        <p>Create <code class="mono">api/hello.js</code>:</p>
-        <pre><code>return { message: "Hello from the server!" };</code></pre>
-        <p>Deploy the project. Then call it:</p>
-        <pre><code>const res = await fetch("/api/{pid}/hello", { method: "POST" });
+  'getting-started': {
+    title: 'Getting started',
+    body: `
+      <h2>What is this?</h2>
+      <p>Your project has a private backend. Write JavaScript in <code class="mono">api/*.js</code>, deploy, and call it from your frontend.</p>
+      <p>Three things your script can touch:</p>
+      <ul>
+        <li><code class="mono">ENV</code> — your secrets (API keys, tokens)</li>
+        <li><code class="mono">REQ</code> — the incoming request body, method, headers</li>
+        <li><code class="mono">FILES</code> — your public file list</li>
+      </ul>
+
+      <h2>The URL</h2>
+      <p>Two URL shapes work, and they do the same thing:</p>
+      <pre><code>POST https://foliostudios.vercel.app/{username}/project/{slug}/api/{route}
+POST https://foliostudios.vercel.app/api/{pid}/{route}</code></pre>
+      <p>The first is the <strong>friendly URL</strong> — reads like your project's URL, so anyone can guess it. The second is the <strong>direct URL</strong> — no lookup needed, faster on the first call.</p>
+      <p>Both are documented in the API tab. Use whichever fits your code.</p>
+
+      <h2>Your first route</h2>
+      <p>Create <code class="mono">api/hello.js</code>:</p>
+      <pre><code>return { message: "Hello from the server!" };</code></pre>
+      <p>Deploy the project. Then call it:</p>
+      <pre><code>const res = await fetch("/{username}/project/{slug}/api/hello", {
+  method: "POST"
+});
 const data = await res.json();
 // → { message: "Hello from the server!" }</code></pre>
-        <p>No handler, no res.json, no boilerplate. Whatever your script returns becomes the response body.</p>
-        <h2>With a request body</h2>
-        <pre><code>const name = REQ.body.name || "friend";
+      <p>No handler, no res.json, no boilerplate. Whatever your script returns becomes the response body.</p>
+
+      <h2>With a request body</h2>
+      <pre><code>const name = REQ.body.name || "friend";
 return { greeting: \`Hello, \${name}!\` };</code></pre>
-        <h2>With a secret</h2>
-        <p>Add <code class="mono">OPENAI_API_KEY</code> in the <strong>Secrets</strong> tab. Then use it in your script:</p>
-        <pre><code>const r = await fetch("https://api.openai.com/v1/chat/completions", {
+
+      <h2>With a secret</h2>
+      <p>Add <code class="mono">OPENAI_API_KEY</code> in the <strong>Secrets</strong> tab. Then use it in your script:</p>
+      <pre><code>const r = await fetch("https://api.openai.com/v1/chat/completions", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -5991,65 +6035,65 @@ return { greeting: \`Hello, \${name}!\` };</code></pre>
 });
 const data = await r.json();
 return data.choices[0].message.content;</code></pre>
-        <p>The key never reaches the browser.</p>
-      `,
-    },
-    'secrets': {
-      title: 'Secrets',
-      body: `
-        <h2>Private vs public secrets</h2>
-        <p>Every secret has a visibility: <strong>private</strong> (default) or <strong>public</strong>.</p>
-        <ul>
-          <li><strong>Private</strong> — visible only in <code class="mono">ENV</code> from <code class="mono">api/*.js</code>. Never sent to the browser.</li>
-          <li><strong>Public</strong> — also injected into HTML as <code class="mono">window.__SECRETS__</code>.</li>
-        </ul>
-        <p>Use <strong>public</strong> for publishable keys (Stripe publishable, Supabase anon). Never for OpenAI keys.</p>
-        <h2>Access from api/*.js</h2>
-        <pre><code>const key = ENV.OPENAI_API_KEY;</code></pre>
-        <p>ENV is a frozen object built fresh per invocation. If any secret fails to decrypt, the entire invocation fails with <code class="mono">500 "Failed to load secrets"</code>.</p>
-        <h2>Access from frontend</h2>
-        <p>Only <strong>public</strong> secrets appear:</p>
-        <pre><code>const stripe = window.__SECRETS__?.STRIPE_PUBLISHABLE_KEY;</code></pre>
-        <h2>Reserved ENV variables</h2>
-        <p>These are auto-injected at runtime. You cannot create secrets with these names.</p>
-        <ul>
-          <li><code class="mono">ENV.PROJECT_ID</code> — the project pid</li>
-          <li><code class="mono">ENV.PROJECT_NAME</code> — display name</li>
-          <li><code class="mono">ENV.PROJECT_SLUG</code> — URL slug</li>
-          <li><code class="mono">ENV.PROJECT_URL</code> — clean URL</li>
-          <li><code class="mono">ENV.OWNER_USERNAME</code> — owner's username</li>
-          <li><code class="mono">ENV.OWNER_UID</code> — owner's UID</li>
-          <li><code class="mono">ENV.DEPLOYMENT_ID</code> — current deployment</li>
-          <li><code class="mono">ENV.DEPLOYMENT_URL</code> — deployment URL</li>
-          <li><code class="mono">ENV.FOLIO_BASE_URL</code> — Folio's base URL</li>
-          <li><code class="mono">ENV.FOLIO_API_URL</code> — Folio's API base</li>
-          <li><code class="mono">ENV.API_ROUTE</code> — current route name</li>
-          <li><code class="mono">ENV.REQUEST_ID</code> — unique request ID</li>
-          <li><code class="mono">ENV.FOLIO_API_KEY</code> — project API key (if generated)</li>
-        </ul>
-        <h2>Injection mode</h2>
-        <p>When enabled, <code class="mono">window.__SECRETS__</code> is injected into served HTML. Only public secrets appear.</p>
-        <p><strong>Warning:</strong> anyone visiting your site can read them. Enable only if you accept that risk.</p>
-        <h2>Limits</h2>
-        <ul>
-          <li>16 KB per value</li>
-          <li>512 KB total per project</li>
-          <li>50 secrets max</li>
-        </ul>
-      `,
-    },
-    'data-api': {
-      title: 'Data API',
-      body: `
-        <h2>What is it?</h2>
-        <p>A per-project key/value store backed by Firebase Realtime Database. Up to 15 MB per project.</p>
-        <p>You can read and write it from <code class="mono">api/*.js</code> using normal <code class="mono">fetch</code>. The requests resolve in-process, so they're fast.</p>
-        <h2>Read</h2>
-        <pre><code>const r = await fetch(\`https://folio/api/host?action=db/get&pid=\${ENV.PROJECT_ID}\`);
+      <p>The key never reaches the browser.</p>
+    `,
+  },
+  'secrets': {
+    title: 'Secrets',
+    body: `
+      <h2>Private vs public secrets</h2>
+      <p>Every secret has a visibility: <strong>private</strong> (default) or <strong>public</strong>.</p>
+      <ul>
+        <li><strong>Private</strong> — visible only in <code class="mono">ENV</code> from <code class="mono">api/*.js</code>. Never sent to the browser.</li>
+        <li><strong>Public</strong> — also injected into HTML as <code class="mono">window.__SECRETS__</code>.</li>
+      </ul>
+      <p>Use <strong>public</strong> for publishable keys (Stripe publishable, Supabase anon). Never for OpenAI keys.</p>
+      <h2>Access from api/*.js</h2>
+      <pre><code>const key = ENV.OPENAI_API_KEY;</code></pre>
+      <p>ENV is a frozen object built fresh per invocation. If any secret fails to decrypt, the entire invocation fails with <code class="mono">500 "Failed to load secrets"</code>.</p>
+      <h2>Access from frontend</h2>
+      <p>Only <strong>public</strong> secrets appear:</p>
+      <pre><code>const stripe = window.__SECRETS__?.STRIPE_PUBLISHABLE_KEY;</code></pre>
+      <h2>Reserved ENV variables</h2>
+      <p>These are auto-injected at runtime. You cannot create secrets with these names.</p>
+      <ul>
+        <li><code class="mono">ENV.PROJECT_ID</code> — the project pid</li>
+        <li><code class="mono">ENV.PROJECT_NAME</code> — display name</li>
+        <li><code class="mono">ENV.PROJECT_SLUG</code> — URL slug</li>
+        <li><code class="mono">ENV.PROJECT_URL</code> — clean URL</li>
+        <li><code class="mono">ENV.OWNER_USERNAME</code> — owner's username</li>
+        <li><code class="mono">ENV.OWNER_UID</code> — owner's UID</li>
+        <li><code class="mono">ENV.DEPLOYMENT_ID</code> — current deployment</li>
+        <li><code class="mono">ENV.DEPLOYMENT_URL</code> — deployment URL</li>
+        <li><code class="mono">ENV.FOLIO_BASE_URL</code> — Folio's base URL</li>
+        <li><code class="mono">ENV.FOLIO_API_URL</code> — Folio's API base</li>
+        <li><code class="mono">ENV.API_ROUTE</code> — current route name</li>
+        <li><code class="mono">ENV.REQUEST_ID</code> — unique request ID</li>
+        <li><code class="mono">ENV.FOLIO_API_KEY</code> — project API key (if generated)</li>
+      </ul>
+      <h2>Injection mode</h2>
+      <p>When enabled, <code class="mono">window.__SECRETS__</code> is injected into served HTML. Only public secrets appear.</p>
+      <p><strong>Warning:</strong> anyone visiting your site can read them. Enable only if you accept that risk.</p>
+      <h2>Limits</h2>
+      <ul>
+        <li>16 KB per value</li>
+        <li>512 KB total per project</li>
+        <li>50 secrets max</li>
+      </ul>
+    `,
+  },
+  'data-api': {
+    title: 'Data API',
+    body: `
+      <h2>What is it?</h2>
+      <p>A per-project key/value store backed by Firebase Realtime Database. Up to 15 MB per project.</p>
+      <p>You can read and write it from <code class="mono">api/*.js</code> using normal <code class="mono">fetch</code>. The requests resolve in-process, so they're fast.</p>
+      <h2>Read</h2>
+      <pre><code>const r = await fetch(\`/api/host?action=db/get&pid=\${ENV.PROJECT_ID}\`);
 const { data } = await r.json();
 return { users: data.users };</code></pre>
-        <h2>Write</h2>
-        <pre><code>await fetch("https://folio/api/host?action=db/set", {
+      <h2>Write</h2>
+      <pre><code>await fetch("/api/host?action=db/set", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -6058,8 +6102,8 @@ return { users: data.users };</code></pre>
     value: { text: "Buy milk", done: false },
   }),
 });</code></pre>
-        <h2>Atomic multi-write</h2>
-        <pre><code>await fetch("https://folio/api/host?action=db/batch", {
+      <h2>Atomic multi-write</h2>
+      <pre><code>await fetch("/api/host?action=db/batch", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -6070,57 +6114,66 @@ return { users: data.users };</code></pre>
     ],
   }),
 });</code></pre>
-        <h2>Atomic increment</h2>
-        <pre><code>await fetch("https://folio/api/host?action=db/increment", {
+      <h2>Atomic increment</h2>
+      <pre><code>await fetch("/api/host?action=db/increment", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ pid: ENV.PROJECT_ID, key: "counters/views", by: 1 }),
 });</code></pre>
-        <h2>List</h2>
-        <pre><code>const r = await fetch(\`https://folio/api/host?action=db/list&pid=\${ENV.PROJECT_ID}&path=todos\`);
+      <h2>List</h2>
+      <pre><code>const r = await fetch(\`/api/host?action=db/list&pid=\${ENV.PROJECT_ID}&path=todos\`);
 const { items } = await r.json();</code></pre>
-        <h2>Rules</h2>
-        <ul>
-          <li>Firebase RTDB doesn't support arrays — they become <code class="mono">{"0": …, "1": …}</code></li>
-          <li>Writing <code class="mono">null</code> deletes the path</li>
-          <li>Key segments can't contain <code class="mono">. # $ / [ ]</code></li>
-          <li>Only <code class="mono">action=db/*</code> endpoints are allowed from <code class="mono">api/*.js</code></li>
-        </ul>
-      `,
-    },
-    'private-api': {
-      title: 'Private API',
-      body: `
-        <h2>What is it?</h2>
-        <p><code class="mono">api/*.js</code> files are private: never served over HTTP, only executed when called.</p>
-        <p>The runtime is headless Chromium. Everything a browser has, your script has.</p>
-        <h2>The URL</h2>
-        <pre><code>POST /api/{pid}/{route}</code></pre>
-        <p>The route is the filename without <code class="mono">.js</code>. <code class="mono">api/chat.js</code> becomes <code class="mono">POST /api/{pid}/chat</code>.</p>
-        <h2>Reaching external APIs with @allow</h2>
-        <p>To <code class="mono">fetch</code> an external host, declare it at the top of the file:</p>
-        <pre><code>// @allow api.weather.com
+      <h2>Rules</h2>
+      <ul>
+        <li>Firebase RTDB doesn't support arrays — they become <code class="mono">{"0": …, "1": …}</code></li>
+        <li>Writing <code class="mono">null</code> deletes the path</li>
+        <li>Key segments can't contain <code class="mono">. # $ / [ ]</code></li>
+        <li>Only <code class="mono">action=db/*</code> endpoints are allowed from <code class="mono">api/*.js</code></li>
+      </ul>
+    `,
+  },
+  'private-api': {
+    title: 'Private API',
+    body: `
+      <h2>What is it?</h2>
+      <p><code class="mono">api/*.js</code> files are private: never served over HTTP, only executed when called.</p>
+      <p>The runtime is headless Chromium. Everything a browser has, your script has.</p>
+
+      <h2>The URLs</h2>
+      <p>Two shapes, same behavior:</p>
+      <pre><code>POST https://foliostudios.vercel.app/{username}/project/{slug}/api/{route}
+POST https://foliostudios.vercel.app/api/{pid}/{route}</code></pre>
+      <p>The <strong>friendly URL</strong> uses your username and project slug — this is what appears in the API tab and what you should use in frontend code. It requires one lookup (cached for 60s) to resolve <code class="mono">username + slug</code> to the project id.</p>
+      <p>The <strong>direct URL</strong> uses the project id — no lookup, fastest path. Useful for <code class="mono">_system.js</code> routes, high-throughput clients, or debugging.</p>
+      <p>The <code class="mono">{route}</code> is the filename without <code class="mono">.js</code>. <code class="mono">api/chat.js</code> becomes <code class="mono">POST /{username}/project/{slug}/api/chat</code>.</p>
+
+      <h2>Reaching external APIs with @allow</h2>
+      <p>To <code class="mono">fetch</code> an external host, declare it at the top of the file:</p>
+      <pre><code>// @allow api.weather.com
 // @allow api.example.com
 
 const weather = await fetch("https://api.weather.com/v1/today");
 return await weather.json();</code></pre>
-        <p>If you call a host you didn't declare, the request is blocked with a 403.</p>
-        <h2>Built-in allowed hosts (no @allow needed)</h2>
-        <ul>
-          <li><code class="mono">api.openai.com</code></li>
-          <li><code class="mono">api.groq.com</code></li>
-          <li><code class="mono">api.anthropic.com</code></li>
-          <li><code class="mono">api.stripe.com</code></li>
-          <li><code class="mono">api.supabase.co</code></li>
-          <li><code class="mono">api.resend.com</code></li>
-        </ul>
-        <h2>Imports from CDNs</h2>
-        <p>Import from three allowed CDNs:</p>
-        <pre><code>import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";
+      <p>If you call a host you didn't declare, the request is blocked with a 403.</p>
+
+      <h2>Built-in allowed hosts (no @allow needed)</h2>
+      <ul>
+        <li><code class="mono">api.openai.com</code></li>
+        <li><code class="mono">api.groq.com</code></li>
+        <li><code class="mono">api.anthropic.com</code></li>
+        <li><code class="mono">api.stripe.com</code></li>
+        <li><code class="mono">api.supabase.co</code></li>
+        <li><code class="mono">api.resend.com</code></li>
+      </ul>
+
+      <h2>Imports from CDNs</h2>
+      <p>Import from three allowed CDNs:</p>
+      <pre><code>import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";
 return { html: marked(REQ.body.md) };</code></pre>
-        <p>Allowed: <code class="mono">cdn.jsdelivr.net</code>, <code class="mono">esm.sh</code>, <code class="mono">unpkg.com</code></p>
-        <h2>Returning a response</h2>
-        <pre><code>// JSON (default)
+      <p>Allowed: <code class="mono">cdn.jsdelivr.net</code>, <code class="mono">esm.sh</code>, <code class="mono">unpkg.com</code></p>
+
+      <h2>Returning a response</h2>
+      <pre><code>// JSON (default)
 return { hello: "world" };
 
 // Text
@@ -6128,125 +6181,127 @@ return "Hello, world";
 
 // Custom status
 return { __status: 404, __contentType: "text/plain", __body: "Not found" };</code></pre>
-        <h2>The _system.js file</h2>
-        <p>Auto-created on first deploy. Provides six routes for free:</p>
-        <ul>
-          <li><code class="mono">GET /api/{pid}/health</code> — { status, pid, deployed, responseMs }</li>
-          <li><code class="mono">GET /api/{pid}/whoami</code> — { pid, name, deployedAt, apiVersion }</li>
-          <li><code class="mono">GET /api/{pid}/files</code> — { files, count, totalBytes }</li>
-          <li><code class="mono">GET /api/{pid}/status</code> — richer health</li>
-          <li><code class="mono">GET /api/{pid}/version</code> — { deploymentId, deployedAt, url }</li>
-          <li><code class="mono">GET /api/{pid}/robots</code> — plain text robots.txt</li>
-        </ul>
-        <p>Non-deletable. Editable. Revertible via the file tree menu.</p>
-        <h2>File rules</h2>
-        <ul>
-          <li>Flat folder — no subfolders</li>
-          <li>Lowercase only</li>
-          <li><code class="mono">.js</code> only</li>
-          <li>No <code class="mono">_</code> prefix except <code class="mono">_system.js</code></li>
-          <li>Reserved names: <code class="mono">index.js</code>, <code class="mono">run.js</code>, <code class="mono">health.js</code>, <code class="mono">whoami.js</code>, <code class="mono">files.js</code>, <code class="mono">status.js</code>, <code class="mono">version.js</code>, <code class="mono">robots.js</code></li>
-          <li>Max 10 files total</li>
-          <li>Max 50 KB per file</li>
-          <li>Max 200 KB total</li>
-          <li>Max 20 <code class="mono">@allow</code> lines per file</li>
-          <li>Max 50 unique hosts per project</li>
-        </ul>
-      `,
-    },
-    'limits': {
-      title: 'Limits',
-      body: `
-        <h2>API folder</h2>
-        <ul>
-          <li>Max files: 10 (including <code class="mono">_system.js</code>)</li>
-          <li>Max size per file: 50 KB</li>
-          <li>Max total size: 200 KB</li>
-          <li>Max <code class="mono">@allow</code> lines per file: 20</li>
-          <li>Max unique hosts per project: 50</li>
-        </ul>
-        <h2>Runtime</h2>
-        <ul>
-          <li>Timeout: 10 seconds (7s user code)</li>
-          <li>Memory: 128 MB</li>
-          <li>Max response: 5 MB</li>
-          <li>Max request body: 1 MB</li>
-        </ul>
-        <h2>Rate limits</h2>
-        <ul>
-          <li>Per session, per route: 10/min</li>
-          <li>Per session, all routes: 50/min</li>
-          <li>Per project, all routes: 500/hour</li>
-          <li>Per project, all routes: 2,000/day</li>
-          <li>Per project, per route: 100/hour</li>
-        </ul>
-        <h2>Secrets</h2>
-        <ul>
-          <li>Max value: 16 KB</li>
-          <li>Max total per project: 512 KB</li>
-          <li>Max count: 50</li>
-        </ul>
-        <h2>JSON DB</h2>
-        <ul>
-          <li>Max total: 15 MB per project</li>
-          <li>Max per write: 2 MB</li>
-          <li>Max batch entries: 100</li>
-        </ul>
-      `,
-    },
-    'errors': {
-      title: 'Errors',
-      body: `
-        <h2>Runtime errors</h2>
-        <table class="db-table">
-          <thead><tr><th>Cause</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td>Script throws</td><td>500</td></tr>
-            <tr><td>Timeout (7s)</td><td>504</td></tr>
-            <tr><td>Fetch blocked (undeclared host)</td><td>403</td></tr>
-            <tr><td>Fetch failed (network)</td><td>502</td></tr>
-            <tr><td>Import blocked (unallowed CDN)</td><td>403</td></tr>
-            <tr><td>Route not found</td><td>404</td></tr>
-            <tr><td>Auth required</td><td>401</td></tr>
-            <tr><td>Rate limit exceeded</td><td>429</td></tr>
-            <tr><td>Secrets failed to decrypt</td><td>500</td></tr>
-            <tr><td>Recursion limit exceeded</td><td>508</td></tr>
-            <tr><td>Response too large (> 5 MB)</td><td>413</td></tr>
-            <tr><td>Request body too large (> 1 MB)</td><td>413</td></tr>
-          </tbody>
-        </table>
-        <h2>Deploy errors</h2>
-        <table class="db-table">
-          <thead><tr><th>Cause</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td>Invalid @allow host</td><td>400 (whole deploy rejected)</td></tr>
-            <tr><td>Too many @allow lines</td><td>400</td></tr>
-            <tr><td>Too many unique hosts</td><td>400</td></tr>
-            <tr><td>Reserved file name</td><td>400</td></tr>
-            <tr><td>File too large</td><td>400</td></tr>
-            <tr><td>Too many files</td><td>400</td></tr>
-            <tr><td>Deploy write fails</td><td>500 (rollback)</td></tr>
-          </tbody>
-        </table>
-        <h2>What gets rejected by @allow</h2>
-        <ul>
-          <li>IP addresses (<code class="mono">10.0.0.5</code>, <code class="mono">169.254.169.254</code>)</li>
-          <li>Hosts resolving to private IPs</li>
-          <li><code class="mono">localhost</code></li>
-          <li><code class="mono">*.vercel.app</code> (Folio's own infrastructure)</li>
-          <li>Wildcards (<code class="mono">*.example.com</code>)</li>
-          <li>Ports (<code class="mono">api.example.com:8080</code>)</li>
-          <li>Paths (<code class="mono">api.example.com/path</code>)</li>
-          <li>Non-HTTPS hosts</li>
-          <li>Hosts that don't respond to HTTPS</li>
-        </ul>
-      `,
-    },
-    'examples': {
-      title: 'Examples',
-      body: `
-        <h2>AI chat with OpenAI</h2>
-        <pre><code>const r = await fetch("https://api.openai.com/v1/chat/completions", {
+
+      <h2>The _system.js file</h2>
+      <p>Auto-created on first deploy. Provides six routes for free:</p>
+      <ul>
+        <li><code class="mono">GET /{username}/project/{slug}/api/health</code> — { status, pid, deployed, responseMs }</li>
+        <li><code class="mono">GET /{username}/project/{slug}/api/whoami</code> — { pid, name, deployedAt, apiVersion }</li>
+        <li><code class="mono">GET /{username}/project/{slug}/api/files</code> — { files, count, totalBytes }</li>
+        <li><code class="mono">GET /{username}/project/{slug}/api/status</code> — richer health</li>
+        <li><code class="mono">GET /{username}/project/{slug}/api/version</code> — { deploymentId, deployedAt, url }</li>
+        <li><code class="mono">GET /{username}/project/{slug}/api/robots</code> — plain text robots.txt</li>
+      </ul>
+      <p>Non-deletable. Editable. Revertible via the file tree menu.</p>
+
+      <h2>File rules</h2>
+      <ul>
+        <li>Flat folder — no subfolders</li>
+        <li>Lowercase only</li>
+        <li><code class="mono">.js</code> only</li>
+        <li>No <code class="mono">_</code> prefix except <code class="mono">_system.js</code></li>
+        <li>Reserved names: <code class="mono">index.js</code>, <code class="mono">run.js</code>, <code class="mono">health.js</code>, <code class="mono">whoami.js</code>, <code class="mono">files.js</code>, <code class="mono">status.js</code>, <code class="mono">version.js</code>, <code class="mono">robots.js</code></li>
+        <li>Max 10 files total</li>
+        <li>Max 50 KB per file</li>
+        <li>Max 200 KB total</li>
+        <li>Max 20 <code class="mono">@allow</code> lines per file</li>
+        <li>Max 50 unique hosts per project</li>
+      </ul>
+    `,
+  },
+  'limits': {
+    title: 'Limits',
+    body: `
+      <h2>API folder</h2>
+      <ul>
+        <li>Max files: 10 (including <code class="mono">_system.js</code>)</li>
+        <li>Max size per file: 50 KB</li>
+        <li>Max total size: 200 KB</li>
+        <li>Max <code class="mono">@allow</code> lines per file: 20</li>
+        <li>Max unique hosts per project: 50</li>
+      </ul>
+      <h2>Runtime</h2>
+      <ul>
+        <li>Timeout: 10 seconds (7s user code)</li>
+        <li>Memory: 128 MB</li>
+        <li>Max response: 5 MB</li>
+        <li>Max request body: 1 MB</li>
+      </ul>
+      <h2>Rate limits</h2>
+      <ul>
+        <li>Per session, per route: 10/min</li>
+        <li>Per session, all routes: 50/min</li>
+        <li>Per project, all routes: 500/hour</li>
+        <li>Per project, all routes: 2,000/day</li>
+        <li>Per project, per route: 100/hour</li>
+      </ul>
+      <h2>Secrets</h2>
+      <ul>
+        <li>Max value: 16 KB</li>
+        <li>Max total per project: 512 KB</li>
+        <li>Max count: 50</li>
+      </ul>
+      <h2>JSON DB</h2>
+      <ul>
+        <li>Max total: 15 MB per project</li>
+        <li>Max per write: 2 MB</li>
+        <li>Max batch entries: 100</li>
+      </ul>
+    `,
+  },
+  'errors': {
+    title: 'Errors',
+    body: `
+      <h2>Runtime errors</h2>
+      <table class="db-table">
+        <thead><tr><th>Cause</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Script throws</td><td>500</td></tr>
+          <tr><td>Timeout (7s)</td><td>504</td></tr>
+          <tr><td>Fetch blocked (undeclared host)</td><td>403</td></tr>
+          <tr><td>Fetch failed (network)</td><td>502</td></tr>
+          <tr><td>Import blocked (unallowed CDN)</td><td>403</td></tr>
+          <tr><td>Route not found</td><td>404</td></tr>
+          <tr><td>Auth required</td><td>401</td></tr>
+          <tr><td>Rate limit exceeded</td><td>429</td></tr>
+          <tr><td>Secrets failed to decrypt</td><td>500</td></tr>
+          <tr><td>Recursion limit exceeded</td><td>508</td></tr>
+          <tr><td>Response too large (> 5 MB)</td><td>413</td></tr>
+          <tr><td>Request body too large (> 1 MB)</td><td>413</td></tr>
+        </tbody>
+      </table>
+      <h2>Deploy errors</h2>
+      <table class="db-table">
+        <thead><tr><th>Cause</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Invalid @allow host</td><td>400 (whole deploy rejected)</td></tr>
+          <tr><td>Too many @allow lines</td><td>400</td></tr>
+          <tr><td>Too many unique hosts</td><td>400</td></tr>
+          <tr><td>Reserved file name</td><td>400</td></tr>
+          <tr><td>File too large</td><td>400</td></tr>
+          <tr><td>Too many files</td><td>400</td></tr>
+          <tr><td>Deploy write fails</td><td>500 (rollback)</td></tr>
+        </tbody>
+      </table>
+      <h2>What gets rejected by @allow</h2>
+      <ul>
+        <li>IP addresses (<code class="mono">10.0.0.5</code>, <code class="mono">169.254.169.254</code>)</li>
+        <li>Hosts resolving to private IPs</li>
+        <li><code class="mono">localhost</code></li>
+        <li><code class="mono">*.vercel.app</code> (Folio's own infrastructure)</li>
+        <li>Wildcards (<code class="mono">*.example.com</code>)</li>
+        <li>Ports (<code class="mono">api.example.com:8080</code>)</li>
+        <li>Paths (<code class="mono">api.example.com/path</code>)</li>
+        <li>Non-HTTPS hosts</li>
+        <li>Hosts that don't respond to HTTPS</li>
+      </ul>
+    `,
+  },
+  'examples': {
+    title: 'Examples',
+    body: `
+      <h2>AI chat with OpenAI</h2>
+      <pre><code>const r = await fetch("https://api.openai.com/v1/chat/completions", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -6260,8 +6315,8 @@ return { __status: 404, __contentType: "text/plain", __body: "Not found" };</cod
 const data = await r.json();
 return { reply: data.choices[0].message.content };</code></pre>
 
-        <h2>External weather API</h2>
-        <pre><code>// @allow api.open-meteo.com
+      <h2>External weather API</h2>
+      <pre><code>// @allow api.open-meteo.com
 
 const lat = REQ.body.lat || 52.52;
 const lon = REQ.body.lon || 13.41;
@@ -6270,10 +6325,10 @@ const r = await fetch(
 );
 return await r.json();</code></pre>
 
-        <h2>Todos with JSON DB</h2>
-        <pre><code>if (REQ.method === "POST" && REQ.body.text) {
+      <h2>Todos with JSON DB</h2>
+      <pre><code>if (REQ.method === "POST" && REQ.body.text) {
   const id = crypto.randomUUID();
-  await fetch("https://folio/api/host?action=db/set", {
+  await fetch("/api/host?action=db/set", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -6284,12 +6339,12 @@ return await r.json();</code></pre>
   });
   return { ok: true, id };
 }
-const r = await fetch(\`https://folio/api/host?action=db/list&pid=\${ENV.PROJECT_ID}&path=todos\`);
+const r = await fetch(\`/api/host?action=db/list&pid=\${ENV.PROJECT_ID}&path=todos\`);
 const { items } = await r.json();
 return { todos: items };</code></pre>
 
-        <h2>Image resize with OffscreenCanvas</h2>
-        <pre><code>const blob = await (await fetch(REQ.body.imageUrl)).blob();
+      <h2>Image resize with OffscreenCanvas</h2>
+      <pre><code>const blob = await (await fetch(REQ.body.imageUrl)).blob();
 const bitmap = await createImageBitmap(blob);
 const canvas = new OffscreenCanvas(400, 300);
 const ctx = canvas.getContext("2d");
@@ -6299,20 +6354,35 @@ const buffer = await out.arrayBuffer();
 const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
 return { dataUrl: \`data:image/webp;base64,\${base64}\` };</code></pre>
 
-        <h2>Markdown from CDN</h2>
-        <pre><code>import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";
+      <h2>Markdown from CDN</h2>
+      <pre><code>import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";
 return { html: marked(REQ.body.md) };</code></pre>
 
-        <h2>Using ENV reserved vars</h2>
-        <pre><code>// Log with correlation
-console.log(\`[\${ENV.API_ROUTE}] [\${ENV.REQUEST_ID}] handling request\`);
+      <h2>Frontend: calling the friendly URL</h2>
+      <pre><code>// In your app.js, called from the browser
+const USERNAME = "your-username";
+const SLUG = "your-project-slug";
 
-// Call Folio's DB for this project
-const r = await fetch(\`\${ENV.FOLIO_API_URL}/host?action=db/get&pid=\${ENV.PROJECT_ID}\`);
-return await r.json();</code></pre>
-      `,
-    },
-  };
+const res = await fetch(\`/\${USERNAME}/project/\${SLUG}/api/chat\`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: "Hello" }),
+});
+const { reply } = await res.json();</code></pre>
+
+      <h2>Frontend: calling the direct URL</h2>
+      <pre><code>// Same request, different URL shape — identical behavior
+const PID = "p_abc123";
+
+const res = await fetch(\`/api/\${PID}/chat\`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: "Hello" }),
+});
+const { reply } = await res.json();</code></pre>
+    `,
+  },
+};
 
   let _docsActiveSection = 'getting-started';
 
