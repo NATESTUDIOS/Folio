@@ -2883,22 +2883,23 @@ async function handleServe(req, res, reqId) {
     });
 
     // ── Inject public secrets (only from live deployment) ───────
-    if (!fromId) {
-      try {
-        const publicSecrets = await projectSecrets.readPublicSecrets(pid);
-        if (publicSecrets && Object.keys(publicSecrets).length > 0) {
-          const payload = JSON.stringify(publicSecrets).replace(/</g, "\\u003c");
-          const script = `<script>window.__SECRETS__=Object.freeze(${payload});</script>`;
-          if (/<\/head>/i.test(html)) {
-            html = html.replace(/<\/head>/i, script + "\n</head>");
-          } else {
-            html = script + html;
-          }
-        }
-      } catch (err) {
-        log("host.serve.secrets_inject_failed", { pid, message: err.message });
-      }
+if (!fromId) {
+  try {
+    const publicSecrets = await projectSecrets.readPublicSecrets(pid);
+    const pidJson = JSON.stringify(pid);
+    const secretsJson = (publicSecrets && Object.keys(publicSecrets).length > 0)
+      ? `window.__SECRETS__=Object.freeze(${JSON.stringify(publicSecrets).replace(/</g, "\\u003c")});`
+      : "";
+    const script = `<script>${secretsJson}window.__DN_PID__=${pidJson};</script>`;
+    if (/<\/head>/i.test(html)) {
+      html = html.replace(/<\/head>/i, script + "\n</head>");
+    } else {
+      html = script + html;
     }
+  } catch (err) {
+    log("host.serve.secrets_inject_failed", { pid, message: err.message });
+  }
+}
 
     res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
     return res.status(200).send(html);
