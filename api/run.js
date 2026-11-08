@@ -37,12 +37,18 @@
 //  Overwriting it with path.dirname(executablePath) (/tmp) breaks
 //  the browser launch because the libs aren't actually there.
 //
+//  ⚠  SYSTEM vs USER ROUTES
+//  System routes (health, whoami, files, status, version, robots)
+//  are all served by a single file: _system.js. It branches
+//  internally on REQ.route. loadRouteFile handles the fallback.
+//
 //  ⚠  LATENCY NOTE
 //  On Vercel free tier, every invocation launches Chromium fresh
 //  (~1.5–2s cold start). Serverless functions cannot keep processes
 //  alive between calls on free tier. Expect ~2s per /api/* call.
 // ═══════════════════════════════════════════════════════════════════
 
+import fs from "node:fs";
 import crypto from "node:crypto";
 import net from "node:net";
 import { db } from "../utils/firebase.js";
@@ -69,10 +75,9 @@ const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ||
   "https://foliostudios.vercel.app";
 
-const INVOKE_TIMEOUT_MS = 10000;
 const USER_CODE_TIMEOUT_MS = 7000;
-const PAGE_SETUP_TIMEOUT_MS = 3000;
-const CHROMIUM_LAUNCH_TIMEOUT_MS = 4000;
+const PAGE_SETUP_TIMEOUT_MS = 5000;
+const CHROMIUM_LAUNCH_TIMEOUT_MS = 15000;
 
 const MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -390,15 +395,13 @@ async function launchBrowser() {
   // dynamic linker look in the wrong directory, and Chromium dies
   // with "libnspr4.so: cannot open shared object file".
 
-  // ── 4. Pin writable dirs to /tmp ───────────────────────────────
-  // Vercel functions run from a read-only filesystem except /tmp.
-  // Chromium writes profile, cache, crash dumps, and font config
-  // during startup. Without these, Chromium either fails to boot or
-  // boots into a broken state that throws on the first navigation.
-  process.env.HOME = "/tmp";
-  process.env.XDG_CONFIG_HOME = "/tmp/.chromium";
-  process.env.XDG_CACHE_HOME  = "/tmp/.chromium";
-  process.env.FONTCONFIG_PATH = "/tmp/.chromium/fonts";
+  // ── 4. Ensure the profile directory exists ─────────────────────
+  // Chromium writes its user profile here. On Vercel only /tmp is
+  // writable. mkdir is idempotent and cheap; safer than assuming
+  // the directory already exists.
+  try {
+    fs.mkdirSync("/tmp/.chromium/profile", { recursive: true });
+  } catch {}
 
   // ── 5. Launch ──────────────────────────────────────────────────
   const browser = await puppeteer.launch({
@@ -750,19 +753,27 @@ async function loadInvocationContext(pid, route) {
   return { project, deployment, publicFiles, apiRoutes, isSystemRoute, isUserRoute };
 }
 
-async function loadRouteFile(pid, route) {
-  // Two storage conventions exist depending on when the file was
-  // deployed:
+async function loadRouteFile(pid, route, isSystemRoute) {
+  // System routes (health, whoami, files, status, version, robots) are
+  // all served by the single file _system.js, which branches internally
+  // on REQ.route. Try both storage keys the deploy pipeline has used:
   //
-  //   api-files/{pid}/api__notes.js  ← canonical (reader-expected form)
-  //   api-files/{pid}/notes.js       ← legacy   (writer-actual form)
+  //   api-files/{pid}/_system.js       ← canonical (writer-actual form)
+  //   api-files/{pid}/api___system.js  ← legacy   (reader-expected form)
   //
-  // Try both, first match wins. This makes the runtime robust to
-  // whichever key the current deploy pipeline actually writes.
-  const candidates = [
-    sanitizeFirebasePath(`api/${route}.js`.replace(/\//g, "__")), // api__notes.js
-    sanitizeFirebasePath(`${route}.js`),                          // notes.js
-  ];
+  // User routes (notes, etc.) try the two storage conventions:
+  //
+  //   api-files/{pid}/api__notes.js  ← canonical
+  //   api-files/{pid}/notes.js       ← legacy
+  const candidates = [];
+
+  if (isSystemRoute) {
+    candidates.push(sanitizeFirebasePath("_system.js"));
+    candidates.push(sanitizeFirebasePath("api___system.js"));
+  }
+
+  candidates.push(sanitizeFirebasePath(`api/${route}.js`.replace(/\//g, "__")));
+  candidates.push(sanitizeFirebasePath(`${route}.js`));
 
   for (const key of candidates) {
     const snap = await db.ref(`api-files/${pid}/${key}`).once("value");
@@ -875,7 +886,7 @@ export default async function handler(req, res) {
   }
 
   // ── Load route file ────────────────────────────────────────────
-  const userCode = await loadRouteFile(pid, route);
+  const userCode = await loadRouteFile(pid, route, ctx.isSystemRoute);
   if (!userCode || !userCode.trim()) {
     return res.status(404).json({ success: false, error: "Route file not found", route });
   }
@@ -1036,6 +1047,7 @@ export default async function handler(req, res) {
   const responseBody =
     typeof result.body === "string" ? result.body : JSON.stringify(result.body);
   const responseBytes = Buffer.byteLength(responseBody, "utf8");
+  const responseStatus = Number(result.status) || 200;
 
   if (responseBytes > MAX_RESPONSE_BYTES) {
     await logProjectEvent(pid, actor?.uid || null, "api", `run.${route}`, {
@@ -1048,7 +1060,7 @@ export default async function handler(req, res) {
   }
 
   await logProjectEvent(pid, actor?.uid || null, "api", `run.${route}`, {
-    status: result.status || 200,
+    status: responseStatus,
     durationMs,
     bytesOut: responseBytes,
     fetchHosts: runResult.fetchHosts || [],
@@ -1058,7 +1070,7 @@ export default async function handler(req, res) {
     reqId,
     pid,
     route,
-    status: result.status,
+    status: responseStatus,
     durationMs,
     bytesOut: responseBytes,
     fetchHosts: runResult.fetchHosts || [],
@@ -1069,7 +1081,7 @@ export default async function handler(req, res) {
   res.setHeader("X-Execution-Time", String(durationMs));
   res.setHeader("X-Fetch-Hosts", (runResult.fetchHosts || []).join(","));
 
-  return res.status(result.status || 200).send(responseBody);
+  return res.status(responseStatus).send(responseBody);
 }
 
 // =========================================================================
@@ -1079,7 +1091,7 @@ export default async function handler(req, res) {
 export const config = {
   runtime: "nodejs",
   memory: 1024,
-  maxDuration: 10,
+  maxDuration: 30,
 };
 
 export { BASE_URL };
