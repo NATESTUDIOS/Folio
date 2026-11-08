@@ -4,11 +4,21 @@
 // FOLIO — PRODUCTION SERVICE WORKER
 // Offline-first application shell, navigation, assets and FCM
 // ============================================================
+//
+// CACHE_VERSION and CACHE_BUILT_AT are injected at build time by
+// scripts/swpush.js.
+//
+// CACHE_VERSION is a millisecond Unix timestamp. Every build bumps
+// it, so the SW always re-installs — even if the source is
+// identical and the same commit is redeployed.
+//
+// CACHE_BUILT_AT mirrors the same millisecond value so client code
+// can display "build X" without parsing the cache name.
 
-const CACHE_VERSION = '2026-11-08-1';
+const CACHE_VERSION = '__FOLIO_SW_VERSION__';
+const CACHE_BUILT_AT = Number('__FOLIO_SW_BUILT_AT__');
+
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
-
-const CACHE_BUILT_AT = Date.now();
 
 const NAVIGATION_TIMEOUT = 5000;
 
