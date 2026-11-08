@@ -6,18 +6,17 @@
 // ============================================================
 //
 // CACHE_VERSION and CACHE_BUILT_AT are injected at build time by
-// scripts/swpush.js.
+// scripts/swpush.cjs.
 //
-// CACHE_VERSION is a millisecond Unix timestamp. Every build bumps
-// it, so the SW always re-installs — even if the source is
+// CACHE_VERSION is a millisecond Unix timestamp. Every build
+// bumps it, so the SW always re-installs — even if the source is
 // identical and the same commit is redeployed.
 //
-// CACHE_BUILT_AT mirrors the same millisecond value so client code
-// can display "build X" without parsing the cache name.
+// CACHE_BUILT_AT mirrors the same millisecond value so client
+// code can display "build X" without parsing the cache name.
 
 const CACHE_VERSION = '__FOLIO_SW_VERSION__';
 const CACHE_BUILT_AT = Number('__FOLIO_SW_BUILT_AT__');
-
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 
 const NAVIGATION_TIMEOUT = 5000;
