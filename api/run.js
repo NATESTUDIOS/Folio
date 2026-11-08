@@ -15,6 +15,13 @@
 //  Both produce the same invocation. The direct URL is faster
 //  (no slug resolution); the friendly URL is what users document.
 //
+//  ⚠  AUTH MODEL
+//  The runtime does NOT require authentication. The user's script
+//  decides what needs a token — e.g. notes.js handles register,
+//  login, and public-get without a session, and calls requireAuth()
+//  internally for the rest. Gating at the runtime level would block
+//  public endpoints.
+//
 //  ⚠  LATENCY NOTE
 //  On Vercel free tier, every invocation launches Chromium fresh
 //  (~1.5–2s cold start). Serverless functions cannot keep processes
@@ -226,6 +233,14 @@ async function enforceRate(sessionId, pid, route) {
 // =========================================================================
 // AUTH
 // =========================================================================
+//
+// authenticate() returns the caller when a valid session or project key
+// is present, or null when there isn't one. It's used to attribute rate
+// limits and log entries — NOT to gate execution.
+//
+// The user's script decides what requires auth. For example, notes.js
+// exposes register/login/public-get without a session, and calls its
+// own requireAuth() for the rest.
 
 async function authenticate(req, pid) {
   const apiKey = req.headers["x-project-key"];
@@ -755,13 +770,17 @@ export default async function handler(req, res) {
   }
 
   // ── Auth ───────────────────────────────────────────────────────
-  const actor = await authenticate(req, pid);
-  if (!actor) {
-    return res.status(401).json({ success: false, error: "Authentication required" });
-  }
+  // Do NOT require authentication. The user's script decides what
+  // needs a token. We still resolve the caller (when present) so
+  // rate limits and logs are attributed correctly.
+  const actor = await authenticate(req, pid).catch(() => null);
 
   // ── Rate limit ─────────────────────────────────────────────────
-  const rate = await enforceRate(actor.sessionId, pid, route).catch(() => ({
+  // Authenticated callers rate-limit per uid/key; anonymous callers
+  // rate-limit per IP. This preserves abuse protection for public
+  // endpoints like register/login/public-get.
+  const sessionId = actor?.sessionId || `anon_${hashIp(getClientIp(req))}`;
+  const rate = await enforceRate(sessionId, pid, route).catch(() => ({
     allowed: false,
     retryAfter: 60,
   }));
@@ -813,7 +832,7 @@ export default async function handler(req, res) {
 
     if (driftDetected) {
       log("run.host_drift_detected", { reqId, pid, route });
-      logProjectEvent(pid, actor.uid || null, "api", "host_drift_detected", { route }).catch(
+      logProjectEvent(pid, actor?.uid || null, "api", "host_drift_detected", { route }).catch(
         () => {},
       );
     }
@@ -921,7 +940,7 @@ export default async function handler(req, res) {
       route,
     }).catch(() => {});
 
-    await logProjectEvent(pid, actor.uid || null, "api", `run.${route}`, {
+    await logProjectEvent(pid, actor?.uid || null, "api", `run.${route}`, {
       status,
       durationMs,
       errorName: runResult.errorName || "Error",
@@ -947,7 +966,7 @@ export default async function handler(req, res) {
   const responseBytes = Buffer.byteLength(responseBody, "utf8");
 
   if (responseBytes > MAX_RESPONSE_BYTES) {
-    await logProjectEvent(pid, actor.uid || null, "api", `run.${route}`, {
+    await logProjectEvent(pid, actor?.uid || null, "api", `run.${route}`, {
       status: 413,
       durationMs,
       bytesOut: responseBytes,
@@ -956,7 +975,7 @@ export default async function handler(req, res) {
     return res.status(413).json({ success: false, error: "Response too large" });
   }
 
-  await logProjectEvent(pid, actor.uid || null, "api", `run.${route}`, {
+  await logProjectEvent(pid, actor?.uid || null, "api", `run.${route}`, {
     status: result.status || 200,
     durationMs,
     bytesOut: responseBytes,
@@ -971,6 +990,7 @@ export default async function handler(req, res) {
     durationMs,
     bytesOut: responseBytes,
     fetchHosts: runResult.fetchHosts || [],
+    via: actor?.via || "anon",
   });
 
   res.setHeader("Content-Type", result.contentType || "application/json");
