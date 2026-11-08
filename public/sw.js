@@ -15,8 +15,8 @@
 // CACHE_BUILT_AT mirrors the same millisecond value so client
 // code can display "build X" without parsing the cache name.
 
-const CACHE_VERSION = "__FOLIO_SW_VERSION__";
-const CACHE_BUILT_AT = Number("__FOLIO_SW_BUILT_AT__");
+const CACHE_VERSION = '__FOLIO_SW_VERSION__';
+const CACHE_BUILT_AT = Number('__FOLIO_SW_BUILT_AT__');
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 
 const NAVIGATION_TIMEOUT = 5000;
