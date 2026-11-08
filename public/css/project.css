@@ -657,16 +657,16 @@ svg { display: block; }
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  padding: 12px 12px calc(12px + var(--safe-bottom) + 40px);
+  padding: 12px 12px calc(12px + var(--safe-bottom));
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 @media (min-width: 640px) {
-  .main-content { padding: 20px 20px calc(20px + var(--safe-bottom) + 20px); }
+  .main-content { padding: 20px 20px calc(20px + var(--safe-bottom)); }
 }
 @media (min-width: 1024px) {
-  .main-content { padding: 24px 24px 24px; }
+  .main-content { padding: 24px 24px calc(24px + var(--safe-bottom)); }
 }
 .main-content::-webkit-scrollbar { width: 6px; }
 .main-content::-webkit-scrollbar-thumb { background: var(--theme-divider); border-radius: 3px; }
@@ -687,8 +687,12 @@ svg { display: block; }
   gap: 12px;
   animation: panelIn 0.25s var(--ease);
   min-width: 0;
+  padding-bottom: 12px;
 }
 .panel.active { display: flex; }
+@media (min-width: 640px) {
+  .panel { padding-bottom: 16px; }
+}
 @keyframes panelIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -3871,6 +3875,7 @@ svg { display: block; }
   .docs-content-body pre { border: 1px solid #ccc; background: #f8f8f8; color: #000; }
   .docs-content-body code { background: #f0f0f0; border-color: #ccc; color: #000; }
 }
+
 /* ═══════════════════════════════════════════════════════════
    API LOGS — collapsible rows
    ═══════════════════════════════════════════════════════════ */
