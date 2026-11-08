@@ -41,9 +41,11 @@
     "@resvg/resvg-js": "^2.6.2",
     "cheerio": "^1.0.0",
     "firebase-admin": "^13.0.1",
-"@sparticuz/chromium": "^123.0.1",
-"puppeteer-core": "^22.0.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "@sparticuz/chromium-min": "^141.0.0",
+    "@sparticuz/chromium": "^131.0.0",
+    "puppeteer-core": "^24.23.1",
+    "playwright-core": "1.39.0"
   },
   "devDependencies": {
     "vercel": "^39.0.0"

@@ -2,40 +2,53 @@
 // ═══════════════════════════════════════════════════════════════════
 //  Folio — Private API Runtime (Vercel Serverless / Chromium)
 //  ────────────────────────────────────────────────────────────────
-//  POST /api/{pid}/{route}
+//  Two URL shapes are supported:
 //
-//  Runs user-authored api/*.js in headless Chromium.
-//  Full browser platform available: fetch, import, Image,
-//  OffscreenCanvas, DOMParser, crypto.subtle, WebAssembly, Blob,
-//  FileReader, URL, setTimeout, etc.
+//    1. Friendly:  POST /{username}/project/{slug}/api/{route}
+//       → Vercel rewrite → /api/run?username=…&project=…&route=…
+//       → runtime resolves username + project slug → pid
+//
+//    2. Direct:    POST /api/{pid}/{route}
+//       → Vercel rewrite → /api/run?pid=…&route=…
+//       → runtime uses pid directly (no lookup)
+//
+//  Both produce the same invocation. The direct URL is faster
+//  (no slug resolution); the friendly URL is what users document.
+//
+//  ⚠  AUTH MODEL
+//  The runtime does NOT require authentication. The user's script
+//  decides what needs a token — e.g. notes.js handles register,
+//  login, and public-get without a session, and calls requireAuth()
+//  internally for the rest. Gating at the runtime level would block
+//  public endpoints.
+//
+//  ⚠  CHROMIUM MIN
+//  We use @sparticuz/chromium-min (not @sparticuz/chromium). The
+//  full package relies on runtime environment detection to decide
+//  whether to extract its shared-library archive — that detection
+//  fails on Vercel Node 20+/24, leaving Chromium without libnspr4.so
+//  and libnss3.so. The -min variant downloads a pack from a URL you
+//  provide, so it never tries to detect the environment.
+//
+//  ⚠  LD_LIBRARY_PATH
+//  Do NOT override process.env.LD_LIBRARY_PATH manually. The
+//  chromium-min package sets it to point at the extracted libraries
+//  (e.g. /tmp/al2023/lib), where libnspr4.so and libnss3.so live.
+//  Overwriting it with path.dirname(executablePath) (/tmp) breaks
+//  the browser launch because the libs aren't actually there.
+//
+//  ⚠  SYSTEM vs USER ROUTES
+//  System routes (health, whoami, files, status, version, robots)
+//  are all served by a single file: _system.js. It branches
+//  internally on REQ.route. loadRouteFile handles the fallback.
 //
 //  ⚠  LATENCY NOTE
 //  On Vercel free tier, every invocation launches Chromium fresh
 //  (~1.5–2s cold start). Serverless functions cannot keep processes
 //  alive between calls on free tier. Expect ~2s per /api/* call.
-//
-//  If you need ~150ms warm starts, deploy this file to Railway,
-//  Fly Machines, or a self-hosted VPS running a persistent Node
-//  process — the code works unchanged there.
-//
-//  Timeout budget (10s total):
-//    - Chromium launch:    ~1500ms
-//    - Page setup:          ~200ms
-//    - User code:           up to ~7500ms
-//    - Response read:       ~100ms
-//
-//  ENV layout (injected as window.ENV):
-//    Reserved (auto, read-only):
-//      PROJECT_ID, PROJECT_NAME, PROJECT_SLUG, PROJECT_URL
-//      OWNER_USERNAME, OWNER_UID
-//      DEPLOYMENT_ID, DEPLOYMENT_URL
-//      FOLIO_BASE_URL, FOLIO_API_URL
-//      API_ROUTE, REQUEST_ID
-//      FOLIO_API_KEY  (if generated)
-//    User secrets (from vault):
-//      Any user-defined keys (e.g. OPENAI_API_KEY)
 // ═══════════════════════════════════════════════════════════════════
 
+import fs from "node:fs";
 import crypto from "node:crypto";
 import net from "node:net";
 import { db } from "../utils/firebase.js";
@@ -62,14 +75,19 @@ const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ||
   "https://foliostudios.vercel.app";
 
-const INVOKE_TIMEOUT_MS = 10000;
 const USER_CODE_TIMEOUT_MS = 7000;
-const PAGE_SETUP_TIMEOUT_MS = 3000;
-const CHROMIUM_LAUNCH_TIMEOUT_MS = 4000;
+const PAGE_SETUP_TIMEOUT_MS = 5000;
+const CHROMIUM_LAUNCH_TIMEOUT_MS = 15000;
 
 const MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const MAX_RECURSION_DEPTH = 3;
+
+// Chromium pack URL — @sparticuz/chromium-min downloads and extracts
+// this tarball on first use. Version must match the minor line of the
+// installed package (@sparticuz/chromium-min@^141.0.0).
+const CHROMIUM_PACK_URL =
+  "https://github.com/Sparticuz/chromium/releases/download/v141.0.0/chromium-v141.0.0-pack.x64.tar";
 
 const BUILTIN_ALLOWED_HOSTS = new Set([
   "api.openai.com",
@@ -86,7 +104,6 @@ const ALLOWED_IMPORT_HOSTS = new Set([
   "unpkg.com",
 ]);
 
-// Derived from BASE_URL so custom domains work automatically
 let _folioHost = null;
 try { _folioHost = new URL(BASE_URL).hostname.toLowerCase(); } catch {}
 const FOLIO_INTERNAL_HOSTS = new Set(["folio", _folioHost].filter(Boolean));
@@ -98,6 +115,91 @@ const RATE_LIMITS = {
   perProjectDay: { max: 2000, window: 24 * 60 * 60 * 1000 },
   perProjectPerRouteHour: { max: 100, window: 60 * 60 * 1000 },
 };
+
+const SLUG_CACHE_TTL = 60 * 1000; // 60 seconds
+const SLUG_CACHE_MAX = 500;
+
+// =========================================================================
+// SLUG RESOLUTION CACHE
+// =========================================================================
+
+const PROJECT_SLUG_CACHE = new Map();
+
+function slugCacheGet(username, slug) {
+  const key = `${username}/${slug}`;
+  const entry = PROJECT_SLUG_CACHE.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.at > SLUG_CACHE_TTL) {
+    PROJECT_SLUG_CACHE.delete(key);
+    return null;
+  }
+  return entry.pid;
+}
+
+function slugCacheSet(username, slug, pid) {
+  if (PROJECT_SLUG_CACHE.size >= SLUG_CACHE_MAX) {
+    const first = PROJECT_SLUG_CACHE.keys().next().value;
+    if (first) PROJECT_SLUG_CACHE.delete(first);
+  }
+  PROJECT_SLUG_CACHE.set(`${username}/${slug}`, { pid, at: Date.now() });
+}
+
+async function resolveProjectBySlug(username, slug) {
+  if (!username || !slug) return null;
+
+  const cached = slugCacheGet(username, slug);
+  if (cached) return cached;
+
+  // Fast path: slug index
+  try {
+    const idxSnap = await db
+      .ref(`projectSlugs/${username}/${slug}`)
+      .once("value");
+    if (idxSnap.exists()) {
+      const pid = idxSnap.val();
+      if (typeof pid === "string" && pid.startsWith("p_")) {
+        slugCacheSet(username, slug, pid);
+        return pid;
+      }
+    }
+  } catch (err) {
+    log("run.slug_index_lookup_failed", { username, slug, message: err.message });
+  }
+
+  // Fallback: scan this user's projects
+  try {
+    const userSnap = await db.ref(`usernames/${username}`).once("value");
+    if (!userSnap.exists()) return null;
+    const uid = userSnap.val();
+    if (!uid) return null;
+
+    const projectsSnap = await db
+      .ref("projects")
+      .orderByChild("ownerId")
+      .equalTo(uid)
+      .once("value");
+    if (!projectsSnap.exists()) return null;
+
+    let foundPid = null;
+    projectsSnap.forEach((child) => {
+      const p = child.val() || {};
+      if (p.slug === slug && p.ownerId === uid) foundPid = child.key;
+    });
+
+    if (foundPid) {
+      // Self-heal the index
+      db.ref(`projectSlugs/${username}/${slug}`)
+        .set(foundPid)
+        .catch(() => {});
+      slugCacheSet(username, slug, foundPid);
+      return foundPid;
+    }
+  } catch (err) {
+    log("run.slug_scan_failed", { username, slug, message: err.message });
+  }
+
+  return null;
+}
 
 // =========================================================================
 // RATE LIMITING
@@ -157,9 +259,16 @@ async function enforceRate(sessionId, pid, route) {
 // =========================================================================
 // AUTH
 // =========================================================================
+//
+// authenticate() returns the caller when a valid session or project key
+// is present, or null when there isn't one. It's used to attribute rate
+// limits and log entries — NOT to gate execution.
+//
+// The user's script decides what requires auth. For example, notes.js
+// exposes register/login/public-get without a session, and calls its
+// own requireAuth() for the rest.
 
 async function authenticate(req, pid) {
-  // Project API key
   const apiKey = req.headers["x-project-key"];
   if (apiKey && typeof apiKey === "string") {
     try {
@@ -175,7 +284,6 @@ async function authenticate(req, pid) {
     } catch {}
   }
 
-  // Session bearer
   const auth = req.headers.authorization || "";
   if (auth.startsWith("Bearer ")) {
     const decoded = verifySession(auth.slice(7).trim());
@@ -224,7 +332,6 @@ async function buildReservedEnv(pid, project, deployment, route, reqId) {
       const owner = await getUser(project.ownerId);
       ownerUsername = owner?.profile?.username || null;
       if (ownerUsername) {
-        // Cache for next invocation
         db.ref(`projects/${pid}/ownerUsername`).set(ownerUsername).catch(() => {});
       }
     } catch {}
@@ -260,7 +367,7 @@ async function loadChromiumModules() {
     return { chromium: _chromiumModule, puppeteer: _puppeteerModule };
   }
   const [chromiumMod, puppeteerMod] = await Promise.all([
-    import("@sparticuz/chromium").then((m) => m.default || m),
+    import("@sparticuz/chromium-min").then((m) => m.default || m),
     import("puppeteer-core").then((m) => m.default || m),
   ]);
   _chromiumModule = chromiumMod;
@@ -269,8 +376,34 @@ async function loadChromiumModules() {
 }
 
 async function launchBrowser() {
+  // ── 1. Load the module pair ────────────────────────────────────
   const { chromium, puppeteer } = await loadChromiumModules();
-  const executablePath = await chromium.executablePath();
+
+  // ── 2. Extract Chromium via the pack URL ───────────────────────
+  // @sparticuz/chromium-min downloads the pack from the URL you pass
+  // in and extracts it to /tmp. It does not run environment detection
+  // — the pack is downloaded unconditionally, so libnspr4.so and
+  // libnss3.so are always extracted to /tmp/al2023/lib/ (the pack's
+  // layout). The package then sets process.env.LD_LIBRARY_PATH to
+  // that directory so the loader finds them when Chromium spawns.
+  const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
+
+  // ── 3. Do NOT override LD_LIBRARY_PATH ─────────────────────────
+  // chromium-min already set process.env.LD_LIBRARY_PATH to point at
+  // /tmp/al2023/lib, where the shared libraries live. Overwriting it
+  // with path.dirname(executablePath) (which is /tmp) makes the
+  // dynamic linker look in the wrong directory, and Chromium dies
+  // with "libnspr4.so: cannot open shared object file".
+
+  // ── 4. Ensure the profile directory exists ─────────────────────
+  // Chromium writes its user profile here. On Vercel only /tmp is
+  // writable. mkdir is idempotent and cheap; safer than assuming
+  // the directory already exists.
+  try {
+    fs.mkdirSync("/tmp/.chromium/profile", { recursive: true });
+  } catch {}
+
+  // ── 5. Launch ──────────────────────────────────────────────────
   const browser = await puppeteer.launch({
     args: [
       ...chromium.args,
@@ -278,12 +411,17 @@ async function launchBrowser() {
       "--disable-gpu",
       "--no-sandbox",
       "--single-process",
+      "--no-zygote",
+      "--disable-setuid-sandbox",
+      "--disable-features=HttpsFirstBalancedModeAutoEnable",
+      "--user-data-dir=/tmp/.chromium/profile",
     ],
     executablePath,
     headless: "shell",
     defaultViewport: { width: 1280, height: 720 },
     timeout: CHROMIUM_LAUNCH_TIMEOUT_MS,
   });
+
   return browser;
 }
 
@@ -300,7 +438,7 @@ async function closeBrowserQuietly(browser) {
 }
 
 // =========================================================================
-// INTERNAL DB HANDLER (in-process, no network)
+// INTERNAL DB HANDLER
 // =========================================================================
 
 async function handleInternalDbRequest(pid, url, req) {
@@ -505,7 +643,6 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
         const urlObj = new URL(request.url());
         const host = urlObj.hostname.toLowerCase();
 
-        // Allow page-origin resources
         if (
           urlObj.protocol === "data:" ||
           urlObj.protocol === "about:" ||
@@ -514,7 +651,6 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
           return await request.continue();
         }
 
-        // Folio internal — resolve db/* in-process
         if (FOLIO_INTERNAL_HOSTS.has(host)) {
           if (
             urlObj.pathname === "/api/host" &&
@@ -544,12 +680,10 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
           return await request.abort("blockedbyclient");
         }
 
-        // HTTPS only
         if (urlObj.protocol !== "https:") {
           return await request.abort("blockedbyclient");
         }
 
-        // Whitelist check
         if (
           BUILTIN_ALLOWED_HOSTS.has(host) ||
           ALLOWED_IMPORT_HOSTS.has(host) ||
@@ -619,12 +753,38 @@ async function loadInvocationContext(pid, route) {
   return { project, deployment, publicFiles, apiRoutes, isSystemRoute, isUserRoute };
 }
 
-async function loadRouteFile(pid, route) {
-  const safeKey = sanitizeFirebasePath(`api/${route}.js`.replace(/\//g, "__"));
-  const snap = await db.ref(`api-files/${pid}/${safeKey}`).once("value");
-  if (!snap.exists()) return null;
-  const data = snap.val();
-  return data?.content || "";
+async function loadRouteFile(pid, route, isSystemRoute) {
+  // System routes (health, whoami, files, status, version, robots) are
+  // all served by the single file _system.js, which branches internally
+  // on REQ.route. Try both storage keys the deploy pipeline has used:
+  //
+  //   api-files/{pid}/_system.js       ← canonical (writer-actual form)
+  //   api-files/{pid}/api___system.js  ← legacy   (reader-expected form)
+  //
+  // User routes (notes, etc.) try the two storage conventions:
+  //
+  //   api-files/{pid}/api__notes.js  ← canonical
+  //   api-files/{pid}/notes.js       ← legacy
+  const candidates = [];
+
+  if (isSystemRoute) {
+    candidates.push(sanitizeFirebasePath("_system.js"));
+    candidates.push(sanitizeFirebasePath("api___system.js"));
+  }
+
+  candidates.push(sanitizeFirebasePath(`api/${route}.js`.replace(/\//g, "__")));
+  candidates.push(sanitizeFirebasePath(`${route}.js`));
+
+  for (const key of candidates) {
+    const snap = await db.ref(`api-files/${pid}/${key}`).once("value");
+    if (snap.exists()) {
+      const data = snap.val();
+      if (data?.content && typeof data.content === "string") {
+        return data.content;
+      }
+    }
+  }
+  return null;
 }
 
 // =========================================================================
@@ -637,7 +797,7 @@ export default async function handler(req, res) {
 
   res.setHeader("X-Request-Id", reqId);
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Project-Key, X-Recursion-Depth, X-Caller-Route",
@@ -645,34 +805,65 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(204).end();
 
-  // ── Parse URL ────────────────────────────────────────────────────
-  const urlPath = String(req.url || "").split("?")[0];
-  const parts = urlPath.replace(/^\/api\/?/, "").split("/").filter(Boolean);
-  const pid = parts[0];
-  const routeRaw = parts[1] || "";
-  const route = routeRaw.replace(/\.js$/i, "");
+  // ── Parse query params (set by Vercel rewrites) ─────────────────
+  let pid = String(req.query?.pid || "").trim();
+  let username = String(req.query?.username || "").trim().toLowerCase();
+  let projectSlug = String(req.query?.project || "").trim();
+  let route = String(req.query?.route || "").trim();
 
-  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
-  if (!route) return res.status(400).json({ success: false, error: "Missing route" });
+  // ── Fallback: parse URL directly for /api/{pid}/{route} ─────────
+  // (Needed when the rewrite isn't applied, e.g. local dev, or
+  //  direct calls without query params.)
+  if (!pid && !username) {
+    const urlPath = String(req.url || "").split("?")[0];
+    const parts = urlPath.replace(/^\/api\/?/, "").split("/").filter(Boolean);
+    pid = parts[0] || "";
+    route = route || (parts[1] || "");
+  }
+
+  route = route.replace(/\.js$/i, "").trim();
+
+  // ── Resolve pid from slug if only username + project given ───────
+  let resolutionError = null;
+  if (!pid && username && projectSlug) {
+    pid = await resolveProjectBySlug(username, projectSlug);
+    if (!pid) resolutionError = "Project not found";
+  }
+
+  if (!pid) {
+    return res.status(400).json({
+      success: false,
+      error: resolutionError || "Missing pid or username/project",
+    });
+  }
+
+  if (!route) {
+    return res.status(400).json({ success: false, error: "Missing route" });
+  }
+
   if (!/^[a-z0-9_-]+$/i.test(route)) {
     return res.status(400).json({ success: false, error: "Invalid route name" });
   }
 
-  // ── Recursion depth ─────────────────────────────────────────────
+  // ── Recursion depth ────────────────────────────────────────────
   const depthHeader = String(req.headers["x-recursion-depth"] || "0");
   const depth = Math.max(0, Math.min(10, parseInt(depthHeader, 10) || 0));
   if (depth >= MAX_RECURSION_DEPTH) {
     return res.status(508).json({ success: false, error: "Recursion limit exceeded", route });
   }
 
-  // ── Auth ────────────────────────────────────────────────────────
-  const actor = await authenticate(req, pid);
-  if (!actor) {
-    return res.status(401).json({ success: false, error: "Authentication required" });
-  }
+  // ── Auth ───────────────────────────────────────────────────────
+  // Do NOT require authentication. The user's script decides what
+  // needs a token. We still resolve the caller (when present) so
+  // rate limits and logs are attributed correctly.
+  const actor = await authenticate(req, pid).catch(() => null);
 
-  // ── Rate limit ──────────────────────────────────────────────────
-  const rate = await enforceRate(actor.sessionId, pid, route).catch(() => ({
+  // ── Rate limit ─────────────────────────────────────────────────
+  // Authenticated callers rate-limit per uid/key; anonymous callers
+  // rate-limit per IP. This preserves abuse protection for public
+  // endpoints like register/login/public-get.
+  const sessionId = actor?.sessionId || `anon_${hashIp(getClientIp(req))}`;
+  const rate = await enforceRate(sessionId, pid, route).catch(() => ({
     allowed: false,
     retryAfter: 60,
   }));
@@ -685,7 +876,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── Load invocation context ─────────────────────────────────────
+  // ── Load invocation context ────────────────────────────────────
   const ctx = await loadInvocationContext(pid, route);
   if (!ctx) {
     return res.status(404).json({ success: false, error: "Project not found" });
@@ -694,13 +885,13 @@ export default async function handler(req, res) {
     return res.status(404).json({ success: false, error: "Route not found", route });
   }
 
-  // ── Load route file ─────────────────────────────────────────────
-  const userCode = await loadRouteFile(pid, route);
+  // ── Load route file ────────────────────────────────────────────
+  const userCode = await loadRouteFile(pid, route, ctx.isSystemRoute);
   if (!userCode || !userCode.trim()) {
     return res.status(404).json({ success: false, error: "Route file not found", route });
   }
 
-  // ── Build allowed-hosts set from manifest ───────────────────────
+  // ── Allowed hosts from manifest ────────────────────────────────
   let declaredHostsSet = new Set();
   let driftDetected = false;
 
@@ -718,14 +909,13 @@ export default async function handler(req, res) {
       }
     }
 
-    // Also include any other manifest hosts that have been validated
     for (const [host, meta] of Object.entries(manifest)) {
       if (meta && meta.validatedOk) declaredHostsSet.add(host);
     }
 
     if (driftDetected) {
       log("run.host_drift_detected", { reqId, pid, route });
-      logProjectEvent(pid, actor.uid || null, "api", "host_drift_detected", { route }).catch(
+      logProjectEvent(pid, actor?.uid || null, "api", "host_drift_detected", { route }).catch(
         () => {},
       );
     }
@@ -734,21 +924,18 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: "Failed to parse @allow hosts" });
   }
 
-  // ── Load ENV: reserved vars + user secrets ──────────────────────
+  // ── Build ENV ──────────────────────────────────────────────────
   let env = {};
   try {
     const reserved = await buildReservedEnv(pid, ctx.project, ctx.deployment, route, reqId);
     const userSecrets = await projectSecrets.readAllSecrets(pid);
-
-    // Merge: reserved wins over user secrets if there's a collision
-    // (shouldn't happen — setSecret rejects reserved names)
     env = { ...userSecrets, ...reserved };
   } catch (err) {
     log("run.secrets_failed", { reqId, pid, message: err.message });
     return res.status(500).json({ success: false, error: "Failed to load secrets" });
   }
 
-  // ── Build REQ object ────────────────────────────────────────────
+  // ── Build REQ object ───────────────────────────────────────────
   const reqObj = {
     route,
     method: req.method,
@@ -757,7 +944,10 @@ export default async function handler(req, res) {
       "user-agent": (req.headers["user-agent"] || "").slice(0, 200),
     },
     body: typeof req.body === "object" && req.body !== null ? req.body : {},
+    query: req.query || {},
     pid,
+    username: username || null,
+    projectSlug: projectSlug || null,
     projectName: ctx.project.name || null,
     deployedAt: ctx.deployment?.deployedAt || null,
     deploymentId: ctx.deployment?.deploymentId || null,
@@ -795,7 +985,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── Execute ─────────────────────────────────────────────────────
+  // ── Execute ────────────────────────────────────────────────────
   let browser = null;
   let runResult = null;
 
@@ -822,7 +1012,7 @@ export default async function handler(req, res) {
 
   const durationMs = Date.now() - startTime;
 
-  // ── Handle failure ──────────────────────────────────────────────
+  // ── Failure ────────────────────────────────────────────────────
   if (!runResult.ok) {
     const status = runResult.isTimeout ? 504 : 500;
     const message = runResult.isTimeout ? "Function timed out" : "Function threw an error";
@@ -833,7 +1023,7 @@ export default async function handler(req, res) {
       route,
     }).catch(() => {});
 
-    await logProjectEvent(pid, actor.uid || null, "api", `run.${route}`, {
+    await logProjectEvent(pid, actor?.uid || null, "api", `run.${route}`, {
       status,
       durationMs,
       errorName: runResult.errorName || "Error",
@@ -852,14 +1042,15 @@ export default async function handler(req, res) {
     return res.status(status).json({ success: false, error: message, route });
   }
 
-  // ── Emit response ───────────────────────────────────────────────
+  // ── Response ───────────────────────────────────────────────────
   const { result } = runResult;
   const responseBody =
     typeof result.body === "string" ? result.body : JSON.stringify(result.body);
   const responseBytes = Buffer.byteLength(responseBody, "utf8");
+  const responseStatus = Number(result.status) || 200;
 
   if (responseBytes > MAX_RESPONSE_BYTES) {
-    await logProjectEvent(pid, actor.uid || null, "api", `run.${route}`, {
+    await logProjectEvent(pid, actor?.uid || null, "api", `run.${route}`, {
       status: 413,
       durationMs,
       bytesOut: responseBytes,
@@ -868,8 +1059,8 @@ export default async function handler(req, res) {
     return res.status(413).json({ success: false, error: "Response too large" });
   }
 
-  await logProjectEvent(pid, actor.uid || null, "api", `run.${route}`, {
-    status: result.status || 200,
+  await logProjectEvent(pid, actor?.uid || null, "api", `run.${route}`, {
+    status: responseStatus,
     durationMs,
     bytesOut: responseBytes,
     fetchHosts: runResult.fetchHosts || [],
@@ -879,17 +1070,18 @@ export default async function handler(req, res) {
     reqId,
     pid,
     route,
-    status: result.status,
+    status: responseStatus,
     durationMs,
     bytesOut: responseBytes,
     fetchHosts: runResult.fetchHosts || [],
+    via: actor?.via || "anon",
   });
 
   res.setHeader("Content-Type", result.contentType || "application/json");
   res.setHeader("X-Execution-Time", String(durationMs));
   res.setHeader("X-Fetch-Hosts", (runResult.fetchHosts || []).join(","));
 
-  return res.status(result.status || 200).send(responseBody);
+  return res.status(responseStatus).send(responseBody);
 }
 
 // =========================================================================
@@ -899,7 +1091,7 @@ export default async function handler(req, res) {
 export const config = {
   runtime: "nodejs",
   memory: 1024,
-  maxDuration: 10,
+  maxDuration: 30,
 };
 
 export { BASE_URL };

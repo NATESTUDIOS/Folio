@@ -2170,11 +2170,46 @@ async function handleDeploy(req, res, reqId) {
     }
   } catch {}
 
+  // ── Resolve owner username ───────────────────────────────────────
   const ownerUsername = await getProjectOwnerUsername(pid, project);
   const cleanUrl = ownerUsername
     ? buildProjectCleanUrl(ownerUsername, project, pid)
     : `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
   const serveUrl = `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
+
+  // ═════════════════════════════════════════════════════════════════
+  // ✅ NEW: Write the slug index for the friendly API URL
+  // ═════════════════════════════════════════════════════════════════
+  // Populates projectSlugs/{username}/{slug} = pid so that
+  // api/run.js can resolve /{username}/project/{slug}/api/{route}
+  // without falling back to the slower scan.
+  //
+  // Also removes stale entries when the slug or username changed
+  // since the last deploy (defensive — normally handleProjectsUpdate
+  // already cleans these up, but this catches any drift).
+  if (ownerUsername && project.slug) {
+    try {
+      await db.ref(`projectSlugs/${ownerUsername}/${project.slug}`).set(pid);
+
+      // Remove stale slug entries for this pid under this user
+      // (in case the slug changed without the index being cleaned up)
+      const userSlugsSnap = await db.ref(`projectSlugs/${ownerUsername}`).once("value");
+      if (userSlugsSnap.exists()) {
+        const updates = {};
+        userSlugsSnap.forEach((child) => {
+          if (child.val() === pid && child.key !== project.slug) {
+            updates[`projectSlugs/${ownerUsername}/${child.key}`] = null;
+          }
+        });
+        if (Object.keys(updates).length > 0) {
+          await db.ref().update(updates);
+        }
+      }
+    } catch (err) {
+      // Non-fatal — the runtime resolver self-heals on the first call
+      log("host.deploy.slug_index_failed", { pid, message: err.message });
+    }
+  }
 
   const deploymentId = `db_${pid}_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
   const deploymentRecord = {
@@ -2738,11 +2773,29 @@ async function handleServe(req, res, reqId) {
     contentMap = snapshotToFiles(vSnap.val()?.files);
   }
 
-  let wantPath = String(req.query?.path || "").replace(/^\/+/, "");
-  if (!isValidRoutePath(wantPath)) return sendText(400, "Invalid path");
-  if (!wantPath && !fromId) {
-    if (project.primaryFile) wantPath = project.primaryFile;
+  // ── Normalize path ──────────────────────────────────────────
+  // Vercel passes `path` in several shapes depending on how the
+  // rewrite captured the URL:
+  //
+  //   /user/project                    → path is undefined
+  //   /user/project/                   → path is "" or "/" or undefined
+  //   /user/project/index.html         → path is "index.html"
+  //   /user/project/css/app.css        → path is "css/app.css"
+  //   /user/project/view               → path is "view"
+  //
+  // All forms are normalized to a leading-slash-free, trailing-slash-
+  // free string. Empty means "serve index.html".
+  let wantPath = String(req.query?.path || "").trim();
+  wantPath = wantPath.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!wantPath) {
+    if (project.primaryFile) {
+      wantPath = project.primaryFile;
+    } else {
+      wantPath = "index.html";
+    }
   }
+
+  if (!isValidRoutePath(wantPath)) return sendText(400, "Invalid path");
 
   const resolved = await resolveRequestPath(pid, wantPath, contentMap);
 
@@ -2830,22 +2883,23 @@ async function handleServe(req, res, reqId) {
     });
 
     // ── Inject public secrets (only from live deployment) ───────
-    if (!fromId) {
-      try {
-        const publicSecrets = await projectSecrets.readPublicSecrets(pid);
-        if (publicSecrets && Object.keys(publicSecrets).length > 0) {
-          const payload = JSON.stringify(publicSecrets).replace(/</g, "\\u003c");
-          const script = `<script>window.__SECRETS__=Object.freeze(${payload});</script>`;
-          if (/<\/head>/i.test(html)) {
-            html = html.replace(/<\/head>/i, script + "\n</head>");
-          } else {
-            html = script + html;
-          }
-        }
-      } catch (err) {
-        log("host.serve.secrets_inject_failed", { pid, message: err.message });
-      }
+if (!fromId) {
+  try {
+    const publicSecrets = await projectSecrets.readPublicSecrets(pid);
+    const pidJson = JSON.stringify(pid);
+    const secretsJson = (publicSecrets && Object.keys(publicSecrets).length > 0)
+      ? `window.__SECRETS__=Object.freeze(${JSON.stringify(publicSecrets).replace(/</g, "\\u003c")});`
+      : "";
+    const script = `<script>${secretsJson}window.__DN_PID__=${pidJson};</script>`;
+    if (/<\/head>/i.test(html)) {
+      html = html.replace(/<\/head>/i, script + "\n</head>");
+    } else {
+      html = script + html;
     }
+  } catch (err) {
+    log("host.serve.secrets_inject_failed", { pid, message: err.message });
+  }
+}
 
     res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
     return res.status(200).send(html);
@@ -2911,22 +2965,48 @@ async function handleApiRoutes(req, res, reqId) {
   const access = await requireProjectRole(req, res, pid, "viewer");
   if (!access) return;
 
-  const [routesSnap, hostsSnap, filesSnap] = await Promise.all([
+  const [routesSnap, hostsSnap, filesSnap, project] = await Promise.all([
     db.ref(`projects/${pid}/apiRoutes`).once("value"),
     db.ref(`projects/${pid}/allowedHosts`).once("value"),
     db.ref(`projects/${pid}/publicFileList`).once("value"),
+    getProjectCached(pid),
   ]);
 
   const routes = routesSnap.exists() ? routesSnap.val() : { system: [], user: [] };
   const hosts = hostsSnap.exists() ? hostsSnap.val() : {};
-  const publicFiles = filesSnap.exists() ? filesSnap.val() : { files: [], count: 0, totalBytes: 0 };
+  const publicFiles = filesSnap.exists()
+    ? filesSnap.val()
+    : { files: [], count: 0, totalBytes: 0 };
+
+  // ✅ Build both URL styles
+  const ownerUsername = project
+    ? (project.ownerUsername || (await getProjectOwnerUsername(pid, project)))
+    : null;
+  const slug = project?.slug || null;
+
+  // Friendly URL — requires both username and slug
+  const friendlyBaseUrl =
+    ownerUsername && slug
+      ? `${BASE_URL}/${encodeURIComponent(ownerUsername)}/project/${encodeURIComponent(slug)}/api`
+      : null;
+
+  // Direct URL — always works, no lookup needed
+  const directBaseUrl = `${BASE_URL}/api/${encodeURIComponent(pid)}`;
+
+  // Preferred URL for display in the dashboard
+  const primaryBaseUrl = friendlyBaseUrl || directBaseUrl;
 
   return res.status(200).json({
     success: true,
     system: routes.system || [],
     user: routes.user || [],
     maxFiles: MAX_API_FILES,
-    baseUrl: `${BASE_URL}/api/${encodeURIComponent(pid)}`,
+    baseUrl: primaryBaseUrl,           // ← what the dashboard shows by default
+    friendlyBaseUrl,                    // ← null if username/slug unavailable
+    directBaseUrl,                      // ← always present
+    ownerUsername: ownerUsername || null,
+    slug: slug || null,
+    pid,
     allowedHosts: {
       builtin: [...BUILTIN_ALLOWED_HOSTS],
       declared: Object.entries(hosts).map(([host, meta]) => ({
@@ -3043,6 +3123,14 @@ async function handleProjectsCreate(req, res, reqId) {
     const ownerUsername = user.profile?.username || null;
     if (ownerUsername) {
       await db.ref(`projects/${project.pid}/ownerUsername`).set(ownerUsername).catch(() => {});
+
+      // ✅ NEW: populate slug index for the friendly API URL
+      //    /{username}/project/{slug}/api/{route}
+      if (project.slug) {
+        await db.ref(`projectSlugs/${ownerUsername}/${project.slug}`)
+          .set(project.pid)
+          .catch(() => {});
+      }
     }
 
     await db.ref(`projects/${project.pid}/ownerId`).set(user.uid).catch(() => {});
@@ -3130,6 +3218,24 @@ async function handleProjectsUpdate(req, res, reqId) {
             }
           }
           if (Object.keys(updates).length) await db.ref().update(updates).catch(() => {});
+
+          // ✅ NEW: update slug index for the friendly API URL
+          //    Remove the old entry, add the new one.
+          try {
+            const ownerUsername = await getProjectOwnerUsername(pid, existing);
+            if (ownerUsername) {
+              if (existing.slug && existing.slug !== newSlug) {
+                await db.ref(`projectSlugs/${ownerUsername}/${existing.slug}`)
+                  .remove()
+                  .catch(() => {});
+              }
+              await db.ref(`projectSlugs/${ownerUsername}/${newSlug}`)
+                .set(pid)
+                .catch(() => {});
+            }
+          } catch (slugIdxErr) {
+            log("host.projects_update.slug_index_failed", { pid, message: slugIdxErr.message });
+          }
         }
       } catch {}
     }
@@ -3214,6 +3320,34 @@ async function handleProjectsDelete(req, res, reqId) {
     const nameSnap = await db.ref(`projects/${pid}/name`).once("value");
     projectName = nameSnap.exists() ? nameSnap.val() : "";
   } catch {}
+
+  // ✅ NEW: clean up slug index entries before delete
+  //    Removes projectSlugs/{username}/{slug} = pid so the friendly
+  //    API URL resolver doesn't return a stale pid after deletion.
+  try {
+    const ownerSnap = await db.ref(`projects/${pid}`).once("value");
+    const ownerId = ownerSnap.val()?.ownerId;
+    if (ownerId) {
+      const owner = await getUser(ownerId);
+      const ownerUsername = owner?.profile?.username;
+      if (ownerUsername) {
+        const slugsSnap = await db.ref(`projectSlugs/${ownerUsername}`).once("value");
+        if (slugsSnap.exists()) {
+          const updates = {};
+          slugsSnap.forEach((child) => {
+            if (child.val() === pid) {
+              updates[`projectSlugs/${ownerUsername}/${child.key}`] = null;
+            }
+          });
+          if (Object.keys(updates).length > 0) {
+            await db.ref().update(updates);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    log("host.projects_delete.slug_index_cleanup_failed", { pid, message: err.message });
+  }
 
   try {
     await deleteProjectCdnAssets(pid, reqId);
