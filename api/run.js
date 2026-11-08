@@ -22,6 +22,14 @@
 //  internally for the rest. Gating at the runtime level would block
 //  public endpoints.
 //
+//  ⚠  CHROMIUM MIN
+//  We use @sparticuz/chromium-min (not @sparticuz/chromium). The
+//  full package relies on runtime environment detection to decide
+//  whether to extract its shared-library archive — that detection
+//  fails on Vercel Node 20+/24, leaving Chromium without libnspr4.so
+//  and libnss3.so. The -min variant downloads a pack from a URL you
+//  provide, so it never tries to detect the environment.
+//
 //  ⚠  LATENCY NOTE
 //  On Vercel free tier, every invocation launches Chromium fresh
 //  (~1.5–2s cold start). Serverless functions cannot keep processes
@@ -63,6 +71,12 @@ const CHROMIUM_LAUNCH_TIMEOUT_MS = 4000;
 const MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const MAX_RECURSION_DEPTH = 3;
+
+// Chromium pack URL — @sparticuz/chromium-min downloads and extracts
+// this tarball on first use. Version must match the minor line of the
+// installed package.
+const CHROMIUM_PACK_URL =
+  "https://github.com/Sparticuz/chromium/releases/download/v143.0.0/chromium-v143.0.0-pack.x64.tar";
 
 const BUILTIN_ALLOWED_HOSTS = new Set([
   "api.openai.com",
@@ -342,7 +356,7 @@ async function loadChromiumModules() {
     return { chromium: _chromiumModule, puppeteer: _puppeteerModule };
   }
   const [chromiumMod, puppeteerMod] = await Promise.all([
-    import("@sparticuz/chromium").then((m) => m.default || m),
+    import("@sparticuz/chromium-min").then((m) => m.default || m),
     import("puppeteer-core").then((m) => m.default || m),
   ]);
   _chromiumModule = chromiumMod;
@@ -354,30 +368,22 @@ async function launchBrowser() {
   // ── 1. Load the module pair ────────────────────────────────────
   const { chromium, puppeteer } = await loadChromiumModules();
 
-  // ── 2. Force serverless env detection ──────────────────────────
-  // @sparticuz/chromium checks this env var during executablePath()
-  // to decide whether to extract the shared-library archive. If it's
-  // missing on Vercel Node 20+, only the binary extracts and
-  // libnspr4.so ends up missing. Hardcode it here so it's set before
-  // the first call.
-  if (!process.env.AWS_LAMBDA_JS_RUNTIME) {
-    process.env.AWS_LAMBDA_JS_RUNTIME = "nodejs24.x";
-  }
+  // ── 2. Extract Chromium via the pack URL ───────────────────────
+  // @sparticuz/chromium-min downloads the pack from the URL you pass
+  // in and extracts it to /tmp. It does not run environment detection
+  // — the pack is downloaded unconditionally, so libnspr4.so and
+  // libnss3.so are always present next to the binary.
+  const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
 
-  // ── 3. Extract the Chromium binary + libs ──────────────────────
-  const executablePath = await chromium.executablePath();
-
-  // ── 4. Point the dynamic linker at the extracted libs ──────────
+  // ── 3. Point the dynamic linker at the extracted libs ──────────
   // The browser binary needs libnspr4.so, libnss3.so, etc. — they
-  // land next to the binary after extraction. If the auto-detection
-  // path fails, the loader can't find them and the browser crashes
-  // with "cannot open shared object file". Setting LD_LIBRARY_PATH
-  // explicitly to the extracted dir forces the loader to look there
-  // first.
+  // land next to the binary after extraction. Setting
+  // LD_LIBRARY_PATH explicitly to the extracted dir forces the
+  // loader to look there first.
   const execDir = path.dirname(executablePath);
   process.env.LD_LIBRARY_PATH = execDir;
 
-  // ── 5. Pin writable dirs to /tmp ───────────────────────────────
+  // ── 4. Pin writable dirs to /tmp ───────────────────────────────
   // Vercel functions run from a read-only filesystem except /tmp.
   // Chromium writes profile, cache, crash dumps, and font config
   // during startup. Without these, Chromium either fails to boot or
@@ -387,7 +393,7 @@ async function launchBrowser() {
   process.env.XDG_CACHE_HOME  = "/tmp/.chromium";
   process.env.FONTCONFIG_PATH = "/tmp/.chromium/fonts";
 
-  // ── 6. Launch ──────────────────────────────────────────────────
+  // ── 5. Launch ──────────────────────────────────────────────────
   const browser = await puppeteer.launch({
     args: [
       ...chromium.args,
