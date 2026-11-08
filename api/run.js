@@ -30,6 +30,13 @@
 //  and libnss3.so. The -min variant downloads a pack from a URL you
 //  provide, so it never tries to detect the environment.
 //
+//  ⚠  LD_LIBRARY_PATH
+//  Do NOT override process.env.LD_LIBRARY_PATH manually. The
+//  chromium-min package sets it to point at the extracted libraries
+//  (e.g. /tmp/al2023/lib), where libnspr4.so and libnss3.so live.
+//  Overwriting it with path.dirname(executablePath) (/tmp) breaks
+//  the browser launch because the libs aren't actually there.
+//
 //  ⚠  LATENCY NOTE
 //  On Vercel free tier, every invocation launches Chromium fresh
 //  (~1.5–2s cold start). Serverless functions cannot keep processes
@@ -38,7 +45,6 @@
 
 import crypto from "node:crypto";
 import net from "node:net";
-import path from "node:path";
 import { db } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import {
@@ -74,9 +80,9 @@ const MAX_RECURSION_DEPTH = 3;
 
 // Chromium pack URL — @sparticuz/chromium-min downloads and extracts
 // this tarball on first use. Version must match the minor line of the
-// installed package.
+// installed package (@sparticuz/chromium-min@^141.0.0).
 const CHROMIUM_PACK_URL =
-  "https://github.com/Sparticuz/chromium/releases/download/v143.0.0/chromium-v143.0.0-pack.x64.tar";
+  "https://github.com/Sparticuz/chromium/releases/download/v141.0.0/chromium-v141.0.0-pack.x64.tar";
 
 const BUILTIN_ALLOWED_HOSTS = new Set([
   "api.openai.com",
@@ -372,16 +378,17 @@ async function launchBrowser() {
   // @sparticuz/chromium-min downloads the pack from the URL you pass
   // in and extracts it to /tmp. It does not run environment detection
   // — the pack is downloaded unconditionally, so libnspr4.so and
-  // libnss3.so are always present next to the binary.
+  // libnss3.so are always extracted to /tmp/al2023/lib/ (the pack's
+  // layout). The package then sets process.env.LD_LIBRARY_PATH to
+  // that directory so the loader finds them when Chromium spawns.
   const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
 
-  // ── 3. Point the dynamic linker at the extracted libs ──────────
-  // The browser binary needs libnspr4.so, libnss3.so, etc. — they
-  // land next to the binary after extraction. Setting
-  // LD_LIBRARY_PATH explicitly to the extracted dir forces the
-  // loader to look there first.
-  const execDir = path.dirname(executablePath);
-  process.env.LD_LIBRARY_PATH = execDir;
+  // ── 3. Do NOT override LD_LIBRARY_PATH ─────────────────────────
+  // chromium-min already set process.env.LD_LIBRARY_PATH to point at
+  // /tmp/al2023/lib, where the shared libraries live. Overwriting it
+  // with path.dirname(executablePath) (which is /tmp) makes the
+  // dynamic linker look in the wrong directory, and Chromium dies
+  // with "libnspr4.so: cannot open shared object file".
 
   // ── 4. Pin writable dirs to /tmp ───────────────────────────────
   // Vercel functions run from a read-only filesystem except /tmp.
