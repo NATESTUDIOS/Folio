@@ -1011,12 +1011,19 @@ export default async function handler(req, res) {
   }
 
   // ── Build REQ object ───────────────────────────────────────────
+  //
+  // IMPORTANT: the `authorization` header is forwarded so that user
+  // scripts (like notes.js) can validate their own bearer tokens
+  // via REQ.headers.authorization. Without this, any authenticated
+  // user script action returns 401 because the token never reaches
+  // the script.
   const reqObj = {
     route,
     method: req.method,
     headers: {
       "content-type": req.headers["content-type"] || "",
       "user-agent": (req.headers["user-agent"] || "").slice(0, 200),
+      "authorization": req.headers["authorization"] || "",
     },
     body: typeof req.body === "object" && req.body !== null ? req.body : {},
     query: req.query || {},
