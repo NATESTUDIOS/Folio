@@ -1,14 +1,4 @@
-Updated README.md — includes the new private API runtime
 
-Three sections added or rewritten to reflect the system we built:
-
-1. Overview table — added a row for the private API runtime.
-2. Section 05 → new "Private API runtime" section (renumbered from 05; everything after shifts by one) — describes api/*.js, _system.js, the six system routes, @allow host declarations, the runtime's Chromium sandbox, the auth model, and both URL shapes.
-3. API reference — added a "Private API" subsection with the six system routes and the friendly/direct URL shapes.
-
-Everything else — AI section, database section, deployment, structure, development, contributing — unchanged.
-
-```markdown
 <div align="center">
 
 <img src="https://foliostudios.vercel.app/icons/icon-192.png" alt="Folio Logo" width="100" height="100">
