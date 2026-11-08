@@ -3173,15 +3173,31 @@ async function renderApiPanel(panel) {
           <div class="field-hint" style="margin-top:10px;">
             See <button type="button" class="link-btn" id="btnApiDocs">Docs → Private API</button> for the full reference.
           </div>
-          <div class="card" style="margin-top:12px;">
+          
+<div class="card" style="margin-top:12px;" id="apiLogsCard">
   <div class="card-header">
-    <div class="card-title">${svg('list', 13, 2.2)} Recent calls <span style="font-size:10px;opacity:0.6;font-weight:400;">(last 50)</span></div>
-    <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshLogs" aria-label="Refresh logs" type="button">${svg('refresh', 10, 2.2)}</button>
+    <div class="card-title">
+      ${svg('list', 13, 2.2)} Recent calls
+      <span style="font-size:10px;opacity:0.6;font-weight:400;" id="apiLogsMeta">(last 50)</span>
+    </div>
+    <div style="display:flex;gap:4px;align-items:center;">
+      <input class="input" id="apiLogsFilterRoute" placeholder="route…" style="width:80px;height:24px;font-size:10.5px;padding:0 6px;">
+      <select class="select" id="apiLogsFilterStatus" style="width:80px;height:24px;font-size:10.5px;padding:0 20px 0 6px;">
+        <option value="">All</option>
+        <option value="ok">OK</option>
+        <option value="error">Errors</option>
+        <option value="500">500</option>
+        <option value="504">504</option>
+      </select>
+      <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshLogs" aria-label="Refresh logs" type="button">${svg('refresh', 10, 2.2)}</button>
+    </div>
   </div>
   <div class="card-body tight" id="apiLogsBody">
     <div class="field-hint">Loading…</div>
   </div>
+  <div id="apiLogsPager"></div>
 </div>
+
         </div>
       </div>
     </div>
@@ -3196,61 +3212,203 @@ async function renderApiPanel(panel) {
 
   $('btnApiDocs')?.addEventListener('click', () => openDocsOverlay('private-api'));
 
-  $('btnRefreshLogs')?.addEventListener('click', () => loadApiLogs());
+$('btnRefreshLogs')?.addEventListener('click', () => {
+  _apiLogsState.offset = 0;
   loadApiLogs();
+});
+loadApiLogs();
 }
+
+// ═══════════════════════════════════════════════════════════
+// API LOGS — filterable, paginated, collapsible
+// ═══════════════════════════════════════════════════════════
+let _apiLogsState = { offset: 0, limit: 10, route: '', status: '', expanded: new Set() };
 
 async function loadApiLogs() {
   const body = $('apiLogsBody');
   if (!body) return;
 
-  const res = await apiFetch(
-    API_HOST + '?action=api-logs&pid=' + encodeURIComponent(S.pid) + '&limit=50'
-  );
+  const qs = new URLSearchParams({
+    action: 'api-logs',
+    pid: S.pid,
+    limit: String(_apiLogsState.limit),
+    offset: String(_apiLogsState.offset),
+  });
+  if (_apiLogsState.route) qs.set('route', _apiLogsState.route);
+  if (_apiLogsState.status) qs.set('status', _apiLogsState.status);
 
+  const res = await apiFetch(API_HOST + '?' + qs.toString());
   if (!res.ok || !res.data?.success) {
-    body.innerHTML = `<div class="field-hint" style="color:var(--theme-danger);">Couldn't load logs: ${escapeHTML(res.data?.error || 'unknown')}</div>`;
+    body.innerHTML = `<div class="field-hint" style="color:var(--theme-danger);">
+      Couldn't load logs: ${escapeHTML(res.data?.error || 'unknown')}
+    </div>`;
+    $('apiLogsPager').innerHTML = '';
     return;
   }
 
-  const logs = res.data.logs || [];
+  const { logs = [], total = 0, hasMore = false, errorSummary = {} } = res.data;
+  _apiLogsState._logs = logs;
+  const meta = $('apiLogsMeta');
+  if (meta) {
+    const errs = Object.values(errorSummary).reduce((s, n) => s + n, 0);
+    meta.textContent = total === 0
+      ? '(0)'
+      : `(${total}${errs ? ` · ${errs} error${errs === 1 ? '' : 's'}` : ''})`;
+  }
 
   if (logs.length === 0) {
     body.innerHTML = `
       <div class="field-hint" style="text-align:center;padding:16px 8px;">
-        No API calls yet. Calls to <code class="mono">api/*.js</code> will appear here.
-      </div>
-    `;
+        No API calls match${_apiLogsState.route || _apiLogsState.status ? ' these filters' : ''}.
+      </div>`;
+    $('apiLogsPager').innerHTML = '';
     return;
   }
 
-  body.innerHTML = logs.map((l) => {
-    const isError = l.status >= 400;
-    const iconName = isError ? 'alertCircle' : 'check';
-    const badgeClass = isError ? 'danger' : 'success';
+  body.innerHTML = logs.map(renderApiLogRow).join('');
 
-    const errLine = l.errorMessage
-      ? `<div class="field-hint mono" style="margin-top:2px;color:var(--theme-danger);font-size:10px;line-height:1.4;">
-           ${escapeHTML(l.errorName || 'Error')}: ${escapeHTML(l.errorMessage)}
-         </div>`
-      : '';
+  // Wire expand toggles + copy buttons
+  body.querySelectorAll('[data-log-toggle]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-log-toggle');
+      if (_apiLogsState.expanded.has(id)) _apiLogsState.expanded.delete(id);
+      else _apiLogsState.expanded.add(id);
+      renderApiLogsList();
+    });
+  });
+  body.querySelectorAll('[data-copy-text]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (copyToClipboard(btn.dataset.copyText)) toast('Copied', 'success', 1000);
+    });
+  });
 
-    return `
-      <div class="row-item" style="align-items:flex-start;">
-        <div class="row-icon" style="flex-shrink:0;">${svg(iconName, 12, 2.2)}</div>
-        <div class="row-content" style="min-width:0;">
-          <div class="row-title mono" style="font-size:11px;overflow-wrap:anywhere;">
-            ${escapeHTML(l.method)} /${escapeHTML(l.route)}
-            <span class="badge ${badgeClass}" style="font-size:9px;margin-left:4px;">${l.status}</span>
-          </div>
-          <div class="row-sub" style="font-size:10px;">
-            ${timeAgo(l.ts)} · ${l.durationMs}ms · ${escapeHTML(l.via)}
-          </div>
-          ${errLine}
+  // Pager
+  const pager = $('apiLogsPager');
+  const from = _apiLogsState.offset + 1;
+  const to = Math.min(_apiLogsState.offset + logs.length, total);
+  pager.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 12px;border-top:1px solid var(--theme-divider);">
+      <button class="btn btn-sm btn-ghost" id="apiLogsPrev" ${_apiLogsState.offset === 0 ? 'disabled' : ''}>
+        ${svg('chevron-left', 10, 2.4)} Prev
+      </button>
+      <span style="font-size:10.5px;color:var(--theme-text-tertiary);">${from}–${to} of ${total}</span>
+      <button class="btn btn-sm btn-ghost" id="apiLogsNext" ${!hasMore ? 'disabled' : ''}>
+        Next ${svg('chevronRight', 10, 2.4)}
+      </button>
+    </div>`;
+  $('apiLogsPrev')?.addEventListener('click', () => {
+    _apiLogsState.offset = Math.max(0, _apiLogsState.offset - _apiLogsState.limit);
+    loadApiLogs();
+  });
+  $('apiLogsNext')?.addEventListener('click', () => {
+    _apiLogsState.offset += _apiLogsState.limit;
+    loadApiLogs();
+  });
+
+  // Wire filter inputs
+  const routeInput = $('apiLogsFilterRoute');
+  const statusSel = $('apiLogsFilterStatus');
+  if (routeInput && !routeInput._wired) {
+    routeInput._wired = true;
+    routeInput.addEventListener('input', debounce(() => {
+      _apiLogsState.route = routeInput.value.trim();
+      _apiLogsState.offset = 0;
+      loadApiLogs();
+    }, 300));
+  }
+  if (statusSel && !statusSel._wired) {
+    statusSel._wired = true;
+    statusSel.addEventListener('change', () => {
+      _apiLogsState.status = statusSel.value;
+      _apiLogsState.offset = 0;
+      loadApiLogs();
+    });
+  }
+}
+
+function renderApiLogsList() {
+  const body = $('apiLogsBody');
+  if (!body) return;
+  // Re-render using the last fetched logs — cache them on state
+  const logs = _apiLogsState._logs || [];
+  body.innerHTML = logs.map(renderApiLogRow).join('');
+  body.querySelectorAll('[data-log-toggle]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-log-toggle');
+      if (_apiLogsState.expanded.has(id)) _apiLogsState.expanded.delete(id);
+      else _apiLogsState.expanded.add(id);
+      renderApiLogsList();
+    });
+  });
+  body.querySelectorAll('[data-copy-text]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (copyToClipboard(btn.dataset.copyText)) toast('Copied', 'success', 1000);
+    });
+  });
+}
+
+function renderApiLogRow(l) {
+  const isError = l.status >= 400 || !l.ok && l.ok !== undefined ? (!l.ok) : l.status >= 400;
+  const iconName = isError ? 'alertCircle' : 'check';
+  const badgeClass = isError ? 'danger' : 'success';
+  const isExpanded = _apiLogsState.expanded.has(l.id);
+
+  const errInline = l.errorMessage && !isExpanded
+    ? `<div class="field-hint mono" style="margin-top:2px;color:var(--theme-danger);font-size:10px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+         ${escapeHTML(l.errorName || 'Error')}: ${escapeHTML(l.errorMessage)}
+       </div>`
+    : '';
+
+  const detail = isExpanded ? `
+    <div class="api-log-detail">
+      ${rowDetail('Status', `${l.status}${l.errorClass ? ` · ${l.errorClass}` : ''}`)}
+      ${rowDetail('Method', l.method || 'POST')}
+      ${rowDetail('Duration', `${l.durationMs} ms`)}
+      ${rowDetail('Via', l.via || 'anon')}
+      ${l.requestId ? rowDetail('Request ID', l.requestId, true) : ''}
+      ${l.stage ? rowDetail('Last stage', l.stage) : ''}
+      ${l.bytesIn != null ? rowDetail('Bytes in', String(l.bytesIn)) : ''}
+      ${l.bytesOut != null ? rowDetail('Bytes out', String(l.bytesOut)) : ''}
+      ${l.deploymentId ? rowDetail('Deployment', l.deploymentId, true) : ''}
+      ${l.fetchHosts && l.fetchHosts.length ? rowDetail('Fetch hosts', l.fetchHosts.join(', ')) : ''}
+      ${l.userAgent ? rowDetail('User-Agent', l.userAgent) : ''}
+      ${l.ipHash ? rowDetail('IP hash', l.ipHash) : ''}
+      ${l.errorName ? rowDetail('Error', `${l.errorName}: ${l.errorMessage || ''}`, true) : ''}
+    </div>
+  ` : '';
+
+  return `
+    <div class="api-log-row ${isExpanded ? 'expanded' : ''}" data-log-row="${escapeAttr(l.id)}">
+      <button class="api-log-toggle" type="button" data-log-toggle="${escapeAttr(l.id)}" aria-expanded="${isExpanded}" aria-label="Toggle details">
+        ${svg('chevronRight', 10, 2.6)}
+      </button>
+      <div class="row-icon" style="flex-shrink:0;">${svg(iconName, 12, 2.2)}</div>
+      <div class="row-content" style="min-width:0;">
+        <div class="row-title mono" style="font-size:11px;overflow-wrap:anywhere;">
+          ${escapeHTML(l.method)} /${escapeHTML(l.route)}
+          <span class="badge ${badgeClass}" style="font-size:9px;margin-left:4px;">${l.status}</span>
+          ${l.via && l.via !== 'anon' ? `<span class="badge neutral" style="font-size:8px;margin-left:4px;">${escapeHTML(l.via)}</span>` : ''}
         </div>
+        <div class="row-sub" style="font-size:10px;">
+          ${timeAgo(l.ts)} · ${l.durationMs}ms
+          ${l.errorClass ? ` · <span style="color:var(--theme-danger);">${escapeHTML(l.errorClass)}</span>` : ''}
+        </div>
+        ${errInline}
       </div>
-    `;
-  }).join('');
+    </div>
+    ${detail}
+  `;
+}
+
+function rowDetail(label, value, mono = false) {
+  return `<div class="api-log-detail-row">
+    <span class="api-log-detail-label">${escapeHTML(label)}</span>
+    <span class="api-log-detail-value ${mono ? 'mono' : ''}">${escapeHTML(value)}</span>
+  </div>`;
 }
   
   function toggleDeploymentRow(deploymentId) {
@@ -6041,14 +6199,15 @@ async function loadApiLogs() {
   // ═══════════════════════════════════════════════════════════
 
   const DOCS_SECTIONS = [
-    { id: 'getting-started', title: 'Getting started', icon: 'book' },
-    { id: 'secrets', title: 'Secrets', icon: 'key' },
-    { id: 'data-api', title: 'Data API', icon: 'database' },
-    { id: 'private-api', title: 'Private API', icon: 'terminal' },
-    { id: 'limits', title: 'Limits', icon: 'shield' },
-    { id: 'errors', title: 'Errors', icon: 'alertCircle' },
-    { id: 'examples', title: 'Examples', icon: 'code' },
-  ];
+  { id: 'getting-started', title: 'Getting started', icon: 'book' },
+  { id: 'secrets', title: 'Secrets', icon: 'key' },
+  { id: 'data-api', title: 'Data API', icon: 'database' },
+  { id: 'private-api', title: 'Private API', icon: 'terminal' },
+  { id: 'limits', title: 'Limits', icon: 'shield' },
+  { id: 'errors', title: 'Errors', icon: 'alertCircle' },
+  { id: 'logs', title: 'Logs & debugging', icon: 'list' },
+  { id: 'examples', title: 'Examples', icon: 'code' },
+];
 
   const DOCS_CONTENT = {
   'getting-started': {
@@ -6362,6 +6521,74 @@ return { __status: 404, __contentType: "text/plain", __body: "Not found" };</cod
       </ul>
     `,
   },
+  'logs': {
+  title: 'Logs & debugging',
+  body: `
+    <h2>What gets logged</h2>
+    <p>Every call to a user route (<code class="mono">api/*.js</code>) is recorded. System routes
+    (<code class="mono">health</code>, <code class="mono">whoami</code>, <code class="mono">files</code>,
+    <code class="mono">status</code>, <code class="mono">version</code>, <code class="mono">robots</code>)
+    are <strong>not</strong> recorded in the per-project buffer — they still appear in Vercel logs and project activity.</p>
+
+    <h2>Where to find them</h2>
+    <ul>
+      <li><strong>API tab → Recent calls</strong> — the last 50 user-route calls, with filters and pagination.</li>
+      <li><strong>Insights tab → Logs</strong> — the project event log (deploys, secrets, DB writes, invites…).</li>
+      <li><strong>Vercel logs</strong> — structured <code class="mono">run.timing</code> stage lines per request.</li>
+    </ul>
+
+    <h2>What each entry contains</h2>
+    <table class="db-table">
+      <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><strong>route</strong></td><td>The route name (<code class="mono">notes</code>, <code class="mono">chat</code>, …)</td></tr>
+        <tr><td><strong>method</strong></td><td>HTTP method</td></tr>
+        <tr><td><strong>status</strong></td><td>Response code (200, 500, 504…)</td></tr>
+        <tr><td><strong>durationMs</strong></td><td>Total wall time</td></tr>
+        <tr><td><strong>via</strong></td><td><code class="mono">anon</code>, <code class="mono">session</code>, or <code class="mono">api-key</code></td></tr>
+        <tr><td><strong>requestId</strong></td><td>Correlates with the <code class="mono">X-Request-Id</code> response header and Vercel logs</td></tr>
+        <tr><td><strong>stage</strong></td><td>Last <code class="mono">run.timing</code> stage reached (useful for timeouts)</td></tr>
+        <tr><td><strong>bytesIn / bytesOut</strong></td><td>Request body size / response size</td></tr>
+        <tr><td><strong>fetchHosts</strong></td><td>External hosts the script actually hit</td></tr>
+        <tr><td><strong>userAgent / ipHash</strong></td><td>Client UA and hashed IP (for debugging)</td></tr>
+        <tr><td><strong>deploymentId</strong></td><td>Which deploy the call hit</td></tr>
+        <tr><td><strong>errorName / errorMessage</strong></td><td>Thrown error, if any</td></tr>
+        <tr><td><strong>errorClass</strong></td><td>Grouped: <code class="mono">timeout</code>, <code class="mono">rate_limit</code>, <code class="mono">syntax_error</code>, <code class="mono">blocked_host</code>, <code class="mono">network</code>, <code class="mono">server_error</code>…</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Reading logs from outside</h2>
+    <p>Requires <strong>editor</strong> role:</p>
+    <pre><code>GET /api/host?action=api-logs&pid={pid}&limit=20&offset=0
+GET /api/host?action=api-logs&pid={pid}&status=error
+GET /api/host?action=api-logs&pid={pid}&route=notes&via=api-key
+GET /api/host?action=api-logs&pid={pid}&since=1730000000000</code></pre>
+    <p>Filters: <code class="mono">route</code>, <code class="mono">status</code> (<code class="mono">error</code> | <code class="mono">ok</code> | numeric), <code class="mono">via</code>, <code class="mono">since</code> (Unix ms).</p>
+    <p>The response includes <code class="mono">logs</code>, <code class="mono">total</code>, <code class="mono">returned</code>, <code class="mono">offset</code>, <code class="mono">limit</code>, <code class="mono">hasMore</code>, and an <code class="mono">errorSummary</code> breakdown.</p>
+
+    <h2>Response headers</h2>
+    <p>Every API response carries:</p>
+    <ul>
+      <li><code class="mono">X-Request-Id</code> — quote this when reporting an issue</li>
+      <li><code class="mono">X-Execution-Time</code> — total ms</li>
+      <li><code class="mono">X-Fetch-Hosts</code> — comma-separated external hosts hit</li>
+    </ul>
+
+    <h2>Debugging a timeout</h2>
+    <p>Functions cap at 30s (7s for user code). When a call times out, look at the <code class="mono">stage</code>
+    field on the log entry — or open Vercel logs and find the last <code class="mono">run.timing</code> line for that
+    <code class="mono">requestId</code>. That stage is where the budget was consumed.</p>
+    <p>Common culprits: <code class="mono">waitforfunction_started</code> (your script never returned),
+    <code class="mono">chromium_launch_started</code> (cold start — try again), or a slow external fetch inside your script.</p>
+
+    <h2>Limits</h2>
+    <ul>
+      <li>The per-project API log keeps the <strong>last 50</strong> user-route calls.</li>
+      <li>The project event log keeps the <strong>last 200</strong> events.</li>
+      <li>Logs are append-only; there's no delete endpoint.</li>
+    </ul>
+  `,
+},
   'examples': {
     title: 'Examples',
     body: `
