@@ -2,50 +2,31 @@
 // ============================================================
 // scripts/swpush.cjs
 // ------------------------------------------------------------
-// Injects a build-time cache version into sw.js and writes the
-// result to public/sw.js.
+// Rewrites the CACHE_VERSION and CACHE_BUILT_AT constants in
+// public/sw.js on every build.
 //
-// Version format:  <unix-ms>
-// Example:         1762613422345
+// Idempotent: it matches EITHER the placeholder OR an already-
+// injected numeric version, so it can run repeatedly against the
+// same file without breaking.
 //
-// Why millisecond timestamp?
-//   - Monotonically increasing: newer build = larger number.
-//   - Unique per build: two builds in the same second still
-//     produce different values because ms resolution is
-//     granularity, not seconds.
-//   - No git SHA, no random suffix, no date formatting — just
-//     Date.now(). Impossible to collide unless two builds
-//     happen in the exact same millisecond, which is not
-//     physically possible on a single Vercel builder.
+// Version format:  <unix-ms>       e.g. 1762613422345
+// Reset format:    1               (see RESET below)
 //
+// This is the ONLY script. There is no separate source file.
+// public/sw.js is both the source and the output. The two
+// constants on lines 1–12 are the only thing this script touches.
+//
+// ------------------------------------------------------------
 // RESET TO VERSION 1
 // ------------------------------------------------------------
-// The build can be forced to emit version "1" instead of the
-// millisecond stamp. Useful after manual cache surgery, a
-// rollback, or any time you want to nuke the cache with a
-// known marker.
+// Trigger any of:
 //
-// Trigger any of these:
+//   1. Env var:      SW_RESET=1 node scripts/swpush.cjs
+//   2. CLI flag:     node scripts/swpush.cjs --reset
+//   3. Marker file:  create `.swreset` at the repo root, commit,
+//                    let Vercel build, then delete it and commit.
 //
-//   1. Env var:        SW_RESET=1 node scripts/swpush.cjs
-//   2. CLI flag:       node scripts/swpush.cjs --reset
-//   3. Marker file:    create `.swreset` in the repo root,
-//                      commit it, and Vercel's build will reset.
-//                      Then delete `.swreset` and commit again.
-//
-// The reset is ONE-SHOT: it affects only the current run. The
-// next build resumes timestamping from Date.now().
-//
-// The script also refuses to run twice on the same source file.
-// That prevents a stale public/sw.js from a previous build
-// being silently reused if the placeholders are already gone.
-//
-// Usage:
-//   node scripts/swpush.cjs
-//   node scripts/swpush.cjs --reset
-//
-// Wired into:
-//   "build": "node scripts/swpush.cjs"
+// One-shot: the next build after reset resumes timestamping.
 // ============================================================
 
 'use strict';
@@ -55,8 +36,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const ROOT = path.resolve(__dirname, '..');
-const SRC = path.join(ROOT, 'sw.js');
-const OUT = path.join(ROOT, 'public', 'sw.js');
+const SW = path.join(ROOT, 'public', 'sw.js');
 const RESET_MARKER = path.join(ROOT, '.swreset');
 
 // ------------------------------------------------------------
@@ -64,47 +44,16 @@ const RESET_MARKER = path.join(ROOT, '.swreset');
 // ------------------------------------------------------------
 
 function shouldReset(argv) {
-  // 1. CLI flag
-  if (argv.includes('--reset')) {
-    return { yes: true, source: 'cli' };
-  }
+  if (argv.includes('--reset')) return { yes: true, source: 'cli' };
 
-  // 2. Env var (SW_RESET=1, SW_RESET=true, SW_RESET=yes)
   const env = String(process.env.SW_RESET || '').toLowerCase();
   if (env === '1' || env === 'true' || env === 'yes') {
     return { yes: true, source: 'env' };
   }
 
-  // 3. Marker file
-  if (fs.existsSync(RESET_MARKER)) {
-    return { yes: true, source: 'marker' };
-  }
+  if (fs.existsSync(RESET_MARKER)) return { yes: true, source: 'marker' };
 
   return { yes: false, source: null };
-}
-
-// ------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------
-
-function buildVersion({ reset }) {
-  if (reset) {
-    // Forced reset. CACHE_NAME becomes `folio-shell-1`.
-    // Previous caches (folio-shell-<ms>) are deleted on activate,
-    // so a reset effectively replaces every cached shell.
-    return 1;
-  }
-
-  // Normal path. Millisecond Unix timestamp.
-  return Date.now();
-}
-
-function buildBuiltAt(version, { reset }) {
-  if (reset) return 1;
-  // Same value as the version — kept separate so CACHE_BUILT_AT
-  // remains a valid Unix-ms value even if the version format
-  // ever changes to something non-numeric.
-  return version;
 }
 
 // ------------------------------------------------------------
@@ -116,51 +65,53 @@ function main() {
 
   let source;
   try {
-    source = fs.readFileSync(SRC, 'utf8');
+    source = fs.readFileSync(SW, 'utf8');
   } catch (err) {
-    console.error('[swpush] Cannot read sw.js:', err.message);
+    console.error('[swpush] Cannot read public/sw.js:', err.message);
     process.exit(1);
   }
 
-  // Guard: refuse to overwrite if placeholders are already gone.
-  // A previous build that mutated the source would leave nothing
-  // to replace, and we'd silently produce a SW with a stale
-  // version — the exact failure mode this script exists to
-  // prevent.
-  if (!source.includes('__FOLIO_SW_VERSION__')) {
+  // These two regexes match EITHER the placeholder OR an already-
+  // injected numeric value. That's what makes the script idempotent
+  // when public/sw.js doubles as both source and output.
+  const VERSION_RE =
+    /const CACHE_VERSION = (?:'__FOLIO_SW_VERSION__'|'\d+');/;
+  const BUILT_AT_RE =
+    /const CACHE_BUILT_AT = Number\((?:'__FOLIO_SW_BUILT_AT__'|'\d+')\);/;
+
+  if (!VERSION_RE.test(source)) {
     console.error(
-      '[swpush] sw.js has no __FOLIO_SW_VERSION__ placeholder. ' +
-      'Refusing to write public/sw.js. ' +
-      'The source may have been modified by a previous build.'
+      '[swpush] Cannot find CACHE_VERSION line in public/sw.js. ' +
+      'Expected: const CACHE_VERSION = \'<something>\';'
     );
     process.exit(1);
   }
-  if (!source.includes('__FOLIO_SW_BUILT_AT__')) {
+  if (!BUILT_AT_RE.test(source)) {
     console.error(
-      '[swpush] sw.js has no __FOLIO_SW_BUILT_AT__ placeholder. ' +
-      'Refusing to write public/sw.js.'
+      '[swpush] Cannot find CACHE_BUILT_AT line in public/sw.js. ' +
+      'Expected: const CACHE_BUILT_AT = Number(\'<something>\');'
     );
     process.exit(1);
   }
 
-  const version = buildVersion(reset);
-  const builtAt = buildBuiltAt(version, reset);
+  const version = reset.yes ? 1 : Date.now();
+  const builtAt = reset.yes ? 1 : version;
 
   const output = source
-    .replace(/__FOLIO_SW_VERSION__/g, String(version))
-    .replace(/__FOLIO_SW_BUILT_AT__/g, String(builtAt));
+    .replace(VERSION_RE, `const CACHE_VERSION = '${version}';`)
+    .replace(BUILT_AT_RE, `const CACHE_BUILT_AT = Number('${builtAt}');`);
 
-  // Sanity: placeholders must be fully gone from the output.
-  if (/__FOLIO_SW_(VERSION|BUILT_AT)__/.test(output)) {
-    console.error(
-      '[swpush] Placeholder substitution left a token in output. ' +
-      'Check sw.js for duplicate or malformed placeholders.'
+  if (output === source) {
+    // Nothing changed. This shouldn't happen unless the file was
+    // manually edited to have the exact same version, but we
+    // surface it instead of failing silently.
+    console.warn(
+      `[swpush] No change written — version already ${version}. ` +
+      'Two builds in the same millisecond?'
     );
-    process.exit(1);
   }
 
-  fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, output, 'utf8');
+  fs.writeFileSync(SW, output, 'utf8');
 
   const bytes = Buffer.byteLength(output, 'utf8');
   const hash = crypto
@@ -168,16 +119,13 @@ function main() {
     .update(output)
     .digest('hex')
     .slice(0, 12);
-  const target = path.relative(ROOT, OUT);
 
   if (reset.yes) {
-    console.log(
-      `[swpush] RESET via ${reset.source} — forcing version 1`
-    );
+    console.log(`[swpush] RESET via ${reset.source} — forcing version 1`);
   }
 
   console.log(
-    `[swpush] wrote ${target}  ` +
+    `[swpush] wrote public/sw.js  ` +
     `version=${version}  ` +
     `builtAt=${builtAt}  ` +
     `bytes=${bytes}  ` +
@@ -185,16 +133,15 @@ function main() {
     (reset.yes ? '  (RESET)' : '')
   );
 
-  // On Vercel, log the version prominently so it shows up in the
-  // deploy log — makes it easy to correlate a cached shell with
-  // a specific build.
   if (process.env.VERCEL) {
     const label = reset.yes ? 'RESET' : 'ms';
     console.log(`[swpush] Vercel deploy — SW ${label} version: ${version}`);
   }
 
-  // If we came in via marker, remove it so the NEXT build runs
-  // normally. CLI/env resets are one-shot by construction.
+  // Marker is one-shot — remove it from the build workspace so the
+  // next build runs normally. Commit the deletion on GitHub too,
+  // otherwise the marker file stays in the repo and every build
+  // would reset again (still works, just not what you want).
   if (reset.source === 'marker') {
     try {
       fs.unlinkSync(RESET_MARKER);
