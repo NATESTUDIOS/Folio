@@ -3173,6 +3173,15 @@ async function renderApiPanel(panel) {
           <div class="field-hint" style="margin-top:10px;">
             See <button type="button" class="link-btn" id="btnApiDocs">Docs → Private API</button> for the full reference.
           </div>
+          <div class="card" style="margin-top:12px;">
+  <div class="card-header">
+    <div class="card-title">${svg('list', 13, 2.2)} Recent calls <span style="font-size:10px;opacity:0.6;font-weight:400;">(last 50)</span></div>
+    <button class="btn btn-sm btn-ghost btn-icon" id="btnRefreshLogs" aria-label="Refresh logs" type="button">${svg('refresh', 10, 2.2)}</button>
+  </div>
+  <div class="card-body tight" id="apiLogsBody">
+    <div class="field-hint">Loading…</div>
+  </div>
+</div>
         </div>
       </div>
     </div>
@@ -3186,6 +3195,62 @@ async function renderApiPanel(panel) {
   });
 
   $('btnApiDocs')?.addEventListener('click', () => openDocsOverlay('private-api'));
+
+  $('btnRefreshLogs')?.addEventListener('click', () => loadApiLogs());
+  loadApiLogs();
+}
+
+async function loadApiLogs() {
+  const body = $('apiLogsBody');
+  if (!body) return;
+
+  const res = await apiFetch(
+    API_HOST + '?action=api-logs&pid=' + encodeURIComponent(S.pid) + '&limit=50'
+  );
+
+  if (!res.ok || !res.data?.success) {
+    body.innerHTML = `<div class="field-hint" style="color:var(--theme-danger);">Couldn't load logs: ${escapeHTML(res.data?.error || 'unknown')}</div>`;
+    return;
+  }
+
+  const logs = res.data.logs || [];
+
+  if (logs.length === 0) {
+    body.innerHTML = `
+      <div class="field-hint" style="text-align:center;padding:16px 8px;">
+        No API calls yet. Calls to <code class="mono">api/*.js</code> will appear here.
+      </div>
+    `;
+    return;
+  }
+
+  body.innerHTML = logs.map((l) => {
+    const isError = l.status >= 400;
+    const iconName = isError ? 'alertCircle' : 'check';
+    const badgeClass = isError ? 'danger' : 'success';
+
+    const errLine = l.errorMessage
+      ? `<div class="field-hint mono" style="margin-top:2px;color:var(--theme-danger);font-size:10px;line-height:1.4;">
+           ${escapeHTML(l.errorName || 'Error')}: ${escapeHTML(l.errorMessage)}
+         </div>`
+      : '';
+
+    return `
+      <div class="row-item" style="align-items:flex-start;">
+        <div class="row-icon" style="flex-shrink:0;">${svg(iconName, 12, 2.2)}</div>
+        <div class="row-content" style="min-width:0;">
+          <div class="row-title mono" style="font-size:11px;overflow-wrap:anywhere;">
+            ${escapeHTML(l.method)} /${escapeHTML(l.route)}
+            <span class="badge ${badgeClass}" style="font-size:9px;margin-left:4px;">${l.status}</span>
+          </div>
+          <div class="row-sub" style="font-size:10px;">
+            ${timeAgo(l.ts)} · ${l.durationMs}ms · ${escapeHTML(l.via)}
+          </div>
+          ${errLine}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
   
   function toggleDeploymentRow(deploymentId) {
