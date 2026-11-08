@@ -15,11 +15,9 @@ export default async function handler(req, res) {
     stacks: {},
   };
 
-  const testHtml = `
-    <!DOCTYPE html>
-    <html><head><title>Folio Browser Test</title></head>
-    <body><h1 id="status">Launched</h1></body></html>
-  `;
+  const testHtml = `<!DOCTYPE html>
+<html><head><title>Folio Browser Test</title></head>
+<body><h1 id="status">Launched</h1></body></html>`;
 
   // ── Stack A: Puppeteer + chromium-min with explicit pack URL ──
   try {
@@ -45,16 +43,9 @@ export default async function handler(req, res) {
     const title = await page.title();
     await browser.close();
 
-    results.stacks.puppeteer_chromium_min = {
-      ok: true,
-      executablePath,
-      title,
-    };
+    results.stacks.puppeteer_chromium_min = { ok: true, executablePath, title };
   } catch (err) {
-    results.stacks.puppeteer_chromium_min = {
-      ok: false,
-      error: err.message,
-    };
+    results.stacks.puppeteer_chromium_min = { ok: false, error: err.message };
   }
 
   // ── Stack B: Playwright + full chromium ──
@@ -79,20 +70,12 @@ export default async function handler(req, res) {
     const title = await page.title();
     await browser.close();
 
-    results.stacks.playwright_chromium = {
-      ok: true,
-      executablePath,
-      title,
-    };
+    results.stacks.playwright_chromium = { ok: true, executablePath, title };
   } catch (err) {
-    results.stacks.playwright_chromium = {
-      ok: false,
-      error: err.message,
-    };
+    results.stacks.playwright_chromium = { ok: false, error: err.message };
   }
 
   const anyOk = Object.values(results.stacks).some((s) => s.ok);
-
   return res.status(anyOk ? 200 : 500).json(results);
 }
 
