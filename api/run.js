@@ -697,11 +697,29 @@ async function loadInvocationContext(pid, route) {
 }
 
 async function loadRouteFile(pid, route) {
-  const safeKey = sanitizeFirebasePath(`api/${route}.js`.replace(/\//g, "__"));
-  const snap = await db.ref(`api-files/${pid}/${safeKey}`).once("value");
-  if (!snap.exists()) return null;
-  const data = snap.val();
-  return data?.content || "";
+  // Two storage conventions exist depending on when the file was
+  // deployed:
+  //
+  //   api-files/{pid}/api__notes.js  ← canonical (reader-expected form)
+  //   api-files/{pid}/notes.js       ← legacy   (writer-actual form)
+  //
+  // Try both, first match wins. This makes the runtime robust to
+  // whichever key the current deploy pipeline actually writes.
+  const candidates = [
+    sanitizeFirebasePath(`api/${route}.js`.replace(/\//g, "__")), // api__notes.js
+    sanitizeFirebasePath(`${route}.js`),                          // notes.js
+  ];
+
+  for (const key of candidates) {
+    const snap = await db.ref(`api-files/${pid}/${key}`).once("value");
+    if (snap.exists()) {
+      const data = snap.val();
+      if (data?.content && typeof data.content === "string") {
+        return data.content;
+      }
+    }
+  }
+  return null;
 }
 
 // =========================================================================
