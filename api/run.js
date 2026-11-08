@@ -123,7 +123,54 @@ const RATE_LIMITS = {
 
 const SLUG_CACHE_TTL = 60 * 1000; // 60 seconds
 const SLUG_CACHE_MAX = 500;
+// =========================================================================
+// API LOGS — per-project ring buffer (max 50 entries)
+// =========================================================================
+//
+// Recorded only for user routes (`api/*.js`). System routes
+// (health, whoami, files, status, version, robots) are skipped.
+//
+// Stored at apiLogs/{pid}/{entryId}. Pruned to 50 by timestamp on
+// every write. Read via the `host` action `?action=api-logs`.
 
+const API_LOGS_MAX = 50;
+
+async function recordApiLog(pid, entry) {
+  try {
+    const clean = {
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      ts: Date.now(),
+      route: String(entry.route || "").slice(0, 60),
+      method: String(entry.method || "POST").slice(0, 10),
+      status: Number(entry.status) || 200,
+      durationMs: Math.max(0, Number(entry.durationMs) || 0),
+      errorName: entry.errorName ? String(entry.errorName).slice(0, 100) : null,
+      errorMessage: entry.errorMessage ? String(entry.errorMessage).slice(0, 500) : null,
+      via: entry.via || "anon",
+    };
+
+    let existing = {};
+    try {
+      const snap = await db.ref(`apiLogs/${pid}`).once("value");
+      if (snap.exists()) existing = snap.val() || {};
+    } catch {}
+
+    existing[clean.id] = clean;
+
+    const entries = Object.entries(existing)
+      .sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+    const keep = new Set(entries.slice(0, API_LOGS_MAX).map(([id]) => id));
+
+    const updates = {};
+    for (const [id, val] of Object.entries(existing)) {
+      updates[id] = keep.has(id) ? val : null;
+    }
+
+    await db.ref(`apiLogs/${pid}`).update(updates);
+  } catch (err) {
+    log("run.record_api_log_failed", { pid, message: err.message });
+  }
+}
 // =========================================================================
 // STAGE TIMING HELPER
 // =========================================================================
@@ -1128,15 +1175,28 @@ export default async function handler(req, res) {
     }).catch(() => {});
 
     log("run.execution_failed", {
-      reqId,
-      pid,
-      route,
-      status,
-      durationMs,
-      message: runResult.errorMessage,
-    });
+  reqId,
+  pid,
+  route,
+  status,
+  durationMs,
+  message: runResult.errorMessage,
+});
 
-    return res.status(status).json({ success: false, error: message, route });
+// Record to the per-project API logs (user routes only)
+if (ctx.isUserRoute && !ctx.isSystemRoute) {
+  recordApiLog(pid, {
+    route,
+    method: req.method,
+    status,
+    durationMs,
+    errorName: runResult.errorName || "Error",
+    errorMessage: runResult.errorMessage || null,
+    via: actor?.via || "anon",
+  }).catch(() => {});
+}
+
+return res.status(status).json({ success: false, error: message, route });
   }
 
   // ── Response ───────────────────────────────────────────────────
@@ -1164,17 +1224,30 @@ export default async function handler(req, res) {
   }).catch(() => {});
 
   log("run.completed", {
-    reqId,
-    pid,
+  reqId,
+  pid,
+  route,
+  status: responseStatus,
+  durationMs,
+  bytesOut: responseBytes,
+  fetchHosts: runResult.fetchHosts || [],
+  via: actor?.via || "anon",
+});
+
+// Record to the per-project API logs (user routes only)
+if (ctx.isUserRoute && !ctx.isSystemRoute) {
+  recordApiLog(pid, {
     route,
+    method: req.method,
     status: responseStatus,
     durationMs,
-    bytesOut: responseBytes,
-    fetchHosts: runResult.fetchHosts || [],
+    errorName: null,
+    errorMessage: null,
     via: actor?.via || "anon",
-  });
+  }).catch(() => {});
+}
 
-  stageLog(reqId, "completed", startTime, { status: responseStatus, bytes: responseBytes });
+stageLog(reqId, "completed", startTime, { status: responseStatus, bytes: responseBytes });
 
   res.setHeader("Content-Type", result.contentType || "application/json");
   res.setHeader("X-Execution-Time", String(durationMs));
