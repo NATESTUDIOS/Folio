@@ -651,6 +651,15 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
           return await request.continue();
         }
 
+        // ── Secure-context bootstrap ─────────────────────────────
+        // We navigate to https://example.com first so the page has a
+        // secure origin. This is required for crypto.subtle to be
+        // available. We must let that navigation through unblocked.
+        // See the goto() below for context.
+        if (host === "example.com" || host.endsWith(".example.com")) {
+          return await request.continue();
+        }
+
         if (FOLIO_INTERNAL_HOSTS.has(host)) {
           if (
             urlObj.pathname === "/api/host" &&
@@ -699,6 +708,25 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
         try { await request.abort("failed"); } catch {}
       }
     });
+
+    // ── Secure-context bootstrap ─────────────────────────────────
+    // Navigate to a minimal HTTPS page BEFORE setContent. This makes
+    // page.isSecureContext === true, which unlocks window.crypto.subtle
+    // inside the injected script. Without this, setContent produces an
+    // about:blank page (not a secure context), and any user script
+    // that calls crypto.subtle.digest / encrypt / decrypt throws
+    // "Cannot read properties of undefined (reading 'digest')".
+    //
+    // The navigation is fast (~100-300ms). If it fails, we log and
+    // continue — scripts that don't use crypto.subtle still work.
+    try {
+      await page.goto("https://example.com/", {
+        waitUntil: "domcontentloaded",
+        timeout: 5000,
+      });
+    } catch (err) {
+      log("run.secure_context_nav_failed", { reqId, message: err.message });
+    }
 
     await page.setContent(html, {
       waitUntil: "domcontentloaded",
