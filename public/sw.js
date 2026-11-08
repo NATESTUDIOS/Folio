@@ -5,7 +5,7 @@
 // Offline-first application shell, navigation, assets and FCM
 // ============================================================
 
-const CACHE_VERSION = '2026-11-04-2';
+const CACHE_VERSION = '2026-11-08-1';
 const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
 
 const CACHE_BUILT_AT = Date.now();
