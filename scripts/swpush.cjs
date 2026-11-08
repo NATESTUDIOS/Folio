@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// scripts/swpush.js
+// scripts/swpush.cjs
 // ------------------------------------------------------------
 // Injects a build-time cache version into sw.js and writes the
 // result to public/sw.js.
@@ -27,10 +27,11 @@
 //
 // Trigger any of these:
 //
-//   1. Env var:        SW_RESET=1 node scripts/swpush.js
-//   2. CLI flag:       node scripts/swpush.js --reset
+//   1. Env var:        SW_RESET=1 node scripts/swpush.cjs
+//   2. CLI flag:       node scripts/swpush.cjs --reset
 //   3. Marker file:    create `.swreset` in the repo root,
-//                      run the build, delete the marker.
+//                      commit it, and Vercel's build will reset.
+//                      Then delete `.swreset` and commit again.
 //
 // The reset is ONE-SHOT: it affects only the current run. The
 // next build resumes timestamping from Date.now().
@@ -40,11 +41,11 @@
 // being silently reused if the placeholders are already gone.
 //
 // Usage:
-//   node scripts/swpush.js
-//   node scripts/swpush.js --reset
+//   node scripts/swpush.cjs
+//   node scripts/swpush.cjs --reset
 //
 // Wired into:
-//   "build": "node scripts/swpush.js && <other-build-steps>"
+//   "build": "node scripts/swpush.cjs"
 // ============================================================
 
 'use strict';
@@ -104,16 +105,6 @@ function buildBuiltAt(version, { reset }) {
   // remains a valid Unix-ms value even if the version format
   // ever changes to something non-numeric.
   return version;
-}
-
-function cleanupResetMarker(source) {
-  if (source !== 'marker') return;
-  try {
-    fs.unlinkSync(RESET_MARKER);
-    console.log('[swpush] Removed .swreset marker');
-  } catch (err) {
-    console.warn('[swpush] Could not remove .swreset:', err.message);
-  }
 }
 
 // ------------------------------------------------------------
@@ -204,7 +195,14 @@ function main() {
 
   // If we came in via marker, remove it so the NEXT build runs
   // normally. CLI/env resets are one-shot by construction.
-  cleanupResetMarker(reset.source);
+  if (reset.source === 'marker') {
+    try {
+      fs.unlinkSync(RESET_MARKER);
+      console.log('[swpush] Removed .swreset marker from build workspace');
+    } catch (err) {
+      console.warn('[swpush] Could not remove .swreset:', err.message);
+    }
+  }
 }
 
 main();
