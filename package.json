@@ -30,12 +30,15 @@
   ],
   "engines": { "node": "24.x" },
   "scripts": {
-    "dev": "vercel dev",
-    "deploy": "vercel deploy --prod",
-    "deploy:preview": "vercel deploy",
+    "build": "node scripts/swpush.js",
+    "dev": "node scripts/swpush.js && vercel dev",
+    "deploy": "node scripts/swpush.js && vercel deploy --prod",
+    "deploy:preview": "node scripts/swpush.js && vercel deploy",
+    "sw": "node scripts/swpush.js",
+    "sw:reset": "node scripts/swpush.js --reset",
     "logs": "vercel logs",
     "env:pull": "vercel env pull .env.local",
-    "clean": "rm -rf .vercel node_modules"
+    "clean": "rm -rf .vercel node_modules public/sw.js"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
