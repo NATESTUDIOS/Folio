@@ -46,6 +46,11 @@
 //  On Vercel free tier, every invocation launches Chromium fresh
 //  (~1.5–2s cold start). Serverless functions cannot keep processes
 //  alive between calls on free tier. Expect ~2s per /api/* call.
+//
+//  ⚠  STAGE TIMING LOGS
+//  Every major stage emits log("run.timing", { reqId, stage, elapsed }).
+//  When a function times out at 30s, the last stage tag in the Vercel
+//  logs tells you exactly which step consumed the budget.
 // ═══════════════════════════════════════════════════════════════════
 
 import fs from "node:fs";
@@ -118,6 +123,25 @@ const RATE_LIMITS = {
 
 const SLUG_CACHE_TTL = 60 * 1000; // 60 seconds
 const SLUG_CACHE_MAX = 500;
+
+// =========================================================================
+// STAGE TIMING HELPER
+// =========================================================================
+//
+// Emits a log line with the elapsed time since the request started.
+// Call at every stage boundary. When the function hits maxDuration,
+// the last logged stage is the one that hung.
+
+function stageLog(reqId, stage, startTime, extra = {}) {
+  try {
+    log("run.timing", {
+      reqId,
+      stage,
+      elapsed: Date.now() - startTime,
+      ...extra,
+    });
+  } catch {}
+}
 
 // =========================================================================
 // SLUG RESOLUTION CACHE
@@ -375,9 +399,13 @@ async function loadChromiumModules() {
   return { chromium: chromiumMod, puppeteer: puppeteerMod };
 }
 
-async function launchBrowser() {
+async function launchBrowser(reqId, startTime) {
+  stageLog(reqId, "chromium_modules_loading", startTime);
+
   // ── 1. Load the module pair ────────────────────────────────────
   const { chromium, puppeteer } = await loadChromiumModules();
+
+  stageLog(reqId, "chromium_modules_loaded", startTime);
 
   // ── 2. Extract Chromium via the pack URL ───────────────────────
   // @sparticuz/chromium-min downloads the pack from the URL you pass
@@ -387,6 +415,8 @@ async function launchBrowser() {
   // layout). The package then sets process.env.LD_LIBRARY_PATH to
   // that directory so the loader finds them when Chromium spawns.
   const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
+
+  stageLog(reqId, "chromium_extracted", startTime, { executablePath });
 
   // ── 3. Do NOT override LD_LIBRARY_PATH ─────────────────────────
   // chromium-min already set process.env.LD_LIBRARY_PATH to point at
@@ -402,6 +432,8 @@ async function launchBrowser() {
   try {
     fs.mkdirSync("/tmp/.chromium/profile", { recursive: true });
   } catch {}
+
+  stageLog(reqId, "chromium_launch_started", startTime);
 
   // ── 5. Launch ──────────────────────────────────────────────────
   const browser = await puppeteer.launch({
@@ -421,6 +453,8 @@ async function launchBrowser() {
     defaultViewport: { width: 1280, height: 720 },
     timeout: CHROMIUM_LAUNCH_TIMEOUT_MS,
   });
+
+  stageLog(reqId, "chromium_launch_done", startTime);
 
   return browser;
 }
@@ -631,8 +665,11 @@ ${userCode}
 // PAGE EXECUTION
 // =========================================================================
 
-async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
+async function runInPage(browser, { html, allowedHostsSet, pid, reqId, startTime }) {
+  stageLog(reqId, "new_page_started", startTime);
   const page = await browser.newPage();
+  stageLog(reqId, "new_page_done", startTime);
+
   const fetchHosts = new Set();
 
   try {
@@ -700,15 +737,23 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
       }
     });
 
+    stageLog(reqId, "setcontent_started", startTime);
+
     await page.setContent(html, {
       waitUntil: "domcontentloaded",
       timeout: PAGE_SETUP_TIMEOUT_MS,
     });
 
+    stageLog(reqId, "setcontent_done", startTime);
+
+    stageLog(reqId, "waitforfunction_started", startTime);
+
     await page.waitForFunction(
       () => window.__RESULT__ !== undefined,
       { timeout: USER_CODE_TIMEOUT_MS, polling: 50 },
     );
+
+    stageLog(reqId, "waitforfunction_done", startTime);
 
     const result = await page.evaluate(() => window.__RESULT__);
     return { ok: true, result, fetchHosts: [...fetchHosts] };
@@ -795,6 +840,14 @@ export default async function handler(req, res) {
   const reqId = newReqId();
   const startTime = Date.now();
 
+  stageLog(reqId, "entered", startTime, {
+    method: req.method,
+    pid: req.query?.pid || null,
+    username: req.query?.username || null,
+    project: req.query?.project || null,
+    route: req.query?.route || null,
+  });
+
   res.setHeader("X-Request-Id", reqId);
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
@@ -823,11 +876,14 @@ export default async function handler(req, res) {
 
   route = route.replace(/\.js$/i, "").trim();
 
+  stageLog(reqId, "query_parsed", startTime, { pid, route });
+
   // ── Resolve pid from slug if only username + project given ───────
   let resolutionError = null;
   if (!pid && username && projectSlug) {
     pid = await resolveProjectBySlug(username, projectSlug);
     if (!pid) resolutionError = "Project not found";
+    stageLog(reqId, "slug_resolved", startTime, { pid: pid || null });
   }
 
   if (!pid) {
@@ -858,6 +914,8 @@ export default async function handler(req, res) {
   // rate limits and logs are attributed correctly.
   const actor = await authenticate(req, pid).catch(() => null);
 
+  stageLog(reqId, "auth_done", startTime, { via: actor?.via || "anon" });
+
   // ── Rate limit ─────────────────────────────────────────────────
   // Authenticated callers rate-limit per uid/key; anonymous callers
   // rate-limit per IP. This preserves abuse protection for public
@@ -876,8 +934,15 @@ export default async function handler(req, res) {
     });
   }
 
+  stageLog(reqId, "rate_done", startTime);
+
   // ── Load invocation context ────────────────────────────────────
   const ctx = await loadInvocationContext(pid, route);
+  stageLog(reqId, "ctx_loaded", startTime, {
+    isSystemRoute: ctx?.isSystemRoute || false,
+    isUserRoute: ctx?.isUserRoute || false,
+  });
+
   if (!ctx) {
     return res.status(404).json({ success: false, error: "Project not found" });
   }
@@ -887,6 +952,10 @@ export default async function handler(req, res) {
 
   // ── Load route file ────────────────────────────────────────────
   const userCode = await loadRouteFile(pid, route, ctx.isSystemRoute);
+  stageLog(reqId, "route_file_loaded", startTime, {
+    bytes: userCode ? userCode.length : 0,
+  });
+
   if (!userCode || !userCode.trim()) {
     return res.status(404).json({ success: false, error: "Route file not found", route });
   }
@@ -919,6 +988,8 @@ export default async function handler(req, res) {
         () => {},
       );
     }
+
+    stageLog(reqId, "hosts_parsed", startTime, { allowedHosts: [...declaredHostsSet] });
   } catch (err) {
     log("run.allow_parse_failed", { reqId, pid, route, message: err.message });
     return res.status(500).json({ success: false, error: "Failed to parse @allow hosts" });
@@ -930,6 +1001,10 @@ export default async function handler(req, res) {
     const reserved = await buildReservedEnv(pid, ctx.project, ctx.deployment, route, reqId);
     const userSecrets = await projectSecrets.readAllSecrets(pid);
     env = { ...userSecrets, ...reserved };
+
+    stageLog(reqId, "secrets_loaded", startTime, {
+      envKeys: Object.keys(env).length,
+    });
   } catch (err) {
     log("run.secrets_failed", { reqId, pid, message: err.message });
     return res.status(500).json({ success: false, error: "Failed to load secrets" });
@@ -974,7 +1049,10 @@ export default async function handler(req, res) {
     totalBytes: ctx.publicFiles?.totalBytes || 0,
   };
 
+  stageLog(reqId, "env_built", startTime);
+
   const html = buildPageHtml({ userCode, env, files, reqObj });
+  stageLog(reqId, "html_built", startTime, { htmlBytes: html.length });
 
   // Body size check
   const bodyBytes = JSON.stringify(reqObj.body).length;
@@ -990,12 +1068,23 @@ export default async function handler(req, res) {
   let runResult = null;
 
   try {
-    browser = await launchBrowser();
+    stageLog(reqId, "browser_launch_started", startTime);
+
+    browser = await launchBrowser(reqId, startTime);
+
+    stageLog(reqId, "browser_launched", startTime);
+
     runResult = await runInPage(browser, {
       html,
       allowedHostsSet: declaredHostsSet,
       pid,
       reqId,
+      startTime,
+    });
+
+    stageLog(reqId, "page_executed", startTime, {
+      runOk: runResult?.ok || false,
+      errorMessage: runResult?.errorMessage || null,
     });
   } catch (err) {
     log("run.launch_or_execute_failed", { reqId, pid, route, message: err.message });
@@ -1008,6 +1097,7 @@ export default async function handler(req, res) {
     };
   } finally {
     await closeBrowserQuietly(browser);
+    stageLog(reqId, "browser_closed", startTime);
   }
 
   const durationMs = Date.now() - startTime;
@@ -1076,6 +1166,8 @@ export default async function handler(req, res) {
     fetchHosts: runResult.fetchHosts || [],
     via: actor?.via || "anon",
   });
+
+  stageLog(reqId, "completed", startTime, { status: responseStatus, bytes: responseBytes });
 
   res.setHeader("Content-Type", result.contentType || "application/json");
   res.setHeader("X-Execution-Time", String(durationMs));
