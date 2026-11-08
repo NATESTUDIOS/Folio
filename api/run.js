@@ -750,19 +750,22 @@ async function loadInvocationContext(pid, route) {
   return { project, deployment, publicFiles, apiRoutes, isSystemRoute, isUserRoute };
 }
 
-async function loadRouteFile(pid, route) {
-  // Two storage conventions exist depending on when the file was
-  // deployed:
+async function loadRouteFile(pid, route, isSystemRoute) {
+  // For system routes (health, whoami, files, status, version, robots),
+  // the file is always _system.js — it branches internally on REQ.route.
   //
-  //   api-files/{pid}/api__notes.js  ← canonical (reader-expected form)
-  //   api-files/{pid}/notes.js       ← legacy   (writer-actual form)
-  //
-  // Try both, first match wins. This makes the runtime robust to
-  // whichever key the current deploy pipeline actually writes.
-  const candidates = [
-    sanitizeFirebasePath(`api/${route}.js`.replace(/\//g, "__")), // api__notes.js
-    sanitizeFirebasePath(`${route}.js`),                          // notes.js
-  ];
+  // For user routes (notes, etc.), try the two storage conventions:
+  //   api-files/{pid}/api__notes.js  ← canonical
+  //   api-files/{pid}/notes.js       ← legacy
+  const candidates = [];
+
+  if (isSystemRoute) {
+    candidates.push(sanitizeFirebasePath("_system.js"));
+    candidates.push(sanitizeFirebasePath("api___system.js"));
+  }
+
+  candidates.push(sanitizeFirebasePath(`api/${route}.js`.replace(/\//g, "__")));
+  candidates.push(sanitizeFirebasePath(`${route}.js`));
 
   for (const key of candidates) {
     const snap = await db.ref(`api-files/${pid}/${key}`).once("value");
@@ -875,7 +878,7 @@ export default async function handler(req, res) {
   }
 
   // ── Load route file ────────────────────────────────────────────
-  const userCode = await loadRouteFile(pid, route);
+  const userCode = await loadRouteFile(pid, route, ctx.isSystemRoute);
   if (!userCode || !userCode.trim()) {
     return res.status(404).json({ success: false, error: "Route file not found", route });
   }
