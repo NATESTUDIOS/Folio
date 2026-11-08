@@ -1,25 +1,17 @@
-// api/browser-test.js
-// Standalone test endpoint. Tries multiple Chromium launch strategies
-// and reports which one works on the current Vercel runtime.
 
+import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 export default async function handler(req, res) {
-  const results = {
+  const result = {
     runtime: process.version,
-    env: {
-      AWS_LAMBDA_JS_RUNTIME: process.env.AWS_LAMBDA_JS_RUNTIME || null,
-      VERCEL: process.env.VERCEL || null,
-      VERCEL_REGION: process.env.VERCEL_REGION || null,
+    envBefore: {
+      VERCEL: process.env.VERCEL,
+      AWS_LAMBDA_JS_RUNTIME: process.env.AWS_LAMBDA_JS_RUNTIME,
+      LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH || null,
     },
-    stacks: {},
   };
 
-  const testHtml = `<!DOCTYPE html>
-<html><head><title>Folio Browser Test</title></head>
-<body><h1 id="status">Launched</h1></body></html>`;
-
-  // ── Stack A: Puppeteer + chromium-min with explicit pack URL ──
   try {
     const { default: puppeteer } = await import("puppeteer-core");
     const { default: chromium } = await import("@sparticuz/chromium-min");
@@ -28,55 +20,80 @@ export default async function handler(req, res) {
       "https://github.com/Sparticuz/chromium/releases/download/v141.0.0/chromium-v141.0.0-pack.x64.tar";
 
     const executablePath = await chromium.executablePath(packUrl);
-    const execDir = path.dirname(executablePath);
-    process.env.LD_LIBRARY_PATH = execDir;
+
+    // IMPORTANT:
+    // Do not overwrite LD_LIBRARY_PATH.
+    // Let @sparticuz/chromium configure its own library paths.
+
+    const candidates = [
+      "/tmp",
+      "/tmp/al2023/lib",
+      "/tmp/chromium-pack",
+      "/tmp/chromium",
+    ];
+
+    const libraries = {};
+
+    for (const dir of candidates) {
+      if (existsSync(dir)) {
+        try {
+          libraries[dir] = readdirSync(dir).slice(0, 40);
+        } catch (e) {
+          libraries[dir] = e.message;
+        }
+      }
+    }
+
+    result.extraction = {
+      executablePath,
+      executableExists: existsSync(executablePath),
+      envAfter: {
+        LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH || null,
+        AWS_LAMBDA_JS_RUNTIME: process.env.AWS_LAMBDA_JS_RUNTIME,
+        VERCEL: process.env.VERCEL,
+      },
+      libraries,
+      required: {
+        nspr: existsSync("/tmp/al2023/lib/libnspr4.so"),
+        nss: existsSync("/tmp/al2023/lib/libnss3.so"),
+        nsprTmp: existsSync("/tmp/libnspr4.so"),
+      },
+    };
 
     const browser = await puppeteer.launch({
-      args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
+      args: chromium.args,
       executablePath,
       headless: "shell",
-      timeout: 10000,
+      timeout: 15000,
     });
 
-    const page = await browser.newPage();
-    await page.setContent(testHtml, { waitUntil: "domcontentloaded", timeout: 5000 });
-    const title = await page.title();
-    await browser.close();
+    try {
+      const page = await browser.newPage();
 
-    results.stacks.puppeteer_chromium_min = { ok: true, executablePath, title };
+      await page.setContent(
+        "<html><head><title>Folio Browser Test</title></head></html>"
+      );
+
+      result.browser = {
+        ok: true,
+        title: await page.title(),
+      };
+    } finally {
+      await browser.close();
+    }
   } catch (err) {
-    results.stacks.puppeteer_chromium_min = { ok: false, error: err.message };
+    result.browser = {
+      ok: false,
+      error: err.message,
+      stack: err.stack,
+    };
   }
 
-  // ── Stack B: Playwright + full chromium ──
-  try {
-    const { chromium: playwright } = await import("playwright-core");
-    const { default: chromium } = await import("@sparticuz/chromium");
-
-    const executablePath = await chromium.executablePath();
-    const execDir = path.dirname(executablePath);
-    process.env.LD_LIBRARY_PATH = execDir;
-
-    const browser = await playwright.launch({
-      args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
-      executablePath,
-      headless: true,
-      timeout: 10000,
-    });
-
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    await page.setContent(testHtml, { waitUntil: "domcontentloaded", timeout: 5000 });
-    const title = await page.title();
-    await browser.close();
-
-    results.stacks.playwright_chromium = { ok: true, executablePath, title };
-  } catch (err) {
-    results.stacks.playwright_chromium = { ok: false, error: err.message };
-  }
-
-  const anyOk = Object.values(results.stacks).some((s) => s.ok);
-  return res.status(anyOk ? 200 : 500).json(results);
+  return res.status(result.browser?.ok ? 200 : 500).json(result);
 }
 
-export const config = { runtime: "nodejs", memory: 1024, maxDuration: 30 };
+export const config = {
+  runtime: "nodejs",
+  memory: 1024,
+  maxDuration: 30,
+};
