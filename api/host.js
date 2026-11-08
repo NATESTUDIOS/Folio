@@ -3028,16 +3028,21 @@ async function handleApiLogs(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
 
-  if (!(await enforceRate(req, res, "apiRoutes", `pid_${pid}`))) return;
+  if (!(await enforceRate(req, res, "apiLogs", `pid_${pid}`))) return;
 
   // Require at least editor access — logs may include error messages
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
-  const limit = Math.min(
-    Math.max(parseInt(req.query?.limit, 10) || 50, 1),
-    50
-  );
+  // ── Pagination params ────────────────────────────────────────
+  const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 20, 1), 50);
+  const offset = Math.max(parseInt(req.query?.offset, 10) || 0, 0);
+
+  // ── Filters ──────────────────────────────────────────────────
+  const routeFilter = String(req.query?.route || "").trim().toLowerCase();
+  const statusFilter = String(req.query?.status || "").trim(); // "error" | "ok" | exact code
+  const viaFilter = String(req.query?.via || "").trim().toLowerCase();
+  const sinceTs = parseInt(req.query?.since, 10) || 0;
 
   const snap = await db.ref(`apiLogs/${pid}`).once("value");
   if (!snap.exists()) {
@@ -3045,10 +3050,16 @@ async function handleApiLogs(req, res, reqId) {
       success: true,
       logs: [],
       total: 0,
+      returned: 0,
+      offset,
+      limit,
+      hasMore: false,
       max: 50,
+      filters: { route: routeFilter || null, status: statusFilter || null, via: viaFilter || null, since: sinceTs || null },
     });
   }
 
+  // ── Collect all entries ──────────────────────────────────────
   const all = [];
   snap.forEach((child) => {
     const v = child.val() || {};
@@ -3062,18 +3073,101 @@ async function handleApiLogs(req, res, reqId) {
       errorName: v.errorName || null,
       errorMessage: v.errorMessage || null,
       via: v.via || "anon",
+      // ── NEW: richer error context ──────────────────────────
+      ok: !v.errorName && v.status >= 200 && v.status < 400,
+      errorClass: classifyApiError(v),
+      requestId: v.requestId || null,
+      stage: v.stage || null,              // last run.timing stage if failed
+      bytesIn: v.bytesIn || null,
+      bytesOut: v.bytesOut || null,
+      fetchHosts: Array.isArray(v.fetchHosts) ? v.fetchHosts : [],
+      userAgent: v.userAgent || null,
+      ipHash: v.ipHash || null,
+      deploymentId: v.deploymentId || null,
     });
   });
 
-  all.sort((a, b) => b.ts - a.ts);
-  const slice = all.slice(0, limit);
+  // ── Apply filters ────────────────────────────────────────────
+  let filtered = all;
+
+  if (routeFilter) {
+    filtered = filtered.filter((e) => e.route.toLowerCase() === routeFilter);
+  }
+  if (viaFilter) {
+    filtered = filtered.filter((e) => e.via === viaFilter);
+  }
+  if (sinceTs > 0) {
+    filtered = filtered.filter((e) => e.ts >= sinceTs);
+  }
+  if (statusFilter) {
+    if (statusFilter === "error") {
+      filtered = filtered.filter((e) => !e.ok);
+    } else if (statusFilter === "ok") {
+      filtered = filtered.filter((e) => e.ok);
+    } else {
+      const code = parseInt(statusFilter, 10);
+      if (Number.isFinite(code)) {
+        filtered = filtered.filter((e) => e.status === code);
+      }
+    }
+  }
+
+  // ── Sort newest-first ────────────────────────────────────────
+  filtered.sort((a, b) => b.ts - a.ts);
+
+  const total = filtered.length;
+  const slice = filtered.slice(offset, offset + limit);
+
+  // ── Error summary (helps the UI show a breakdown) ────────────
+  const errorSummary = {};
+  for (const e of filtered) {
+    if (e.ok) continue;
+    const key = e.errorName || `HTTP ${e.status}`;
+    errorSummary[key] = (errorSummary[key] || 0) + 1;
+  }
 
   return res.status(200).json({
     success: true,
     logs: slice,
-    total: all.length,
-    max: 50,
+    total,
+    returned: slice.length,
+    offset,
+    limit,
+    hasMore: offset + limit < total,
+    max: 50, // ring-buffer cap
+    filters: {
+      route: routeFilter || null,
+      status: statusFilter || null,
+      via: viaFilter || null,
+      since: sinceTs || null,
+    },
+    errorSummary,
+    rateLimit: {
+      limit: 60,
+      remaining: res.getHeader("X-RateLimit-Remaining") || null,
+    },
   });
+}
+
+// ── Classify an API error for the dashboard ────────────────────
+function classifyApiError(entry) {
+  if (!entry) return null;
+  const name = entry.errorName || "";
+  const msg = entry.errorMessage || "";
+  const status = Number(entry.status) || 0;
+
+  if (status === 504 || /timeout/i.test(name + msg)) return "timeout";
+  if (status === 429) return "rate_limit";
+  if (status === 413) return "payload_too_large";
+  if (status === 508) return "recursion_limit";
+  if (/SyntaxError/i.test(name)) return "syntax_error";
+  if (/TypeError/i.test(name)) return "type_error";
+  if (/ReferenceError/i.test(name)) return "reference_error";
+  if (/blockedbyclient|blocked/i.test(msg)) return "blocked_host";
+  if (/^net::|ERR_/i.test(msg)) return "network";
+  if (status >= 500) return "server_error";
+  if (status >= 400) return "client_error";
+  return null;
 }
 // =========================================================================
 // PROJECTS CRUD
