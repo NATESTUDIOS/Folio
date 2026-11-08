@@ -135,42 +135,28 @@ const SLUG_CACHE_MAX = 500;
 
 const API_LOGS_MAX = 50;
 
-async function recordApiLog(pid, entry) {
-  try {
-    const clean = {
-      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      ts: Date.now(),
-      route: String(entry.route || "").slice(0, 60),
-      method: String(entry.method || "POST").slice(0, 10),
-      status: Number(entry.status) || 200,
-      durationMs: Math.max(0, Number(entry.durationMs) || 0),
-      errorName: entry.errorName ? String(entry.errorName).slice(0, 100) : null,
-      errorMessage: entry.errorMessage ? String(entry.errorMessage).slice(0, 500) : null,
-      via: entry.via || "anon",
-    };
-
-    let existing = {};
-    try {
-      const snap = await db.ref(`apiLogs/${pid}`).once("value");
-      if (snap.exists()) existing = snap.val() || {};
-    } catch {}
-
-    existing[clean.id] = clean;
-
-    const entries = Object.entries(existing)
-      .sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
-    const keep = new Set(entries.slice(0, API_LOGS_MAX).map(([id]) => id));
-
-    const updates = {};
-    for (const [id, val] of Object.entries(existing)) {
-      updates[id] = keep.has(id) ? val : null;
-    }
-
-    await db.ref(`apiLogs/${pid}`).update(updates);
-  } catch (err) {
-    log("run.record_api_log_failed", { pid, message: err.message });
-  }
-}
+const clean = {
+  id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  ts: Date.now(),
+  route: String(entry.route || "").slice(0, 60),
+  method: String(entry.method || "POST").slice(0, 10),
+  status: Number(entry.status) || 200,
+  durationMs: Math.max(0, Number(entry.durationMs) || 0),
+  errorName: entry.errorName ? String(entry.errorName).slice(0, 100) : null,
+  errorMessage: entry.errorMessage ? String(entry.errorMessage).slice(0, 500) : null,
+  via: entry.via || "anon",
+  // ── new context fields ────────────────────────────────
+  requestId: entry.requestId ? String(entry.requestId).slice(0, 60) : null,
+  stage: entry.stage ? String(entry.stage).slice(0, 60) : null,
+  bytesIn: Number.isFinite(entry.bytesIn) ? Math.max(0, entry.bytesIn) : null,
+  bytesOut: Number.isFinite(entry.bytesOut) ? Math.max(0, entry.bytesOut) : null,
+  fetchHosts: Array.isArray(entry.fetchHosts)
+    ? entry.fetchHosts.slice(0, 20).map((h) => String(h).slice(0, 100))
+    : [],
+  userAgent: entry.userAgent ? String(entry.userAgent).slice(0, 200) : null,
+  ipHash: entry.ipHash ? String(entry.ipHash).slice(0, 40) : null,
+  deploymentId: entry.deploymentId ? String(entry.deploymentId).slice(0, 60) : null,
+};
 // =========================================================================
 // STAGE TIMING HELPER
 // =========================================================================
@@ -178,8 +164,9 @@ async function recordApiLog(pid, entry) {
 // Emits a log line with the elapsed time since the request started.
 // Call at every stage boundary. When the function hits maxDuration,
 // the last logged stage is the one that hung.
-
+let _lastStage = null;
 function stageLog(reqId, stage, startTime, extra = {}) {
+  _lastStage = stage;
   try {
     log("run.timing", {
       reqId,
@@ -886,7 +873,8 @@ async function loadRouteFile(pid, route, isSystemRoute) {
 export default async function handler(req, res) {
   const reqId = newReqId();
   const startTime = Date.now();
-
+_lastStage = "entered";
+  
   stageLog(reqId, "entered", startTime, {
     method: req.method,
     pid: req.query?.pid || null,
@@ -1193,6 +1181,15 @@ if (ctx.isUserRoute && !ctx.isSystemRoute) {
     errorName: runResult.errorName || "Error",
     errorMessage: runResult.errorMessage || null,
     via: actor?.via || "anon",
+    // ── richer error context ──────────────────────────────
+    requestId: reqId,
+    stage: _lastStage,
+    bytesIn: bodyBytes,
+    bytesOut: 0,
+    fetchHosts: runResult.fetchHosts || [],
+    userAgent: (req.headers["user-agent"] || "").slice(0, 200),
+    ipHash: hashIp(getClientIp(req)),
+    deploymentId: ctx.deployment?.deploymentId || null,
   }).catch(() => {});
 }
 
@@ -1244,6 +1241,15 @@ if (ctx.isUserRoute && !ctx.isSystemRoute) {
     errorName: null,
     errorMessage: null,
     via: actor?.via || "anon",
+    // ── richer success context ────────────────────────────
+    requestId: reqId,
+    stage: _lastStage,          // will be "completed"
+    bytesIn: bodyBytes,
+    bytesOut: responseBytes,
+    fetchHosts: runResult.fetchHosts || [],
+    userAgent: (req.headers["user-agent"] || "").slice(0, 200),
+    ipHash: hashIp(getClientIp(req)),
+    deploymentId: ctx.deployment?.deploymentId || null,
   }).catch(() => {});
 }
 
