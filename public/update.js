@@ -10,6 +10,28 @@
    Events:
      folio:update:available
      folio:update:applied
+
+   ────────────────────────────────────────────────────────────
+   CHANGELOG
+   ────────────────────────────────────────────────────────────
+   1. show() is now re-entrancy-safe via a synchronous `_showing`
+      flag. Rapid double-invocations (visibilitychange + online in
+      the same tick) can no longer stack overlays or duplicate
+      auto-dismiss timers.
+   2. buildDialog() now defensively removes any pre-existing
+      #folio-update-overlay from the DOM. Extra layer of safety on
+      top of #1.
+   3. The "already on the latest version" branch in applyNow() now
+      fully resets the dialog: removes `applying` class, hides the
+      progress bar (not just zeroes its width), restores the apply
+      button label, restarts the auto-dismiss timer. Users are no
+      longer stranded on a frozen "Updating… 45%" screen.
+   4. confirmDiscard() no longer passes an object to
+      window.confirm() — every browser stringifies the object to
+      "[object Object]". Uses the plain string form.
+   5. Minor: badge slice logic tolerates both dashed versions
+      (legacy `2026-11-08-1`) and bare ms timestamps
+      (`1762613422345`) without clipping.
    ============================================================ */
 (function () {
   'use strict';
@@ -44,6 +66,7 @@
     lastCheckedAt: 0,
     pageVersion: '',
     swActivatedHandled: false,
+    _showing: false,          // ← FIX #1: re-entrancy guard for show()
   };
 
   let postponedMemory = null;
@@ -126,21 +149,24 @@
     } catch { return false; }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // FIX #4: confirmDiscard() uses the string form only.
+  //
+  // The previous version passed an object to window.confirm(), which
+  // every browser stringifies to "[object Object]" — so the user saw
+  // literal gibberish in the native confirmation dialog.
+  //
+  // The async-then-check was dead code anyway: window.confirm() is
+  // synchronous in every shipping browser. Dropped it.
+  // ═══════════════════════════════════════════════════════════
   async function confirmDiscard() {
-    const opts = {
-      title: 'Reload anyway?',
-      message: 'You have unsaved changes. Reloading will lose them.',
-      confirmLabel: 'Reload',
-      danger: true,
-    };
     try {
-      if (typeof window.confirm === 'function') {
-        const r = window.confirm(opts);
-        if (r && typeof r.then === 'function') return !!(await r);
-        if (typeof r === 'boolean') return r;
-      }
-    } catch {}
-    try { return !!window.confirm(opts.message); } catch { return false; }
+      return !!window.confirm(
+        'You have unsaved changes. Reloading will lose them.'
+      );
+    } catch {
+      return false;
+    }
   }
 
   async function isRealUpdate(reg) {
@@ -159,6 +185,22 @@
     // cases where the active worker's message port is stale.
     if (waitingVer && !activeVer) return true;
     return false;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // FIX #5: badge label tolerates both version formats.
+  //
+  // Legacy:   "2026-11-08-1"  → last dash segment "1"
+  // Current:  "1762613422345" → last 6 chars    "422345"
+  //
+  // Neither is "pretty", but at least the current format no longer
+  // clips to the leading digits of the ms timestamp.
+  // ═══════════════════════════════════════════════════════════
+  function shortVersion(version) {
+    if (!version) return 'new';
+    const s = String(version);
+    if (s.includes('-')) return s.split('-').pop().slice(0, 6);
+    return s.length > 6 ? s.slice(-6) : s;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -477,10 +519,15 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // DIALOG
+  // FIX #2: buildDialog() defensively removes any pre-existing
+  // overlay. Even though FIX #1 makes double-invocation virtually
+  // impossible, this guarantees the DOM stays clean under any
+  // pathological path (e.g. a previous dialog failed to tear down).
   // ═══════════════════════════════════════════════════════════
   function buildDialog() {
     injectStyles();
+    document.getElementById('folio-update-overlay')?.remove();
+
     const ov = document.createElement('div');
     ov.className = 'folio-upd';
     ov.id = 'folio-update-overlay';
@@ -523,37 +570,49 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SHOW / DISMISS
+  // FIX #1: show() is now re-entrancy-safe.
+  //
+  // The `_showing` flag is set synchronously before any async work,
+  // and cleared in a `finally` block. Rapid invocations from
+  // visibilitychange + online (or two postMessage callbacks in the
+  // same microtask) can no longer create two overlays, two
+  // auto-dismiss timers, or fight over document.body.style.overflow.
   // ═══════════════════════════════════════════════════════════
   function show(version) {
-    if (S.applying || S.dialogEl) return;
+    if (S.applying || S.dialogEl || S._showing) return;
 
-    // Same-version-only suppression (was: block all)
-    if (version && S.postponedVersion && version === S.postponedVersion) return;
+    S._showing = true;
+    try {
+      // Same-version-only suppression (was: block all)
+      if (version && S.postponedVersion && version === S.postponedVersion) {
+        return;
+      }
 
-    const ov = buildDialog();
-    S.dialogEl = ov;
-    S.dialogVersion = version || null;
+      const ov = buildDialog();
+      S.dialogEl = ov;
+      S.dialogVersion = version || null;
 
-    // Version badge — short form (last -N segment)
-    const badge = ov.querySelector('#folioUpdBadge');
-    if (badge) {
-      const short = version ? String(version).split('-').pop() : 'new';
-      badge.textContent = short.slice(0, 6);
-      badge.title = String(version || 'Latest');
+      // Version badge — short form
+      const badge = ov.querySelector('#folioUpdBadge');
+      if (badge) {
+        badge.textContent = shortVersion(version);
+        badge.title = String(version || 'Latest');
+      }
+
+      document.body.style.overflow = 'hidden';
+      void ov.offsetWidth;
+      ov.classList.add('open');
+
+      // KOFA X behaviour: auto-DISMISS (not auto-apply)
+      if (S.autoDismissTimer) clearTimeout(S.autoDismissTimer);
+      S.autoDismissTimer = setTimeout(() => {
+        if (!S.applying) dismiss();
+      }, CFG.autoDismissMs);
+
+      try { window.dispatchEvent(new CustomEvent('folio:update:available')); } catch {}
+    } finally {
+      S._showing = false;
     }
-
-    document.body.style.overflow = 'hidden';
-    void ov.offsetWidth;
-    ov.classList.add('open');
-
-    // KOFA X behaviour: auto-DISMISS (not auto-apply)
-    if (S.autoDismissTimer) clearTimeout(S.autoDismissTimer);
-    S.autoDismissTimer = setTimeout(() => {
-      if (!S.applying) dismiss();
-    }, CFG.autoDismissMs);
-
-    try { window.dispatchEvent(new CustomEvent('folio:update:available')); } catch {}
   }
 
   function dismiss() {
@@ -603,6 +662,28 @@
     if (text) {
       text.textContent = pct >= 100 ? '✓ Complete!' : `Updating… ${Math.round(pct)}%`;
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // FIX #3 helper: resetProgressVisuals()
+  //
+  // Fully resets the progress UI to its pre-apply state:
+  //   - hides the wrapper (`display:none` via class removal)
+  //   - zeroes the fill width
+  //   - restores the label text
+  //
+  // Distinct from setProgress(0), which keeps the wrapper visible
+  // with a 0% bar and the "Updating… 0%" text. That's why the old
+  // "already latest" branch left a half-applied dialog on screen.
+  // ═══════════════════════════════════════════════════════════
+  function resetProgressVisuals() {
+    const wrap = S.dialogEl?.querySelector('#folioUpdProgress');
+    const fill = S.dialogEl?.querySelector('.folio-upd-progress-fill');
+    const text = S.dialogEl?.querySelector('.folio-upd-progress-text');
+
+    if (wrap) wrap.classList.remove('visible');
+    if (fill) fill.style.width = '0%';
+    if (text) text.textContent = 'Updating…';
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -685,7 +766,7 @@
         applyBtn.innerHTML = '<span>Update Now</span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
       }
       if (laterBtn) laterBtn.disabled = false;
-      setProgress(0);
+      resetProgressVisuals();
       if (msg) toast(msg, 'error', 4200);
     };
 
@@ -745,14 +826,33 @@
           location.reload();
         }, CFG.controllerTimeoutMs);
       } else {
+        // ═════════════════════════════════════════════════════════
+        // FIX #3: fully reset the dialog when there's nothing to apply.
+        //
+        // Previously this branch left the card with class="applying"
+        // (spinner spinning fast), the progress bar visible at 45%,
+        // and no auto-dismiss timer — leaving the user on a frozen
+        // "Updating… 45%" screen with a dead "Check again" button.
+        //
+        // Now: remove .applying, hide the progress bar entirely
+        // (not just zero its width), restore the apply button's
+        // original markup, restart auto-dismiss, and inform the user.
+        // ═════════════════════════════════════════════════════════
         S.applying = false;
         if (card) card.classList.remove('applying');
         if (applyBtn) {
           applyBtn.disabled = false;
-          applyBtn.textContent = 'Check again';
+          applyBtn.innerHTML = '<span>Update Now</span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
         }
         if (laterBtn) laterBtn.disabled = false;
-        setProgress(0);
+
+        resetProgressVisuals();
+
+        if (S.autoDismissTimer) clearTimeout(S.autoDismissTimer);
+        S.autoDismissTimer = setTimeout(() => {
+          if (!S.applying) dismiss();
+        }, CFG.autoDismissMs);
+
         toast('You\'re already on the latest version', 'info', 3000);
       }
     } catch (err) {
