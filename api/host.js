@@ -197,6 +197,7 @@ const RATE_LIMITS = {
   dbBackup: { max: 5, window: 60 * 60 * 1000 },
   dbSet: { max: 300, window: 60 * 1000 },
   dbGet: { max: 600, window: 60 * 1000 },
+  apiLogs: { max: 60, window: 60 * 60 * 1000 },
 };
 
 // =========================================================================
@@ -3023,7 +3024,57 @@ async function handleApiRoutes(req, res, reqId) {
     },
   });
 }
+async function handleApiLogs(req, res, reqId) {
+  const pid = String(req.query?.pid || "").trim();
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
 
+  if (!(await enforceRate(req, res, "apiRoutes", `pid_${pid}`))) return;
+
+  // Require at least editor access — logs may include error messages
+  const access = await requireProjectRole(req, res, pid, "editor");
+  if (!access) return;
+
+  const limit = Math.min(
+    Math.max(parseInt(req.query?.limit, 10) || 50, 1),
+    50
+  );
+
+  const snap = await db.ref(`apiLogs/${pid}`).once("value");
+  if (!snap.exists()) {
+    return res.status(200).json({
+      success: true,
+      logs: [],
+      total: 0,
+      max: 50,
+    });
+  }
+
+  const all = [];
+  snap.forEach((child) => {
+    const v = child.val() || {};
+    all.push({
+      id: child.key,
+      ts: v.ts || 0,
+      route: v.route || "",
+      method: v.method || "POST",
+      status: v.status || 0,
+      durationMs: v.durationMs || 0,
+      errorName: v.errorName || null,
+      errorMessage: v.errorMessage || null,
+      via: v.via || "anon",
+    });
+  });
+
+  all.sort((a, b) => b.ts - a.ts);
+  const slice = all.slice(0, limit);
+
+  return res.status(200).json({
+    success: true,
+    logs: slice,
+    total: all.length,
+    max: 50,
+  });
+}
 // =========================================================================
 // PROJECTS CRUD
 // =========================================================================
@@ -5719,6 +5770,8 @@ export default async function handler(req, res) {
       return await handleApiSystemDefault(req, res, reqId);
     if (method === "GET" && action === "api-routes")
       return await handleApiRoutes(req, res, reqId);
+    if (method === "GET" && action === "api-logs")
+  return await handleApiLogs(req, res, reqId);
 
     if (method === "POST" && action === "apikey/generate")
       return await handleApiKeyGenerate(req, res, reqId);
