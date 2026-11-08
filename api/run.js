@@ -30,6 +30,7 @@
 
 import crypto from "node:crypto";
 import net from "node:net";
+import path from "node:path";
 import { db } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import {
@@ -350,8 +351,43 @@ async function loadChromiumModules() {
 }
 
 async function launchBrowser() {
+  // ── 1. Load the module pair ────────────────────────────────────
   const { chromium, puppeteer } = await loadChromiumModules();
+
+  // ── 2. Force serverless env detection ──────────────────────────
+  // @sparticuz/chromium checks this env var during executablePath()
+  // to decide whether to extract the shared-library archive. If it's
+  // missing on Vercel Node 20+, only the binary extracts and
+  // libnspr4.so ends up missing. Hardcode it here so it's set before
+  // the first call.
+  if (!process.env.AWS_LAMBDA_JS_RUNTIME) {
+    process.env.AWS_LAMBDA_JS_RUNTIME = "nodejs24.x";
+  }
+
+  // ── 3. Extract the Chromium binary + libs ──────────────────────
   const executablePath = await chromium.executablePath();
+
+  // ── 4. Point the dynamic linker at the extracted libs ──────────
+  // The browser binary needs libnspr4.so, libnss3.so, etc. — they
+  // land next to the binary after extraction. If the auto-detection
+  // path fails, the loader can't find them and the browser crashes
+  // with "cannot open shared object file". Setting LD_LIBRARY_PATH
+  // explicitly to the extracted dir forces the loader to look there
+  // first.
+  const execDir = path.dirname(executablePath);
+  process.env.LD_LIBRARY_PATH = execDir;
+
+  // ── 5. Pin writable dirs to /tmp ───────────────────────────────
+  // Vercel functions run from a read-only filesystem except /tmp.
+  // Chromium writes profile, cache, crash dumps, and font config
+  // during startup. Without these, Chromium either fails to boot or
+  // boots into a broken state that throws on the first navigation.
+  process.env.HOME = "/tmp";
+  process.env.XDG_CONFIG_HOME = "/tmp/.chromium";
+  process.env.XDG_CACHE_HOME  = "/tmp/.chromium";
+  process.env.FONTCONFIG_PATH = "/tmp/.chromium/fonts";
+
+  // ── 6. Launch ──────────────────────────────────────────────────
   const browser = await puppeteer.launch({
     args: [
       ...chromium.args,
@@ -359,12 +395,17 @@ async function launchBrowser() {
       "--disable-gpu",
       "--no-sandbox",
       "--single-process",
+      "--no-zygote",
+      "--disable-setuid-sandbox",
+      "--disable-features=HttpsFirstBalancedModeAutoEnable",
+      "--user-data-dir=/tmp/.chromium/profile",
     ],
     executablePath,
     headless: "shell",
     defaultViewport: { width: 1280, height: 720 },
     timeout: CHROMIUM_LAUNCH_TIMEOUT_MS,
   });
+
   return browser;
 }
 
