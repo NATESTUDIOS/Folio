@@ -685,6 +685,7 @@ function buildPageHtml({ userCode, env, files, reqObj }) {
     const result = await (async () => {
 ${userCode}
     })();
+
     let contentType = "application/json";
     let body = result;
     let status = 200;
@@ -702,14 +703,31 @@ ${userCode}
       body = result;
     }
 
-    const serialized = typeof body === "string" ? body : JSON.stringify(body);
+    // FIX: serialized must ALWAYS be a string. JSON.stringify(undefined)
+    // returns undefined (not a string), which crashes the Node-side
+    // Buffer.byteLength(responseBody) call downstream. Coerce every
+    // possible outcome — undefined, null, circular refs, symbols,
+    // functions — into a valid string.
+    let serialized;
+    if (typeof body === "string") {
+      serialized = body;
+    } else if (body === undefined || body === null) {
+      serialized = "null";
+    } else {
+      try {
+        const s = JSON.stringify(body);
+        serialized = typeof s === "string" ? s : "null";
+      } catch {
+        serialized = "null";
+      }
+    }
 
     window.__RESULT__ = {
       ok: true,
       status,
       contentType,
       body: serialized,
-      bodyBytes: (typeof serialized === "string" ? serialized : "").length,
+      bodyBytes: serialized.length,
     };
   } catch (err) {
     window.__RESULT__ = {
@@ -1226,11 +1244,35 @@ export default async function handler(req, res) {
   }
 
   // ── Response ───────────────────────────────────────────────────
+    // ── Response ───────────────────────────────────────────────────
   const { result } = runResult;
-  const responseBody =
-    typeof result.body === "string" ? result.body : JSON.stringify(result.body);
+
+  // FIX: responseBody must ALWAYS be a string. Previous code did
+  //   typeof result.body === "string" ? result.body : JSON.stringify(result.body)
+  // which returned `undefined` when result.body was undefined
+  // (JSON.stringify(undefined) === undefined), causing
+  // Buffer.byteLength(undefined) to throw a TypeError.
+  let responseBody;
+  if (typeof result?.body === "string") {
+    responseBody = result.body;
+  } else if (result?.body === undefined || result?.body === null) {
+    responseBody = "null";
+  } else {
+    try {
+      const s = JSON.stringify(result.body);
+      responseBody = typeof s === "string" ? s : "null";
+    } catch {
+      responseBody = "null";
+    }
+  }
+
+  // Defense in depth: if responseBody is still somehow not a string,
+  // coerce it now. This should never fire given the block above, but
+  // it guarantees Buffer.byteLength can't throw.
+  if (typeof responseBody !== "string") responseBody = String(responseBody);
+
   const responseBytes = Buffer.byteLength(responseBody, "utf8");
-  const responseStatus = Number(result.status) || 200;
+  const responseStatus = Number(result?.status) || 200;
 
   if (responseBytes > MAX_RESPONSE_BYTES) {
     await logProjectEvent(pid, actor?.uid || null, "api", `run.${route}`, {
@@ -1284,7 +1326,7 @@ export default async function handler(req, res) {
 
   stageLog(reqId, "completed", startTime, { status: responseStatus, bytes: responseBytes });
 
-  res.setHeader("Content-Type", result.contentType || "application/json");
+  res.setHeader("Content-Type", result?.contentType || "application/json");
   res.setHeader("X-Execution-Time", String(durationMs));
   res.setHeader("X-Fetch-Hosts", (runResult.fetchHosts || []).join(","));
 
