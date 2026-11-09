@@ -476,9 +476,23 @@
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
-      navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(function () {});
-      navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" })
-        .catch(function (err) { console.warn("[SW] FCM registration failed:", err); });
+      // App shell worker — owns the entire origin.
+      navigator.serviceWorker
+        .register("/sw.js", { scope: "/" })
+        .catch(function (err) {
+          console.error("[SW] sw.js registration failed:", err);
+        });
+
+      // FCM worker — must be registered with a NARROW scope so it
+      // does not fight /sw.js for control of "/". Google's FCM SDK
+      // uses this exact scope internally; it is the documented value.
+      navigator.serviceWorker
+        .register("/firebase-messaging-sw.js", {
+          scope: "/firebase-cloud-messaging-push-scope/",
+        })
+        .catch(function (err) {
+          console.warn("[SW] FCM registration failed:", err);
+        });
     });
   }
 </script>
