@@ -6,51 +6,38 @@
    in the background). This SW coexists with /sw.js — FCM
    routes pushes here, Web Push routes to /sw.js.
 
-   IMPORTANT: All Firebase initialization is wrapped in try/catch.
-   If the CDN is unreachable (e.g. gstatic.com blocked by network,
-   CSP, or extension), this SW still installs and continues to
-   handle notificationclick / notificationclose / message events.
-   It simply won't receive background FCM messages until the next
-   successful load.
+   Firebase SDK is SELF-HOSTED at /vendor/firebase/.
+   No cross-origin fetches on SW boot. If the local files are
+   missing, this worker still registers and continues to handle
+   notificationclick / notificationclose / message events.
+
+   Required files (served by your own origin):
+     /vendor/firebase/firebase-app-compat.js
+     /vendor/firebase/firebase-messaging-compat.js
    ============================================================ */
 
-// ── Firebase SDK loading ────────────────────────────────────
-// Try the primary CDN. If it fails, try a mirror. If that also
-// fails, we continue in "degraded" mode — no background message
-// handler, but every other SW capability still works.
+// ── Firebase SDK loading (self-hosted) ──────────────────────
 //
-// NOTE: Replace these two lines with local imports once the
-// compat scripts are self-hosted at /vendor/firebase/:
-//   importScripts('/vendor/firebase/firebase-app-compat.js');
-//   importScripts('/vendor/firebase/firebase-messaging-compat.js');
-
-const FIREBASE_VERSION = '10.13.2';
-const FIREBASE_CDNS = [
-  `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/`,
-  `https://unpkg.com/firebase@${FIREBASE_VERSION}/`,
-];
+// These are classic scripts, not ES modules. importScripts is
+// synchronous and — importantly — a network failure here aborts
+// SW script evaluation entirely. That is why the files MUST be
+// on our own origin. Since they are, we can wrap the call in
+// try/catch and still keep the worker alive on the (rare) case
+// the files are missing from a deploy.
 
 let firebaseLoaded = false;
 
-for (const base of FIREBASE_CDNS) {
-  try {
-    importScripts(
-      base + 'firebase-app-compat.js',
-      base + 'firebase-messaging-compat.js'
-    );
-    firebaseLoaded = true;
-    console.log('[FCM SW] Firebase SDK loaded from', base);
-    break;
-  } catch (err) {
-    console.warn('[FCM SW] Firebase SDK failed from', base, '—', err.message);
-  }
-}
-
-if (!firebaseLoaded) {
+try {
+  importScripts(
+    '/vendor/firebase/firebase-app-compat.js',
+    '/vendor/firebase/firebase-messaging-compat.js'
+  );
+  firebaseLoaded = true;
+  console.log('[FCM SW] Firebase SDK loaded from /vendor/firebase/');
+} catch (err) {
   console.error(
-    '[FCM SW] Firebase SDK unavailable on all CDNs. ' +
-    'SW will install but background FCM messages will not be received. ' +
-    'Self-host the Firebase compat scripts to fix this permanently.'
+    '[FCM SW] Failed to load self-hosted Firebase SDK:',
+    err.message
   );
 }
 
@@ -77,11 +64,11 @@ if (firebaseLoaded && typeof firebase !== 'undefined') {
   }
 }
 
-// Expose state for debugging (visible via console: self.__FCM_STATE__)
+// Expose state for debugging (console: self.__FCM_STATE__)
 self.__FCM_STATE__ = {
   firebaseLoaded,
   messagingReady: !!messaging,
-  version: FIREBASE_VERSION,
+  source: 'self-hosted',
   at: new Date().toISOString(),
 };
 
@@ -129,50 +116,40 @@ function buildNotificationOptions(n) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// Background message handler (only if messaging is ready)
+// Native push handler — ALWAYS registered.
+//
+// FCM delivers its messages through the standard push protocol.
+// The SDK's onBackgroundMessage is a convenience wrapper that
+// duplicates this. Registering the native handler unconditionally
+// guarantees notifications work regardless of Firebase state.
+// We do NOT call onBackgroundMessage — this is the single code
+// path for showing a notification, and it always runs.
 // ═══════════════════════════════════════════════════════════
-if (messaging) {
-  messaging.onBackgroundMessage((payload) => {
-    console.log('[FCM SW] Background message:', payload);
+self.addEventListener('push', (event) => {
+  let payload = null;
 
-    const n = normalizeFcmPayload(payload);
-
-    // Guard against duplicate delivery when the same payload
-    // arrives via the main /sw.js push handler as well.
-    return self.registration
-      .getNotifications({ tag: n.tag })
-      .then((existing) => {
-        if (existing.length > 0) {
-          console.log('[FCM SW] Duplicate notification suppressed:', n.tag);
-          return;
-        }
-        return self.registration.showNotification(
-          n.title,
-          buildNotificationOptions(n)
-        );
-      });
-  });
-} else {
-  // Even in degraded mode, respond to native `push` events so
-  // a fallback push channel still works if it exists.
-  self.addEventListener('push', (event) => {
-    let payload = null;
+  try {
+    payload = event.data ? event.data.json() : null;
+  } catch {
     try {
-      payload = event.data ? event.data.json() : null;
-    } catch {
-      try {
-        payload = { body: event.data ? event.data.text() : '' };
-      } catch {}
-    }
-    if (!payload) payload = { title: 'Folio', body: 'You have a new notification.' };
+      payload = { body: event.data ? event.data.text() : '' };
+    } catch {}
+  }
 
-    const n = normalizeFcmPayload(payload);
+  if (!payload) {
+    payload = { title: 'Folio', body: 'You have a new notification.' };
+  }
 
-    event.waitUntil(
-      self.registration.showNotification(n.title, buildNotificationOptions(n))
-    );
-  });
-}
+  const n = normalizeFcmPayload(payload);
+
+  event.waitUntil(
+    self.registration
+      .showNotification(n.title, buildNotificationOptions(n))
+      .catch((err) => {
+        console.error('[FCM SW] showNotification failed:', err);
+      })
+  );
+});
 
 // ═══════════════════════════════════════════════════════════
 // Notification click — focus existing tab or open a new one
@@ -191,7 +168,7 @@ self.addEventListener('notificationclick', (event) => {
       absoluteUrl = self.location.origin + '/notifications';
     }
 
-    // Never navigate to a foreign origin from a payload we didn't verify.
+    // Never navigate to a foreign origin.
     try {
       if (new URL(absoluteUrl).origin !== self.location.origin) {
         absoluteUrl = self.location.origin + '/notifications';
@@ -288,6 +265,13 @@ self.addEventListener('activate', (event) => {
 // Message bus — for manual testing / debugging
 // ═══════════════════════════════════════════════════════════
 self.addEventListener('message', (event) => {
+  // Reject messages from foreign origins (postMessage from iframes).
+  try {
+    if (event.source && new URL(event.source.url).origin !== self.location.origin) {
+      return;
+    }
+  } catch {}
+
   const data = event.data;
   if (!data) return;
   const type = typeof data === 'string' ? data : (data.type || data.action);
