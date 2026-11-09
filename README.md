@@ -1,28 +1,27 @@
-
 <div align="center">
 
 <img src="https://foliostudios.vercel.app/icons/icon-192.png" alt="Folio Logo" width="100" height="100">
 
-# Folio
+Folio
 
-### Code in your pocket.
+Code in your pocket.
 
-**A mobile-first, offline-first code editor built for the way you code.**
+A mobile-first, offline-first code editor built for the way you code.
 
 Write, preview, manage, and deploy websites directly from your phone.
 No desktop setup. No build step. No account required to get started.
 
-[![Open Folio](https://img.shields.io/badge/OPEN-FOLIO-F59E0B?style=for-the-badge&logo=googlechrome&logoColor=white)](https://foliostudios.vercel.app)
-[![Documentation](https://img.shields.io/badge/READ-DOCS-3B82F6?style=for-the-badge)](https://foliostudios.vercel.app/#docs)
-[![Progressive Web App](https://img.shields.io/badge/PWA-INSTALLABLE-10B981?style=for-the-badge)](https://foliostudios.vercel.app)
+https://img.shields.io/badge/OPEN-FOLIO-F59E0B?style=for-the-badge&logo=googlechrome&logoColor=white
+https://img.shields.io/badge/READ-DOCS-3B82F6?style=for-the-badge
+https://img.shields.io/badge/PWA-INSTALLABLE-10B981?style=for-the-badge
 
-[Website](https://foliostudios.vercel.app) · [Documentation](https://foliostudios.vercel.app/#docs) · [Report a bug](https://github.com)
+Website · Documentation · Report a bug
 
 </div>
 
 ---
 
-## Overview
+Overview
 
 Folio is a browser-based development environment that makes building websites practical on mobile devices.
 
@@ -30,26 +29,26 @@ It combines a code editor, file manager, live preview, version snapshots, projec
 
 Projects are stored locally first, so you can keep working when your internet connection disappears. When you're ready to publish, deploy your project to a live URL and share it with anyone.
 
-**Start locally. Work offline. Publish when you're ready.**
+Start locally. Work offline. Publish when you're ready.
 
-### At a glance
+At a glance
 
-| Capability | What it means |
-|---|---|
-| Mobile-first | Designed for touchscreens and small displays |
-| Offline-first | Local projects remain available without internet |
-| Live preview | See your code run without a build step |
-| One-tap deployment | Publish projects to a live URL |
-| Private API runtime | Write server-side JavaScript in `api/*.js` and call it from your frontend |
-| Built-in JSON database | Add simple dynamic data to your projects |
-| AI assistant | Explain, fix, and draft code through staged proposals |
-| Collaboration | Invite people with different project permissions |
-| Version history | Save snapshots and restore earlier work |
-| No-account entry | Start coding before signing in |
+Capability What it means
+Mobile-first Designed for touchscreens and small displays
+Offline-first Local projects remain available without internet
+Live preview See your code run without a build step
+One-tap deployment Publish projects to a live URL
+Private API runtime Write server-side JavaScript in api/*.js and call it from your frontend
+Built-in JSON database Add simple dynamic data to your projects
+User accounts Email + password sign-in with hashed passwords
+AI assistant Explain, fix, and draft code through staged proposals
+Collaboration Invite people with different project permissions
+Version history Save snapshots and restore earlier work
+No-account entry Start coding before signing in
 
 <div align="center">
 
-### Your development workspace, wherever you are.
+Your development workspace, wherever you are.
 
 <img src="https://foliostudios.vercel.app/screenshots/screenshot1.png" alt="Folio code editor" width="260">
 
@@ -57,33 +56,31 @@ Projects are stored locally first, so you can keep working when your internet co
 
 ---
 
-## Screenshots
-
-Explore the main parts of the Folio experience.
+Screenshots
 
 <div align="center">
 
-### Code editor
+Code editor
 
 <img src="https://foliostudios.vercel.app/screenshots/screenshot1.png" alt="Code editor with syntax highlighting" width="300">
 
-### Project library
+Project library
 
 <img src="https://foliostudios.vercel.app/screenshots/screenshot2.png" alt="Folio project library" width="300">
 
-### Live preview
+Live preview
 
 <img src="https://foliostudios.vercel.app/screenshots/screenshot3.png" alt="Website rendered in Folio preview" width="300">
 
-### Deployments
+Deployments
 
 <img src="https://foliostudios.vercel.app/screenshots/screenshot4.png" alt="Project deployments dashboard" width="300">
 
-### JSON database
+JSON database
 
 <img src="https://foliostudios.vercel.app/screenshots/screenshot5.png" alt="Folio JSON database interface" width="300">
 
-### AI Lens
+AI Lens
 
 <img src="https://foliostudios.vercel.app/screenshots/screenshot6.png" alt="Folio AI Lens panel" width="300">
 
@@ -91,53 +88,71 @@ Explore the main parts of the Folio experience.
 
 ---
 
-## Features
+Features
 
-### 01. A real code editor
+01. A real code editor
 
 Write and manage code with a development environment designed for mobile.
 
-- Syntax highlighting for HTML, CSS, JavaScript, TypeScript, JSX/TSX, JSON, Markdown, Python, and more.
-- Autocomplete and bracket matching.
-- Multiple cursors.
-- Find text in the current file using `Ctrl/Cmd + F`.
-- Format HTML, CSS, JavaScript, JSON, and Markdown with Prettier.
-- Save version snapshots with commit messages.
-- Compare versions and restore earlier snapshots.
+· Syntax highlighting for HTML, CSS, JavaScript, TypeScript, JSX/TSX, JSON, Markdown, Python, and more.
+· Autocomplete and bracket matching.
+· Multiple cursors.
+· Find text in the current file using Ctrl/Cmd + F.
+· Format HTML, CSS, JavaScript, JSON, and Markdown with Prettier.
+· Save version snapshots with commit messages.
+· Compare versions and restore earlier snapshots.
 
-### 02. Live preview
+02. Live preview
 
-Test your work as you build it.
+· Full-screen preview, mini panel, or a separate browser tab.
+· Multi-file HTML projects with CSS and JavaScript.
+· Console output returned to the editor.
+· No mandatory compilation or bundling step for ordinary static projects.
 
-- Full-screen preview, mini panel, or a separate browser tab.
-- Multi-file HTML projects with CSS and JavaScript.
-- Console output returned to the editor.
-- No mandatory compilation or bundling step for ordinary static projects.
+03. One-tap deployment
 
-### 03. One-tap deployment
+· Publish projects to a live URL.
+· Keep deployment versions and redeploy previous versions.
+· Take a deployment offline without deleting your local files.
+· Serve project assets and relative URLs through Folio's hosting endpoint.
 
-Turn a project into a shareable website.
+04. User accounts
 
-- Publish projects to a live URL.
-- Keep deployment versions and redeploy previous versions.
-- Take a deployment offline without deleting your local files.
-- Serve project assets and relative URLs through Folio's hosting endpoint.
+Folio uses email + password authentication backed by Firebase Realtime Database.
 
-### 04. Private API runtime
+· Registration — email, password, confirm. Password must be ≥8 characters.
+· Login — email + password, verified against the stored hash.
+· Session tokens — HMAC-signed, 30-day TTL, stateless.
+· Change password — requires the current password, invalidates all old sessions.
+· Delete account — cascades: deletes the account, all notes, and all versions.
+· Rate limiting — 10 login attempts per 15 minutes per email; 5 registrations per hour.
 
-Folio projects can run their own server-side JavaScript — no separate backend service required.
+How passwords are stored:
 
-Write JavaScript in `api/*.js`, deploy, and call it from your frontend. Every route runs inside an isolated Chromium sandbox on Vercel serverless functions, so your code gets the full browser environment: `fetch`, `crypto`, `TextEncoder`, `Date`, standard library, and any CDN module that's allowlisted.
+Each password is hashed with a two-stage scheme: SHA-256(PASSWORD_SALT + "|" + password + "|" + PASSWORD_SALT). Only the hash is stored. PASSWORD_SALT is an environment variable that never appears in the database or the frontend. If the database is dumped, an attacker cannot brute-force passwords without also compromising the server environment.
 
-**What a route can touch:**
+How sessions work:
 
-| Object | Purpose |
-|---|---|
-| `REQ` | The incoming request — `body`, `method`, `headers`, `route`, `pid`, and project metadata |
-| `ENV` | Your project's secrets — API keys, tokens — never sent to the browser |
-| `FILES` | The project's public file list, injected at runtime |
+On successful register/login, the backend issues a session token: base64(userId|expiry).hmac(userId|expiry, SESSION_SECRET). Every authenticated request sends this token as Authorization: Bearer <token>. The backend verifies the HMAC and expiry, plus checks passwordChangedAt to reject tokens issued before a password change.
 
-Anything your script returns becomes the response body. No `res.json`, no handler boilerplate.
+Where the crypto runs:
+
+Folio's runtime is a sandboxed Chromium page at about:blank, which is a non-secure context. That means crypto.subtle and crypto.randomUUID are unavailable. Folio uses pure-JS SHA-256 and HMAC for password hashing and session signing, and a crypto.getRandomValues-based UUID generator, all of which work in non-secure contexts.
+
+05. Private API runtime
+
+Projects can run their own server-side JavaScript — no separate backend service required.
+
+Write JavaScript in api/*.js, deploy, and call it from your frontend. Every route runs inside an isolated Chromium sandbox on Vercel serverless functions, so your code gets the full browser environment: fetch, crypto, TextEncoder, Date, standard library, and any CDN module that's allowlisted.
+
+What a route can touch:
+
+Object Purpose
+REQ The incoming request — body, method, headers, route, pid, and project metadata
+ENV Your project's secrets — API keys, tokens — never sent to the browser
+FILES The project's public file list, injected at runtime
+
+Anything your script returns becomes the response body. No res.json, no handler boilerplate.
 
 ```javascript
 // api/hello.js
@@ -183,15 +198,6 @@ return data.choices[0].message.content;
 
 The OpenAI key is read from ENV on the server. It never reaches the browser.
 
-Calling external APIs: By default, only a fixed set of built-in hosts is reachable. To call anything else, declare it with an @allow comment at the top of the file:
-
-```javascript
-// @allow api.weather.com
-
-const r = await fetch("https://api.weather.com/v1/today");
-return await r.json();
-```
-
 Two URL shapes per route:
 
 Shape Example
@@ -212,11 +218,52 @@ status Richer health info including region, runtime, file counts, and last error
 version { deploymentId, deployedAt, versionId, url }
 robots Plain-text robots.txt
 
-These routes are auto-registered during deployment. They're editable, revertible, and always present — you can use them to verify the runtime is working, or to give your frontend a quick way to read project metadata.
-
 Auth is your script's decision. The runtime does not require authentication before executing a script. Your api/*.js decides what needs a token — a register or login route can be fully public, while a list route can require a bearer token. Rate limits are attributed per-user when a session token is present, per-IP otherwise.
 
-Limits:
+06. Allowed external hosts
+
+Scripts can only reach external hosts that have been explicitly allowed. Folio has four tiers of trusted hosts so you don't have to declare every call by hand:
+
+Tier Where What it covers
+Built-in API hosts BUILTIN_ALLOWED_HOSTS in run.js api.openai.com, api.groq.com, api.anthropic.com, api.stripe.com, api.paystack.co, api.supabase.co, api.resend.com, api.github.com, raw.githubusercontent.com, gist.githubusercontent.com
+Trusted image hosts TRUSTED_IMAGE_HOSTS in run.js picsum.photos, fastly.picsum.photos, images.unsplash.com, images.pexels.com, cdn.pixabay.com, upload.wikimedia.org
+Allowed import hosts ALLOWED_IMPORT_HOSTS in run.js cdn.jsdelivr.net, esm.sh, unpkg.com, cdnjs.cloudflare.com, ga.jspm.io, cdn.skypack.dev
+Per-project hosts projects/{pid}/allowedHosts in the DB Anything declared via // @allow host.name or auto-detected from literal https://host/... URLs in your scripts, or added from the dashboard
+
+Auto-detection. When you deploy, the pipeline scans every api/*.js file for:
+
+1. Explicit // @allow host.name or // @allow-host host.name comments
+2. Literal https://host/... URLs anywhere in the source — fetch("https://..."), import ... from "https://...", string constants
+
+Every detected host is validated (DNS + HTTPS reachability, reject private/reserved IPs) and written to projects/{pid}/allowedHosts. If you write:
+
+```javascript
+// api/weather.js
+const r = await fetch("https://api.weather.com/v1/today");
+return await r.json();
+```
+
+…the deploy pipeline automatically allows api.weather.com. No @allow comment needed for literal URLs.
+
+Dynamic URLs still need @allow. Folio cannot statically analyze:
+
+```javascript
+const host = REQ.body.host;  // user-controlled
+const r = await fetch(`https://${host}/x`);
+```
+
+Because the hostname isn't a literal string, the scanner can't detect it. You must declare the actual hosts explicitly:
+
+```javascript
+// @allow api.example.com
+// @allow api.weather.com
+```
+
+Allowing new hosts from the dashboard. Owners can add any public host from the API tab without editing code. The backend validates DNS + HTTPS before writing to the manifest. Added hosts persist until removed.
+
+Blocked requests are logged. When a script tries to reach an unallowed host, run.js logs run.host_blocked with the hostname. The API tab's log view shows this, so you can debug "why doesn't my fetch work" without guessing.
+
+Runtime limits on the API folder:
 
 Limit Value
 Files per API folder 10 (including _system.js)
@@ -229,7 +276,7 @@ Response size 5 MB
 
 The runtime runs on Vercel's Node.js serverless functions with Chromium for the sandbox. Cold starts are 1.5–2s on the free tier; warm calls are sub-500ms for typical scripts.
 
-05. Built-in JSON database
+07. Built-in JSON database
 
 Give projects a simple hosted data store without building a database backend from scratch.
 
@@ -240,26 +287,18 @@ Give projects a simple hosted data store without building a database backend fro
 
 Default limits: 15 MB per project database and 100 writes per hour per project.
 
-These limits and access rules are enforced by the backend.
-
-06. AI assistant
+08. AI assistant
 
 Folio includes an AI helper that lives in the editor and dashboard — the Lens panel.
 
 · 22 tasks across understanding, fixing, building, documenting, and diagnosing code.
 · Explain, debug, fix, optimize, refactor, document, audit, translate — with patch previews you accept or reject.
-· Diagrams as Mermaid, mind maps, and flow tables — rendered inline in your notes.
+· Diagrams as Mermaid, mind maps, and flow tables — rendered inline.
 · Commit and deploy drafts — the AI drafts text; you approve before anything is applied.
 · Offline-safe rendering. Markdown, diagrams, math, and diffs render locally once the app is cached.
 · Nothing is auto-applied. AI drafts live in a staged queue until you accept them.
 
-AI tasks require a connection. Rendering AI output works offline once the necessary assets are cached.
-
-The AI never writes to your project automatically. It drafts text and proposed changes. You decide what to apply.
-
-07. Sharing and collaboration
-
-Control how your projects are shared.
+09. Sharing and collaboration
 
 · Configure independent visibility settings for your profile, live site, code viewer, language information, and JSON database API.
 · Invite collaborators as viewers, commenters, or editors.
@@ -267,9 +306,7 @@ Control how your projects are shared.
 · Share project pages using URLs such as:
   https://foliostudios.vercel.app/<username>/<slug>
 
-08. Offline-first PWA
-
-Folio is designed to remain useful when connectivity is unreliable.
+10. Offline-first PWA
 
 · Store projects in IndexedDB before relying on cloud synchronization.
 · Install the app from a supported browser.
@@ -278,9 +315,7 @@ Folio is designed to remain useful when connectivity is unreliable.
 · Prompt users when an updated application version becomes available.
 · Queue supported synchronization operations for later processing.
 
-09. Export and portability
-
-Your work should not be trapped in one editor.
+11. Export and portability
 
 Format Contents
 .folio Full project backup, including files, versions, JSON database, schema, and API files
@@ -314,7 +349,7 @@ Install Folio on your phone
 
 1. Open Folio in a supported browser.
 2. Open the browser menu.
-3. Select Install app or Add to Home screen, depending on your browser.
+3. Select Install app or Add to Home screen.
 4. Launch Folio from your home screen.
 
 Installation availability depends on the browser and platform.
@@ -336,304 +371,228 @@ Storage architecture
 Folio uses browser storage for local work and server storage for supported cloud features.
 
 Store Purpose
-projects Project metadata, including IDs, names, slugs, icons, timestamps, and roles
+projects Project metadata — IDs, names, slugs, icons, timestamps, roles
 files File contents, keyed by project ID and path
 versions Version snapshots and commit messages
 projectMeta Project-specific notes and notepad data
 syncQueue Pending synchronization operations
 
-On the server, project files are stored under api-files/{pid} (private runtime scripts) and files/{pid} (public assets). The browser uses IndexedDB for local project data. Server-side project data is handled by the backend and Firebase Realtime Database.
+On the server:
 
-Offline availability does not mean every cloud feature works offline. Authentication, remote deployment, cloud synchronization, hosted database operations, private API calls, and AI tasks require connectivity.
+· Public assets → files/{pid}
+· Private runtime scripts → api-files/{pid}
+· Accounts → accounts/{emailKey} (hashed password + metadata)
+· Notes (for the notes project) → notes/{noteId}, indexed under userNotes/{userId}/{noteId}
+· Versions → versions/{noteId}/{timestamp} (last 3 kept)
+· Project host manifest → projects/{pid}/allowedHosts
+
+The browser uses IndexedDB for local project data. Server-side project data is handled by the backend and Firebase Realtime Database.
 
 How deployment works
 
 Folio stores deployed project files and serves them through a hosting endpoint.
 
-Example:
-
 ```text
 https://foliostudios.vercel.app/api/host?action=serve&pid=YOUR_PID&path=index.html
 ```
 
-The serving handler rewrites supported relative asset references so files such as style.css and app.js can be loaded through the hosting endpoint.
-
-This allows ordinary multi-file static projects to work without a separate build configuration.
+The serving handler rewrites supported relative asset references so files such as style.css and app.js can be loaded through the hosting endpoint. This allows ordinary multi-file static projects to work without a separate build configuration.
 
 ---
 
-The JSON database
+Environment configuration
 
-Every project can use a hosted JSON database for lightweight application data.
+Folio needs a small set of environment variables to run. Set them in Vercel Project Settings → Environment Variables or the Secrets tab of the Folio dashboard (for per-project values).
 
-Configure access through Sharing → JSON database API.
+Platform variables (Vercel)
 
-Public reads depend on the project's visibility settings. Writes require the project's API key.
+Variable Required Purpose
+BASE_URL Yes The canonical deployment URL. Used in every generated link. Example: https://foliostudios.vercel.app
+FIREBASE_PROJECT_ID Yes Firebase project ID
+FIREBASE_CLIENT_EMAIL Yes Firebase service account email
+FIREBASE_PRIVATE_KEY Yes Firebase service account private key
+ADMIN_API_KEY Yes Admin key for privileged operations
+FLIER_INTERNAL_URL Optional Internal image-generation endpoint
+GROQ_API_KEY Optional Enables AI features
+GROQ_MODEL Optional Primary AI model. Example: llama-3.3-70b-versatile
+GROQ_MODEL_FAST Optional Fallback AI model
 
-1. Read data
+Auth variables
 
-```javascript
-const response = await fetch(
-  'https://foliostudios.vercel.app/api/host' +
-  '?action=db/get&pid=YOUR_PID'
-);
+These sign passwords and sessions. Set both before anyone registers. Never change PASSWORD_SALT after users exist — changing it invalidates every stored password.
 
-if (!response.ok) {
-  throw new Error(`Database request failed: ${response.status}`);
-}
+Variable Required Minimum length Purpose
+PASSWORD_SALT Yes (for accounts) 16 chars Pepper for password hashing. Never changes after first use.
+SESSION_SECRET Yes (for accounts) 16 chars HMAC key for signing session tokens. Can be rotated — that signs everyone out.
 
-const result = await response.json();
-
-console.log(result.data);
-```
-
-Replace YOUR_PID with your actual project ID.
-
-2. Write to a path
-
-Use a path write to update a specific value while preserving unrelated sibling data.
+Generate both securely (paste into browser console):
 
 ```javascript
-const response = await fetch(
-  'https://foliostudios.vercel.app/api/host' +
-  '?action=db/set&pid=YOUR_PID',
-  {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-project-key': 'YOUR_PROJECT_API_KEY'
-    },
-    body: JSON.stringify({
-      pid: 'YOUR_PID',
-      key: 'posts/p_abc/heart',
-      value: 42
-    })
-  }
-);
-
-if (!response.ok) {
-  throw new Error(`Database write failed: ${response.status}`);
-}
+crypto.randomUUID() + crypto.randomUUID()
 ```
 
-Use path writes when updating one item in a larger collection.
+Each call gives you a ~72-character string. Use one for PASSWORD_SALT, one for SESSION_SECRET. Never commit them to git.
 
-3. Merge data
-
-A merge write replaces each supplied top-level subtree while preserving unrelated top-level keys.
-
-```javascript
-const response = await fetch(
-  'https://foliostudios.vercel.app/api/host' +
-  '?action=db/set&pid=YOUR_PID',
-  {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-project-key': 'YOUR_PROJECT_API_KEY'
-    },
-    body: JSON.stringify({
-      pid: 'YOUR_PID',
-      data: {
-        config: {
-          theme: 'dark'
-        }
-      },
-      mode: 'merge'
-    })
-  }
-);
-```
-
-Important: This is not a deep merge. Sending config replaces the entire existing config subtree. It does not update only config.theme.
-
-4. Replace the database
-
-A replacement write replaces the entire database contents.
-
-```javascript
-const response = await fetch(
-  'https://foliostudios.vercel.app/api/host' +
-  '?action=db/set&pid=YOUR_PID',
-  {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-project-key': 'YOUR_PROJECT_API_KEY'
-    },
-    body: JSON.stringify({
-      pid: 'YOUR_PID',
-      data: {
-        config: {},
-        posts: {},
-        members: {}
-      }
-    })
-  }
-);
-```
-
-Use replacement writes carefully because existing data may be lost.
-
-Database limits
-
-Limit Value
-Maximum database size 15 MB per project
-Write rate 100 writes per hour per project
-Transaction support Writes are not transactional
-
-See the Folio documentation for additional details.
+If the server is missing either variable, all /api/notes.js-style scripts return a clean 500 Server misconfigured: PASSWORD_SALT (or SESSION_SECRET) — you'll see this immediately on the first request.
 
 ---
 
-The private API runtime
+Working with auth
 
-Folio projects can run server-side JavaScript without provisioning a separate backend.
+Folio's backend runtime is a non-secure context. That means crypto.subtle and crypto.randomUUID are not available. All crypto must use:
 
-Write files in api/*.js, deploy the project, and call them from anywhere. Every route runs inside a Chromium sandbox on Vercel's serverless infrastructure, with access to the standard browser environment.
+· crypto.getRandomValues() — available in non-secure contexts, used for UUIDs
+· Pure-JS SHA-256 and HMAC — required because crypto.subtle.digest and crypto.subtle.sign throw in the sandbox
 
-What a script receives
+Folio ships working implementations of both. When writing your own api/*.js auth logic, copy them or import from a shared helper file.
 
-Object Description
-REQ The incoming request — body, method, headers, route, pid, username, projectSlug, deployments, and more
-ENV The project's secrets — never exposed to the browser
-FILES The project's public file list
+Preventing the sandbox crypto errors:
 
-Whatever the script returns becomes the response body.
+Wrong Right
+crypto.randomUUID() Use a getRandomValues-based UUID helper
+crypto.subtle.digest("SHA-256", …) Use a pure-JS SHA-256
+crypto.subtle.sign(…, "HMAC", …) Use a pure-JS HMAC-SHA256
 
-What a script can reach
+Where to get them: see api/notes.js in this repo — sha256Hex, hmacSign, hashPassword, and uuid are the reference implementations.
 
-· Standard library. crypto, fetch, TextEncoder, Date, Math, JSON, Intl, everything the browser offers.
-· External APIs. Only allowlisted hosts are reachable. Use // @allow host.name at the top of the file to add one. Six hosts (OpenAI, Groq, Anthropic, Stripe, Supabase, Resend) are pre-approved.
-· CDN imports. cdn.jsdelivr.net, esm.sh, and unpkg.com are all allowed.
-· Folio's own DB. Any script can read or write project data through fetch("/api/host?action=db/..."). Folio intercepts these calls in-process — they never leave the sandbox.
+---
 
-Two URL shapes per route
+Building an app on Folio
+
+The repo ships with a full example — the notes app — that demonstrates auth, private API routes, publishing, and image search. Use it as a template.
+
+Project layout
+
+A typical Folio app has:
 
 ```text
-POST /{username}/project/{slug}/api/{route}
-POST /api/{pid}/{route}
+your-project/
+├── index.html            # Frontend (single page)
+└── api/
+    └── notes.js          # Backend routes
 ```
 
-Both reach the same run.js handler and execute the same api/{route}.js file. The friendly form is what you document; the direct form skips the slug lookup on the first call.
+The api/*.js file
 
-Calling a route from the frontend
+Every api/*.js file is a single script. Actions are dispatched by reading REQ.body.action:
 
 ```javascript
-// Friendly URL — preferred
-const res = await fetch("/{username}/project/{slug}/api/chat", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer " + localStorage.getItem("token"),
-  },
-  body: JSON.stringify({ message: "Hello" }),
-});
-const { reply } = await res.json();
+// api/notes.js
+const action = REQ.body && REQ.body.action;
 
-// Direct URL — same behavior
-const res = await fetch("/api/YOUR_PID/chat", {
+if (action === "listNotes") {
+  // ...
+  return { success: true, notes: [] };
+}
+
+if (action === "createNote") {
+  // ...
+  return { success: true, note: { ... } };
+}
+
+return { __status: 400, __body: "Unknown action", error: "Unknown action" };
+```
+
+Response shapes:
+
+You return Response is
+{ success: true, data: … } 200 application/json with the object
+"hello" (string) 200 text/plain with the string
+{ __status: 404, __body: "Not found", error: "Not found" } 404 with the error body
+{ __contentType: "text/html", __body: "<h1>Hi</h1>" } 200 text/html with the HTML
+
+Calling the DB from inside a script
+
+Folio intercepts fetch("/api/host?action=db/…") in-process — the request never leaves the sandbox. But fetch needs an absolute URL in the sandbox, so always prefix with ENV.FOLIO_BASE_URL:
+
+```javascript
+const BASE = ENV.FOLIO_BASE_URL; // e.g. "https://foliostudios.vercel.app"
+
+const r = await fetch(`${BASE}/api/host?action=db/get&pid=${ENV.PROJECT_ID}`);
+const { data } = await r.json();
+```
+
+Not:
+
+```javascript
+// ❌ Fails with "Failed to parse URL" in the sandbox
+const r = await fetch(`/api/host?action=db/get&pid=${ENV.PROJECT_ID}`);
+```
+
+Reading the DB
+
+db/get returns the whole project tree as data. Walk it yourself:
+
+```javascript
+const r = await fetch(`${BASE}/api/host?action=db/get&pid=${ENV.PROJECT_ID}`);
+const { data } = await r.json();
+
+// data.notes = { note1: {...}, note2: {...} }
+const notes = data.notes || {};
+```
+
+Do not use db/list for the primary read path unless you've verified its response shape. In this codebase, db/get is the reliable primitive. db/list returns an implementation-specific shape that varies with Firebase's layout.
+
+Writing the DB
+
+Single-path write:
+
+```javascript
+await fetch(`${BASE}/api/host?action=db/set`, {
   method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer " + localStorage.getItem("token"),
-  },
-  body: JSON.stringify({ message: "Hello" }),
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: `notes/${id}`,
+    value: { title, content, at: Date.now() },
+  }),
 });
 ```
 
-Auth is your script's decision
+Atomic batch write (multiple paths in one call):
 
-The runtime does not require authentication before executing a script. That means you can expose public endpoints (register, login, webhooks) alongside private ones (list, update, delete) without any runtime-level restrictions. Your api/*.js decides what needs a token by calling whatever auth logic you want.
+```javascript
+await fetch(`${BASE}/api/host?action=db/batch`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    updates: [
+      { key: `notes/${id}`, value: note },
+      { key: `userNotes/${userId}/${id}`, value: summary },
+    ],
+  }),
+});
+```
 
-When a bearer token or project API key is present, Folio attributes rate limits and logs to that user. When it isn't, requests are rate-limited per IP.
+Delete a path (write null):
 
-The six system routes
+```javascript
+await fetch(`${BASE}/api/host?action=db/set`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: `notes/${id}`,
+    value: null,
+  }),
+});
+```
 
-Every project ships with an auto-registered _system.js that provides six routes for free. They're available at deploy time, editable, and revertible.
+Calling external APIs
 
-Route Returns
-health { status, pid, deployed, responseMs }
-whoami { pid, name, deployedAt, apiVersion }
-files { files, count, totalBytes }
-status { status, pid, deployed, responseMs, region, runtime, apiFiles, publicFiles, lastError, lastErrorAt }
-version { deploymentId, deployedAt, versionId, gitCommit, url }
-robots Plain-text robots.txt with Disallow: /api/
+If the host is in a trusted tier (image CDNs, well-known APIs, import CDNs), just call it:
 
-Use these to verify the runtime is working, or to give your frontend a free metadata endpoint.
+```javascript
+const r = await fetch("https://picsum.photos/v2/list?page=1&limit=12");
+```
 
-Route limits
+If the host is unfamiliar, add an @allow comment OR put the literal URL somewhere in your script — the deploy pipeline auto-detects it:
 
-Limit Value
-Files per API folder 10 (including _system.js)
-Size per file 50 KB
-Total API folder size 200 KB
-@allow lines per file 20
-Unique @allow hosts per project 50
-Execution timeout 7 seconds
-Response size 5 MB
-
-See the Folio documentation for more details.
-
----
-
-The AI assistant (Lens)
-
-The Lens panel lives in the sidebar of both the editor and the project dashboard.
-
-How it works
-
-1. Pick a task from the dropdown.
-2. Choose a scope: file or selection.
-3. Click Run, or right-click a selection in the editor to run a task directly.
-4. The AI returns Markdown text and typed artifacts, such as findings, diffs, files, diagrams, and drafts.
-5. Write-apply tasks stage their proposals in the pending queue.
-6. Review each patch and accept or reject it.
-7. Before applying a patch, Folio verifies that the original text still matches the expected content.
-
-What AI can do
-
-Category Tasks
-Understand explain, diagram, simulate, designExplain
-Fix and improve debug, codefix, optimize, suggest, audit
-Build and transform scaffold, translate, docstrings
-Content and metadata metatags, brainstorm, commitMsg, docs, logExplain
-Diagnose findFn, struggle
-Hosting drafts readProject, commitDraft, deployDraft
-
-Guest vs. signed-in access
-
-Capability Guest Signed in
-Available tasks 5 selected tasks All 22 tasks
-Rate limits Per-IP limits Per-user limits
-AI changes Proposals only Proposals requiring approval
-
-The exact task availability and limits are determined by the backend configuration.
-
-The safety rule
-
-AI proposals require explicit user approval before being applied.
-
-· commitDraft returns text, a message, and a changed-file list; it does not return file contents for automatic writing.
-· deployDraft returns text, a summary, and a changed-file list; it does not deploy automatically.
-· Applying a patch writes through the client's IndexedDB, followed by the existing synchronization flow.
-· Committing pre-fills the message in the existing commit dialog.
-· Deploying pre-fills the summary in the existing deployment confirmation.
-
-Everything that touches project files follows the accepted-patch workflow or an existing commit/deploy flow requiring user approval.
-
-Offline behaviour
-
-AI tasks require a connection. Rendering does not, once the necessary assets are cached.
-
-Works offline Requires a connection
-Markdown, tables, and task lists Running an AI task
-Cached Mermaid diagram rendering Fetching new diagram assets
-Cached KaTeX math rendering Fetching new math assets
-Diffs and patch previews Requesting new AI proposals
-Viewing pending proposals Cloud synchronization when applying changes
-
-First-time rendering may require internet access to download the relevant assets.
+```javascript
+// @allow api.weather.com
+const r = await fetch("https://api.weather.com/v1/today");
+```
 
 ---
 
@@ -676,15 +635,17 @@ file/list GET Optional List files through the code viewer
 file/get GET Optional Retrieve a file through the code viewer
 serve GET Optional Serve a deployed file
 api-routes GET Bearer List registered API routes for a project
+api-logs GET Bearer Read recent user-route calls
 logs GET Bearer Retrieve project activity logs
+hosts/add POST Bearer (owner) Add an allowed host from the dashboard
 share GET Public Public share page
 profile GET Public Public profile page
 
-Authentication note: Bearer indicates an authenticated session token. Optional or public access does not imply unrestricted access; individual visibility settings and server-side authorization still apply.
-
 Rate-limit information is returned through X-RateLimit-* response headers where supported.
 
-Private API
+---
+
+Private API runtime
 
 Custom routes are declared by files in api/*.js. Each file becomes a route named after the file (without the .js extension).
 
@@ -693,17 +654,7 @@ api/notes.js  →  POST /{username}/project/{slug}/api/notes
               →  POST /api/{pid}/notes
 ```
 
-Available on every project:
-
-Route Method Description
-health GET or POST Basic liveness check
-whoami GET or POST Project identity
-files GET or POST Public file list
-status GET or POST Richer health info
-version GET or POST Current deployment metadata
-robots GET or POST robots.txt as plain text
-
-Route discovery:
+Route discovery
 
 ```bash
 curl 'https://foliostudios.vercel.app/api/host?action=api-routes&pid=YOUR_PID' \
@@ -723,6 +674,29 @@ Returns:
 }
 ```
 
+Reading the API logs
+
+The api-logs endpoint returns the last 50 user-route calls, with filter and pagination support:
+
+```bash
+curl 'https://foliostudios.vercel.app/api/host?action=api-logs&pid=YOUR_PID&limit=20&offset=0' \
+  -H 'Authorization: Bearer YOUR_SESSION_TOKEN'
+```
+
+Each log entry contains:
+
+Field Meaning
+route, method, status What was called and what came back
+durationMs Total wall time
+via anon, session, or api-key
+requestId Correlates with the X-Request-Id header and Vercel logs
+stage Last run.timing stage reached — tells you where a failure happened
+bytesIn, bytesOut Request and response sizes
+fetchHosts External hosts the script actually reached
+errorName, errorMessage If the script threw or returned an error
+
+Filters: ?status=error, ?route=notes, ?via=api-key, ?since=<unix-ms>.
+
 AI endpoint
 
 ```http
@@ -734,38 +708,59 @@ task string One of the supported AI tasks
 pid string, optional Project ID; required for project-related tasks
 payload object Task-specific input
 
-Example response:
+---
 
-```json
-{
-  "success": true,
-  "task": "debug",
-  "text": "Found 2 issues...",
-  "artifacts": [],
-  "usage": {
-    "promptTokens": 1840,
-    "completionTokens": 620,
-    "model": "llama-3.3-70b-versatile"
-  },
-  "guest": false,
-  "cached": false,
-  "rateLimit": {
-    "limit": 30,
-    "remaining": 27,
-    "reset": "2026-10-25T04:00:00.000Z"
-  }
+Debugging runtime failures
+
+When something in api/*.js fails, work through these checks in order.
+
+1. Read the log entry. Open the API tab → Recent calls, or hit /api/host?action=api-logs&pid=YOUR_PID. The entry tells you:
+
+· status (200, 400, 500, 504)
+· stage (where in the runtime execution stopped)
+· errorName, errorMessage (the actual exception)
+
+2. Interpret the stage. The runtime emits a run.timing event at every stage. Common stage → cause mappings:
+
+Stage Means
+query_parsed Bad pid/route in the URL
+slug_resolved Username + slug didn't resolve to a project
+ctx_loaded Project record missing, or route not in apiRoutes
+route_file_loaded api/*.js file not found in storage
+hosts_parsed A literal URL in your script couldn't be validated
+secrets_loaded ENV build failed
+html_built Script too large to embed
+browser_launch_started Chromium failed to launch (cold-start, memory)
+setcontent_started Page setup timed out
+waitforfunction_started Script never set window.__RESULT__ (usually a 7s timeout)
+page_executed Script ran but threw — check errorName
+
+3. Read the response body. If the script returns { __status: 400, __body: "…", error: "…" }, that's a clean rejection — the runtime worked. Look at errorMessage in the log to see the reason.
+
+4. null responses mean the script returned undefined.
+
+If you see "null" in the response body, the script fell through a branch without returning anything. Wrap the whole script in a top-level try/catch and return a fallback at the bottom:
+
+```javascript
+try {
+  // ... your actions ...
+  return { __status: 400, error: "Unknown action" };
+} catch (e) {
+  return { __status: 500, error: "Script error: " + e.message };
 }
 ```
 
-The example illustrates the response structure. Actual fields and values depend on the implementation and request.
+5. "Failed to parse URL" from fetch. In the sandbox, fetch("/api/host") has no base URL. Always use an absolute URL built from ENV.FOLIO_BASE_URL.
 
-The AI endpoint returns text and typed artifacts. It does not directly write to project files.
+6. "crypto.subtle" / "crypto.randomUUID" not defined. The sandbox is not a secure context. Use pure-JS SHA-256/HMAC and a getRandomValues UUID helper.
+
+7. Buffer.byteLength(undefined) at run.js line 1232. The runtime has an active fix for this — if you see it, you're on an old version of run.js. Update to the latest.
 
 ---
 
 Project structure
 
-The following is the main application layout.
+The main application layout:
 
 ```text
 .
@@ -796,13 +791,14 @@ The following is the main application layout.
 ├── firebase-messaging-sw.js # FCM background handler
 │
 ├── api/
-│   ├── host.js              # Hosting, deployment, database, sharing, logs
+│   ├── host.js              # Hosting, deployment, database, sharing, logs, hosts/add
 │   ├── run.js               # Private API runtime (Chromium sandbox)
 │   ├── auth.js              # Authentication and session endpoints
 │   ├── ai.js                # AI task dispatcher
 │   ├── flier.js             # Image generation and avatar upload
 │   ├── analytics.js         # Usage analytics
-│   └── notify.js            # Notification dispatch
+│   ├── notify.js            # Notification dispatch
+│   └── notes.js             # Example app: notes with auth, publishing, images
 │
 ├── utils/
 │   ├── firebase.js          # Firebase Admin initialization
@@ -832,9 +828,9 @@ Folio uses a static frontend and a serverless backend on Vercel.
 
 The frontend has no build step. It uses HTML, CSS, and JavaScript, with CodeMirror loaded through CDN-based ES modules and import maps.
 
-The AI client module is js/ai.js. It contains the panel, task dispatcher, Markdown renderer, Mermaid/KaTeX loaders, artifact renderers, pending staging, and inline context menu. It is imported by index.html and project.html.
+The AI client module is js/ai.js. It contains the panel, task dispatcher, Markdown renderer, Mermaid/KaTeX loaders, artifact renderers, pending staging, and inline context menu.
 
-The private API runtime is api/run.js. It resolves project slugs, launches Chromium via @sparticuz/chromium-min, executes api/*.js scripts in an isolated page, and enforces the @allow allowlist, timeouts, rate limits, and response size caps.
+The private API runtime is api/run.js. It resolves project slugs, launches Chromium via @sparticuz/chromium-min, executes api/*.js scripts in an isolated page, and enforces the allowlist, timeouts, rate limits, and response size caps.
 
 Requirements
 
@@ -851,8 +847,6 @@ git clone https://github.com/YOUR_USERNAME/folio.git
 cd folio
 ```
 
-Replace YOUR_USERNAME/folio with the actual repository URL.
-
 2. Install dependencies
 
 ```bash
@@ -861,13 +855,11 @@ npm install
 
 3. Configure environment variables
 
-Create a .env file from the project's environment template, if one exists.
-
 ```bash
 cp .env.example .env
 ```
 
-Configure the required values:
+Fill in the required values:
 
 ```dotenv
 FIREBASE_PROJECT_ID=your_firebase_project_id
@@ -877,15 +869,17 @@ ADMIN_API_KEY=your_admin_api_key
 BASE_URL=https://foliostudios.vercel.app
 FLIER_INTERNAL_URL=your_internal_flier_url
 
+# Auth — generate with crypto.randomUUID() + crypto.randomUUID()
+PASSWORD_SALT=your_generated_salt
+SESSION_SECRET=your_generated_secret
+
 # AI (optional)
 GROQ_API_KEY=your_groq_api_key
 GROQ_MODEL=llama-3.3-70b-versatile
 GROQ_MODEL_FAST=llama-3.1-8b-instant
 ```
 
-Use the actual environment variable names expected by the backend.
-
-Security: Never commit .env, Firebase service-account credentials, administrator keys, Groq API keys, or other private keys to a public repository. Configure production secrets through Vercel's environment settings.
+Security: Never commit .env, Firebase service-account credentials, administrator keys, Groq API keys, PASSWORD_SALT, or SESSION_SECRET to a public repository. Configure production secrets through Vercel's environment settings.
 
 4. Run locally
 
@@ -909,13 +903,13 @@ Edit CACHE_VERSION in sw.js whenever a deployment requires a new application-she
 const CACHE_VERSION = '2026-10-24-1';
 ```
 
-For a later release, increment the version:
+For a later release:
 
 ```javascript
 const CACHE_VERSION = '2026-10-24-2';
 ```
 
-Old caches are cleaned up during service-worker activation according to the cleanup logic. The update manager prompts users to apply available updates.
+Old caches are cleaned up during service-worker activation.
 
 Adding a language to the editor
 
@@ -937,12 +931,29 @@ Adding a private API route
 
 1. Create a file in the project's api/ folder — e.g. api/hello.js.
 2. Write the script. Anything returned becomes the response body.
-3. If the script calls external hosts, declare them at the top with // @allow host.name.
+3. If the script calls unfamiliar hosts, add // @allow host.name or include a literal URL — the deploy pipeline auto-detects literal https://host/... URLs.
 4. Deploy the project.
-5. Call it from the frontend at either /{username}/project/{slug}/api/hello or /api/{pid}/hello.
-6. Test both URL shapes to confirm the route resolves correctly.
+5. Call it from the frontend at /{username}/project/{slug}/api/hello or /api/{pid}/hello.
+6. Test both URL shapes.
+7. Inspect the API tab to confirm the route was registered.
 
-The runtime auto-registers the route in apiRoutes.user at deploy time. See the API tab in the project dashboard to inspect the route list.
+Adding a trusted host tier
+
+Edit api/run.js and add to the appropriate set:
+
+· BUILTIN_ALLOWED_HOSTS — well-known API hosts
+· TRUSTED_IMAGE_HOSTS — image CDNs
+· ALLOWED_IMPORT_HOSTS — CDN import hosts
+
+Mirror the change in api/host.js (TRUSTED_IMAGE_HOSTS, KNOWN_SAFE_HOSTS) so deploy-time validation skips the DNS probe for those hosts.
+
+Adding auth to a new api/*.js app
+
+1. Copy the crypto helpers from api/notes.js: sha256Hex, hmacSign, hashPassword, safeEqualHex, uuid.
+2. Copy createSessionToken, verifySessionToken, resolveSession.
+3. Wire up the actions: register, login, session, changePassword, deleteAccount.
+4. Protect user-scoped actions with resolveSession(token) — return 401 when it fails.
+5. Set PASSWORD_SALT and SESSION_SECRET in the Secrets tab before anyone registers.
 
 ---
 
@@ -954,7 +965,9 @@ Code editor CodeMirror 6
 Editor modules deno.land/x/codemirror_esm
 Local storage IndexedDB
 Server database Firebase Realtime Database
-Authentication Session tokens through api/auth.js
+Authentication Email + password, pure-JS SHA-256 + HMAC, session tokens
+Password hashing SHA-256(PASSWORD_SALT \| password \| PASSWORD_SALT) — pepper stored in env only
+Session signing HMAC-SHA256(payload, SESSION_SECRET)
 Hosting Vercel serverless functions
 API runtime @sparticuz/chromium-min + puppeteer-core
 AI provider Groq
@@ -995,29 +1008,17 @@ For substantial changes, open an issue first to discuss the proposed approach.
 
 Development principles
 
-Mobile-first
+Mobile-first. Design for touchscreens before adapting the interface for desktop.
 
-Design for touchscreens before adapting the interface for desktop.
+Offline-first. Network-dependent features should fail gracefully and preserve locally available work.
 
-Offline-first
+Lightweight. Keep the frontend static and avoid introducing a build step without a clear need.
 
-Network-dependent features should fail gracefully and preserve locally available work.
+Accessible. Interactive controls should support keyboard navigation and accessible labels.
 
-Lightweight
+Privacy-conscious. Avoid unnecessary tracking and analytics. Review third-party integrations and disclose any data collection that is introduced.
 
-Keep the frontend static and avoid introducing a build step without a clear need.
-
-Accessible
-
-Interactive controls should support keyboard navigation and accessible labels.
-
-Privacy-conscious
-
-Avoid unnecessary tracking and analytics. Review third-party integrations and disclose any data collection that is introduced.
-
-AI proposes, user confirms
-
-Every AI write goes through explicit user acceptance. Nothing is auto-applied.
+AI proposes, user confirms. Every AI write goes through explicit user acceptance. Nothing is auto-applied.
 
 Reporting issues
 
