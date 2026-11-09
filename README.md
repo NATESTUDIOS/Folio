@@ -18,7 +18,6 @@ desktop setup. No build step. No account required to get started.
 
 [Website](https://foliostudios.vercel.app) · [Documentation](https://foliostudios.vercel.app/docs) · [Report a bug](https://github.com/YOUR_USERNAME/folio/issues)
 
----
 
 </div>
 
