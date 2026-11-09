@@ -94,19 +94,39 @@ const MAX_RECURSION_DEPTH = 3;
 const CHROMIUM_PACK_URL =
   "https://github.com/Sparticuz/chromium/releases/download/v141.0.0/chromium-v141.0.0-pack.x64.tar";
 
+// API hosts that are safe for any script to reach, no declaration
+// or validation needed. Keep this list short and curated.
 const BUILTIN_ALLOWED_HOSTS = new Set([
   "api.openai.com",
   "api.groq.com",
   "api.anthropic.com",
   "api.stripe.com",
+  "api.paystack.co",
   "api.supabase.co",
   "api.resend.com",
+  "api.github.com",
+  "raw.githubusercontent.com",
+  "gist.githubusercontent.com",
+]);
+
+// Image hosts — trusted, always allowed. These are the reason
+// "image search failed" doesn't happen on every new provider.
+const TRUSTED_IMAGE_HOSTS = new Set([
+  "picsum.photos",
+  "fastly.picsum.photos",
+  "images.unsplash.com",
+  "images.pexels.com",
+  "cdn.pixabay.com",
+  "upload.wikimedia.org",
 ]);
 
 const ALLOWED_IMPORT_HOSTS = new Set([
   "cdn.jsdelivr.net",
   "esm.sh",
   "unpkg.com",
+  "cdnjs.cloudflare.com",
+  "ga.jspm.io",
+  "cdn.skypack.dev",
 ]);
 
 let _folioHost = null;
@@ -390,15 +410,80 @@ async function authenticate(req, pid) {
 // =========================================================================
 
 const ALLOW_LINE_RE = /^\s*\/\/\s*@allow\s+(\S+)\s*$/gm;
+const ALLOW_HOST_LINE_RE = /^\s*\/\/\s*@allow-host\s+(\S+)\s*$/gm;
 
+// -------------------------------------------------------------------
+// extractAllowHosts — detects every external host the script references
+// -------------------------------------------------------------------
+// Scans for:
+//   1. Explicit @allow / @allow-host comments
+//   2. Literal https://host/... URLs anywhere in the source
+//
+// Templates with ${...} are NOT resolved — those hosts must be
+// declared explicitly or added via the dashboard.
+// -------------------------------------------------------------------
 function extractAllowHosts(source) {
   const hosts = new Set();
-  let match;
-  ALLOW_LINE_RE.lastIndex = 0;
-  while ((match = ALLOW_LINE_RE.exec(source)) !== null) {
-    hosts.add(match[1].toLowerCase().trim());
+
+  // 1. Explicit @allow / @allow-host comments
+  for (const re of [ALLOW_LINE_RE, ALLOW_HOST_LINE_RE]) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(source)) !== null) {
+      const h = normalizeHost(m[1]);
+      if (h) hosts.add(h);
+    }
   }
-  return [...hosts];
+
+  // 2. Literal https://host/... URLs in the source
+  //    Matches: fetch("https://api.example.com/x"),
+  //             import ... from "https://cdn.jsdelivr.net/...",
+  //             fetch("https://picsum.photos/v2/list"),
+  //             const u = "https://foo.com/x"
+  //
+  //    Skips: fetch("/api/host?...")     ← relative, no hostname
+  //           fetch(`https://${h}/x`)    ← template, unresolved
+  const URLLIKE = /https:\/\/([a-z0-9][a-z0-9.-]*\.[a-z]{2,})(?=[\/:'"`\s])/gi;
+  let m;
+  while ((m = URLLIKE.exec(source)) !== null) {
+    const h = normalizeHost(m[1]);
+    if (h) hosts.add(h);
+  }
+
+  return [...hosts].filter(h => !isSkippableHost(h));
+}
+
+// -------------------------------------------------------------------
+// normalizeHost — lowercase, strip protocol/path/port, validate shape
+// -------------------------------------------------------------------
+function normalizeHost(host) {
+  if (!host || typeof host !== "string") return null;
+  let h = host.toLowerCase().trim();
+  h = h.replace(/^https?:\/\//, "");      // strip protocol if present
+  h = h.split("/")[0].split(":")[0];      // strip path/port
+  if (!h) return null;
+  if (h.length > 253) return null;
+  if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(h)) return null;
+  return h;
+}
+
+// -------------------------------------------------------------------
+// isSkippableHost — hosts that never need to be in the manifest
+// -------------------------------------------------------------------
+function isSkippableHost(h) {
+  if (FOLIO_INTERNAL_HOSTS.has(h)) return true;
+  if (h.endsWith(".vercel.app")) return true;
+  const SKIP = new Set([
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "cdn.jsdelivr.net",
+    "esm.sh",
+    "unpkg.com",
+    "fonts.googleapis.com",
+    "fonts.gstatic.com",
+  ]);
+  return SKIP.has(h);
 }
 
 // =========================================================================
@@ -802,16 +887,30 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId, startTime
           return await request.abort("blockedbyclient");
         }
 
-        if (
-          BUILTIN_ALLOWED_HOSTS.has(host) ||
-          ALLOWED_IMPORT_HOSTS.has(host) ||
-          allowedHostsSet.has(host)
-        ) {
-          fetchHosts.add(host);
-          return await request.continue();
-        }
+// Trusted image hosts are always allowed — no declaration needed.
+// They're read-only CDNs, safe for any script to use.
+if (TRUSTED_IMAGE_HOSTS.has(host)) {
+  fetchHosts.add(host);
+  return await request.continue();
+}
 
-        return await request.abort("blockedbyclient");
+if (
+  BUILTIN_ALLOWED_HOSTS.has(host) ||
+  ALLOWED_IMPORT_HOSTS.has(host) ||
+  allowedHostsSet.has(host)
+) {
+  fetchHosts.add(host);
+  return await request.continue();
+}
+
+// Blocked — log the exact host so the user can see what
+// needs to be added.
+log("run.host_blocked", { reqId, host, pid });
+try {
+  logProjectEvent(pid, null, "api", "host_blocked", { host, route: null }).catch(() => {});
+} catch {}
+
+return await request.abort("blockedbyclient");
       } catch (err) {
         log("run.request_intercept_error", { reqId, message: err.message });
         try { await request.abort("failed"); } catch {}
