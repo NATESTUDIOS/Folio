@@ -6242,7 +6242,7 @@ const data = await res.json();
 
       <h2>With a request body</h2>
       <pre><code>const name = REQ.body.name || "friend";
-return { greeting: \`Hello, \${name}!\` };</code></pre>
+return { greeting: 'Hello, ' + name + '!' };</code></pre>
 
       <h2>With a secret</h2>
       <p>Add <code class="mono">OPENAI_API_KEY</code> in the <strong>Secrets</strong> tab. Then use it in your script:</p>
@@ -6260,6 +6260,58 @@ return { greeting: \`Hello, \${name}!\` };</code></pre>
 const data = await r.json();
 return data.choices[0].message.content;</code></pre>
       <p>The key never reaches the browser.</p>
+
+      <h2>Calling your own API from the browser</h2>
+      <pre><code>const res = await fetch("/{username}/project/{slug}/api/hello", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer " + localStorage.getItem("token"),
+  },
+  body: JSON.stringify({ name: "Alice" }),
+});
+const { greeting } = await res.json();</code></pre>
+      <p>The <code class="mono">Authorization</code> header is optional — it's forwarded to your script as <code class="mono">REQ.headers.authorization</code> so your script can decide what requires a token.</p>
+
+      <h2>Calling external APIs</h2>
+      <p>External hosts must be allowed. In practice, three paths get you there:</p>
+      <ol>
+        <li><strong>It's already trusted.</strong> OpenAI, Groq, Anthropic, Stripe, Supabase, Resend, GitHub, plus image CDNs like Picsum and Unsplash, plus the main import CDNs (jsdelivr, esm.sh, unpkg) — just call them.</li>
+        <li><strong>Literal URL in your script.</strong> On deploy, Folio scans every <code class="mono">api/*.js</code> file for literal <code class="mono">https://host/…</code> URLs and adds them to the manifest automatically.</li>
+        <li><strong>Dynamic URL.</strong> If the host is built from a variable, declare it explicitly with <code class="mono">// @allow host</code> at the top of the file.</li>
+      </ol>
+      <pre><code>// (1) Already trusted — no declaration needed
+const r1 = await fetch("https://api.openai.com/v1/chat/completions");
+
+// (2) Literal URL — auto-detected on deploy
+const r2 = await fetch("https://api.weather.com/v1/today");
+
+// (3) Dynamic — must be declared
+// @allow api.example.com
+const host = REQ.body.host || "api.example.com";
+const r3 = await fetch("https://" + host + "/v1/data");</code></pre>
+      <p>If a call fails with <code class="mono">TypeError: Failed to fetch</code>, it was blocked — check the logs for <code class="mono">run.host_blocked</code>, add <code class="mono">@allow</code>, redeploy.</p>
+
+      <h2>Common pitfalls</h2>
+      <ul>
+        <li><strong>Always return something.</strong> If a branch doesn't return, the response is <code class="mono">"null"</code> — wrap your script in try/catch with a fallback return.</li>
+        <li><strong>fetch needs an absolute URL.</strong> <code class="mono">fetch("/api/host?…")</code> fails in the sandbox. Use <code class="mono">ENV.FOLIO_BASE_URL + "/api/host?…"</code>.</li>
+        <li><strong>crypto.subtle and crypto.randomUUID don't exist</strong> in the sandbox (non-secure context). Use <code class="mono">crypto.getRandomValues</code> and pure-JS SHA-256.</li>
+        <li><strong>External hosts need to be allowed.</strong> Literal <code class="mono">https://host/…</code> URLs are auto-detected on deploy; dynamic URLs need <code class="mono">// @allow host</code>.</li>
+      </ul>
+
+      <h2>Wrap your script</h2>
+      <pre><code>const body = (REQ.body && typeof REQ.body === "object") ? REQ.body : {};
+const action = typeof body.action === "string" ? body.action : "";
+
+try {
+  if (action === "hello") {
+    return { message: "hi" };
+  }
+  return { __status: 400, error: "Unknown action: " + action };
+} catch (e) {
+  return { __status: 500, error: "Script error: " + e.message };
+}</code></pre>
     `,
   },
   'secrets': {
@@ -6269,15 +6321,18 @@ return data.choices[0].message.content;</code></pre>
       <p>Every secret has a visibility: <strong>private</strong> (default) or <strong>public</strong>.</p>
       <ul>
         <li><strong>Private</strong> — visible only in <code class="mono">ENV</code> from <code class="mono">api/*.js</code>. Never sent to the browser.</li>
-        <li><strong>Public</strong> — also injected into HTML as <code class="mono">window.__SECRETS__</code>.</li>
+        <li><strong>Public</strong> — also injected into HTML as <code class="mono">window.__SECRETS__</code> when injection is on.</li>
       </ul>
       <p>Use <strong>public</strong> for publishable keys (Stripe publishable, Supabase anon). Never for OpenAI keys.</p>
+
       <h2>Access from api/*.js</h2>
       <pre><code>const key = ENV.OPENAI_API_KEY;</code></pre>
       <p>ENV is a frozen object built fresh per invocation. If any secret fails to decrypt, the entire invocation fails with <code class="mono">500 "Failed to load secrets"</code>.</p>
+
       <h2>Access from frontend</h2>
-      <p>Only <strong>public</strong> secrets appear:</p>
-      <pre><code>const stripe = window.__SECRETS__?.STRIPE_PUBLISHABLE_KEY;</code></pre>
+      <p>Only <strong>public</strong> secrets appear, and only if injection is enabled:</p>
+      <pre><code>const stripe = window.__SECRETS__ && window.__SECRETS__.STRIPE_PUBLISHABLE_KEY;</code></pre>
+
       <h2>Reserved ENV variables</h2>
       <p>These are auto-injected at runtime. You cannot create secrets with these names.</p>
       <ul>
@@ -6295,9 +6350,31 @@ return data.choices[0].message.content;</code></pre>
         <li><code class="mono">ENV.REQUEST_ID</code> — unique request ID</li>
         <li><code class="mono">ENV.FOLIO_API_KEY</code> — project API key (if generated)</li>
       </ul>
+
+      <h2>Auth secrets (for user accounts)</h2>
+      <p>If your app has user accounts, you need two secrets set on the <strong>server</strong> (Vercel env, not per-project):</p>
+      <ul>
+        <li><code class="mono">PASSWORD_SALT</code> — 16+ characters. Pepper for password hashing. <strong>Never change after users register</strong> — that invalidates every stored password.</li>
+        <li><code class="mono">SESSION_SECRET</code> — 16+ characters. HMAC key for session tokens. Rotating it signs everyone out.</li>
+      </ul>
+      <p>Generate both with <code class="mono">crypto.randomUUID() + crypto.randomUUID()</code> in the browser console.</p>
+      <p>Both are exposed to your scripts as <code class="mono">ENV.PASSWORD_SALT</code> and <code class="mono">ENV.SESSION_SECRET</code>. Guard them at the top of your script:</p>
+      <pre><code>if (!ENV.PASSWORD_SALT || ENV.PASSWORD_SALT.length < 16) {
+  return { __status: 500, error: "PASSWORD_SALT not configured" };
+}</code></pre>
+
+      <h2>Secrets vs allowed hosts</h2>
+      <p>Secrets store <em>values</em> — API keys, tokens, connection strings. They do not affect which hosts your script can reach. To call a new external host, use <code class="mono">// @allow host</code>, a literal URL in the script, or the dashboard's Add-a-host control. The two mechanisms are independent: adding an API key doesn't allow its host, and allowing a host doesn't add credentials.</p>
+
       <h2>Injection mode</h2>
       <p>When enabled, <code class="mono">window.__SECRETS__</code> is injected into served HTML. Only public secrets appear.</p>
       <p><strong>Warning:</strong> anyone visiting your site can read them. Enable only if you accept that risk.</p>
+
+      <h2>Inspecting ENV safely</h2>
+      <p>To see which secrets are set (without values):</p>
+      <pre><code>return { envKeys: Object.keys(ENV || {}) };</code></pre>
+      <p>Never return <code class="mono">ENV</code> directly — it contains every secret.</p>
+
       <h2>Limits</h2>
       <ul>
         <li>16 KB per value</li>
@@ -6311,23 +6388,58 @@ return data.choices[0].message.content;</code></pre>
     body: `
       <h2>What is it?</h2>
       <p>A per-project key/value store backed by Firebase Realtime Database. Up to 15 MB per project.</p>
-      <p>You can read and write it from <code class="mono">api/*.js</code> using normal <code class="mono">fetch</code>. The requests resolve in-process, so they're fast.</p>
-      <h2>Read</h2>
-      <pre><code>const r = await fetch(\`/api/host?action=db/get&pid=\${ENV.PROJECT_ID}\`);
+      <p>You can read and write it from <code class="mono">api/*.js</code> using normal <code class="mono">fetch</code>. The runtime intercepts these calls in-process, so they never leave the sandbox.</p>
+
+      <h2>Read the whole tree</h2>
+      <p><code class="mono">db/get</code> returns the entire project tree as <code class="mono">data</code>:</p>
+      <pre><code>const BASE = ENV.FOLIO_BASE_URL;
+const r = await fetch(BASE + "/api/host?action=db/get&pid=" + ENV.PROJECT_ID);
 const { data } = await r.json();
-return { users: data.users };</code></pre>
-      <h2>Write</h2>
-      <pre><code>await fetch("/api/host?action=db/set", {
+
+const users = data.users || {};
+const todos = data.todos || {};
+return { users, todos };</code></pre>
+      <p><strong>Always use an absolute URL</strong> built from <code class="mono">ENV.FOLIO_BASE_URL</code>. <code class="mono">fetch("/api/host?…")</code> throws "Failed to parse URL" in the sandbox.</p>
+
+      <h2>Walk the tree yourself</h2>
+      <p>To read one path, walk the tree in JS:</p>
+      <pre><code>function walk(obj, path) {
+  if (!path) return obj;
+  return path.split("/").filter(Boolean).reduce(function (c, k) { return c && c[k]; }, obj);
+}
+
+const BASE = ENV.FOLIO_BASE_URL;
+const r = await fetch(BASE + "/api/host?action=db/get&pid=" + ENV.PROJECT_ID);
+const { data } = await r.json();
+return { user: walk(data, "users/abc123") };</code></pre>
+      <p><strong>Prefer <code class="mono">db/get</code> over <code class="mono">db/list</code>.</strong> <code class="mono">db/get</code> has a stable response shape (whole tree). <code class="mono">db/list</code> returns an implementation-specific shape that varies with layout.</p>
+
+      <h2>Write a single path</h2>
+      <pre><code>const BASE = ENV.FOLIO_BASE_URL;
+await fetch(BASE + "/api/host?action=db/set", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     pid: ENV.PROJECT_ID,
     key: "todos/123",
-    value: { text: "Buy milk", done: false },
+    value: { text: "Buy milk", done: false, at: Date.now() },
   }),
 });</code></pre>
+
+      <h2>Delete a path</h2>
+      <p>Write <code class="mono">null</code>:</p>
+      <pre><code>await fetch(BASE + "/api/host?action=db/set", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: "todos/123",
+    value: null,
+  }),
+});</code></pre>
+
       <h2>Atomic multi-write</h2>
-      <pre><code>await fetch("/api/host?action=db/batch", {
+      <pre><code>await fetch(BASE + "/api/host?action=db/batch", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -6338,21 +6450,61 @@ return { users: data.users };</code></pre>
     ],
   }),
 });</code></pre>
+
       <h2>Atomic increment</h2>
-      <pre><code>await fetch("/api/host?action=db/increment", {
+      <pre><code>await fetch(BASE + "/api/host?action=db/increment", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ pid: ENV.PROJECT_ID, key: "counters/views", by: 1 }),
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: "counters/views",
+    by: 1,
+  }),
 });</code></pre>
-      <h2>List</h2>
-      <pre><code>const r = await fetch(\`/api/host?action=db/list&pid=\${ENV.PROJECT_ID}&path=todos\`);
-const { items } = await r.json();</code></pre>
+
+      <h2>Reading from the frontend (browser)</h2>
+      <p>From your browser JS, the base URL is relative — no <code class="mono">ENV</code> needed:</p>
+      <pre><code>const r = await fetch("/api/host?action=db/get&pid=YOUR_PID");
+const { data } = await r.json();</code></pre>
+      <p>Writes from the browser need the project API key:</p>
+      <pre><code>await fetch("/api/host?action=db/set", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-Project-Key": "YOUR_PROJECT_API_KEY",
+  },
+  body: JSON.stringify({ pid, key, value }),
+});</code></pre>
+
+      <h2>Using your DB to store external API responses</h2>
+      <p>A common pattern: your script fetches from an allowed external host, caches the result in the JSON DB, and returns the cached copy on subsequent calls.</p>
+      <pre><code>const BASE = ENV.FOLIO_BASE_URL;
+const cacheKey = "cache/weather";
+const cacheUrl = BASE + "/api/host?action=db/get&pid=" + ENV.PROJECT_ID;
+const cached = await (await fetch(cacheUrl)).json();
+const hit = cached.data && cached.data.cache && cached.data.cache.weather;
+if (hit && Date.now() - hit.at < 60000) return { data: hit.data, cached: true };
+
+const fresh = await (await fetch("https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m")).json();
+await fetch(BASE + "/api/host?action=db/set", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: cacheKey,
+    value: { data: fresh, at: Date.now() },
+  }),
+});
+return { data: fresh, cached: false };</code></pre>
+
       <h2>Rules</h2>
       <ul>
         <li>Firebase RTDB doesn't support arrays — they become <code class="mono">{"0": …, "1": …}</code></li>
         <li>Writing <code class="mono">null</code> deletes the path</li>
         <li>Key segments can't contain <code class="mono">. # $ / [ ]</code></li>
         <li>Only <code class="mono">action=db/*</code> endpoints are allowed from <code class="mono">api/*.js</code></li>
+        <li>Writes are not transactional — last writer wins</li>
+        <li>Max 15 MB per project, 100 writes/hour</li>
       </ul>
     `,
   },
@@ -6361,7 +6513,7 @@ const { items } = await r.json();</code></pre>
     body: `
       <h2>What is it?</h2>
       <p><code class="mono">api/*.js</code> files are private: never served over HTTP, only executed when called.</p>
-      <p>The runtime is headless Chromium. Everything a browser has, your script has.</p>
+      <p>The runtime is headless Chromium running at <code class="mono">about:blank</code>. That is a <strong>non-secure context</strong> — see below.</p>
 
       <h2>The URLs</h2>
       <p>Two shapes, same behavior:</p>
@@ -6371,32 +6523,108 @@ POST https://foliostudios.vercel.app/api/{pid}/{route}</code></pre>
       <p>The <strong>direct URL</strong> uses the project id — no lookup, fastest path. Useful for <code class="mono">_system.js</code> routes, high-throughput clients, or debugging.</p>
       <p>The <code class="mono">{route}</code> is the filename without <code class="mono">.js</code>. <code class="mono">api/chat.js</code> becomes <code class="mono">POST /{username}/project/{slug}/api/chat</code>.</p>
 
-      <h2>Reaching external APIs with @allow</h2>
-      <p>To <code class="mono">fetch</code> an external host, declare it at the top of the file:</p>
-      <pre><code>// @allow api.weather.com
-// @allow api.example.com
+      <h2>⚠ Sandbox restrictions</h2>
+      <p>Your script runs in a Chromium page whose origin is <code class="mono">about:blank</code>. That means <strong>secure-context APIs are unavailable</strong>:</p>
+      <table class="db-table">
+        <thead><tr><th>Unavailable</th><th>Use instead</th></tr></thead>
+        <tbody>
+          <tr><td><code class="mono">crypto.subtle</code></td><td>Pure-JS SHA-256 / HMAC</td></tr>
+          <tr><td><code class="mono">crypto.randomUUID</code></td><td><code class="mono">crypto.getRandomValues</code>-based UUID</td></tr>
+          <tr><td><code class="mono">navigator.clipboard</code></td><td>Not needed server-side</td></tr>
+          <tr><td><code class="mono">navigator.share</code></td><td>Not needed server-side</td></tr>
+        </tbody>
+      </table>
+      <p><strong>Use absolute URLs for fetch.</strong> <code class="mono">fetch("/api/host?…")</code> has no base URL to resolve against. Build every URL from <code class="mono">ENV.FOLIO_BASE_URL</code>.</p>
+      <p>For working crypto helpers, see the <strong>Examples</strong> tab — hashPassword, hmacSign, uuid all work in the sandbox.</p>
 
-const weather = await fetch("https://api.weather.com/v1/today");
-return await weather.json();</code></pre>
-      <p>If you call a host you didn't declare, the request is blocked with a 403.</p>
+      <h2>Allowed external hosts — four tiers</h2>
+      <p>Scripts can only reach external hosts that have been allowed. Folio has four tiers, and the first three are always on for every project:</p>
+      <table class="db-table">
+        <thead><tr><th>Tier</th><th>Examples</th><th>Declared in</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Built-in API hosts</strong></td>
+            <td><code class="mono">api.openai.com</code>, <code class="mono">api.groq.com</code>, <code class="mono">api.anthropic.com</code>, <code class="mono">api.stripe.com</code>, <code class="mono">api.paystack.co</code>, <code class="mono">api.supabase.co</code>, <code class="mono">api.resend.com</code>, <code class="mono">api.github.com</code>, <code class="mono">raw.githubusercontent.com</code>, <code class="mono">gist.githubusercontent.com</code></td>
+            <td><code class="mono">BUILTIN_ALLOWED_HOSTS</code> in <code class="mono">run.js</code></td>
+          </tr>
+          <tr>
+            <td><strong>Trusted image hosts</strong></td>
+            <td><code class="mono">picsum.photos</code>, <code class="mono">fastly.picsum.photos</code>, <code class="mono">images.unsplash.com</code>, <code class="mono">images.pexels.com</code>, <code class="mono">cdn.pixabay.com</code>, <code class="mono">upload.wikimedia.org</code></td>
+            <td><code class="mono">TRUSTED_IMAGE_HOSTS</code> in <code class="mono">run.js</code></td>
+          </tr>
+          <tr>
+            <td><strong>Allowed import CDNs</strong></td>
+            <td><code class="mono">cdn.jsdelivr.net</code>, <code class="mono">esm.sh</code>, <code class="mono">unpkg.com</code>, <code class="mono">cdnjs.cloudflare.com</code>, <code class="mono">ga.jspm.io</code>, <code class="mono">cdn.skypack.dev</code></td>
+            <td><code class="mono">ALLOWED_IMPORT_HOSTS</code> in <code class="mono">run.js</code></td>
+          </tr>
+          <tr>
+            <td><strong>Per-project hosts</strong></td>
+            <td>Anything detected from your script or added via the dashboard</td>
+            <td><code class="mono">projects/{pid}/allowedHosts</code></td>
+          </tr>
+        </tbody>
+      </table>
 
-      <h2>Built-in allowed hosts (no @allow needed)</h2>
-      <ul>
-        <li><code class="mono">api.openai.com</code></li>
-        <li><code class="mono">api.groq.com</code></li>
-        <li><code class="mono">api.anthropic.com</code></li>
-        <li><code class="mono">api.stripe.com</code></li>
-        <li><code class="mono">api.supabase.co</code></li>
-        <li><code class="mono">api.resend.com</code></li>
-      </ul>
+      <h2>Three ways to allow a host</h2>
+
+      <h3>1. It's already trusted</h3>
+      <p>The first three tiers require no declaration. Just call the host:</p>
+      <pre><code>const r = await fetch("https://api.openai.com/v1/chat/completions", { /* ... */ });
+const imgs = await (await fetch("https://picsum.photos/v2/list?page=1&limit=12")).json();
+import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";</code></pre>
+
+      <h3>2. Literal URL in your script — auto-detected on deploy</h3>
+      <p>On deploy, Folio scans every <code class="mono">api/*.js</code> file for literal <code class="mono">https://host/…</code> URLs and adds them to the manifest automatically. If your script contains:</p>
+      <pre><code>const r = await fetch("https://api.weather.com/v1/today");</code></pre>
+      <p>…the deploy pipeline detects <code class="mono">api.weather.com</code>, validates it (DNS + HTTPS), and adds it to your allowed hosts. No <code class="mono">@allow</code> needed. This works even inside a template literal — the hostname portion <code class="mono">https://api.weather.com</code> is literal:</p>
+      <pre><code>const url = "https://api.weather.com/v1/today?lat=" + lat;
+const r = await fetch(url);  // ← auto-detected on deploy</code></pre>
+
+      <h3>3. Dynamic host — declare it with @allow</h3>
+      <p>Auto-detection cannot see dynamic hosts. If the hostname is built from a variable, declare it at the top of the file:</p>
+      <pre><code>// @allow api.example.com
+// @allow api.weather.com
+
+const host = REQ.body.host || "api.weather.com";
+const r = await fetch("https://" + host + "/v1/today");
+return await r.json();</code></pre>
+      <p>If you call a host that wasn't declared and isn't in the manifest, the request is aborted and <code class="mono">run.host_blocked</code> is logged with the hostname.</p>
+
+      <h2>What auto-detection finds (and misses)</h2>
+      <table class="db-table">
+        <thead><tr><th>Pattern</th><th>Detected?</th></tr></thead>
+        <tbody>
+          <tr><td><code class="mono">fetch("https://api.x.com/v1")</code></td><td>✅ Yes — literal string</td></tr>
+          <tr><td><code class="mono">fetch("https://api.x.com/v1?id=" + id)</code></td><td>✅ Yes — hostname is literal</td></tr>
+          <tr><td><code class="mono">import { x } from "https://cdn.jsdelivr.net/…"</code></td><td>✅ Yes — but only allowlisted CDNs work anyway</td></tr>
+          <tr><td><code class="mono">const url = "https://api.x.com/v1"; fetch(url)</code></td><td>✅ Yes — scanner walks the whole file</td></tr>
+          <tr><td><code class="mono">const H = "api.x.com"; fetch("https://" + H + "/v1")</code></td><td>❌ No — host is a variable</td></tr>
+          <tr><td><code class="mono">fetch(REQ.body.url)</code></td><td>❌ No — user-controlled</td></tr>
+          <tr><td><code class="mono">fetch("https://" + "api.x.com" + "/v1")</code></td><td>❌ No — concatenation</td></tr>
+        </tbody>
+      </table>
+      <p>For the ❌ cases, add <code class="mono">// @allow api.x.com</code> explicitly.</p>
+
+      <h2>Adding hosts from the dashboard</h2>
+      <p>Project owners can add a host without editing code. The backend validates DNS + HTTPS before writing to the manifest. Added hosts persist through redeploys and are tagged <code class="mono">declaredBy: ["dashboard"]</code> so they survive manifest rebuilds.</p>
 
       <h2>Imports from CDNs</h2>
-      <p>Import from three allowed CDNs:</p>
+      <p>Import from the allowlisted CDN hosts:</p>
       <pre><code>import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";
 return { html: marked(REQ.body.md) };</code></pre>
-      <p>Allowed: <code class="mono">cdn.jsdelivr.net</code>, <code class="mono">esm.sh</code>, <code class="mono">unpkg.com</code></p>
 
       <h2>Returning a response</h2>
+      <p>Whatever you return becomes the response body. The runtime inspects the shape:</p>
+      <table class="db-table">
+        <thead><tr><th>Return</th><th>Status</th><th>Content-Type</th></tr></thead>
+        <tbody>
+          <tr><td><code class="mono">{ success: true, … }</code></td><td>200</td><td>application/json</td></tr>
+          <tr><td><code class="mono">"hello"</code></td><td>200</td><td>text/plain</td></tr>
+          <tr><td><code class="mono">null</code> / <code class="mono">undefined</code></td><td>200</td><td>application/json (<code class="mono">"null"</code>)</td></tr>
+          <tr><td><code class="mono">{ __status: 404, __body: "x", error: "x" }</code></td><td>404</td><td>application/json</td></tr>
+        </tbody>
+      </table>
+      <p>Custom status and content type:</p>
       <pre><code>// JSON (default)
 return { hello: "world" };
 
@@ -6404,7 +6632,19 @@ return { hello: "world" };
 return "Hello, world";
 
 // Custom status
-return { __status: 404, __contentType: "text/plain", __body: "Not found" };</code></pre>
+return { __status: 404, __contentType: "text/plain", __body: "Not found" };
+
+// HTML
+return { __contentType: "text/html; charset=utf-8", __body: "<h1>Hi</h1>" };</code></pre>
+
+      <h2>⚠ Always return something</h2>
+      <p>If your script falls through a branch without returning, the response body is the string <code class="mono">"null"</code> — not what any client wants. Wrap your entire script:</p>
+      <pre><code>try {
+  if (REQ.body && REQ.body.action === "hello") return { message: "hi" };
+  return { __status: 400, error: "Unknown action" };
+} catch (e) {
+  return { __status: 500, error: "Script error: " + e.message };
+}</code></pre>
 
       <h2>The _system.js file</h2>
       <p>Auto-created on first deploy. Provides six routes for free:</p>
@@ -6444,14 +6684,29 @@ return { __status: 404, __contentType: "text/plain", __body: "Not found" };</cod
         <li>Max <code class="mono">@allow</code> lines per file: 20</li>
         <li>Max unique hosts per project: 50</li>
       </ul>
+
+      <h2>External hosts</h2>
+      <ul>
+        <li>Max <code class="mono">@allow</code> lines per file: 20</li>
+        <li>Max unique allowed hosts per project: 50</li>
+        <li>Hosts are validated at deploy: DNS resolution + public IP + HTTPS reachability</li>
+        <li>Auto-detection scans literal <code class="mono">https://host/…</code> URLs in every <code class="mono">api/*.js</code> file</li>
+        <li><code class="mono">hosts/add</code> via the dashboard: 30/hour per project (owner only)</li>
+      </ul>
+
       <h2>Runtime</h2>
       <ul>
-        <li>Timeout: 10 seconds (7s user code)</li>
-        <li>Memory: 128 MB</li>
+        <li>Total function timeout: 30 seconds</li>
+        <li>User code timeout: 7 seconds</li>
+        <li>Chromium launch timeout: 15 seconds</li>
+        <li>Page setup timeout: 5 seconds</li>
+        <li>Memory: 1024 MB</li>
         <li>Max response: 5 MB</li>
         <li>Max request body: 1 MB</li>
+        <li>Recursion depth: 3</li>
       </ul>
-      <h2>Rate limits</h2>
+
+      <h2>Rate limits (runtime)</h2>
       <ul>
         <li>Per session, per route: 10/min</li>
         <li>Per session, all routes: 50/min</li>
@@ -6459,17 +6714,45 @@ return { __status: 404, __contentType: "text/plain", __body: "Not found" };</cod
         <li>Per project, all routes: 2,000/day</li>
         <li>Per project, per route: 100/hour</li>
       </ul>
+
+      <h2>Rate limits (hosting API)</h2>
+      <p>Each action has its own limit. Notable:</p>
+      <ul>
+        <li><code class="mono">deploy</code>: 10/hour</li>
+        <li><code class="mono">redeploy</code>: 10/hour</li>
+        <li><code class="mono">db/set</code>: 300/min</li>
+        <li><code class="mono">db/get</code>: 600/min</li>
+        <li><code class="mono">secrets/set</code>: 20/hour</li>
+        <li><code class="mono">hosts/add</code>: 30/hour</li>
+      </ul>
+
       <h2>Secrets</h2>
       <ul>
         <li>Max value: 16 KB</li>
         <li>Max total per project: 512 KB</li>
         <li>Max count: 50</li>
       </ul>
+
       <h2>JSON DB</h2>
       <ul>
         <li>Max total: 15 MB per project</li>
         <li>Max per write: 2 MB</li>
         <li>Max batch entries: 100</li>
+        <li>Write rate: 100/hour per project</li>
+        <li>Transactions: none</li>
+      </ul>
+
+      <h2>Deployments</h2>
+      <ul>
+        <li>Max deployments kept: 5</li>
+        <li>Each deploy creates one version snapshot</li>
+      </ul>
+
+      <h2>Logs</h2>
+      <ul>
+        <li>API log: last 50 user-route calls per project</li>
+        <li>Event log: last 200 project events</li>
+        <li>No delete endpoint</li>
       </ul>
     `,
   },
@@ -6482,11 +6765,9 @@ return { __status: 404, __contentType: "text/plain", __body: "Not found" };</cod
         <tbody>
           <tr><td>Script throws</td><td>500</td></tr>
           <tr><td>Timeout (7s)</td><td>504</td></tr>
-          <tr><td>Fetch blocked (undeclared host)</td><td>403</td></tr>
-          <tr><td>Fetch failed (network)</td><td>502</td></tr>
-          <tr><td>Import blocked (unallowed CDN)</td><td>403</td></tr>
+          <tr><td>Fetch blocked (undeclared host)</td><td>blocked; script sees <code class="mono">TypeError: Failed to fetch</code></td></tr>
+          <tr><td>Import blocked (unallowed CDN)</td><td>import fails at parse time</td></tr>
           <tr><td>Route not found</td><td>404</td></tr>
-          <tr><td>Auth required</td><td>401</td></tr>
           <tr><td>Rate limit exceeded</td><td>429</td></tr>
           <tr><td>Secrets failed to decrypt</td><td>500</td></tr>
           <tr><td>Recursion limit exceeded</td><td>508</td></tr>
@@ -6494,11 +6775,87 @@ return { __status: 404, __contentType: "text/plain", __body: "Not found" };</cod
           <tr><td>Request body too large (> 1 MB)</td><td>413</td></tr>
         </tbody>
       </table>
+      <p><strong>Note:</strong> the runtime does <strong>not</strong> enforce auth. If your script returns a 401 or 403, that's your script's decision — not the runtime.</p>
+
+      <h2>Common script errors</h2>
+      <table class="db-table">
+        <thead><tr><th>Error message</th><th>Cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code class="mono">Failed to parse URL from /api/host…</code></td>
+            <td>Relative URL in sandbox</td>
+            <td>Use <code class="mono">ENV.FOLIO_BASE_URL + "/api/host…"</code></td>
+          </tr>
+          <tr>
+            <td><code class="mono">crypto.randomUUID is not a function</code></td>
+            <td>Secure-context API in sandbox</td>
+            <td>Use <code class="mono">crypto.getRandomValues</code>-based UUID</td>
+          </tr>
+          <tr>
+            <td><code class="mono">Cannot read properties of undefined (reading 'digest')</code></td>
+            <td><code class="mono">crypto.subtle</code> is undefined</td>
+            <td>Use pure-JS SHA-256</td>
+          </tr>
+          <tr>
+            <td><code class="mono">TypeError: Failed to fetch</code></td>
+            <td>Blocked external host</td>
+            <td>Add <code class="mono">@allow</code> or literal URL, redeploy</td>
+          </tr>
+          <tr>
+            <td>Response body is <code class="mono">"null"</code></td>
+            <td>Script returned <code class="mono">undefined</code></td>
+            <td>Wrap in try/catch, return fallback at bottom</td>
+          </tr>
+          <tr>
+            <td><code class="mono">Function timed out</code></td>
+            <td>Script >7s</td>
+            <td>Batch DB calls, reduce external fetches</td>
+          </tr>
+          <tr>
+            <td><code class="mono">ENV.PROJECT_ID missing</code></td>
+            <td>Runtime misconfiguration</td>
+            <td>Redeploy; check the api-logs entry</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Host-related errors</h2>
+      <table class="db-table">
+        <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code class="mono">TypeError: Failed to fetch</code> + <code class="mono">run.host_blocked</code> in logs</td>
+            <td>Host not in any tier and not in the manifest</td>
+            <td>Add <code class="mono">// @allow host.name</code>, or include a literal URL, or add via dashboard</td>
+          </tr>
+          <tr>
+            <td>Deploy rejected: <code class="mono">Host validation failed</code></td>
+            <td>Detected host doesn't resolve, resolves to a private IP, or doesn't respond to HTTPS</td>
+            <td>Fix the URL in the script, or remove the host and add via dashboard after fixing</td>
+          </tr>
+          <tr>
+            <td>Deploy rejected: <code class="mono">Too many hosts</code></td>
+            <td>More than 50 unique hosts detected</td>
+            <td>Trim the script — 50 unique hosts is a lot for one project</td>
+          </tr>
+          <tr>
+            <td>Host added via dashboard but still blocked</td>
+            <td>Manifest not refreshed, or host missing from manifest</td>
+            <td>Redeploy the project; verify the host appears under "Allowed hosts" in the API tab</td>
+          </tr>
+          <tr>
+            <td><code class="mono">Cannot find module</code> on <code class="mono">import</code></td>
+            <td>CDN not in <code class="mono">ALLOWED_IMPORT_HOSTS</code></td>
+            <td>Use jsdelivr, esm.sh, unpkg, cdnjs, ga.jspm.io, or cdn.skypack.dev</td>
+          </tr>
+        </tbody>
+      </table>
+
       <h2>Deploy errors</h2>
       <table class="db-table">
         <thead><tr><th>Cause</th><th>Status</th></tr></thead>
         <tbody>
-          <tr><td>Invalid @allow host</td><td>400 (whole deploy rejected)</td></tr>
+          <tr><td>Invalid @allow host (DNS or HTTPS fails)</td><td>400 (whole deploy rejected)</td></tr>
           <tr><td>Too many @allow lines</td><td>400</td></tr>
           <tr><td>Too many unique hosts</td><td>400</td></tr>
           <tr><td>Reserved file name</td><td>400</td></tr>
@@ -6507,7 +6864,8 @@ return { __status: 404, __contentType: "text/plain", __body: "Not found" };</cod
           <tr><td>Deploy write fails</td><td>500 (rollback)</td></tr>
         </tbody>
       </table>
-      <h2>What gets rejected by @allow</h2>
+
+      <h2>What gets rejected by @allow / auto-detection</h2>
       <ul>
         <li>IP addresses (<code class="mono">10.0.0.5</code>, <code class="mono">169.254.169.254</code>)</li>
         <li>Hosts resolving to private IPs</li>
@@ -6519,80 +6877,125 @@ return { __status: 404, __contentType: "text/plain", __body: "Not found" };</cod
         <li>Non-HTTPS hosts</li>
         <li>Hosts that don't respond to HTTPS</li>
       </ul>
+
+      <h2>Reading the error from a response</h2>
+      <p>When your script returns <code class="mono">{ __status: 400, __body: "Invalid formId", error: "Invalid formId" }</code>, the client sees:</p>
+      <pre><code>{ "error": "Invalid formId" }</code></pre>
+      <p>The status is 400, <code class="mono">errorName</code> is <code class="mono">null</code> (no exception thrown), and <code class="mono">errorMessage</code> is <code class="mono">null</code>. That's a <strong>clean rejection</strong> — the runtime worked. The script decided to reject.</p>
+      <p>When your script <strong>throws</strong>, the client sees <code class="mono">500 "Function threw an error"</code> and the log entry has <code class="mono">errorName</code> + <code class="mono">errorMessage</code> populated.</p>
     `,
   },
   'logs': {
-  title: 'Logs & debugging',
-  body: `
-    <h2>What gets logged</h2>
-    <p>Every call to a user route (<code class="mono">api/*.js</code>) is recorded. System routes
-    (<code class="mono">health</code>, <code class="mono">whoami</code>, <code class="mono">files</code>,
-    <code class="mono">status</code>, <code class="mono">version</code>, <code class="mono">robots</code>)
-    are <strong>not</strong> recorded in the per-project buffer — they still appear in Vercel logs and project activity.</p>
+    title: 'Logs & debugging',
+    body: `
+      <h2>What gets logged</h2>
+      <p>Every call to a user route (<code class="mono">api/*.js</code>) is recorded. System routes
+      (<code class="mono">health</code>, <code class="mono">whoami</code>, <code class="mono">files</code>,
+      <code class="mono">status</code>, <code class="mono">version</code>, <code class="mono">robots</code>)
+      are <strong>not</strong> recorded in the per-project buffer — they still appear in Vercel logs and project activity.</p>
 
-    <h2>Where to find them</h2>
-    <ul>
-      <li><strong>API tab → Recent calls</strong> — the last 50 user-route calls, with filters and pagination.</li>
-      <li><strong>Insights tab → Logs</strong> — the project event log (deploys, secrets, DB writes, invites…).</li>
-      <li><strong>Vercel logs</strong> — structured <code class="mono">run.timing</code> stage lines per request.</li>
-    </ul>
+      <h2>Where to find them</h2>
+      <ul>
+        <li><strong>API tab → Recent calls</strong> — the last 50 user-route calls, with filters and pagination.</li>
+        <li><strong>Insights tab → Logs</strong> — the project event log (deploys, secrets, DB writes, invites…).</li>
+        <li><strong>Vercel logs</strong> — structured <code class="mono">run.timing</code> stage lines per request.</li>
+      </ul>
 
-    <h2>What each entry contains</h2>
-    <table class="db-table">
-      <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
-      <tbody>
-        <tr><td><strong>route</strong></td><td>The route name (<code class="mono">notes</code>, <code class="mono">chat</code>, …)</td></tr>
-        <tr><td><strong>method</strong></td><td>HTTP method</td></tr>
-        <tr><td><strong>status</strong></td><td>Response code (200, 500, 504…)</td></tr>
-        <tr><td><strong>durationMs</strong></td><td>Total wall time</td></tr>
-        <tr><td><strong>via</strong></td><td><code class="mono">anon</code>, <code class="mono">session</code>, or <code class="mono">api-key</code></td></tr>
-        <tr><td><strong>requestId</strong></td><td>Correlates with the <code class="mono">X-Request-Id</code> response header and Vercel logs</td></tr>
-        <tr><td><strong>stage</strong></td><td>Last <code class="mono">run.timing</code> stage reached (useful for timeouts)</td></tr>
-        <tr><td><strong>bytesIn / bytesOut</strong></td><td>Request body size / response size</td></tr>
-        <tr><td><strong>fetchHosts</strong></td><td>External hosts the script actually hit</td></tr>
-        <tr><td><strong>userAgent / ipHash</strong></td><td>Client UA and hashed IP (for debugging)</td></tr>
-        <tr><td><strong>deploymentId</strong></td><td>Which deploy the call hit</td></tr>
-        <tr><td><strong>errorName / errorMessage</strong></td><td>Thrown error, if any</td></tr>
-        <tr><td><strong>errorClass</strong></td><td>Grouped: <code class="mono">timeout</code>, <code class="mono">rate_limit</code>, <code class="mono">syntax_error</code>, <code class="mono">blocked_host</code>, <code class="mono">network</code>, <code class="mono">server_error</code>…</td></tr>
-      </tbody>
-    </table>
+      <h2>What each entry contains</h2>
+      <table class="db-table">
+        <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>route</strong></td><td>The route name (<code class="mono">notes</code>, <code class="mono">chat</code>, …)</td></tr>
+          <tr><td><strong>method</strong></td><td>HTTP method</td></tr>
+          <tr><td><strong>status</strong></td><td>Response code (200, 500, 504…)</td></tr>
+          <tr><td><strong>durationMs</strong></td><td>Total wall time</td></tr>
+          <tr><td><strong>via</strong></td><td><code class="mono">anon</code>, <code class="mono">session</code>, or <code class="mono">api-key</code></td></tr>
+          <tr><td><strong>requestId</strong></td><td>Correlates with the <code class="mono">X-Request-Id</code> response header and Vercel logs</td></tr>
+          <tr><td><strong>stage</strong></td><td>Last <code class="mono">run.timing</code> stage reached (useful for timeouts)</td></tr>
+          <tr><td><strong>bytesIn / bytesOut</strong></td><td>Request body size / response size</td></tr>
+          <tr><td><strong>fetchHosts</strong></td><td>External hosts the script actually hit</td></tr>
+          <tr><td><strong>userAgent / ipHash</strong></td><td>Client UA and hashed IP (for debugging)</td></tr>
+          <tr><td><strong>deploymentId</strong></td><td>Which deploy the call hit</td></tr>
+          <tr><td><strong>errorName / errorMessage</strong></td><td>Thrown error, if any — <strong>null</strong> if the script returned an error object cleanly</td></tr>
+          <tr><td><strong>errorClass</strong></td><td>Grouped: <code class="mono">timeout</code>, <code class="mono">rate_limit</code>, <code class="mono">syntax_error</code>, <code class="mono">blocked_host</code>, <code class="mono">network</code>, <code class="mono">server_error</code>…</td></tr>
+        </tbody>
+      </table>
 
-    <h2>Reading logs from outside</h2>
-    <p>Requires <strong>editor</strong> role:</p>
-    <pre><code>GET /api/host?action=api-logs&pid={pid}&limit=20&offset=0
+      <h2>Reading logs from outside</h2>
+      <p>Requires <strong>editor</strong> role:</p>
+      <pre><code>GET /api/host?action=api-logs&pid={pid}&limit=20&offset=0
 GET /api/host?action=api-logs&pid={pid}&status=error
 GET /api/host?action=api-logs&pid={pid}&route=notes&via=api-key
 GET /api/host?action=api-logs&pid={pid}&since=1730000000000</code></pre>
-    <p>Filters: <code class="mono">route</code>, <code class="mono">status</code> (<code class="mono">error</code> | <code class="mono">ok</code> | numeric), <code class="mono">via</code>, <code class="mono">since</code> (Unix ms).</p>
-    <p>The response includes <code class="mono">logs</code>, <code class="mono">total</code>, <code class="mono">returned</code>, <code class="mono">offset</code>, <code class="mono">limit</code>, <code class="mono">hasMore</code>, and an <code class="mono">errorSummary</code> breakdown.</p>
+      <p>Filters: <code class="mono">route</code>, <code class="mono">status</code> (<code class="mono">error</code> | <code class="mono">ok</code> | numeric), <code class="mono">via</code>, <code class="mono">since</code> (Unix ms).</p>
+      <p>The response includes <code class="mono">logs</code>, <code class="mono">total</code>, <code class="mono">returned</code>, <code class="mono">offset</code>, <code class="mono">limit</code>, <code class="mono">hasMore</code>, and an <code class="mono">errorSummary</code> breakdown.</p>
 
-    <h2>Response headers</h2>
-    <p>Every API response carries:</p>
-    <ul>
-      <li><code class="mono">X-Request-Id</code> — quote this when reporting an issue</li>
-      <li><code class="mono">X-Execution-Time</code> — total ms</li>
-      <li><code class="mono">X-Fetch-Hosts</code> — comma-separated external hosts hit</li>
-    </ul>
+      <h2>Response headers</h2>
+      <p>Every API response carries:</p>
+      <ul>
+        <li><code class="mono">X-Request-Id</code> — quote this when reporting an issue</li>
+        <li><code class="mono">X-Execution-Time</code> — total ms</li>
+        <li><code class="mono">X-Fetch-Hosts</code> — comma-separated external hosts hit</li>
+      </ul>
+      <p><code class="mono">X-Fetch-Hosts</code> is empty when your script made no external calls. If it's empty but you expected a call, the request was blocked before it left the sandbox.</p>
 
-    <h2>Debugging a timeout</h2>
-    <p>Functions cap at 30s (7s for user code). When a call times out, look at the <code class="mono">stage</code>
-    field on the log entry — or open Vercel logs and find the last <code class="mono">run.timing</code> line for that
-    <code class="mono">requestId</code>. That stage is where the budget was consumed.</p>
-    <p>Common culprits: <code class="mono">waitforfunction_started</code> (your script never returned),
-    <code class="mono">chromium_launch_started</code> (cold start — try again), or a slow external fetch inside your script.</p>
+      <h2>Debugging a timeout</h2>
+      <p>Functions cap at 30s (7s for user code). When a call times out, look at the <code class="mono">stage</code> field on the log entry — or open Vercel logs and find the last <code class="mono">run.timing</code> line for that <code class="mono">requestId</code>. That stage is where the budget was consumed.</p>
+      <p>Common culprits:</p>
+      <ul>
+        <li><code class="mono">waitforfunction_started</code> — your script never returned (usually an unresolved <code class="mono">await</code>)</li>
+        <li><code class="mono">chromium_launch_started</code> — cold start consumed the budget (try again)</li>
+        <li><code class="mono">setcontent_started</code> — page setup hung</li>
+        <li>Any stage just before the timeout — the next one is where it hung</li>
+      </ul>
 
-    <h2>Limits</h2>
-    <ul>
-      <li>The per-project API log keeps the <strong>last 50</strong> user-route calls.</li>
-      <li>The project event log keeps the <strong>last 200</strong> events.</li>
-      <li>Logs are append-only; there's no delete endpoint.</li>
-    </ul>
-  `,
-},
+      <h2>Debugging a blocked fetch</h2>
+      <p>Look for <code class="mono">run.host_blocked</code> in Vercel logs. The entry names the host that was blocked. Options:</p>
+      <ul>
+        <li><strong>If it's a trusted host</strong> (<code class="mono">picsum.photos</code>, <code class="mono">api.openai.com</code>, etc.) — something else is wrong. Check the exact hostname (e.g. <code class="mono">fastly.picsum.photos</code> is trusted, <code class="mono">other.picsum.com</code> is not).</li>
+        <li><strong>If it's a literal URL in your script</strong> — the deploy scan should have picked it up. Check the API tab's "Allowed hosts" list; if it's missing, redeploy.</li>
+        <li><strong>If it's dynamic</strong> — add <code class="mono">// @allow host.name</code> at the top of the script and redeploy.</li>
+        <li><strong>If you added it via dashboard</strong> — verify the manifest shows it under "Allowed hosts" in the API tab. If not, the add failed — check the project's event log for the <code class="mono">hosts/add</code> action.</li>
+      </ul>
+      <p>For a full diagnostic, add this temporary debug action to your script:</p>
+      <pre><code>if (REQ.body && REQ.body.action === "__hosts") {
+  const BASE = ENV.FOLIO_BASE_URL;
+  const r = await fetch(BASE + "/api/host?action=api-routes&pid=" + ENV.PROJECT_ID);
+  const data = await r.json();
+  return {
+    allowedHosts: data.allowedHosts || null,
+    fetchHostsNote: "Also check the X-Fetch-Hosts response header.",
+  };
+}</code></pre>
+
+      <h2>Debugging a null response</h2>
+      <p>If the response body is the string <code class="mono">"null"</code>, the script returned <code class="mono">undefined</code>. This happens when a branch falls through without a <code class="mono">return</code>, or when an action isn't handled.</p>
+      <p>Fix: wrap the whole script in try/catch and end with a fallback return.</p>
+
+      <h2>Using a __debug action</h2>
+      <p>Add a debug branch to your script for inspection:</p>
+      <pre><code>if (REQ.body && REQ.body.action === "__debug") {
+  return {
+    envKeys: Object.keys(ENV || {}),
+    pid: ENV.PROJECT_ID,
+    hasAuth: !!(REQ.headers.authorization),
+    body: REQ.body,
+  };
+}</code></pre>
+      <p>Call it with <code class="mono">{ "action": "__debug" }</code> to see what your script sees. <strong>Remove this before shipping</strong> — it leaks env key names.</p>
+
+      <h2>Limits</h2>
+      <ul>
+        <li>The per-project API log keeps the <strong>last 50</strong> user-route calls.</li>
+        <li>The project event log keeps the <strong>last 200</strong> events.</li>
+        <li>Logs are append-only; there's no delete endpoint.</li>
+      </ul>
+    `,
+  },
   'examples': {
     title: 'Examples',
     body: `
-      <h2>AI chat with OpenAI</h2>
+      <h2>AI chat with OpenAI (trusted host)</h2>
       <pre><code>const r = await fetch("https://api.openai.com/v1/chat/completions", {
   method: "POST",
   headers: {
@@ -6607,35 +7010,261 @@ GET /api/host?action=api-logs&pid={pid}&since=1730000000000</code></pre>
 const data = await r.json();
 return { reply: data.choices[0].message.content };</code></pre>
 
-      <h2>External weather API</h2>
-      <pre><code>// @allow api.open-meteo.com
-
-const lat = REQ.body.lat || 52.52;
+      <h2>External weather API — auto-detected host</h2>
+      <p>The literal <code class="mono">https://api.open-meteo.com</code> URL is detected on deploy. No <code class="mono">@allow</code> needed.</p>
+      <pre><code>const lat = REQ.body.lat || 52.52;
 const lon = REQ.body.lon || 13.41;
-const r = await fetch(
-  \`https://api.open-meteo.com/v1/forecast?latitude=\${lat}&longitude=\${lon}&current=temperature_2m\`
-);
+const url = "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon + "&current=temperature_2m";
+const r = await fetch(url);
 return await r.json();</code></pre>
 
-      <h2>Todos with JSON DB</h2>
-      <pre><code>if (REQ.method === "POST" && REQ.body.text) {
-  const id = crypto.randomUUID();
-  await fetch("/api/host?action=db/set", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      pid: ENV.PROJECT_ID,
-      key: \`todos/\${id}\`,
-      value: { text: REQ.body.text, done: false, at: Date.now() },
-    }),
-  });
-  return { ok: true, id };
-}
-const r = await fetch(\`/api/host?action=db/list&pid=\${ENV.PROJECT_ID}&path=todos\`);
-const { items } = await r.json();
-return { todos: items };</code></pre>
+      <h2>Dynamic host — declare explicitly</h2>
+      <p>The hostname comes from a variable, so auto-detection can't see it. Declare both possible hosts:</p>
+      <pre><code>// @allow api.example.com
+// @allow api.weather.com
 
-      <h2>Image resize with OffscreenCanvas</h2>
+const host = REQ.body.host || "api.weather.com";
+const r = await fetch("https://" + host + "/v1/today");
+return await r.json();</code></pre>
+
+      <h2>String literal host — auto-detected</h2>
+      <p>Even if the URL is stored in a constant, the scanner finds it:</p>
+      <pre><code>const WEATHER_URL = "https://api.weather.com/v1/today";
+const r = await fetch(WEATHER_URL);  // ← host auto-detected on deploy
+return await r.json();</code></pre>
+
+      <h2>Concat / template with variable host — must declare</h2>
+      <pre><code>// @allow api.example.com
+
+const base = "api.example.com";       // ← scanner sees the string but not the join
+const url = "https://" + base + "/v1"; // ← not detected as a URL
+const r = await fetch(url);</code></pre>
+
+      <h2>Picsum image search (trusted host)</h2>
+      <pre><code>const r = await fetch("https://picsum.photos/v2/list?page=1&limit=12");
+const items = await r.json();
+return {
+  images: items.map(function (it) {
+    return {
+      id: it.id,
+      author: it.author,
+      thumb: "https://picsum.photos/id/" + it.id + "/400/300",
+      full: "https://picsum.photos/id/" + it.id + "/1200/800",
+    };
+  }),
+};</code></pre>
+
+      <h2>Unsplash search (trusted host)</h2>
+      <pre><code>const q = encodeURIComponent(REQ.body.q || "");
+const r = await fetch("https://images.unsplash.com/napi/search/photos?query=" + q + "&per_page=12");
+const data = await r.json();
+return {
+  results: (data.results || []).map(function (p) {
+    return { id: p.id, url: p.urls && p.urls.regular };
+  }),
+};</code></pre>
+
+      <h2>Cache external API responses in the JSON DB</h2>
+      <p>Avoid hitting rate limits by caching. First call fetches live, subsequent calls within 60s return from the DB.</p>
+      <pre><code>const BASE = ENV.FOLIO_BASE_URL;
+const cacheUrl = BASE + "/api/host?action=db/get&pid=" + ENV.PROJECT_ID;
+const dbSnap = await fetch(cacheUrl);
+const { data } = await dbSnap.json();
+const hit = data && data.cache && data.cache.weather;
+if (hit && Date.now() - hit.at < 60000) {
+  return { data: hit.data, cached: true };
+}
+
+const fresh = await (await fetch("https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m")).json();
+
+await fetch(BASE + "/api/host?action=db/set", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: "cache/weather",
+    value: { data: fresh, at: Date.now() },
+  }),
+});
+return { data: fresh, cached: false };</code></pre>
+
+      <h2>Read the JSON DB (correct pattern)</h2>
+      <pre><code>const BASE = ENV.FOLIO_BASE_URL;
+const r = await fetch(BASE + "/api/host?action=db/get&pid=" + ENV.PROJECT_ID);
+const { data } = await r.json();
+
+const todos = data.todos || {};
+return { todos };</code></pre>
+      <p>Use <code class="mono">db/get</code> — it returns the whole tree reliably. Walk it yourself.</p>
+
+      <h2>Write to the JSON DB</h2>
+      <pre><code>const BASE = ENV.FOLIO_BASE_URL;
+const id = "t_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+
+await fetch(BASE + "/api/host?action=db/set", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: "todos/" + id,
+    value: { text: REQ.body.text, done: false, at: Date.now() },
+  }),
+});
+
+return { ok: true, id };</code></pre>
+
+      <h2>Atomic multi-write</h2>
+      <pre><code>const BASE = ENV.FOLIO_BASE_URL;
+await fetch(BASE + "/api/host?action=db/batch", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    updates: [
+      { key: "users/" + id, value: user },
+      { key: "usernames/" + lower, value: { id: id } },
+    ],
+  }),
+});</code></pre>
+
+      <h2>uuid() — sandbox-safe</h2>
+      <p><code class="mono">crypto.randomUUID()</code> is unavailable in the sandbox. Use this:</p>
+      <pre><code>function uuid() {
+  try {
+    const b = new Uint8Array(16);
+    crypto.getRandomValues(b);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = [];
+    for (let i = 0; i < 16; i++) h.push(b[i].toString(16).padStart(2, "0"));
+    return h.slice(0, 4).join("") + "-" +
+           h.slice(4, 6).join("") + "-" +
+           h.slice(6, 8).join("") + "-" +
+           h.slice(8, 10).join("") + "-" +
+           h.slice(10, 16).join("");
+  } catch (e) {
+    return "u-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+  }
+}</code></pre>
+
+      <h2>sha256Hex() — sandbox-safe</h2>
+      <p><code class="mono">crypto.subtle.digest</code> is unavailable in the sandbox. Use this pure-JS implementation:</p>
+      <pre><code>function sha256Hex(str) {
+  function rightRotate(v, n) { return (v >>> n) | (v << (32 - n)); }
+  const bytes = new TextEncoder().encode(String(str));
+  const K = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+  const H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+  const data = Array.from(bytes);
+  const l = data.length;
+  data.push(0x80);
+  while (data.length % 64 !== 56) data.push(0);
+  const bitLen = l * 8;
+  for (let i = 7; i >= 0; i--) data.push(Math.floor(bitLen / Math.pow(2, i * 8)) & 0xff);
+  const w = new Array(64);
+  for (let i = 0; i < data.length; i += 64) {
+    for (let j = 0; j < 16; j++) {
+      w[j] = (data[i + j * 4] << 24) | (data[i + j * 4 + 1] << 16) | (data[i + j * 4 + 2] << 8) | data[i + j * 4 + 3];
+    }
+    for (let j = 16; j < 64; j++) {
+      const s0 = rightRotate(w[j - 15], 7) ^ rightRotate(w[j - 15], 18) ^ (w[j - 15] >>> 3);
+      const s1 = rightRotate(w[j - 2], 17) ^ rightRotate(w[j - 2], 19) ^ (w[j - 2] >>> 10);
+      w[j] = (w[j - 16] + s0 + w[j - 7] + s1) | 0;
+    }
+    let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+    for (let j = 0; j < 64; j++) {
+      const S1 = rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (h + S1 + ch + K[j] + w[j]) | 0;
+      const S0 = rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0;
+      d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+    H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+  }
+  return H.map(function (x) { return (x >>> 0).toString(16).padStart(8, "0"); }).join("");
+}</code></pre>
+
+      <h2>Password hashing</h2>
+      <pre><code>function hashPassword(password) {
+  const SALT = ENV.PASSWORD_SALT;
+  if (!SALT || SALT.length < 16) throw new Error("PASSWORD_SALT not configured");
+  return sha256Hex(SALT + "|" + password + "|" + SALT);
+}</code></pre>
+
+      <h2>HMAC-SHA256 for session tokens</h2>
+      <pre><code>function hmacSign(data) {
+  const SECRET = ENV.SESSION_SECRET;
+  if (!SECRET || SECRET.length < 16) throw new Error("SESSION_SECRET not configured");
+
+  const blockSize = 64;
+  let keyBytes = new TextEncoder().encode(SECRET);
+  if (keyBytes.length > blockSize) keyBytes = new TextEncoder().encode(sha256Hex(SECRET));
+  const padded = new Uint8Array(blockSize);
+  padded.set(keyBytes);
+
+  const ipad = new Uint8Array(blockSize);
+  const opad = new Uint8Array(blockSize);
+  for (let i = 0; i < blockSize; i++) {
+    ipad[i] = padded[i] ^ 0x36;
+    opad[i] = padded[i] ^ 0x5c;
+  }
+
+  const msgBytes = new TextEncoder().encode(data);
+  const inner = new Uint8Array(blockSize + msgBytes.length);
+  inner.set(ipad);
+  inner.set(msgBytes, blockSize);
+  const innerHex = sha256Hex(new TextDecoder().decode(inner));
+
+  const innerBytes = new TextEncoder().encode(innerHex);
+  const outer = new Uint8Array(blockSize + innerBytes.length);
+  outer.set(opad);
+  outer.set(innerBytes, blockSize);
+  return sha256Hex(new TextDecoder().decode(outer));
+}</code></pre>
+
+      <h2>Session tokens — create and verify</h2>
+      <pre><code>const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+function createSessionToken(userId) {
+  const expiry = Date.now() + SESSION_TTL_MS;
+  const payload = userId + "|" + expiry;
+  const sig = hmacSign(payload);
+  return btoa(payload).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_") + "." + sig;
+}
+
+function verifySessionToken(token) {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+
+  const b64 = parts[0].replace(/-/g, "+").replace(/_/g, "/");
+  const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
+  let payload;
+  try { payload = atob(b64 + pad); } catch (e) { return null; }
+
+  const expected = hmacSign(payload);
+  if (parts[1] !== expected) return null;
+
+  const pieces = payload.split("|");
+  const userId = pieces[0];
+  const expiry = Number(pieces[1]);
+  if (expiry < Date.now()) return null;
+  return { userId: userId, expiry: expiry };
+}</code></pre>
+
+      <h2>OffscreenCanvas image resize</h2>
       <pre><code>const blob = await (await fetch(REQ.body.imageUrl)).blob();
 const bitmap = await createImageBitmap(blob);
 const canvas = new OffscreenCanvas(400, 300);
@@ -6643,8 +7272,8 @@ const ctx = canvas.getContext("2d");
 ctx.drawImage(bitmap, 0, 0, 400, 300);
 const out = await canvas.convertToBlob({ type: "image/webp", quality: 0.8 });
 const buffer = await out.arrayBuffer();
-const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-return { dataUrl: \`data:image/webp;base64,\${base64}\` };</code></pre>
+const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(buffer)));
+return { dataUrl: "data:image/webp;base64," + base64 };</code></pre>
 
       <h2>Markdown from CDN</h2>
       <pre><code>import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";
@@ -6655,7 +7284,7 @@ return { html: marked(REQ.body.md) };</code></pre>
 const USERNAME = "your-username";
 const SLUG = "your-project-slug";
 
-const res = await fetch(\`/\${USERNAME}/project/\${SLUG}/api/chat\`, {
+const res = await fetch("/" + USERNAME + "/project/" + SLUG + "/api/chat", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ message: "Hello" }),
@@ -6666,16 +7295,53 @@ const { reply } = await res.json();</code></pre>
       <pre><code>// Same request, different URL shape — identical behavior
 const PID = "p_abc123";
 
-const res = await fetch(\`/api/\${PID}/chat\`, {
+const res = await fetch("/api/" + PID + "/chat", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ message: "Hello" }),
 });
 const { reply } = await res.json();</code></pre>
+
+      <h2>Frontend: sending a session token</h2>
+      <pre><code>const token = localStorage.getItem("token");
+
+const res = await fetch("/alice/project/notes/api/notes", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": token ? ("Bearer " + token) : "",
+  },
+  body: JSON.stringify({ action: "listNotes" }),
+});
+const data = await res.json();</code></pre>
+
+      <h2>Frontend: error handling with fallback</h2>
+      <pre><code>async function api(action, extra) {
+  extra = extra || {};
+  const ctrl = new AbortController();
+  const tid = setTimeout(function () { ctrl.abort(); }, 25000);
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch("/alice/project/notes/api/notes", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": token ? ("Bearer " + token) : "",
+      },
+      body: JSON.stringify(Object.assign({ action: action }, extra)),
+      signal: ctrl.signal,
+    });
+    if (!res.ok && res.status !== 400 && res.status !== 401) {
+      throw new Error("Server error " + res.status);
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(tid);
+  }
+}</code></pre>
     `,
   },
 };
-
   let _docsActiveSection = 'getting-started';
 
   function openDocsOverlay(section = null) {
