@@ -10,12 +10,13 @@ A mobile-first, offline-first code editor built for the way you code.
 
 Write, preview, manage, and deploy websites directly from your phone. No
 desktop setup. No build step. No account required to get started.
+[![OPEN FOLIO](https://img.shields.io/badge/OPEN-FOLIO-F59E0B?style=for-the-badge&logo=googlechrome&logoColor=white)](https://foliostudios.vercel.app)
+[![READ DOCS](https://img.shields.io/badge/READ-DOCS-3B82F6?style=for-the-badge)](https://foliostudios.vercel.app/docs)
+[![PWA INSTALLABLE](https://img.shields.io/badge/PWA-INSTALLABLE-10B981?style=for-the-badge)](https://foliostudios.vercel.app)
 
-<https://img.shields.io/badge/OPEN-FOLIO-F59E0B?style=for-the-badge&logo=googlechrome&logoColor=white>
-<https://img.shields.io/badge/READ-DOCS-3B82F6?style=for-the-badge>
-<https://img.shields.io/badge/PWA-INSTALLABLE-10B981?style=for-the-badge>
+[Website](https://foliostudios.vercel.app) · [Documentation](https://foliostudios.vercel.app/docs) · [Report a bug](https://github.com/YOUR_USERNAME/folio/issues)
 
-Website · Documentation · Report a bug
+---
 
 </div>
 
