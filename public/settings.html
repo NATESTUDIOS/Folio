@@ -1318,6 +1318,47 @@ svg { display: block; }
 (function () {
   'use strict';
 
+  // ═══════════════════════════════════════════════════════════
+  // SERVICE WORKER REGISTRATION
+  // ═══════════════════════════════════════════════════════════
+  //
+  // Register BOTH workers with explicit, non-conflicting scopes
+  // BEFORE any other logic runs. This makes /settings self-sufficient
+  // — a user who lands directly on this page gets the app-shell SW
+  // and the FCM worker registered even if index.html was never visited.
+  //
+  // Scope rules (critical):
+  //   /sw.js                    → scope "/"  (owns the whole origin)
+  //   /firebase-messaging-sw.js → scope "/firebase-cloud-messaging-push-scope/"
+  //
+  // Two workers CANNOT share the same scope — registering /sw.js and
+  // /firebase-messaging-sw.js both at "/" would cause one to replace
+  // the other, disabling offline cache entirely.
+  //
+  // The FCM worker also auto-registers on demand via fcm-client.js,
+  // so this is redundant but harmless — it makes the state deterministic
+  // when someone opens /settings as their first page.
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker
+      .register('/sw.js', { scope: '/' })
+      .catch(function (err) {
+        console.warn('[Folio settings] /sw.js registration failed:', err);
+      });
+
+    navigator.serviceWorker
+      .register('/firebase-messaging-sw.js', {
+        scope: '/firebase-cloud-messaging-push-scope/',
+      })
+      .catch(function (err) {
+        console.warn('[Folio settings] FCM SW registration failed:', err);
+      });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // THEME SYNC (storage + media query)
+  // ═══════════════════════════════════════════════════════════
+
   function wireThemeSync() {
     window.addEventListener('storage', function (e) {
       try {
@@ -1514,6 +1555,11 @@ svg { display: block; }
     themeMediaQuery: null,
     dbInfo: null,
     notificationBellTimer: null,
+    online: navigator.onLine,
+    // PWA health snapshot — populated by loadPwaHealth()
+    pwaHealth: null,
+    // Update state — populated by loadPwaHealth()
+    updateState: { waiting: false, waitingVersion: null },
   };
 
   const $ = id => document.getElementById(id);
@@ -1559,11 +1605,6 @@ svg { display: block; }
   function formatDate(ts) {
     if (!ts) return '—';
     return new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-  }
-
-  function debounce(fn, ms) {
-    let t;
-    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
   }
 
   function showSaveIndicator() {
@@ -1832,14 +1873,29 @@ svg { display: block; }
     }
 
     if ('serviceWorker' in navigator) {
-      try { S.swRegistration = await navigator.serviceWorker.getRegistration(); } catch {}
+      try { S.swRegistration = await navigator.serviceWorker.getRegistration('/'); } catch {}
       if (S.swRegistration?.active) {
         try {
           const result = await sendSWMessage({ type: 'GET_VERSION' });
           if (result && result.version) S.swVersion = result.version;
         } catch {}
       }
+
+      // Refresh PWA health on SW_ACTIVATED and network recovery.
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        const d = event.data || {};
+        if (d.type === 'SW_ACTIVATED') {
+          S.pwaHealth = null;
+          if (S.activeSection === 'pwa') loadPwaHealth();
+        }
+      });
     }
+
+    window.addEventListener('online', () => {
+      S.online = true;
+      if (S.activeSection === 'pwa') loadPwaHealth();
+    });
+    window.addEventListener('offline', () => { S.online = false; });
 
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -1849,7 +1905,7 @@ svg { display: block; }
     window.addEventListener('appinstalled', () => {
       S.installPrompt = null;
       toast('Folio installed', 'success');
-      if (S.activeSection === 'pwa') renderContent();
+      if (S.activeSection === 'pwa') loadPwaHealth();
     });
 
     if (S.isAuthed) {
@@ -1875,6 +1931,9 @@ svg { display: block; }
     S.notificationBellTimer = setInterval(() => {
       if (document.visibilityState === 'visible' && S.isAuthed) loadNotificationStats();
     }, 60000);
+
+    // Prime the PWA section once so the first render is instant.
+    if (S.activeSection === 'pwa') loadPwaHealth();
   }
 
   async function loadNotifications() {
@@ -1921,17 +1980,91 @@ svg { display: block; }
     if (res.ok && res.data?.success) S.projects = res.data.projects || [];
   }
 
-  async function sendSWMessage(msg) {
+  async function sendSWMessage(msg, timeoutMs = 2500) {
     return new Promise((resolve) => {
       try {
         const reg = S.swRegistration;
         if (!reg?.active) { resolve(null); return; }
         const channel = new MessageChannel();
-        channel.port1.onmessage = (e) => resolve(e.data);
+        let done = false;
+        channel.port1.onmessage = (e) => { done = true; resolve(e.data); };
         reg.active.postMessage(msg, [channel.port2]);
-        setTimeout(() => resolve(null), 2000);
+        setTimeout(() => { if (!done) resolve(null); }, timeoutMs);
       } catch { resolve(null); }
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PWA HEALTH PROBE
+  // ═══════════════════════════════════════════════════════════
+
+  async function loadPwaHealth() {
+    const health = {
+      version: null,
+      builtAt: null,
+      cached: 0,
+      total: 0,
+      missingCritical: [],
+      editorReady: null,
+      fcmReady: null,
+    };
+
+    // Cache status + version from /sw.js
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/');
+      if (reg?.active) {
+        const status = await new Promise((resolve) => {
+          const ch = new MessageChannel();
+          const timer = setTimeout(() => resolve(null), 3000);
+          ch.port1.onmessage = (e) => { clearTimeout(timer); resolve(e.data); };
+          try {
+            reg.active.postMessage({ type: 'GET_CACHE_STATUS' }, [ch.port2]);
+          } catch { clearTimeout(timer); resolve(null); }
+        });
+
+        if (status && !status.error) {
+          health.version = status.version || null;
+          health.builtAt = status.builtAt || null;
+          health.cached = status.cached ?? 0;
+          health.total = status.total ?? 0;
+          health.missingCritical = Array.isArray(status.missingCritical) ? status.missingCritical : [];
+          health.editorReady = status.editorReady ?? null;
+          S.swVersion = health.version;
+          S.swRegistration = reg;
+        }
+      }
+    } catch {}
+
+    // FCM worker readiness
+    try {
+      if (window.FOLIO?.fcm?.waitReady) {
+        health.fcmReady = await window.FOLIO.fcm.waitReady(2000);
+      }
+    } catch {
+      health.fcmReady = false;
+    }
+
+    // Update state from the live registration
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/');
+      S.updateState = { waiting: !!reg?.waiting, waitingVersion: null };
+      if (reg?.waiting) {
+        S.updateState.waitingVersion = await new Promise((resolve) => {
+          const ch = new MessageChannel();
+          const timer = setTimeout(() => resolve(null), 1500);
+          ch.port1.onmessage = (e) => { clearTimeout(timer); resolve(e.data?.version || null); };
+          try {
+            reg.waiting.postMessage({ type: 'GET_VERSION' }, [ch.port2]);
+          } catch { clearTimeout(timer); resolve(null); }
+        });
+      }
+    } catch {
+      S.updateState = { waiting: false, waitingVersion: null };
+    }
+
+    S.pwaHealth = health;
+
+    if (S.activeSection === 'pwa') renderSection('pwa');
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2596,7 +2729,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SECTION: DATABASE (NEW)
+  // SECTION: DATABASE
   // ═══════════════════════════════════════════════════════════
 
   function renderDatabaseSection() {
@@ -2750,45 +2883,219 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   function renderPwaSection() {
-    const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches
-      || window.navigator.standalone === true;
+    const isStandalone =
+      window.matchMedia?.('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
     const canInstall = !!S.installPrompt && !isStandalone;
-    const browserStorageUsed = formatBytes(S.storageEstimate?.usage || 0);
-    const swVersion = S.swVersion || '—';
+
+    const h = S.pwaHealth || {};
+
+    const installState = isStandalone
+      ? { label: 'Installed', cls: 'success' }
+      : canInstall
+        ? { label: 'Ready to install', cls: 'info' }
+        : { label: 'Not installable', cls: 'warning' };
+
+    const version = h.version || S.swVersion || '—';
+    const builtAt = h.builtAt
+      ? formatDate(h.builtAt) +
+        ' · ' +
+        new Date(h.builtAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+      : '—';
+
+    const cached = h.cached ?? 0;
+    const total = h.total ?? 0;
+    const pct = total > 0 ? Math.round((cached / total) * 100) : 0;
+    const barClass = pct >= 95 ? '' : pct >= 70 ? 'warn' : 'danger';
+
+    const offlineReady = Array.isArray(h.missingCritical)
+      ? h.missingCritical.length === 0
+      : null;
+    const editorReady = h.editorReady ?? null;
+
+    const updateWaiting = !!S.updateState?.waiting;
+    const updateVersion = S.updateState?.waitingVersion || null;
+
+    const pushPerm =
+      typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+    const pushBadge =
+      pushPerm === 'granted'
+        ? { cls: 'success', label: 'Granted' }
+        : pushPerm === 'denied'
+          ? { cls: 'danger', label: 'Blocked' }
+          : pushPerm === 'unsupported'
+            ? { cls: 'warning', label: 'Not supported' }
+            : { cls: 'warning', label: 'Not asked' };
 
     return `
       <section class="settings-section" id="section-pwa">
         <h2 class="section-heading">${svg('download', 17, 2.2)} PWA & install</h2>
 
         <div class="card">
-          <div class="card-header"><div class="card-title">${svg('download', 15, 2.2)} Install</div></div>
+          <div class="card-header">
+            <div>
+              <div class="card-title">${svg('download', 15, 2.2)} Install</div>
+              <div class="card-desc">Home-screen app with offline access.</div>
+            </div>
+            <span class="badge ${installState.cls}">${escapeHTML(installState.label)}</span>
+          </div>
           <div class="card-body">
             ${isStandalone ? `
-              <div class="badge success" style="margin-bottom:10px;">${svg('check', 10, 2.6)} Installed</div>
-              <div class="text-muted" style="font-size:12.5px;line-height:1.5;">Folio is installed on this device. You're using the app version.</div>
+              <div class="field-hint">You're using the installed app. Updates apply automatically on next launch.</div>
             ` : canInstall ? `
-              <div class="field-hint" style="margin-bottom:10px;">Install Folio to your home screen for the full app experience.</div>
+              <div class="field-hint" style="margin-bottom:10px;">Add Folio to your home screen for the full app experience.</div>
               <button class="btn btn-primary btn-block" id="installAppBtn">${svg('download', 14, 2.2)} Install Folio</button>
             ` : `
-              <div class="field-hint">Install isn't available here. On iOS, use Share → Add to Home Screen. On desktop browsers, look for the install icon in the address bar.</div>
+              <div class="field-hint">
+                ${/iPad|iPhone|iPod/.test(navigator.userAgent)
+                  ? 'On iOS, use <strong>Share → Add to Home Screen</strong>.'
+                  : 'Look for the install icon in your browser\'s address bar.'}
+              </div>
             `}
           </div>
         </div>
 
         <div class="card">
-          <div class="card-header"><div class="card-title">${svg('info', 15, 2.2)} Version</div></div>
+          <div class="card-header">
+            <div>
+              <div class="card-title">${svg('shield', 15, 2.2)} App health</div>
+              <div class="card-desc">Live status of the installed app shell.</div>
+            </div>
+            <button class="btn btn-sm btn-ghost" id="refreshHealthBtn" type="button">
+              ${svg('refresh', 10, 2.2)} Refresh
+            </button>
+          </div>
           <div class="card-body">
-            <div class="info-row"><span class="info-row-label">App version</span><span class="info-row-value mono">${escapeHTML(swVersion)}</span></div>
-            <div class="info-row"><span class="info-row-label">Browser storage used</span><span class="info-row-value mono">${browserStorageUsed}</span></div>
+            <div class="info-row">
+              <span class="info-row-label">Version</span>
+              <span class="info-row-value mono" style="font-size:11px;">${escapeHTML(version)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Built</span>
+              <span class="info-row-value">${escapeHTML(builtAt)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Offline ready</span>
+              <span class="info-row-value">
+                ${offlineReady === null
+                  ? `<span class="badge warning">Unknown</span>`
+                  : offlineReady
+                    ? `<span class="badge success">${svg('check', 10, 2.6)} Yes</span>`
+                    : `<span class="badge danger">${svg('x', 10, 2.6)} No</span>`}
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Editor offline</span>
+              <span class="info-row-value">
+                ${editorReady === null
+                  ? `<span class="badge warning">Unknown</span>`
+                  : editorReady
+                    ? `<span class="badge success">${svg('check', 10, 2.6)} Yes</span>`
+                    : `<span class="badge warning">Partial</span>`}
+              </span>
+            </div>
+
+            ${total > 0 ? `
+              <div style="margin-top:12px;">
+                <div class="progress-bar">
+                  <div class="progress-fill ${barClass}" style="width:${pct}%"></div>
+                </div>
+                <div class="progress-row">
+                  <span>${cached} of ${total} files cached</span>
+                  <span>${pct}%</span>
+                </div>
+              </div>
+            ` : `
+              <div class="field-hint" style="margin-top:12px;">
+                Cache status unavailable. The app-shell service worker isn't in control of this page.
+              </div>
+            `}
+
+            ${Array.isArray(h.missingCritical) && h.missingCritical.length > 0 ? `
+              <div class="field-hint" style="margin-top:10px;color:var(--theme-danger);">
+                ${h.missingCritical.length} critical file${h.missingCritical.length === 1 ? '' : 's'} missing — offline mode will not work. Try <strong>Check for updates</strong> below.
+              </div>
+            ` : ''}
           </div>
         </div>
 
         <div class="card">
-          <div class="card-header"><div class="card-title">${svg('refresh', 15, 2.2)} Updates</div></div>
+          <div class="card-header">
+            <div>
+              <div class="card-title">${svg('refresh', 15, 2.2)} Updates</div>
+              <div class="card-desc">
+                ${updateWaiting
+                  ? `Version ${escapeHTML(String(updateVersion || ''))} is ready to install.`
+                  : 'You\'re on the latest version.'}
+              </div>
+            </div>
+            ${updateWaiting
+              ? `<span class="badge info">Update waiting</span>`
+              : `<span class="badge success">${svg('check', 10, 2.6)} Up to date</span>`}
+          </div>
           <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
-            <div class="field-hint">Check for a new version of the app shell.</div>
-            <button class="btn btn-secondary btn-block" id="checkUpdatesBtn">${svg('refresh', 14, 2.2)} Check for updates</button>
-            <button class="btn btn-outline-danger btn-block" id="clearCacheBtn">${svg('trash', 14, 2.2)} Clear cache & reload</button>
+            ${updateWaiting ? `
+              <button class="btn btn-primary btn-block" id="applyUpdateBtn">
+                ${svg('refresh', 14, 2.2)} Install update now
+              </button>
+            ` : `
+              <button class="btn btn-secondary btn-block" id="checkUpdatesBtn">
+                ${svg('refresh', 14, 2.2)} Check for updates
+              </button>
+            `}
+            <button class="btn btn-ghost btn-block" id="clearCacheBtn">
+              ${svg('trash', 14, 2.2)} Clear cache & reload
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">${svg('bell', 15, 2.2)} Notifications</div>
+              <div class="card-desc">Push permission and FCM worker status.</div>
+            </div>
+            <span class="badge ${pushBadge.cls}">${escapeHTML(pushBadge.label)}</span>
+          </div>
+          <div class="card-body">
+            <div class="info-row">
+              <span class="info-row-label">FCM worker</span>
+              <span class="info-row-value">
+                ${h.fcmReady === null || h.fcmReady === undefined
+                  ? `<span class="badge warning">Unknown</span>`
+                  : h.fcmReady
+                    ? `<span class="badge success">${svg('check', 10, 2.6)} Ready</span>`
+                    : `<span class="badge danger">${svg('x', 10, 2.6)} Not ready</span>`}
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">Browser storage used</span>
+              <span class="info-row-value mono">${formatBytes(S.storageEstimate?.usage || 0)}</span>
+            </div>
+            ${pushPerm === 'default' ? `
+              <button class="btn btn-secondary btn-block" style="margin-top:10px;" id="enablePushBtn">
+                ${svg('bell', 14, 2.2)} Enable notifications
+              </button>
+            ` : ''}
+            ${pushPerm === 'denied' ? `
+              <div class="field-hint" style="margin-top:10px;color:var(--theme-danger);">
+                Notifications are blocked. Enable them in your browser's site settings, then reload.
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${svg('info', 15, 2.2)} Support</div>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+            <div class="field-hint">
+              Copy diagnostic info to help us troubleshoot. Includes app version, cache status, and environment details — no personal data.
+            </div>
+            <button class="btn btn-secondary btn-block" id="copyPwaDebugBtn">
+              ${svg('copy', 14, 2.2)} Copy diagnostic info
+            </button>
           </div>
         </div>
       </section>
@@ -2956,7 +3263,7 @@ svg { display: block; }
   // ═══════════════════════════════════════════════════════════
 
   function wireAllSections() {
-    // Appearance
+    // ── Appearance ──
     document.querySelectorAll('[data-theme-opt]').forEach(btn => {
       btn.addEventListener('click', () => {
         S.prefs.theme = btn.dataset.themeOpt;
@@ -3035,7 +3342,7 @@ svg { display: block; }
     });
     $('resetEditorPrefsBtn')?.addEventListener('click', confirmResetEditorPrefs);
 
-    // Account
+    // ── Account ──
     $('changeEmailBtn')?.addEventListener('click', openChangeEmailModal);
     $('changeUsernameBtn')?.addEventListener('click', openChangeUsernameModal);
     $('changePasswordBtn')?.addEventListener('click', openChangePasswordModal);
@@ -3043,7 +3350,7 @@ svg { display: block; }
     $('signOutDangerBtn')?.addEventListener('click', confirmSignOut);
     $('resendVerificationBtn')?.addEventListener('click', handleResendVerification);
 
-    // Notifications
+    // ── Notifications ──
     document.querySelectorAll('[data-notif-toggle]').forEach(btn => {
       btn.addEventListener('click', () => handleNotifToggle(btn.dataset.notifToggle, btn));
     });
@@ -3053,11 +3360,11 @@ svg { display: block; }
     });
     if (S.isAuthed) loadNotificationPreview();
 
-    // Storage
+    // ── Storage ──
     $('requestPersistBtn')?.addEventListener('click', requestPersistStorage);
     $('clearLocalCacheBtn')?.addEventListener('click', confirmClearLocalCache);
 
-    // Database
+    // ── Database ──
     if (S.activeSection === 'database') {
       loadDatabaseInfo().then(() => {
         if (S.activeSection === 'database') renderSection('database');
@@ -3070,23 +3377,34 @@ svg { display: block; }
     $('dbExportBtn')?.addEventListener('click', exportDatabase);
     $('dbResetBtn')?.addEventListener('click', confirmResetDB);
 
-    // PWA
+    // ── PWA ──
     $('installAppBtn')?.addEventListener('click', triggerInstall);
     $('checkUpdatesBtn')?.addEventListener('click', checkForUpdates);
+    $('applyUpdateBtn')?.addEventListener('click', applyUpdateNow);
     $('clearCacheBtn')?.addEventListener('click', confirmClearCache);
+    $('refreshHealthBtn')?.addEventListener('click', async () => {
+      await loadPwaHealth();
+      toast('Health refreshed', 'success', 1200);
+    });
+    $('enablePushBtn')?.addEventListener('click', handleEnablePushFromPwa);
+    $('copyPwaDebugBtn')?.addEventListener('click', copyPwaDebugInfo);
 
-    // Data
+    if (S.activeSection === 'pwa' && !S.pwaHealth) {
+      loadPwaHealth();
+    }
+
+    // ── Data ──
     $('exportSettingsBtn')?.addEventListener('click', exportSettings);
     $('importSettingsBtn')?.addEventListener('click', () => $('importSettingsFile')?.click());
     $('importSettingsFile')?.addEventListener('change', importSettings);
 
-    // Advanced
+    // ── Advanced ──
     $('copyDebugBtn')?.addEventListener('click', copyDebugInfo);
     $('drainSyncBtn')?.addEventListener('click', drainSync);
     $('clearSyncBtn')?.addEventListener('click', confirmClearSync);
     if ($('syncQueueInfo')) updateSyncQueueInfo();
 
-    // Danger
+    // ── Danger ──
     $('clearCacheDangerBtn')?.addEventListener('click', confirmClearLocalCache);
     $('resetSettingsBtn')?.addEventListener('click', confirmResetSettings);
   }
@@ -3608,20 +3926,109 @@ svg { display: block; }
       const { outcome } = await S.installPrompt.userChoice;
       if (outcome === 'accepted') toast('Folio installing…', 'success');
       S.installPrompt = null;
+      if (S.activeSection === 'pwa') loadPwaHealth();
     } catch { toast('Install failed', 'error'); }
   }
 
   async function checkForUpdates() {
-    if (!window.FOLIO?.update) {
-      toast('Update system unavailable', 'warning');
+    if (!window.FOLIO?.update?.check) {
+      toast('Update system not loaded', 'warning');
       return;
     }
     try {
       await window.FOLIO.update.check();
-      // update.js shows its own dialog if there's a waiting worker
+      await new Promise((r) => setTimeout(r, 500));
+      await loadPwaHealth();
+      if (S.updateState?.waiting) {
+        toast('Update available — ready to install', 'info', 2400);
+      } else {
+        toast('You\'re on the latest version', 'success', 1800);
+      }
     } catch {
       toast('Update check failed', 'error');
     }
+  }
+
+  async function applyUpdateNow() {
+    if (!window.FOLIO?.update?.applyNow) {
+      toast('Update system not loaded', 'warning');
+      return;
+    }
+    try {
+      await window.FOLIO.update.applyNow();
+      // update.js shows its own overlay and reloads on success
+    } catch {
+      toast('Couldn\'t apply update', 'error');
+    }
+  }
+
+  async function handleEnablePushFromPwa() {
+    if (!('Notification' in window)) {
+      toast('Push not supported in this browser', 'warning');
+      return;
+    }
+    try {
+      const result = await Notification.requestPermission();
+      if (result !== 'granted') {
+        toast('Permission not granted', 'warning', 2000);
+        return;
+      }
+      if (window.FOLIO?.fcm?.subscribe) {
+        await window.FOLIO.fcm.subscribe();
+        toast('Notifications enabled', 'success');
+      } else {
+        toast('Enable notifications from the Notifications tab', 'info', 2400);
+      }
+      await loadPwaHealth();
+    } catch (err) {
+      toast(err.message || 'Couldn\'t enable notifications', 'error');
+    }
+  }
+
+  function copyPwaDebugInfo() {
+    const h = S.pwaHealth || {};
+    const lines = [
+      'Folio — PWA diagnostics',
+      '──────────────────────────',
+      `Date: ${new Date().toISOString()}`,
+      `App version: ${h.version || 'unknown'}`,
+      `Built at: ${h.builtAt ? new Date(h.builtAt).toISOString() : 'unknown'}`,
+      `Cache: ${h.cached || 0} / ${h.total || 0} files`,
+      `Missing critical: ${(h.missingCritical || []).length}`,
+      `Editor offline: ${h.editorReady === null ? 'unknown' : h.editorReady}`,
+      `FCM ready: ${h.fcmReady === null ? 'unknown' : h.fcmReady}`,
+      `Update waiting: ${S.updateState?.waiting || false}` +
+        (S.updateState?.waitingVersion ? ` (v${S.updateState.waitingVersion})` : ''),
+      `Push permission: ${typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'}`,
+      `Display mode: ${window.matchMedia?.('(display-mode: standalone)').matches ? 'standalone' : 'browser'}`,
+      `Storage used: ${formatBytes(S.storageEstimate?.usage || 0)}`,
+      `User: ${S.isAuthed ? 'signed in' : 'guest'}`,
+      `SW controller: ${navigator.serviceWorker?.controller?.scriptURL || 'none'}`,
+    ];
+    const text = lines.join('\n');
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).then(
+          () => toast('Diagnostics copied', 'success'),
+          () => toast('Copy failed', 'error')
+        );
+        return;
+      }
+    } catch {}
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      toast('Diagnostics copied', 'success');
+    } catch {
+      toast('Copy failed', 'error');
+    }
+    document.body.removeChild(ta);
   }
 
   function confirmClearCache() {
@@ -3743,7 +4150,7 @@ svg { display: block; }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // SYNC QUEUE (fixed: no hardcoded v2)
+  // SYNC QUEUE
   // ═══════════════════════════════════════════════════════════
 
   async function readSyncQueue() {
