@@ -1,59 +1,53 @@
+
 "use strict";
 
 // ============================================================
 // FOLIO — PRODUCTION SERVICE WORKER
-// Offline-first application shell, navigation, assets and FCM
+// Offline-first application shell, assets, CDN modules and FCM
 // ============================================================
 //
-// CACHE_VERSION and CACHE_BUILT_AT are injected at build time by
-// scripts/swpush.cjs.
+// Build-time placeholders:
+// __FOLIO_SW_VERSION__
+// __FOLIO_SW_BUILT_AT__
 //
-// CACHE_VERSION is a millisecond Unix timestamp. Every build
-// bumps it, so the SW always re-installs — even if the source is
-// identical and the same commit is redeployed.
+// IMPORTANT:
+// - Critical resources must download successfully before install.
+// - Failed installations cannot replace the previous working SW.
+// - Previous caches are preserved until the new SW activates.
+// - External CDN resources are cached using their original URLs.
+// - Firebase messaging is isolated from the main application.
 //
-// CACHE_BUILT_AT mirrors the same millisecond value so client
-// code can display "build X" without parsing the cache name.
+// ============================================================
+// CONFIGURATION
+// ============================================================
 
-const CACHE_VERSION = '__FOLIO_SW_VERSION__';
-const CACHE_BUILT_AT = Number('__FOLIO_SW_BUILT_AT__');
-const CACHE_NAME = `folio-shell-${CACHE_VERSION}`;
+const CACHE_VERSION = "__FOLIO_SW_VERSION__";
+const CACHE_BUILT_AT = Number("__FOLIO_SW_BUILT_AT__");
+
+const CACHE_PREFIX = "folio-shell-";
+const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`;
+
+const CACHE_META_KEY = "/__folio_internal__/install-complete";
 
 const NAVIGATION_TIMEOUT = 5000;
+const ASSET_TIMEOUT = 12000;
+
+const MAX_PARALLEL_INSTALLS = 6;
 
 // ============================================================
 // LIVE-SITE DETECTION
 // ============================================================
-//
-// Live sites are user-published sites served from Folio but rendered
-// as standalone pages in a normal browser tab. They must NEVER be
-// intercepted by the PWA service worker, otherwise the SW's app-shell
-// scope swallows them and they render inside the installed app window.
-//
-// URL shape: /:username/project/:projectname[/...]
-//
-// This matches:
-//   /alice/project/my-site
-//   /alice/project/my-site/
-//   /alice/project/my-site/about.html
-//   /alice/project/my-site/css/style.css?from=db_xyz
-//   /alice/project/my-site?v=abc
-//
-// It intentionally does NOT match:
-//   /alice                       (profile — stays in PWA)
-//   /alice/my-site               (details page — stays in PWA)
-//   /alice/project               (would be a 2-segment URL, no slug)
-//
-// It also catches the ?from= historic-preview query on ANY path so
-// deployment snapshots are always fetched fresh from the server.
 
 const LIVE_SITE_PATH_RE = /^\/[^/]+\/project\/[^/]+(\/|$)/;
 
 function isLiveSiteRequest(url) {
   try {
     if (url.origin !== self.location.origin) return false;
+
     if (LIVE_SITE_PATH_RE.test(url.pathname)) return true;
+
     if (url.searchParams.has("from")) return true;
+
     return false;
   } catch {
     return false;
@@ -73,12 +67,29 @@ const CDN_HOSTS = new Set([
 ]);
 
 // ============================================================
-// PRE-CACHE FILES
+// PRECACHE FILES
 // ============================================================
 
-const CACHED_FILES = [
-  // ---------------- HTML PAGES ----------------
+const CODEMIRROR_FILES = [
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/codemirror/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/view/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/state/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/commands/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/search/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lint/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/merge/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/language/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/theme-one-dark/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-html/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-css/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-javascript/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-json/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-markdown/dist/index.js",
+  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-python/dist/index.js",
+];
 
+const CACHED_FILES = [
+  // HTML
   "/",
   "/index.html",
 
@@ -115,25 +126,21 @@ const CACHED_FILES = [
   "/ai",
   "/ai.html",
 
-  // ---------------- CSS ----------------
-
+  // CSS
   "/css/app.css",
   "/css/project.css",
   "/css/ai.css",
 
-  // ---------------- PWA ----------------
-
+  // PWA
   "/manifest.json",
 
-  // ---------------- ICONS ----------------
-
+  // Icons
   "/icons/icon-144.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/notif.png",
 
-  // ---------------- SCREENSHOTS ----------------
-
+  // Screenshots
   "/screenshots/screenshot1.png",
   "/screenshots/screenshot2.png",
   "/screenshots/screenshot3.png",
@@ -141,8 +148,7 @@ const CACHED_FILES = [
   "/screenshots/screenshot5.png",
   "/screenshots/screenshot6.png",
 
-  // ---------------- SCRIPTS ----------------
-
+  // Scripts
   "/install.js",
   "/update.js",
   "/fcm-client.js",
@@ -150,38 +156,33 @@ const CACHED_FILES = [
   "/js/ai.js",
   "/js/create-project.js",
 
-  // ---------------- CODEMIRROR ----------------
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/codemirror/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/view/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/state/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/commands/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/search/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lint/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/merge/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/language/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/theme-one-dark/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-html/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-css/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-javascript/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-json/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-markdown/dist/index.js",
-
-  "https://deno.land/x/codemirror_esm@v6.0.1/esm/lang-python/dist/index.js",
+  // CodeMirror
+  ...CODEMIRROR_FILES,
 ];
+
+// ============================================================
+// CRITICAL RESOURCES
+// ============================================================
+//
+// These resources must be available before a new version can
+// replace the previous service worker.
+//
+// CodeMirror is critical because the editor depends on it.
+// Other resources are optional during installation.
+//
+// ============================================================
+
+const CRITICAL_FILES = new Set([
+  "/",
+  "/index.html",
+  "/offline.html",
+  "/css/app.css",
+  "/manifest.json",
+  "/install.js",
+  "/update.js",
+
+  ...CODEMIRROR_FILES,
+]);
 
 // ============================================================
 // BYPASS RULES
@@ -194,21 +195,17 @@ function shouldBypass(url, request) {
 
   if (url.protocol === "chrome-extension:") return true;
 
-  // Live sites and historic previews: never intercept. The browser
-  // handles them as a normal top-level navigation and, if opened from
-  // a link inside the installed PWA on mobile, gets handed off to the
-  // browser's default handler by the platform.
   if (isLiveSiteRequest(url)) return true;
 
-  // External hosts must be explicitly allowed.
+  // External origins must be explicitly allowed.
   if (url.origin !== self.location.origin) {
     if (!CDN_HOSTS.has(url.hostname)) return true;
   }
 
-  // API requests are not cached.
+  // Never cache API responses.
   if (url.pathname.startsWith("/api/")) return true;
 
-  // Firebase messaging internals.
+  // Firebase messaging has its own service worker lifecycle.
   if (
     url.pathname.startsWith("/firebase-cloud-messaging-push-scope/") ||
     url.pathname === "/firebase-messaging-sw.js" ||
@@ -226,66 +223,55 @@ function shouldBypass(url, request) {
 // ============================================================
 
 function expectedContentTypesFor(url) {
-  let path;
+  let pathname;
 
   try {
-    path = new URL(url, self.location.origin).pathname;
+    pathname = new URL(url, self.location.origin).pathname;
   } catch {
     return null;
   }
 
-  const match = path.match(/\.([a-z0-9]+)$/i);
+  const match = pathname.match(/\.([a-z0-9]+)$/i);
 
   const ext = match ? match[1].toLowerCase() : "";
 
-  if (ext === "js") {
-    return ["javascript", "ecmascript"];
+  if (ext === "js" || ext === "mjs") {
+    return [
+      "javascript",
+      "ecmascript",
+    ];
   }
 
-  if (ext === "css") {
-    return ["text/css"];
-  }
+  if (ext === "css") return ["text/css"];
 
   if (ext === "json" || ext === "webmanifest") {
     return ["json", "manifest"];
   }
 
-  if (ext === "png") {
-    return ["image/png"];
-  }
+  if (ext === "png") return ["image/png"];
 
   if (ext === "jpg" || ext === "jpeg") {
     return ["image/jpeg"];
   }
 
-  if (ext === "webp") {
-    return ["image/webp"];
-  }
+  if (ext === "webp") return ["image/webp"];
 
-  if (ext === "svg") {
-    return ["image/svg+xml"];
-  }
+  if (ext === "svg") return ["image/svg+xml"];
 
   if (ext === "ico") {
-    return ["image/x-icon", "image/vnd.microsoft.icon"];
+    return [
+      "image/x-icon",
+      "image/vnd.microsoft.icon",
+    ];
   }
 
-  if (ext === "html") {
-    return ["text/html"];
-  }
+  if (ext === "html") return ["text/html"];
 
-  if (ext === "txt") {
-    return ["text/plain"];
-  }
+  if (ext === "txt") return ["text/plain"];
 
-  if (ext === "xml") {
-    return ["xml"];
-  }
+  if (ext === "xml") return ["xml"];
 
-  // Clean URLs are expected to return HTML.
-  if (!ext) {
-    return ["text/html"];
-  }
+  if (!ext) return ["text/html"];
 
   return null;
 }
@@ -295,9 +281,30 @@ function contentTypeOk(url, response) {
 
   if (!expected) return true;
 
-  const actual = (response.headers.get("content-type") || "").toLowerCase();
+  const actual = (
+    response.headers.get("content-type") || ""
+  ).toLowerCase();
 
   return expected.some((type) => actual.includes(type));
+}
+
+// ============================================================
+// RESPONSE VALIDATION
+// ============================================================
+
+function responseIsCacheable(url, response) {
+  if (!response) return false;
+
+  if (!response.ok) return false;
+
+  if (response.type === "opaque") return false;
+
+  if (!contentTypeOk(url, response)) return false;
+
+  // Avoid caching partial responses.
+  if (response.status === 206) return false;
+
+  return true;
 }
 
 // ============================================================
@@ -308,25 +315,106 @@ async function getAppCache() {
   return caches.open(CACHE_NAME);
 }
 
+function cacheRequestFor(url) {
+  return new Request(
+    url instanceof Request ? url.url : url,
+    {
+      method: "GET",
+      credentials: "omit",
+    }
+  );
+}
+
 async function putInCache(cache, request, response) {
-  if (!response || !response.ok) return false;
-
-  if (response.type === "opaque") return false;
-
-  if (!contentTypeOk(request.url || request, response)) {
-    console.warn("[Folio SW] Invalid content type:", request.url || request);
-
+  if (!responseIsCacheable(request.url || request, response)) {
     return false;
   }
 
   try {
-    await cache.put(request, response.clone());
+    await cache.put(
+      cacheRequestFor(request),
+      response.clone()
+    );
+
     return true;
   } catch (err) {
-    console.warn("[Folio SW] Cache write failed:", request.url || request, err);
+    console.warn(
+      "[Folio SW] Cache write failed:",
+      request.url || request,
+      err
+    );
 
     return false;
   }
+}
+
+async function matchCached(cache, request) {
+  try {
+    // Exact URL matching preserves module query strings.
+    const exact = await cache.match(request);
+
+    if (exact) return exact;
+
+    return null;
+  } catch (err) {
+    console.warn("[Folio SW] Cache match failed:", err);
+
+    return null;
+  }
+}
+
+// ============================================================
+// INSTALL FETCH
+// ============================================================
+
+async function fetchInstallResource(path) {
+  const external = new URL(path, self.location.origin).origin !==
+    self.location.origin;
+
+  const controller = new AbortController();
+
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, ASSET_TIMEOUT);
+
+  try {
+    const response = await fetch(path, {
+      method: "GET",
+      cache: "no-store",
+      credentials: external ? "omit" : "same-origin",
+      mode: external ? "cors" : "same-origin",
+      signal: controller.signal,
+    });
+
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ============================================================
+// INSTALL WORKER POOL
+// ============================================================
+
+async function runInstallPool(items, concurrency, handler) {
+  let index = 0;
+
+  const workers = Array.from(
+    {
+      length: Math.min(concurrency, items.length),
+    },
+    async () => {
+      while (true) {
+        const current = index++;
+
+        if (current >= items.length) return;
+
+        await handler(items[current]);
+      }
+    }
+  );
+
+  await Promise.all(workers);
 }
 
 // ============================================================
@@ -334,81 +422,136 @@ async function putInCache(cache, request, response) {
 // ============================================================
 
 self.addEventListener("install", (event) => {
-  console.log(`[Folio SW] Installing version ${CACHE_VERSION}`);
+  console.log(
+    `[Folio SW] Installing version ${CACHE_VERSION}`
+  );
 
   event.waitUntil(
     (async () => {
       const cache = await getAppCache();
 
-      let successful = 0;
-      let failed = 0;
+      const report = {
+        version: CACHE_VERSION,
+        successful: 0,
+        failed: 0,
+        criticalFailed: [],
+        optionalFailed: [],
+        total: CACHED_FILES.length,
+      };
 
-      await Promise.allSettled(
-        CACHED_FILES.map(async (path) => {
+      // Download resources concurrently without overwhelming
+      // mobile connections or the CDN.
+
+      await runInstallPool(
+        CACHED_FILES,
+        MAX_PARALLEL_INSTALLS,
+        async (path) => {
           try {
-            // Do not download something already cached.
             const existing = await cache.match(path);
 
-            if (existing) {
-              successful++;
+            if (existing && existing.ok) {
+              report.successful++;
               return;
             }
 
-            const response = await fetch(path, {
-              cache: "no-store",
-              credentials: "same-origin",
-            });
+            const response = await fetchInstallResource(path);
 
-            if (!response.ok) {
-              failed++;
-
-              console.warn(
-                "[Folio SW] Pre-cache HTTP failure:",
-                path,
-                response.status,
+            if (!responseIsCacheable(path, response)) {
+              throw new Error(
+                `Invalid response: ${response.status} ${
+                  response.headers.get("content-type") || ""
+                }`
               );
-
-              return;
             }
 
-            if (response.type === "opaque") {
-              failed++;
-              return;
+            const saved = await putInCache(
+              cache,
+              path,
+              response
+            );
+
+            if (!saved) {
+              throw new Error("Cache storage failed");
             }
 
-            if (!contentTypeOk(path, response)) {
-              failed++;
+            report.successful++;
 
-              console.warn(
-                "[Folio SW] Pre-cache content type mismatch:",
-                path,
-                response.headers.get("content-type"),
-              );
-
-              return;
-            }
-
-            await cache.put(path, response);
-
-            successful++;
           } catch (err) {
-            failed++;
+            report.failed++;
 
-            console.warn("[Folio SW] Pre-cache failed:", path, err.message);
+            if (CRITICAL_FILES.has(path)) {
+              report.criticalFailed.push({
+                path,
+                error: err.message,
+              });
+            } else {
+              report.optionalFailed.push({
+                path,
+                error: err.message,
+              });
+            }
+
+            console.warn(
+              "[Folio SW] Pre-cache failed:",
+              path,
+              err.message
+            );
           }
-        }),
+        }
       );
 
-      console.log("[Folio SW] Installation completed", {
-        version: CACHE_VERSION,
-        successful,
-        failed,
-        total: CACHED_FILES.length,
-      });
+      console.log(
+        "[Folio SW] Installation report:",
+        report
+      );
 
-      // Intentionally retain the waiting update lifecycle.
-      // update.js can send SKIP_WAITING when the user approves.
-    })(),
+      // CRITICAL FAILURE:
+      // Reject installation. The browser keeps the previous
+      // active service worker and its cache.
+
+      if (report.criticalFailed.length > 0) {
+        console.error(
+          "[Folio SW] Critical resources missing. Installation aborted.",
+          report.criticalFailed
+        );
+
+        throw new Error(
+          "Folio installation incomplete: critical resources unavailable"
+        );
+      }
+
+      // Mark installation as complete only after critical
+      // resources have been verified.
+
+      const completion = new Response(
+        JSON.stringify({
+          version: CACHE_VERSION,
+          builtAt: CACHE_BUILT_AT,
+          installedAt: Date.now(),
+          successful: report.successful,
+          failed: report.failed,
+          optionalFailed: report.optionalFailed,
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      await cache.put(
+        CACHE_META_KEY,
+        completion
+      );
+
+      console.log(
+        "[Folio SW] Installation completed successfully",
+        report
+      );
+
+      // Do not call skipWaiting here.
+      // Preserve the existing update approval lifecycle.
+    })()
   );
 });
 
@@ -417,25 +560,69 @@ self.addEventListener("install", (event) => {
 // ============================================================
 
 self.addEventListener("activate", (event) => {
-  console.log(`[Folio SW] Activating ${CACHE_VERSION}`);
+  console.log(
+    `[Folio SW] Activating ${CACHE_VERSION}`
+  );
 
   event.waitUntil(
     (async () => {
-      const keys = await caches.keys();
+      const cache = await getAppCache();
 
-      // Only remove old Folio caches.
-      // Never delete unrelated caches on the same origin.
+      // Never activate a cache that lacks the completion marker.
+      const marker = await cache.match(CACHE_META_KEY);
+
+      if (!marker) {
+        console.error(
+          "[Folio SW] Missing installation marker."
+        );
+
+        throw new Error(
+          "Cannot activate incomplete Folio cache"
+        );
+      }
+
+      let metadata;
+
+      try {
+        metadata = await marker.clone().json();
+      } catch {
+        throw new Error("Invalid installation metadata");
+      }
+
+      if (metadata.version !== CACHE_VERSION) {
+        throw new Error("Installation version mismatch");
+      }
+
+      // Confirm critical resources still exist.
+      for (const path of CRITICAL_FILES) {
+        const cached = await cache.match(path);
+
+        if (!cached) {
+          throw new Error(
+            `Critical resource missing during activation: ${path}`
+          );
+        }
+      }
+
+      // The new cache is now verified.
+      // It is safe to remove older Folio caches.
+
+      const keys = await caches.keys();
 
       await Promise.all(
         keys
-          .filter((key) => key.startsWith("folio-shell-") && key !== CACHE_NAME)
-          .map((key) => caches.delete(key)),
+          .filter(
+            (key) =>
+              key.startsWith(CACHE_PREFIX) &&
+              key !== CACHE_NAME
+          )
+          .map((key) => caches.delete(key))
       );
 
-      // Claim existing pages.
       await self.clients.claim();
 
-      // Notify open application windows.
+      // Notify all application windows.
+
       const clients = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
@@ -448,12 +635,19 @@ self.addEventListener("activate", (event) => {
             version: CACHE_VERSION,
             builtAt: CACHE_BUILT_AT,
             timestamp: Date.now(),
+            metadata,
           });
         } catch {}
       });
 
-      console.log("[Folio SW] Activated successfully");
-    })(),
+      console.log(
+        "[Folio SW] Activated successfully",
+        {
+          version: CACHE_VERSION,
+          metadata,
+        }
+      );
+    })()
   );
 });
 
@@ -476,24 +670,29 @@ self.addEventListener("fetch", (event) => {
 
   const isNavigation =
     request.mode === "navigate" ||
-    (request.headers.get("accept") || "").includes("text/html");
+    (
+      request.headers.get("accept") || ""
+    ).includes("text/html");
 
-  // ---------------- NAVIGATION ----------------
-
+  // Navigation
   if (isNavigation) {
-    event.respondWith(networkFirstNavigation(request));
+    event.respondWith(
+      networkFirstNavigation(request)
+    );
 
     return;
   }
 
-  // ---------------- STATIC ASSETS ----------------
-
+  // Static assets and CDN modules.
   const updatePromise = updateAssetCache(request);
 
-  // Register background update immediately.
-  event.waitUntil(updatePromise.catch(() => {}));
+  event.waitUntil(
+    updatePromise.catch(() => null)
+  );
 
-  event.respondWith(serveAsset(request, updatePromise));
+  event.respondWith(
+    serveAsset(request, updatePromise)
+  );
 });
 
 // ============================================================
@@ -514,14 +713,14 @@ function getNavigationCandidates(request) {
   if (path !== "/") {
     candidates.push(path + "/");
 
-    // Clean URL -> HTML file.
     if (!/\.[a-z0-9]+$/i.test(path)) {
       candidates.push(path + ".html");
     }
 
-    // HTML file -> clean URL.
     if (path.endsWith(".html")) {
-      candidates.push(path.replace(/\.html$/i, ""));
+      candidates.push(
+        path.replace(/\.html$/i, "")
+      );
     }
   } else {
     candidates.push("/index.html");
@@ -545,14 +744,17 @@ async function findCachedNavigation(request) {
     });
 
     if (cached) {
-      console.log("[Folio SW] Navigation cache hit:", candidate);
+      console.log(
+        "[Folio SW] Navigation cache hit:",
+        candidate
+      );
 
       return cached;
     }
   }
 
-  // Last resort: search other existing caches.
-  // This can help during cache migrations.
+  // Search older or unrelated caches only as a migration fallback.
+  // Never use internal metadata as a navigation response.
 
   for (const candidate of candidates) {
     const cached = await caches.match(candidate, {
@@ -560,7 +762,13 @@ async function findCachedNavigation(request) {
     });
 
     if (cached) {
-      return cached;
+      const type = (
+        cached.headers.get("content-type") || ""
+      ).toLowerCase();
+
+      if (type.includes("text/html")) {
+        return cached;
+      }
     }
   }
 
@@ -568,15 +776,15 @@ async function findCachedNavigation(request) {
 }
 
 // ============================================================
-// NETWORK REQUEST WITH TIMEOUT
+// NETWORK FETCH WITH TIMEOUT
 // ============================================================
 
-async function fetchNavigation(request) {
+async function fetchWithTimeout(request, timeout) {
   const controller = new AbortController();
 
   const timer = setTimeout(() => {
     controller.abort();
-  }, NAVIGATION_TIMEOUT);
+  }, timeout);
 
   try {
     return await fetch(request, {
@@ -585,6 +793,13 @@ async function fetchNavigation(request) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchNavigation(request) {
+  return fetchWithTimeout(
+    request,
+    NAVIGATION_TIMEOUT
+  );
 }
 
 // ============================================================
@@ -599,10 +814,12 @@ async function networkFirstNavigation(request) {
       response.headers.get("content-type") || ""
     ).toLowerCase();
 
-    // Handle server errors without unnecessarily replacing
-    // a previously cached working page.
-
-    if (response.status >= 500) {
+    // Only successful HTML responses replace cached pages.
+    if (
+      !response.ok ||
+      !contentType.includes("text/html") ||
+      response.type === "opaque"
+    ) {
       const cached = await findCachedNavigation(request);
 
       if (cached) return cached;
@@ -610,80 +827,96 @@ async function networkFirstNavigation(request) {
       return response;
     }
 
-    // Only successful HTML responses should be cached.
-    if (
-      response.ok &&
-      contentType.includes("text/html") &&
-      response.type !== "opaque"
-    ) {
-      const cache = await getAppCache();
+    const cache = await getAppCache();
 
-      const url = new URL(request.url);
-
-      // Store the actual navigation URL, including its
-      // pathname and search parameters.
-
-      const cacheKey =
-        url.origin === self.location.origin ? request : request.url;
-
-      await putInCache(cache, cacheKey, response);
-    }
+    await putInCache(
+      cache,
+      request,
+      response
+    );
 
     return response;
+
   } catch (err) {
     console.warn(
       "[Folio SW] Navigation network unavailable:",
       request.url,
-      err.message,
+      err.message
     );
 
-    // First try the requested page.
     const cached = await findCachedNavigation(request);
 
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
-    // Then show the custom offline page.
     return offlinePage(request);
   }
 }
 
 // ============================================================
-// STATIC ASSET CACHE UPDATE
-// STALE-WHILE-REVALIDATE
+// ASSET NETWORK FETCH
+// ============================================================
+
+async function fetchAsset(request) {
+  const url = new URL(request.url);
+
+  const external = url.origin !== self.location.origin;
+
+  return fetchWithTimeout(
+    new Request(request, {
+      credentials: external ? "omit" : "same-origin",
+      mode: external ? "cors" : request.mode,
+    }),
+    ASSET_TIMEOUT
+  );
+}
+
+// ============================================================
+// UPDATE ASSET CACHE
+// ============================================================
+//
+// Stale-while-revalidate:
+//
+// 1. Cached resources are served immediately.
+// 2. A background request refreshes the cache.
+// 3. Failed refreshes never destroy existing entries.
+// 4. Successful responses replace older entries.
+//
 // ============================================================
 
 function updateAssetCache(request) {
   return (async () => {
     try {
-      const response = await fetch(request);
+      const response = await fetchAsset(request);
 
-      if (!response || !response.ok) {
+      if (!responseIsCacheable(request.url, response)) {
         return null;
       }
 
       const url = new URL(request.url);
 
       const allowed =
-        url.origin === self.location.origin || CDN_HOSTS.has(url.hostname);
+        url.origin === self.location.origin ||
+        CDN_HOSTS.has(url.hostname);
 
-      if (!allowed) return response;
-
-      if (response.type === "opaque") return response;
-
-      if (!contentTypeOk(request.url, response)) {
-        console.warn("[Folio SW] Asset content type mismatch:", request.url);
-
-        return response;
-      }
+      if (!allowed) return null;
 
       const cache = await getAppCache();
 
-      await putInCache(cache, request, response);
+      const saved = await putInCache(
+        cache,
+        request,
+        response
+      );
 
-      return response;
+      return saved ? response : null;
+
     } catch (err) {
+      console.warn(
+        "[Folio SW] Asset refresh failed:",
+        request.url,
+        err.message
+      );
+
       return null;
     }
   })();
@@ -696,56 +929,72 @@ function updateAssetCache(request) {
 async function serveAsset(request, networkPromise) {
   const cache = await getAppCache();
 
-  const cached = await cache.match(request, {
-    ignoreSearch: true,
-  });
+  const cached = await matchCached(
+    cache,
+    request
+  );
 
-  // Cached asset is immediately available.
+  // Existing cached resource:
+  // return immediately, regardless of network availability.
+
   if (cached) {
     return cached;
   }
 
-  // First-time asset request.
+  // First-time resource:
+  // wait for the network request.
+
   const networkResponse = await networkPromise;
 
   if (networkResponse) {
     return networkResponse;
   }
 
-  // Offline fallback for missing JavaScript.
+  // Missing JavaScript: never pretend an empty module is valid.
   const url = new URL(request.url);
 
-  if (/\.m?js$/i.test(url.pathname)) {
-    return new Response("/* Folio offline: JavaScript asset unavailable */", {
-      status: 504,
-      statusText: "Offline",
-      headers: {
-        "Content-Type": "application/javascript; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    });
+  if (/\.(m?js)$/i.test(url.pathname)) {
+    return new Response(
+      "/* Folio offline: JavaScript resource unavailable */",
+      {
+        status: 503,
+        statusText: "Offline",
+        headers: {
+          "Content-Type": "application/javascript; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Folio-Offline": "1",
+        },
+      }
+    );
   }
 
-  // Offline fallback for missing CSS.
   if (/\.css$/i.test(url.pathname)) {
-    return new Response("/* Folio offline: stylesheet unavailable */", {
-      status: 504,
-      statusText: "Offline",
-      headers: {
-        "Content-Type": "text/css; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    });
+    return new Response(
+      "/* Folio offline: stylesheet unavailable */",
+      {
+        status: 503,
+        statusText: "Offline",
+        headers: {
+          "Content-Type": "text/css; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Folio-Offline": "1",
+        },
+      }
+    );
   }
 
-  // Offline fallback for other assets.
-  return new Response("", {
-    status: 504,
-    statusText: "Offline",
-    headers: {
-      "Cache-Control": "no-store",
-    },
-  });
+  return new Response(
+    "Folio resource unavailable offline.",
+    {
+      status: 503,
+      statusText: "Offline",
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Folio-Offline": "1",
+      },
+    }
+  );
 }
 
 // ============================================================
@@ -758,7 +1007,10 @@ function offlineUrlFor(request) {
 
     const from = url.pathname + url.search;
 
-    return "/offline.html?from=" + encodeURIComponent(from);
+    return (
+      "/offline.html?from=" +
+      encodeURIComponent(from)
+    );
   } catch {
     return "/offline.html";
   }
@@ -769,17 +1021,11 @@ function offlineUrlFor(request) {
 // ============================================================
 
 async function offlinePage(request) {
-  // Prefer the actual cached offline page.
   const cache = await getAppCache();
 
   const cached = await cache.match("/offline.html");
 
-  if (cached) {
-    return cached;
-  }
-
-  // If offline.html itself wasn't cached, return an
-  // embedded fallback so Chrome's offline screen is avoided.
+  if (cached) return cached;
 
   return new Response(
     `<!DOCTYPE html>
@@ -794,9 +1040,7 @@ async function offlinePage(request) {
   color-scheme: dark;
   font-family: Inter,system-ui,-apple-system,sans-serif;
 }
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 body {
   background: #0a0c10;
   color: #e8ecf1;
@@ -807,10 +1051,7 @@ body {
   padding: 24px;
   text-align: center;
 }
-main {
-  width: 100%;
-  max-width: 360px;
-}
+main { width: 100%; max-width: 360px; }
 .mark {
   width: 58px;
   height: 58px;
@@ -842,7 +1083,6 @@ button {
   border-radius: 10px;
   font-weight: 750;
   font-size: 14px;
-  cursor: pointer;
 }
 a {
   display: inline-block;
@@ -865,7 +1105,7 @@ a {
   <h1>You're offline</h1>
   <p>
     Folio can't reach the internet right now.
-    Your locally saved projects are still available
+    Your locally saved projects remain available
     whenever their application pages have been cached.
   </p>
   <button onclick="location.reload()">Try again</button>
@@ -875,15 +1115,67 @@ a {
 </main>
 </body>
 </html>`,
-
     {
       status: 200,
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
       },
-    },
+    }
   );
+}
+
+// ============================================================
+// CACHE DIAGNOSTICS
+// ============================================================
+
+async function getCacheStatus() {
+  const cache = await getAppCache();
+
+  const resources = [];
+
+  let cachedCount = 0;
+  let missingCount = 0;
+
+  for (const path of CACHED_FILES) {
+    const response = await cache.match(path);
+
+    const item = {
+      url: path,
+      cached: !!response,
+      critical: CRITICAL_FILES.has(path),
+    };
+
+    resources.push(item);
+
+    if (response) {
+      cachedCount++;
+    } else {
+      missingCount++;
+    }
+  }
+
+  const marker = await cache.match(CACHE_META_KEY);
+
+  let metadata = null;
+
+  if (marker) {
+    try {
+      metadata = await marker.json();
+    } catch {}
+  }
+
+  return {
+    version: CACHE_VERSION,
+    builtAt: CACHE_BUILT_AT,
+    cache: CACHE_NAME,
+    installed: !!marker,
+    metadata,
+    total: resources.length,
+    cached: cachedCount,
+    missing: missingCount,
+    resources,
+  };
 }
 
 // ============================================================
@@ -895,18 +1187,21 @@ self.addEventListener("message", (event) => {
 
   if (!data) return;
 
-  const type = typeof data === "string" ? data : data.type || data.action;
+  const type =
+    typeof data === "string"
+      ? data
+      : data.type || data.action;
 
   switch (type) {
-    // ---------------- UPDATE CONTROL ----------------
+
+    // UPDATE CONTROL
 
     case "SKIP_WAITING":
     case "skipWaiting":
       self.skipWaiting();
-
       break;
 
-    // ---------------- VERSION ----------------
+    // VERSION
 
     case "GET_VERSION":
       event.ports?.[0]?.postMessage({
@@ -914,40 +1209,57 @@ self.addEventListener("message", (event) => {
         cache: CACHE_NAME,
         builtAt: CACHE_BUILT_AT,
       });
-
       break;
 
-    // ---------------- CLEAR CACHE ----------------
+    // CACHE STATUS
+
+    case "GET_CACHE_STATUS":
+      event.waitUntil(
+        (async () => {
+          try {
+            const status = await getCacheStatus();
+
+            event.ports?.[0]?.postMessage(status);
+          } catch (err) {
+            event.ports?.[0]?.postMessage({
+              error: err.message,
+            });
+          }
+        })()
+      );
+      break;
+
+    // CLEAR CACHE
 
     case "CLEAR_CACHE":
       event.waitUntil(
-        caches
-          .keys()
+        (async () => {
+          try {
+            const keys = await caches.keys();
 
-          .then((keys) =>
-            Promise.all(
+            await Promise.all(
               keys
-                .filter((key) => key.startsWith("folio-shell-"))
-                .map((key) => caches.delete(key)),
-            ),
-          )
+                .filter((key) =>
+                  key.startsWith(CACHE_PREFIX)
+                )
+                .map((key) => caches.delete(key))
+            );
 
-          .then(() => {
             event.ports?.[0]?.postMessage({
               ok: true,
             });
-          })
 
-          .catch(() => {
+          } catch (err) {
             event.ports?.[0]?.postMessage({
               ok: false,
+              error: err.message,
             });
-          }),
+          }
+        })()
       );
-
       break;
 
-    // ---------------- CHECK SYNC QUEUE ----------------
+    // CHECK SYNC QUEUE
 
     case "CHECK_QUEUE":
       event.waitUntil(
@@ -957,55 +1269,69 @@ self.addEventListener("message", (event) => {
           try {
             const request = indexedDB.open("folio", 3);
 
-            const connection = await new Promise((resolve, reject) => {
-              request.onsuccess = () => resolve(request.result);
+            const connection = await new Promise(
+              (resolve, reject) => {
+                request.onsuccess = () =>
+                  resolve(request.result);
 
-              request.onerror = () => reject(request.error);
+                request.onerror = () =>
+                  reject(request.error);
 
-              request.onblocked = () => reject(new Error("IDB blocked"));
-            });
+                request.onblocked = () =>
+                  reject(new Error("IDB blocked"));
+              }
+            );
 
             try {
-              if (connection.objectStoreNames.contains("syncQueue")) {
-                const all = await new Promise((resolve) => {
+              if (
+                connection.objectStoreNames.contains(
+                  "syncQueue"
+                )
+              ) {
+                count = await new Promise((resolve) => {
                   try {
-                    const transaction = connection.transaction(
-                      "syncQueue",
-                      "readonly",
-                    );
+                    const transaction =
+                      connection.transaction(
+                        "syncQueue",
+                        "readonly"
+                      );
 
                     const result = transaction
                       .objectStore("syncQueue")
                       .getAll();
 
-                    result.onsuccess = () => resolve(result.result || []);
+                    result.onsuccess = () =>
+                      resolve(
+                        result.result?.length || 0
+                      );
 
-                    result.onerror = () => resolve([]);
+                    result.onerror = () =>
+                      resolve(0);
+
                   } catch {
-                    resolve([]);
+                    resolve(0);
                   }
                 });
-
-                count = all.length;
               }
             } finally {
-              try {
-                connection.close();
-              } catch {}
+              connection.close();
             }
+
           } catch (err) {
-            console.warn("[Folio SW] CHECK_QUEUE failed:", err.message);
+            console.warn(
+              "[Folio SW] CHECK_QUEUE failed:",
+              err.message
+            );
           }
 
           event.ports?.[0]?.postMessage({
             count,
           });
-        })(),
+        })()
       );
-
       break;
 
-    // ---------------- NOTIFICATION STATE ----------------
+    // NOTIFICATION STATE
 
     case "GET_NOTIFICATION_STATE":
       event.waitUntil(
@@ -1022,107 +1348,112 @@ self.addEventListener("message", (event) => {
             permission,
             version: CACHE_VERSION,
           });
-        })(),
+        })()
       );
-
       break;
 
-    // ---------------- CLOSE NOTIFICATION ----------------
+    // CLOSE NOTIFICATION
 
     case "CLOSE_NOTIFICATION":
       event.waitUntil(
         (async () => {
           try {
-            const tag = data.tag || data.notificationId;
+            const tag =
+              data.tag || data.notificationId;
 
             if (!tag) {
               event.ports?.[0]?.postMessage({
                 ok: false,
               });
-
               return;
             }
 
-            const notifications = await self.registration.getNotifications({
-              tag,
-            });
+            const notifications =
+              await self.registration.getNotifications({
+                tag,
+              });
 
-            notifications.forEach((notification) => {
-              notification.close();
-            });
+            notifications.forEach((notification) =>
+              notification.close()
+            );
 
             event.ports?.[0]?.postMessage({
               ok: true,
               closed: notifications.length,
             });
+
           } catch {
             event.ports?.[0]?.postMessage({
               ok: false,
             });
           }
-        })(),
+        })()
       );
-
       break;
 
-    // ---------------- LIST NOTIFICATIONS ----------------
+    // LIST NOTIFICATIONS
 
     case "LIST_ACTIVE_NOTIFICATIONS":
       event.waitUntil(
         (async () => {
           try {
-            const notifications = await self.registration.getNotifications();
-
-            const list = notifications.map((notification) => ({
-              title: notification.title,
-              body: notification.body,
-              tag: notification.tag,
-              data: notification.data || {},
-            }));
+            const notifications =
+              await self.registration.getNotifications();
 
             event.ports?.[0]?.postMessage({
-              notifications: list,
+              notifications: notifications.map(
+                (notification) => ({
+                  title: notification.title,
+                  body: notification.body,
+                  tag: notification.tag,
+                  data: notification.data || {},
+                })
+              ),
             });
+
           } catch {
             event.ports?.[0]?.postMessage({
               notifications: [],
             });
           }
-        })(),
+        })()
       );
-
       break;
 
-    // ---------------- TEST NOTIFICATION ----------------
+    // TEST NOTIFICATION
 
     case "TEST_NOTIFICATION":
       event.waitUntil(
         (async () => {
           try {
-            await self.registration.showNotification("Folio test", {
-              body: "This is a test notification from the service worker.",
-              icon: "/icons/notif.png",
-              badge: "/icons/icon-144.png",
-              tag: "folio-test-" + Date.now(),
-              data: {
-                url: "/notifications",
-                notificationId: "test",
-                type: "system",
-              },
-            });
+            await self.registration.showNotification(
+              "Folio test",
+              {
+                body:
+                  "This is a test notification from the service worker.",
+                icon: "/icons/notif.png",
+                badge: "/icons/icon-144.png",
+                tag: "folio-test-" + Date.now(),
+                data: {
+                  url: "/notifications",
+                  notificationId: "test",
+                  type: "system",
+                },
+              }
+            );
 
             event.ports?.[0]?.postMessage({
               ok: true,
             });
+
           } catch (err) {
             event.ports?.[0]?.postMessage({
               ok: false,
               error: err.message,
             });
           }
-        })(),
+        })()
       );
-
       break;
   }
 });
@@ -1148,46 +1479,68 @@ function normalizePushPayload(raw) {
     };
   }
 
-  const inner = raw.data && typeof raw.data === "object" ? raw.data : {};
+  const inner =
+    raw.data && typeof raw.data === "object"
+      ? raw.data
+      : {};
 
   return {
     title: raw.title || inner.title || "Folio",
-
     body: raw.body || inner.body || "",
-
-    icon: raw.icon || inner.icon || "/icons/notif.png",
-
-    badge: raw.badge || inner.badge || "/icons/icon-144.png",
-
+    icon:
+      raw.icon ||
+      inner.icon ||
+      "/icons/notif.png",
+    badge:
+      raw.badge ||
+      inner.badge ||
+      "/icons/icon-144.png",
     image: raw.image || inner.image || undefined,
-
-    tag: raw.tag || inner.tag || inner.notificationId || "folio",
-
-    link: inner.link || raw.link || "/notifications",
-
-    notificationId: inner.notificationId || raw.notificationId || "",
-
-    type: inner.type || raw.type || "system",
-
-    user_id: inner.user_id || raw.user_id || "",
-
-    extra: inner.extra || raw.extra || "",
+    tag:
+      raw.tag ||
+      inner.tag ||
+      inner.notificationId ||
+      "folio",
+    link:
+      inner.link ||
+      raw.link ||
+      "/notifications",
+    notificationId:
+      inner.notificationId ||
+      raw.notificationId ||
+      "",
+    type:
+      inner.type ||
+      raw.type ||
+      "system",
+    user_id:
+      inner.user_id ||
+      raw.user_id ||
+      "",
+    extra:
+      inner.extra ||
+      raw.extra ||
+      "",
   };
 }
 
 // ============================================================
-// PUSH EVENT — FCM DATA MESSAGES
+// PUSH EVENT
 // ============================================================
 
 self.addEventListener("push", (event) => {
   let payload = null;
 
   try {
-    payload = event.data ? event.data.json() : null;
+    payload = event.data
+      ? event.data.json()
+      : null;
   } catch {
     try {
       payload = {
-        body: event.data ? event.data.text() : "",
+        body: event.data
+          ? event.data.text()
+          : "",
       };
     } catch {}
   }
@@ -1199,34 +1552,24 @@ self.addEventListener("push", (event) => {
     };
   }
 
-  const notification = normalizePushPayload(payload);
+  const notification =
+    normalizePushPayload(payload);
 
   const options = {
     body: notification.body,
-
     icon: notification.icon,
-
     badge: notification.badge,
-
     image: notification.image,
-
     tag: notification.tag,
-
     renotify: false,
-
     requireInteraction: false,
-
     data: {
       url: notification.link,
-
       link: notification.link,
-
-      notificationId: notification.notificationId,
-
+      notificationId:
+        notification.notificationId,
       type: notification.type,
-
       user_id: notification.user_id,
-
       extra: notification.extra,
     },
   };
@@ -1234,9 +1577,15 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
       try {
-        await self.registration.showNotification(notification.title, options);
+        await self.registration.showNotification(
+          notification.title,
+          options
+        );
       } catch (err) {
-        console.warn("[Folio SW] showNotification failed:", err);
+        console.warn(
+          "[Folio SW] showNotification failed:",
+          err
+        );
       }
 
       try {
@@ -1248,14 +1597,14 @@ self.addEventListener("push", (event) => {
         clients.forEach((client) => {
           client.postMessage({
             type: "PUSH_RECEIVED",
-
-            notificationId: notification.notificationId,
-
-            notificationType: notification.type,
+            notificationId:
+              notification.notificationId,
+            notificationType:
+              notification.type,
           });
         });
       } catch {}
-    })(),
+    })()
   );
 });
 
@@ -1268,59 +1617,66 @@ self.addEventListener("notificationclick", (event) => {
 
   const data = event.notification.data || {};
 
-  const target = data.url || data.link || "/notifications";
+  const target =
+    data.url ||
+    data.link ||
+    "/notifications";
 
   event.waitUntil(
     (async () => {
       let absoluteUrl;
 
       try {
-        absoluteUrl = new URL(target, self.location.origin).toString();
+        absoluteUrl = new URL(
+          target,
+          self.location.origin
+        ).toString();
       } catch {
-        absoluteUrl = self.location.origin + "/notifications";
+        absoluteUrl =
+          self.location.origin + "/notifications";
       }
 
       const parsedTarget = new URL(absoluteUrl);
 
-      // Never navigate to an external origin from an
-      // untrusted notification payload.
-      if (parsedTarget.origin !== self.location.origin) {
-        absoluteUrl = self.location.origin + "/notifications";
+      // Never navigate to an external origin.
+      if (
+        parsedTarget.origin !== self.location.origin
+      ) {
+        absoluteUrl =
+          self.location.origin + "/notifications";
       }
 
       const finalTarget = new URL(absoluteUrl);
 
-      // If the notification points at a live site, hand it off to the
-      // browser instead of navigating an existing PWA window. Live sites
-      // are independent pages, not part of the app shell.
       if (isLiveSiteRequest(finalTarget)) {
         await self.clients.openWindow(absoluteUrl);
         return;
       }
 
-      const targetPath = finalTarget.pathname + finalTarget.search;
+      const targetPath =
+        finalTarget.pathname + finalTarget.search;
 
       const clients = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
       });
 
-      // Focus an exact matching page.
+      // Exact matching page.
       for (const client of clients) {
         try {
           const clientUrl = new URL(client.url);
 
           if (
             clientUrl.origin === self.location.origin &&
-            clientUrl.pathname + clientUrl.search === targetPath
+            clientUrl.pathname + clientUrl.search ===
+              targetPath
           ) {
             await client.focus();
 
             client.postMessage({
               type: "NOTIFICATION_CLICKED",
-
-              notificationId: data.notificationId || "",
-
+              notificationId:
+                data.notificationId || "",
               url: absoluteUrl,
             });
 
@@ -1329,20 +1685,21 @@ self.addEventListener("notificationclick", (event) => {
         } catch {}
       }
 
-      // Otherwise reuse an existing Folio window.
+      // Reuse an existing Folio window.
       for (const client of clients) {
         try {
           const clientUrl = new URL(client.url);
 
-          if (clientUrl.origin === self.location.origin) {
+          if (
+            clientUrl.origin === self.location.origin
+          ) {
             await client.focus();
 
             try {
               client.postMessage({
                 type: "NOTIFICATION_CLICKED",
-
-                notificationId: data.notificationId || "",
-
+                notificationId:
+                  data.notificationId || "",
                 url: absoluteUrl,
               });
             } catch {}
@@ -1350,7 +1707,6 @@ self.addEventListener("notificationclick", (event) => {
             if ("navigate" in client) {
               try {
                 await client.navigate(absoluteUrl);
-
                 return;
               } catch {}
             }
@@ -1360,9 +1716,8 @@ self.addEventListener("notificationclick", (event) => {
         } catch {}
       }
 
-      // No existing Folio window.
       await self.clients.openWindow(absoluteUrl);
-    })(),
+    })()
   );
 });
 
@@ -1377,15 +1732,14 @@ self.addEventListener("notificationclose", (event) => {
     self.clients
       .matchAll({
         type: "window",
-
         includeUncontrolled: true,
       })
       .then((clients) => {
         clients.forEach((client) => {
           client.postMessage({
             type: "NOTIFICATION_CLOSED",
-
-            notificationId: data.notificationId || "",
+            notificationId:
+              data.notificationId || "",
           });
         });
       });
@@ -1396,56 +1750,69 @@ self.addEventListener("notificationclose", (event) => {
 // PUSH SUBSCRIPTION CHANGE
 // ============================================================
 
-self.addEventListener("pushsubscriptionchange", (event) => {
-  event.waitUntil(
-    (async () => {
-      try {
-        const oldSubscription = event.oldSubscription;
+self.addEventListener(
+  "pushsubscriptionchange",
+  (event) => {
+    event.waitUntil(
+      (async () => {
+        try {
+          const oldSubscription =
+            event.oldSubscription;
 
-        const newSubscription =
-          event.newSubscription ||
-          (oldSubscription
-            ? await self.registration.pushManager.subscribe(
-                oldSubscription.options,
-              )
-            : null);
+          const newSubscription =
+            event.newSubscription ||
+            (
+              oldSubscription
+                ? await self.registration.pushManager.subscribe(
+                    oldSubscription.options
+                  )
+                : null
+            );
 
-        if (!newSubscription) return;
+          if (!newSubscription) return;
 
-        const clients = await self.clients.matchAll({
-          type: "window",
+          const clients = await self.clients.matchAll({
+            type: "window",
+            includeUncontrolled: true,
+          });
 
-          includeUncontrolled: true,
-        });
+          await Promise.allSettled(
+            clients.map((client) => {
+              try {
+                client.postMessage({
+                  type: "PUSH_SUBSCRIPTION_CHANGED",
+                  subscription:
+                    newSubscription.toJSON(),
+                });
+              } catch {}
+            })
+          );
 
-        await Promise.allSettled(
-          clients.map((client) => {
-            try {
-              client.postMessage({
-                type: "PUSH_SUBSCRIPTION_CHANGED",
-
-                subscription: newSubscription.toJSON(),
-              });
-            } catch {}
-          }),
-        );
-      } catch (err) {
-        console.warn("[Folio SW] pushsubscriptionchange failed:", err);
-      }
-    })(),
-  );
-});
+        } catch (err) {
+          console.warn(
+            "[Folio SW] pushsubscriptionchange failed:",
+            err
+          );
+        }
+      })()
+    );
+  }
+);
 
 // ============================================================
 // MESSAGE ERROR
 // ============================================================
 
 self.addEventListener("messageerror", () => {
-  console.warn("[Folio SW] Message serialization error");
+  console.warn(
+    "[Folio SW] Message serialization error"
+  );
 });
 
 // ============================================================
 // STARTUP
 // ============================================================
 
-console.log(`[Folio SW] Loaded ${CACHE_VERSION}`);
+console.log(
+  `[Folio SW] Loaded ${CACHE_VERSION}`
+);
