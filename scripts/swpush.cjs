@@ -6,8 +6,13 @@
 // public/sw.js on every build.
 //
 // Idempotent: it matches EITHER the placeholder OR an already-
-// injected numeric version, so it can run repeatedly against the
-// same file without breaking.
+// injected numeric version, AND it accepts either single-quote
+// (') or double-quote (") string delimiters — so it works no
+// matter how public/sw.js was formatted.
+//
+// The output preserves the quote style found in the source. If
+// public/sw.js uses double quotes, the injected values use double
+// quotes. If it uses single quotes, they use single quotes.
 //
 // Version format:  <unix-ms>       e.g. 1762613422345
 // Reset format:    1               (see RESET below)
@@ -71,25 +76,36 @@ function main() {
     process.exit(1);
   }
 
-  // These two regexes match EITHER the placeholder OR an already-
-  // injected numeric value. That's what makes the script idempotent
-  // when public/sw.js doubles as both source and output.
+  // Match EITHER the placeholder OR an already-injected numeric
+  // value, wrapped in EITHER ' or ". The (['"]) capture group
+  // and \1 back-reference enforce that the opening and closing
+  // quotes match each other — so `"foo'` (mismatched) will NOT
+  // match, which is the correct behavior.
   const VERSION_RE =
-    /const CACHE_VERSION = (?:'__FOLIO_SW_VERSION__'|'\d+');/;
+    /const CACHE_VERSION = (['"])(?:__FOLIO_SW_VERSION__|\d+)\1;/;
   const BUILT_AT_RE =
-    /const CACHE_BUILT_AT = Number\((?:'__FOLIO_SW_BUILT_AT__'|'\d+')\);/;
+    /const CACHE_BUILT_AT = Number\((['"])(?:__FOLIO_SW_BUILT_AT__|\d+)\1\);/;
 
   if (!VERSION_RE.test(source)) {
     console.error(
-      '[swpush] Cannot find CACHE_VERSION line in public/sw.js. ' +
-      'Expected: const CACHE_VERSION = \'<something>\';'
+      '[swpush] Cannot find CACHE_VERSION line in public/sw.js.\n' +
+      '  Expected one of:\n' +
+      '    const CACHE_VERSION = "__FOLIO_SW_VERSION__";\n' +
+      "    const CACHE_VERSION = '__FOLIO_SW_VERSION__';\n" +
+      '    const CACHE_VERSION = "<digits>";\n' +
+      "    const CACHE_VERSION = '<digits>';"
     );
     process.exit(1);
   }
+
   if (!BUILT_AT_RE.test(source)) {
     console.error(
-      '[swpush] Cannot find CACHE_BUILT_AT line in public/sw.js. ' +
-      'Expected: const CACHE_BUILT_AT = Number(\'<something>\');'
+      '[swpush] Cannot find CACHE_BUILT_AT line in public/sw.js.\n' +
+      '  Expected one of:\n' +
+      '    const CACHE_BUILT_AT = Number("__FOLIO_SW_BUILT_AT__");\n' +
+      "    const CACHE_BUILT_AT = Number('__FOLIO_SW_BUILT_AT__');\n" +
+      '    const CACHE_BUILT_AT = Number("<digits>");\n' +
+      "    const CACHE_BUILT_AT = Number('<digits>');"
     );
     process.exit(1);
   }
@@ -97,14 +113,23 @@ function main() {
   const version = reset.yes ? 1 : Date.now();
   const builtAt = reset.yes ? 1 : version;
 
+  // Replacement callbacks receive (fullMatch, capturedQuote).
+  // We echo the captured quote back so the output preserves the
+  // source's quote style.
   const output = source
-    .replace(VERSION_RE, `const CACHE_VERSION = '${version}';`)
-    .replace(BUILT_AT_RE, `const CACHE_BUILT_AT = Number('${builtAt}');`);
+    .replace(
+      VERSION_RE,
+      (_, q) => `const CACHE_VERSION = ${q}${version}${q};`
+    )
+    .replace(
+      BUILT_AT_RE,
+      (_, q) => `const CACHE_BUILT_AT = Number(${q}${builtAt}${q});`
+    );
 
   if (output === source) {
-    // Nothing changed. This shouldn't happen unless the file was
-    // manually edited to have the exact same version, but we
-    // surface it instead of failing silently.
+    // Nothing changed. This can only happen if two builds run in
+    // the same millisecond against the same file. Surface it
+    // rather than fail silently.
     console.warn(
       `[swpush] No change written — version already ${version}. ` +
       'Two builds in the same millisecond?'
