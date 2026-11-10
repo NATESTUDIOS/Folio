@@ -22,6 +22,15 @@
 //  internally for the rest. Gating at the runtime level would block
 //  public endpoints.
 //
+//  ⚠  SANDBOX ORIGIN
+//  The user script runs inside a real HTTPS origin on Folio's own
+//  domain: ${BASE_URL}/__sandbox. The request interceptor serves
+//  the sandbox HTML for that URL, so no network call is ever made.
+//  The origin matters because about:blank is not a secure context —
+//  crypto.subtle, localStorage, navigator.clipboard, relative fetch,
+//  and every other secure-context API are unavailable there. On a
+//  real HTTPS origin they all work.
+//
 //  ⚠  CHROMIUM MIN
 //  We use @sparticuz/chromium-min (not @sparticuz/chromium). The
 //  full package relies on runtime environment detection to decide
@@ -836,6 +845,13 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId, startTime
   const page = await browser.newPage();
   stageLog(reqId, "new_page_done", startTime);
 
+  // The sandbox is served from Folio's real HTTPS origin, not about:blank.
+  // The interceptor (below) responds to this URL with `html` — no network
+  // call is ever made. The real origin matters because about:blank is not
+  // a secure context, and crypto.subtle / localStorage / relative fetch
+  // / navigator.clipboard etc. are unavailable there.
+  const SANDBOX_URL = `${BASE_URL}/__sandbox`;
+
   const fetchHosts = new Set();
 
   try {
@@ -843,6 +859,18 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId, startTime
 
     page.on("request", async (request) => {
       try {
+        // ── Serve the sandbox HTML for the top-level navigation ──
+        // This must be the first check. If it falls through, the
+        // FOLIO_INTERNAL_HOSTS branch below will abort() the
+        // navigation and page.goto() will throw ERR_ABORTED.
+        if (request.url() === SANDBOX_URL) {
+          return await request.respond({
+            status: 200,
+            contentType: "text/html; charset=utf-8",
+            body: html,
+          });
+        }
+
         const urlObj = new URL(request.url());
         const host = urlObj.hostname.toLowerCase();
 
@@ -917,14 +945,17 @@ return await request.abort("blockedbyclient");
       }
     });
 
-    stageLog(reqId, "setcontent_started", startTime);
+    // Navigate to the sandbox URL. The interceptor above serves the
+    // HTML from memory, so this is a synchronous in-memory operation
+    // from the network's perspective — no round-trip to Vercel.
+    stageLog(reqId, "goto_started", startTime);
 
-    await page.setContent(html, {
+    await page.goto(SANDBOX_URL, {
       waitUntil: "domcontentloaded",
       timeout: PAGE_SETUP_TIMEOUT_MS,
     });
 
-    stageLog(reqId, "setcontent_done", startTime);
+    stageLog(reqId, "goto_done", startTime);
 
     stageLog(reqId, "waitforfunction_started", startTime);
 
