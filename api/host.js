@@ -109,6 +109,26 @@ const BUILTIN_ALLOWED_HOSTS = new Set([
   "api.supabase.co",
   "api.resend.com",
 ]);
+const TRUSTED_IMAGE_HOSTS = new Set([
+  "picsum.photos",
+  "fastly.picsum.photos",
+  "images.unsplash.com",
+  "images.pexels.com",
+  "cdn.pixabay.com",
+  "upload.wikimedia.org",
+]);
+
+// Skip DNS + HTTPS validation for these — they're well-known,
+// stable, public providers. Everything else gets validated.
+const KNOWN_SAFE_HOSTS = new Set([
+  ...TRUSTED_IMAGE_HOSTS,
+  "api.github.com",
+  "raw.githubusercontent.com",
+  "gist.githubusercontent.com",
+  "cdnjs.cloudflare.com",
+  "ga.jspm.io",
+  "cdn.skypack.dev",
+]);
 
 const FOLIO_INTERNAL_HOSTS = new Set([
   "folio",
@@ -197,6 +217,8 @@ const RATE_LIMITS = {
   dbBackup: { max: 5, window: 60 * 60 * 1000 },
   dbSet: { max: 300, window: 60 * 1000 },
   dbGet: { max: 600, window: 60 * 1000 },
+  apiLogs: { max: 60, window: 60 * 60 * 1000 },
+  hostsAdd: { max: 30, window: 60 * 60 * 1000 },
 };
 
 // =========================================================================
@@ -445,15 +467,61 @@ function analyzeApiFiles(apiFiles) {
 }
 
 const ALLOW_LINE_RE = /^\s*\/\/\s*@allow\s+(\S+)\s*$/gm;
+const ALLOW_HOST_LINE_RE = /^\s*\/\/\s*@allow-host\s+(\S+)\s*$/gm;
 
+// Detect every external host a script references:
+//   1. Explicit @allow / @allow-host comments
+//   2. Literal https://host/... URLs (fetch, import, string literals)
+//
+// Templates with ${...} aren't resolved — those must be declared.
 function extractAllowHosts(source) {
   const hosts = new Set();
-  let match;
-  ALLOW_LINE_RE.lastIndex = 0;
-  while ((match = ALLOW_LINE_RE.exec(source)) !== null) {
-    hosts.add(match[1].toLowerCase().trim());
+
+  for (const re of [ALLOW_LINE_RE, ALLOW_HOST_LINE_RE]) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(source)) !== null) {
+      const h = normalizeHost(m[1]);
+      if (h) hosts.add(h);
+    }
   }
-  return [...hosts];
+
+  const URLLIKE = /https:\/\/([a-z0-9][a-z0-9.-]*\.[a-z]{2,})(?=[\/:'"`\s])/gi;
+  let m;
+  while ((m = URLLIKE.exec(source)) !== null) {
+    const h = normalizeHost(m[1]);
+    if (h) hosts.add(h);
+  }
+
+  return [...hosts].filter(h => !isSkippableHost(h));
+}
+
+function normalizeHost(host) {
+  if (!host || typeof host !== "string") return null;
+  let h = host.toLowerCase().trim();
+  h = h.replace(/^https?:\/\//, "");
+  h = h.split("/")[0].split(":")[0];
+  if (!h) return null;
+  if (h.length > 253) return null;
+  if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(h)) return null;
+  return h;
+}
+
+function isSkippableHost(h) {
+  const folioHost = (() => { try { return new URL(BASE_URL).hostname.toLowerCase(); } catch { return null; } })();
+  if (h === folioHost) return true;
+  if (h.endsWith(".vercel.app") && h !== folioHost) return true;
+  const SKIP = new Set([
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "cdn.jsdelivr.net",
+    "esm.sh",
+    "unpkg.com",
+    "fonts.googleapis.com",
+    "fonts.gstatic.com",
+  ]);
+  return SKIP.has(h);
 }
 
 function isPrivateOrReservedIp(ip) {
@@ -1939,9 +2007,8 @@ async function writeFilesInBatches(pid, fileMap, reqId, { tree = "files" } = {})
 }
 
 async function validateAndStoreAllowHosts(pid, apiFiles) {
-  // Collect all @allow hosts across all files
   const allHosts = new Set();
-  const declaredBy = new Map(); // host -> Set of files
+  const declaredBy = new Map();
 
   for (const [name, content] of Object.entries(apiFiles)) {
     const hosts = extractAllowHosts(content);
@@ -1955,33 +2022,32 @@ async function validateAndStoreAllowHosts(pid, apiFiles) {
   if (allHosts.size > MAX_UNIQUE_ALLOW_HOSTS) {
     return {
       ok: false,
-      reason: `Too many @allow hosts (${allHosts.size}). Max is ${MAX_UNIQUE_ALLOW_HOSTS}.`,
+      reason: `Too many allowed hosts (${allHosts.size}). Max is ${MAX_UNIQUE_ALLOW_HOSTS}.`,
     };
   }
 
-  const results = [];
-
-  for (const host of allHosts) {
-    // Built-in hosts are pre-approved
-    if (BUILTIN_ALLOWED_HOSTS.has(host)) {
-      results.push({ host, ok: true, builtin: true });
-      continue;
-    }
-
-    const validation = await validateAllowHost(host);
-    results.push({
-      host,
-      ok: validation.ok,
-      reason: validation.reason,
-      builtin: false,
-    });
-  }
+  // Validate in parallel — DNS + HTTPS for unknown hosts, skip
+  // for built-ins and known-safe providers.
+  const results = await Promise.all(
+    [...allHosts].map(async (host) => {
+      if (BUILTIN_ALLOWED_HOSTS.has(host) || KNOWN_SAFE_HOSTS.has(host)) {
+        return { host, ok: true, builtin: true };
+      }
+      const validation = await validateAllowHost(host);
+      return {
+        host,
+        ok: validation.ok,
+        reason: validation.reason,
+        builtin: false,
+      };
+    })
+  );
 
   const failures = results.filter((r) => !r.ok);
   if (failures.length > 0) {
     return {
       ok: false,
-      reason: `Host validation failed`,
+      reason: "Host validation failed",
       violations: failures.map((f) => ({
         host: f.host,
         reason: f.reason,
@@ -1990,10 +2056,11 @@ async function validateAndStoreAllowHosts(pid, apiFiles) {
     };
   }
 
-  // All good — write the manifest
+  // Build manifest (skip built-ins and known-safe — they don't need
+  // to be stored; run.js trusts them directly)
   const manifest = {};
   for (const r of results) {
-    if (r.builtin) continue; // built-ins aren't stored
+    if (r.builtin) continue;
     manifest[r.host] = {
       declaredBy: [...(declaredBy.get(r.host) || [])],
       validatedAt: Date.now(),
@@ -2001,7 +2068,7 @@ async function validateAndStoreAllowHosts(pid, apiFiles) {
     };
   }
 
-  // Read existing manifest, merge, remove hosts no longer referenced
+  // Merge with existing manifest, preserve dashboard-added hosts
   const existingSnap = await db.ref(`projects/${pid}/allowedHosts`).once("value");
   const existing = existingSnap.exists() ? existingSnap.val() : {};
 
@@ -2009,7 +2076,14 @@ async function validateAndStoreAllowHosts(pid, apiFiles) {
   for (const [host, meta] of Object.entries(manifest)) {
     updates[`projects/${pid}/allowedHosts/${host}`] = meta;
   }
-  for (const host of Object.keys(existing)) {
+  for (const [host, meta] of Object.entries(existing)) {
+    // Don't remove hosts the user added from the dashboard
+    if (meta && Array.isArray(meta.declaredBy) && meta.declaredBy.includes("dashboard")) {
+      continue;
+    }
+    // Don't remove trusted hosts
+    if (KNOWN_SAFE_HOSTS.has(host)) continue;
+    // Remove hosts no longer in the manifest
     if (!manifest[host]) {
       updates[`projects/${pid}/allowedHosts/${host}`] = null;
     }
@@ -3023,7 +3097,203 @@ async function handleApiRoutes(req, res, reqId) {
     },
   });
 }
+async function handleApiLogs(req, res, reqId) {
+  const pid = String(req.query?.pid || "").trim();
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
 
+  if (!(await enforceRate(req, res, "apiLogs", `pid_${pid}`))) return;
+
+  // Require at least editor access — logs may include error messages
+  const access = await requireProjectRole(req, res, pid, "editor");
+  if (!access) return;
+
+  // ── Pagination params ────────────────────────────────────────
+  const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 20, 1), 50);
+  const offset = Math.max(parseInt(req.query?.offset, 10) || 0, 0);
+
+  // ── Filters ──────────────────────────────────────────────────
+  const routeFilter = String(req.query?.route || "").trim().toLowerCase();
+  const statusFilter = String(req.query?.status || "").trim(); // "error" | "ok" | exact code
+  const viaFilter = String(req.query?.via || "").trim().toLowerCase();
+  const sinceTs = parseInt(req.query?.since, 10) || 0;
+
+  const snap = await db.ref(`apiLogs/${pid}`).once("value");
+  if (!snap.exists()) {
+    return res.status(200).json({
+      success: true,
+      logs: [],
+      total: 0,
+      returned: 0,
+      offset,
+      limit,
+      hasMore: false,
+      max: 50,
+      filters: { route: routeFilter || null, status: statusFilter || null, via: viaFilter || null, since: sinceTs || null },
+    });
+  }
+
+  // ── Collect all entries ──────────────────────────────────────
+  const all = [];
+  snap.forEach((child) => {
+    const v = child.val() || {};
+    all.push({
+      id: child.key,
+      ts: v.ts || 0,
+      route: v.route || "",
+      method: v.method || "POST",
+      status: v.status || 0,
+      durationMs: v.durationMs || 0,
+      errorName: v.errorName || null,
+      errorMessage: v.errorMessage || null,
+      via: v.via || "anon",
+      // ── NEW: richer error context ──────────────────────────
+      ok: !v.errorName && v.status >= 200 && v.status < 400,
+      errorClass: classifyApiError(v),
+      requestId: v.requestId || null,
+      stage: v.stage || null,              // last run.timing stage if failed
+      bytesIn: v.bytesIn || null,
+      bytesOut: v.bytesOut || null,
+      fetchHosts: Array.isArray(v.fetchHosts) ? v.fetchHosts : [],
+      userAgent: v.userAgent || null,
+      ipHash: v.ipHash || null,
+      deploymentId: v.deploymentId || null,
+    });
+  });
+
+  // ── Apply filters ────────────────────────────────────────────
+  let filtered = all;
+
+  if (routeFilter) {
+    filtered = filtered.filter((e) => e.route.toLowerCase() === routeFilter);
+  }
+  if (viaFilter) {
+    filtered = filtered.filter((e) => e.via === viaFilter);
+  }
+  if (sinceTs > 0) {
+    filtered = filtered.filter((e) => e.ts >= sinceTs);
+  }
+  if (statusFilter) {
+    if (statusFilter === "error") {
+      filtered = filtered.filter((e) => !e.ok);
+    } else if (statusFilter === "ok") {
+      filtered = filtered.filter((e) => e.ok);
+    } else {
+      const code = parseInt(statusFilter, 10);
+      if (Number.isFinite(code)) {
+        filtered = filtered.filter((e) => e.status === code);
+      }
+    }
+  }
+
+  // ── Sort newest-first ────────────────────────────────────────
+  filtered.sort((a, b) => b.ts - a.ts);
+
+  const total = filtered.length;
+  const slice = filtered.slice(offset, offset + limit);
+
+  // ── Error summary (helps the UI show a breakdown) ────────────
+  const errorSummary = {};
+  for (const e of filtered) {
+    if (e.ok) continue;
+    const key = e.errorName || `HTTP ${e.status}`;
+    errorSummary[key] = (errorSummary[key] || 0) + 1;
+  }
+
+  return res.status(200).json({
+    success: true,
+    logs: slice,
+    total,
+    returned: slice.length,
+    offset,
+    limit,
+    hasMore: offset + limit < total,
+    max: 50, // ring-buffer cap
+    filters: {
+      route: routeFilter || null,
+      status: statusFilter || null,
+      via: viaFilter || null,
+      since: sinceTs || null,
+    },
+    errorSummary,
+    rateLimit: {
+      limit: 60,
+      remaining: res.getHeader("X-RateLimit-Remaining") || null,
+    },
+  });
+}
+// =========================================================================
+// ALLOWED HOSTS — dashboard-added hosts
+// =========================================================================
+
+async function handleHostsAdd(req, res, reqId) {
+  const { pid, host } = req.body || {};
+  if (!pid || !host) {
+    return res.status(400).json({ success: false, error: "Missing pid or host" });
+  }
+  if (!(await enforceRate(req, res, "hostsAdd", `pid_${pid}`))) return;
+
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  const h = normalizeHost(host);
+  if (!h) {
+    return res.status(400).json({ success: false, error: "Invalid hostname" });
+  }
+  if (isSkippableHost(h)) {
+    return res.status(400).json({ success: false, error: "This host doesn't need to be added" });
+  }
+  if (FOLIO_INTERNAL_HOSTS.has(h)) {
+    return res.status(400).json({ success: false, error: "Cannot allow Folio's own infrastructure" });
+  }
+
+  // Validate DNS + HTTPS unless it's a known-safe host
+  if (!KNOWN_SAFE_HOSTS.has(h) && !BUILTIN_ALLOWED_HOSTS.has(h)) {
+    const validation = await validateAllowHost(h);
+    if (!validation.ok) {
+      return res.status(400).json({ success: false, error: validation.reason });
+    }
+  }
+
+  // Check the project hasn't hit the host limit
+  const existingSnap = await db.ref(`projects/${pid}/allowedHosts`).once("value");
+  const existing = existingSnap.exists() ? existingSnap.val() : {};
+  if (!existing[h] && Object.keys(existing).length >= MAX_UNIQUE_ALLOW_HOSTS) {
+    return res.status(400).json({
+      success: false,
+      error: `Host limit reached (${MAX_UNIQUE_ALLOW_HOSTS})`,
+    });
+  }
+
+  await db.ref(`projects/${pid}/allowedHosts/${h}`).set({
+    declaredBy: ["dashboard"],
+    validatedAt: Date.now(),
+    validatedOk: true,
+  });
+
+  await logProjectEvent(pid, access.uid, "api", "host.allowed", { host: h });
+
+  return res.status(200).json({ success: true, host: h });
+}
+// ── Classify an API error for the dashboard ────────────────────
+function classifyApiError(entry) {
+  if (!entry) return null;
+  const name = entry.errorName || "";
+  const msg = entry.errorMessage || "";
+  const status = Number(entry.status) || 0;
+
+  if (status === 504 || /timeout/i.test(name + msg)) return "timeout";
+  if (status === 429) return "rate_limit";
+  if (status === 413) return "payload_too_large";
+  if (status === 508) return "recursion_limit";
+  if (/SyntaxError/i.test(name)) return "syntax_error";
+  if (/TypeError/i.test(name)) return "type_error";
+  if (/ReferenceError/i.test(name)) return "reference_error";
+  if (/blockedbyclient|blocked/i.test(msg)) return "blocked_host";
+  if (/^net::|ERR_/i.test(msg)) return "network";
+  if (status >= 500) return "server_error";
+  if (status >= 400) return "client_error";
+  return null;
+}
 // =========================================================================
 // PROJECTS CRUD
 // =========================================================================
@@ -5719,6 +5989,10 @@ export default async function handler(req, res) {
       return await handleApiSystemDefault(req, res, reqId);
     if (method === "GET" && action === "api-routes")
       return await handleApiRoutes(req, res, reqId);
+    if (method === "GET" && action === "api-logs")
+  return await handleApiLogs(req, res, reqId);
+    if (method === "POST" && action === "hosts/add")
+  return await handleHostsAdd(req, res, reqId);
 
     if (method === "POST" && action === "apikey/generate")
       return await handleApiKeyGenerate(req, res, reqId);

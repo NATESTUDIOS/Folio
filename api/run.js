@@ -46,6 +46,11 @@
 //  On Vercel free tier, every invocation launches Chromium fresh
 //  (~1.5–2s cold start). Serverless functions cannot keep processes
 //  alive between calls on free tier. Expect ~2s per /api/* call.
+//
+//  ⚠  STAGE TIMING LOGS
+//  Every major stage emits log("run.timing", { reqId, stage, elapsed }).
+//  When a function times out at 30s, the last stage tag in the Vercel
+//  logs tells you exactly which step consumed the budget.
 // ═══════════════════════════════════════════════════════════════════
 
 import fs from "node:fs";
@@ -89,19 +94,39 @@ const MAX_RECURSION_DEPTH = 3;
 const CHROMIUM_PACK_URL =
   "https://github.com/Sparticuz/chromium/releases/download/v141.0.0/chromium-v141.0.0-pack.x64.tar";
 
+// API hosts that are safe for any script to reach, no declaration
+// or validation needed. Keep this list short and curated.
 const BUILTIN_ALLOWED_HOSTS = new Set([
   "api.openai.com",
   "api.groq.com",
   "api.anthropic.com",
   "api.stripe.com",
+  "api.paystack.co",
   "api.supabase.co",
   "api.resend.com",
+  "api.github.com",
+  "raw.githubusercontent.com",
+  "gist.githubusercontent.com",
+]);
+
+// Image hosts — trusted, always allowed. These are the reason
+// "image search failed" doesn't happen on every new provider.
+const TRUSTED_IMAGE_HOSTS = new Set([
+  "picsum.photos",
+  "fastly.picsum.photos",
+  "images.unsplash.com",
+  "images.pexels.com",
+  "cdn.pixabay.com",
+  "upload.wikimedia.org",
 ]);
 
 const ALLOWED_IMPORT_HOSTS = new Set([
   "cdn.jsdelivr.net",
   "esm.sh",
   "unpkg.com",
+  "cdnjs.cloudflare.com",
+  "ga.jspm.io",
+  "cdn.skypack.dev",
 ]);
 
 let _folioHost = null;
@@ -118,6 +143,88 @@ const RATE_LIMITS = {
 
 const SLUG_CACHE_TTL = 60 * 1000; // 60 seconds
 const SLUG_CACHE_MAX = 500;
+
+// =========================================================================
+// API LOGS — per-project ring buffer (max 50 entries)
+// =========================================================================
+//
+// Recorded only for user routes (`api/*.js`). System routes
+// (health, whoami, files, status, version, robots) are skipped.
+//
+// Stored at apiLogs/{pid}/{entryId}. Pruned to 50 by timestamp on
+// every write. Read via the `host` action `?action=api-logs`.
+
+const API_LOGS_MAX = 50;
+
+async function recordApiLog(pid, entry) {
+  try {
+    const clean = {
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      ts: Date.now(),
+      route: String(entry.route || "").slice(0, 60),
+      method: String(entry.method || "POST").slice(0, 10),
+      status: Number(entry.status) || 200,
+      durationMs: Math.max(0, Number(entry.durationMs) || 0),
+      errorName: entry.errorName ? String(entry.errorName).slice(0, 100) : null,
+      errorMessage: entry.errorMessage ? String(entry.errorMessage).slice(0, 500) : null,
+      via: entry.via || "anon",
+      // ── new context fields ────────────────────────────────
+      requestId: entry.requestId ? String(entry.requestId).slice(0, 60) : null,
+      stage: entry.stage ? String(entry.stage).slice(0, 60) : null,
+      bytesIn: Number.isFinite(entry.bytesIn) ? Math.max(0, entry.bytesIn) : null,
+      bytesOut: Number.isFinite(entry.bytesOut) ? Math.max(0, entry.bytesOut) : null,
+      fetchHosts: Array.isArray(entry.fetchHosts)
+        ? entry.fetchHosts.slice(0, 20).map((h) => String(h).slice(0, 100))
+        : [],
+      userAgent: entry.userAgent ? String(entry.userAgent).slice(0, 200) : null,
+      ipHash: entry.ipHash ? String(entry.ipHash).slice(0, 40) : null,
+      deploymentId: entry.deploymentId ? String(entry.deploymentId).slice(0, 60) : null,
+    };
+
+    let existing = {};
+    try {
+      const snap = await db.ref(`apiLogs/${pid}`).once("value");
+      if (snap.exists()) existing = snap.val() || {};
+    } catch {}
+
+    existing[clean.id] = clean;
+
+    const entries = Object.entries(existing)
+      .sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+    const keep = new Set(entries.slice(0, API_LOGS_MAX).map(([id]) => id));
+
+    const updates = {};
+    for (const [id, val] of Object.entries(existing)) {
+      updates[id] = keep.has(id) ? val : null;
+    }
+
+    await db.ref(`apiLogs/${pid}`).update(updates);
+  } catch (err) {
+    log("run.record_api_log_failed", { pid, message: err.message });
+  }
+}
+
+// =========================================================================
+// STAGE TIMING HELPER
+// =========================================================================
+//
+// Emits a log line with the elapsed time since the request started.
+// Call at every stage boundary. When the function hits maxDuration,
+// the last logged stage is the one that hung.
+
+let _lastStage = null;
+
+function stageLog(reqId, stage, startTime, extra = {}) {
+  _lastStage = stage;
+  try {
+    log("run.timing", {
+      reqId,
+      stage,
+      elapsed: Date.now() - startTime,
+      ...extra,
+    });
+  } catch {}
+}
 
 // =========================================================================
 // SLUG RESOLUTION CACHE
@@ -303,15 +410,80 @@ async function authenticate(req, pid) {
 // =========================================================================
 
 const ALLOW_LINE_RE = /^\s*\/\/\s*@allow\s+(\S+)\s*$/gm;
+const ALLOW_HOST_LINE_RE = /^\s*\/\/\s*@allow-host\s+(\S+)\s*$/gm;
 
+// -------------------------------------------------------------------
+// extractAllowHosts — detects every external host the script references
+// -------------------------------------------------------------------
+// Scans for:
+//   1. Explicit @allow / @allow-host comments
+//   2. Literal https://host/... URLs anywhere in the source
+//
+// Templates with ${...} are NOT resolved — those hosts must be
+// declared explicitly or added via the dashboard.
+// -------------------------------------------------------------------
 function extractAllowHosts(source) {
   const hosts = new Set();
-  let match;
-  ALLOW_LINE_RE.lastIndex = 0;
-  while ((match = ALLOW_LINE_RE.exec(source)) !== null) {
-    hosts.add(match[1].toLowerCase().trim());
+
+  // 1. Explicit @allow / @allow-host comments
+  for (const re of [ALLOW_LINE_RE, ALLOW_HOST_LINE_RE]) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(source)) !== null) {
+      const h = normalizeHost(m[1]);
+      if (h) hosts.add(h);
+    }
   }
-  return [...hosts];
+
+  // 2. Literal https://host/... URLs in the source
+  //    Matches: fetch("https://api.example.com/x"),
+  //             import ... from "https://cdn.jsdelivr.net/...",
+  //             fetch("https://picsum.photos/v2/list"),
+  //             const u = "https://foo.com/x"
+  //
+  //    Skips: fetch("/api/host?...")     ← relative, no hostname
+  //           fetch(`https://${h}/x`)    ← template, unresolved
+  const URLLIKE = /https:\/\/([a-z0-9][a-z0-9.-]*\.[a-z]{2,})(?=[\/:'"`\s])/gi;
+  let m;
+  while ((m = URLLIKE.exec(source)) !== null) {
+    const h = normalizeHost(m[1]);
+    if (h) hosts.add(h);
+  }
+
+  return [...hosts].filter(h => !isSkippableHost(h));
+}
+
+// -------------------------------------------------------------------
+// normalizeHost — lowercase, strip protocol/path/port, validate shape
+// -------------------------------------------------------------------
+function normalizeHost(host) {
+  if (!host || typeof host !== "string") return null;
+  let h = host.toLowerCase().trim();
+  h = h.replace(/^https?:\/\//, "");      // strip protocol if present
+  h = h.split("/")[0].split(":")[0];      // strip path/port
+  if (!h) return null;
+  if (h.length > 253) return null;
+  if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(h)) return null;
+  return h;
+}
+
+// -------------------------------------------------------------------
+// isSkippableHost — hosts that never need to be in the manifest
+// -------------------------------------------------------------------
+function isSkippableHost(h) {
+  if (FOLIO_INTERNAL_HOSTS.has(h)) return true;
+  if (h.endsWith(".vercel.app")) return true;
+  const SKIP = new Set([
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "cdn.jsdelivr.net",
+    "esm.sh",
+    "unpkg.com",
+    "fonts.googleapis.com",
+    "fonts.gstatic.com",
+  ]);
+  return SKIP.has(h);
 }
 
 // =========================================================================
@@ -375,9 +547,13 @@ async function loadChromiumModules() {
   return { chromium: chromiumMod, puppeteer: puppeteerMod };
 }
 
-async function launchBrowser() {
+async function launchBrowser(reqId, startTime) {
+  stageLog(reqId, "chromium_modules_loading", startTime);
+
   // ── 1. Load the module pair ────────────────────────────────────
   const { chromium, puppeteer } = await loadChromiumModules();
+
+  stageLog(reqId, "chromium_modules_loaded", startTime);
 
   // ── 2. Extract Chromium via the pack URL ───────────────────────
   // @sparticuz/chromium-min downloads the pack from the URL you pass
@@ -387,6 +563,8 @@ async function launchBrowser() {
   // layout). The package then sets process.env.LD_LIBRARY_PATH to
   // that directory so the loader finds them when Chromium spawns.
   const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
+
+  stageLog(reqId, "chromium_extracted", startTime, { executablePath });
 
   // ── 3. Do NOT override LD_LIBRARY_PATH ─────────────────────────
   // chromium-min already set process.env.LD_LIBRARY_PATH to point at
@@ -402,6 +580,8 @@ async function launchBrowser() {
   try {
     fs.mkdirSync("/tmp/.chromium/profile", { recursive: true });
   } catch {}
+
+  stageLog(reqId, "chromium_launch_started", startTime);
 
   // ── 5. Launch ──────────────────────────────────────────────────
   const browser = await puppeteer.launch({
@@ -421,6 +601,8 @@ async function launchBrowser() {
     defaultViewport: { width: 1280, height: 720 },
     timeout: CHROMIUM_LAUNCH_TIMEOUT_MS,
   });
+
+  stageLog(reqId, "chromium_launch_done", startTime);
 
   return browser;
 }
@@ -588,6 +770,7 @@ function buildPageHtml({ userCode, env, files, reqObj }) {
     const result = await (async () => {
 ${userCode}
     })();
+
     let contentType = "application/json";
     let body = result;
     let status = 200;
@@ -605,14 +788,31 @@ ${userCode}
       body = result;
     }
 
-    const serialized = typeof body === "string" ? body : JSON.stringify(body);
+    // FIX: serialized must ALWAYS be a string. JSON.stringify(undefined)
+    // returns undefined (not a string), which crashes the Node-side
+    // Buffer.byteLength(responseBody) call downstream. Coerce every
+    // possible outcome — undefined, null, circular refs, symbols,
+    // functions — into a valid string.
+    let serialized;
+    if (typeof body === "string") {
+      serialized = body;
+    } else if (body === undefined || body === null) {
+      serialized = "null";
+    } else {
+      try {
+        const s = JSON.stringify(body);
+        serialized = typeof s === "string" ? s : "null";
+      } catch {
+        serialized = "null";
+      }
+    }
 
     window.__RESULT__ = {
       ok: true,
       status,
       contentType,
       body: serialized,
-      bodyBytes: (typeof serialized === "string" ? serialized : "").length,
+      bodyBytes: serialized.length,
     };
   } catch (err) {
     window.__RESULT__ = {
@@ -631,8 +831,11 @@ ${userCode}
 // PAGE EXECUTION
 // =========================================================================
 
-async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
+async function runInPage(browser, { html, allowedHostsSet, pid, reqId, startTime }) {
+  stageLog(reqId, "new_page_started", startTime);
   const page = await browser.newPage();
+  stageLog(reqId, "new_page_done", startTime);
+
   const fetchHosts = new Set();
 
   try {
@@ -684,31 +887,53 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId }) {
           return await request.abort("blockedbyclient");
         }
 
-        if (
-          BUILTIN_ALLOWED_HOSTS.has(host) ||
-          ALLOWED_IMPORT_HOSTS.has(host) ||
-          allowedHostsSet.has(host)
-        ) {
-          fetchHosts.add(host);
-          return await request.continue();
-        }
+// Trusted image hosts are always allowed — no declaration needed.
+// They're read-only CDNs, safe for any script to use.
+if (TRUSTED_IMAGE_HOSTS.has(host)) {
+  fetchHosts.add(host);
+  return await request.continue();
+}
 
-        return await request.abort("blockedbyclient");
+if (
+  BUILTIN_ALLOWED_HOSTS.has(host) ||
+  ALLOWED_IMPORT_HOSTS.has(host) ||
+  allowedHostsSet.has(host)
+) {
+  fetchHosts.add(host);
+  return await request.continue();
+}
+
+// Blocked — log the exact host so the user can see what
+// needs to be added.
+log("run.host_blocked", { reqId, host, pid });
+try {
+  logProjectEvent(pid, null, "api", "host_blocked", { host, route: null }).catch(() => {});
+} catch {}
+
+return await request.abort("blockedbyclient");
       } catch (err) {
         log("run.request_intercept_error", { reqId, message: err.message });
         try { await request.abort("failed"); } catch {}
       }
     });
 
+    stageLog(reqId, "setcontent_started", startTime);
+
     await page.setContent(html, {
       waitUntil: "domcontentloaded",
       timeout: PAGE_SETUP_TIMEOUT_MS,
     });
 
+    stageLog(reqId, "setcontent_done", startTime);
+
+    stageLog(reqId, "waitforfunction_started", startTime);
+
     await page.waitForFunction(
       () => window.__RESULT__ !== undefined,
       { timeout: USER_CODE_TIMEOUT_MS, polling: 50 },
     );
+
+    stageLog(reqId, "waitforfunction_done", startTime);
 
     const result = await page.evaluate(() => window.__RESULT__);
     return { ok: true, result, fetchHosts: [...fetchHosts] };
@@ -794,6 +1019,15 @@ async function loadRouteFile(pid, route, isSystemRoute) {
 export default async function handler(req, res) {
   const reqId = newReqId();
   const startTime = Date.now();
+  _lastStage = "entered";
+
+  stageLog(reqId, "entered", startTime, {
+    method: req.method,
+    pid: req.query?.pid || null,
+    username: req.query?.username || null,
+    project: req.query?.project || null,
+    route: req.query?.route || null,
+  });
 
   res.setHeader("X-Request-Id", reqId);
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -823,11 +1057,14 @@ export default async function handler(req, res) {
 
   route = route.replace(/\.js$/i, "").trim();
 
+  stageLog(reqId, "query_parsed", startTime, { pid, route });
+
   // ── Resolve pid from slug if only username + project given ───────
   let resolutionError = null;
   if (!pid && username && projectSlug) {
     pid = await resolveProjectBySlug(username, projectSlug);
     if (!pid) resolutionError = "Project not found";
+    stageLog(reqId, "slug_resolved", startTime, { pid: pid || null });
   }
 
   if (!pid) {
@@ -858,6 +1095,8 @@ export default async function handler(req, res) {
   // rate limits and logs are attributed correctly.
   const actor = await authenticate(req, pid).catch(() => null);
 
+  stageLog(reqId, "auth_done", startTime, { via: actor?.via || "anon" });
+
   // ── Rate limit ─────────────────────────────────────────────────
   // Authenticated callers rate-limit per uid/key; anonymous callers
   // rate-limit per IP. This preserves abuse protection for public
@@ -876,8 +1115,15 @@ export default async function handler(req, res) {
     });
   }
 
+  stageLog(reqId, "rate_done", startTime);
+
   // ── Load invocation context ────────────────────────────────────
   const ctx = await loadInvocationContext(pid, route);
+  stageLog(reqId, "ctx_loaded", startTime, {
+    isSystemRoute: ctx?.isSystemRoute || false,
+    isUserRoute: ctx?.isUserRoute || false,
+  });
+
   if (!ctx) {
     return res.status(404).json({ success: false, error: "Project not found" });
   }
@@ -887,6 +1133,10 @@ export default async function handler(req, res) {
 
   // ── Load route file ────────────────────────────────────────────
   const userCode = await loadRouteFile(pid, route, ctx.isSystemRoute);
+  stageLog(reqId, "route_file_loaded", startTime, {
+    bytes: userCode ? userCode.length : 0,
+  });
+
   if (!userCode || !userCode.trim()) {
     return res.status(404).json({ success: false, error: "Route file not found", route });
   }
@@ -919,6 +1169,8 @@ export default async function handler(req, res) {
         () => {},
       );
     }
+
+    stageLog(reqId, "hosts_parsed", startTime, { allowedHosts: [...declaredHostsSet] });
   } catch (err) {
     log("run.allow_parse_failed", { reqId, pid, route, message: err.message });
     return res.status(500).json({ success: false, error: "Failed to parse @allow hosts" });
@@ -930,18 +1182,29 @@ export default async function handler(req, res) {
     const reserved = await buildReservedEnv(pid, ctx.project, ctx.deployment, route, reqId);
     const userSecrets = await projectSecrets.readAllSecrets(pid);
     env = { ...userSecrets, ...reserved };
+
+    stageLog(reqId, "secrets_loaded", startTime, {
+      envKeys: Object.keys(env).length,
+    });
   } catch (err) {
     log("run.secrets_failed", { reqId, pid, message: err.message });
     return res.status(500).json({ success: false, error: "Failed to load secrets" });
   }
 
   // ── Build REQ object ───────────────────────────────────────────
+  //
+  // IMPORTANT: the `authorization` header is forwarded so that user
+  // scripts (like notes.js) can validate their own bearer tokens
+  // via REQ.headers.authorization. Without this, any authenticated
+  // user script action returns 401 because the token never reaches
+  // the script.
   const reqObj = {
     route,
     method: req.method,
     headers: {
       "content-type": req.headers["content-type"] || "",
       "user-agent": (req.headers["user-agent"] || "").slice(0, 200),
+      "authorization": req.headers["authorization"] || "",
     },
     body: typeof req.body === "object" && req.body !== null ? req.body : {},
     query: req.query || {},
@@ -974,7 +1237,10 @@ export default async function handler(req, res) {
     totalBytes: ctx.publicFiles?.totalBytes || 0,
   };
 
+  stageLog(reqId, "env_built", startTime);
+
   const html = buildPageHtml({ userCode, env, files, reqObj });
+  stageLog(reqId, "html_built", startTime, { htmlBytes: html.length });
 
   // Body size check
   const bodyBytes = JSON.stringify(reqObj.body).length;
@@ -990,12 +1256,23 @@ export default async function handler(req, res) {
   let runResult = null;
 
   try {
-    browser = await launchBrowser();
+    stageLog(reqId, "browser_launch_started", startTime);
+
+    browser = await launchBrowser(reqId, startTime);
+
+    stageLog(reqId, "browser_launched", startTime);
+
     runResult = await runInPage(browser, {
       html,
       allowedHostsSet: declaredHostsSet,
       pid,
       reqId,
+      startTime,
+    });
+
+    stageLog(reqId, "page_executed", startTime, {
+      runOk: runResult?.ok || false,
+      errorMessage: runResult?.errorMessage || null,
     });
   } catch (err) {
     log("run.launch_or_execute_failed", { reqId, pid, route, message: err.message });
@@ -1008,6 +1285,7 @@ export default async function handler(req, res) {
     };
   } finally {
     await closeBrowserQuietly(browser);
+    stageLog(reqId, "browser_closed", startTime);
   }
 
   const durationMs = Date.now() - startTime;
@@ -1039,15 +1317,61 @@ export default async function handler(req, res) {
       message: runResult.errorMessage,
     });
 
+    // Record to the per-project API logs (user routes only)
+    if (ctx.isUserRoute && !ctx.isSystemRoute) {
+      recordApiLog(pid, {
+        route,
+        method: req.method,
+        status,
+        durationMs,
+        errorName: runResult.errorName || "Error",
+        errorMessage: runResult.errorMessage || null,
+        via: actor?.via || "anon",
+        // ── richer error context ──────────────────────────────
+        requestId: reqId,
+        stage: _lastStage,
+        bytesIn: bodyBytes,
+        bytesOut: 0,
+        fetchHosts: runResult.fetchHosts || [],
+        userAgent: (req.headers["user-agent"] || "").slice(0, 200),
+        ipHash: hashIp(getClientIp(req)),
+        deploymentId: ctx.deployment?.deploymentId || null,
+      }).catch(() => {});
+    }
+
     return res.status(status).json({ success: false, error: message, route });
   }
 
   // ── Response ───────────────────────────────────────────────────
+    // ── Response ───────────────────────────────────────────────────
   const { result } = runResult;
-  const responseBody =
-    typeof result.body === "string" ? result.body : JSON.stringify(result.body);
+
+  // FIX: responseBody must ALWAYS be a string. Previous code did
+  //   typeof result.body === "string" ? result.body : JSON.stringify(result.body)
+  // which returned `undefined` when result.body was undefined
+  // (JSON.stringify(undefined) === undefined), causing
+  // Buffer.byteLength(undefined) to throw a TypeError.
+  let responseBody;
+  if (typeof result?.body === "string") {
+    responseBody = result.body;
+  } else if (result?.body === undefined || result?.body === null) {
+    responseBody = "null";
+  } else {
+    try {
+      const s = JSON.stringify(result.body);
+      responseBody = typeof s === "string" ? s : "null";
+    } catch {
+      responseBody = "null";
+    }
+  }
+
+  // Defense in depth: if responseBody is still somehow not a string,
+  // coerce it now. This should never fire given the block above, but
+  // it guarantees Buffer.byteLength can't throw.
+  if (typeof responseBody !== "string") responseBody = String(responseBody);
+
   const responseBytes = Buffer.byteLength(responseBody, "utf8");
-  const responseStatus = Number(result.status) || 200;
+  const responseStatus = Number(result?.status) || 200;
 
   if (responseBytes > MAX_RESPONSE_BYTES) {
     await logProjectEvent(pid, actor?.uid || null, "api", `run.${route}`, {
@@ -1077,7 +1401,31 @@ export default async function handler(req, res) {
     via: actor?.via || "anon",
   });
 
-  res.setHeader("Content-Type", result.contentType || "application/json");
+  // Record to the per-project API logs (user routes only)
+  if (ctx.isUserRoute && !ctx.isSystemRoute) {
+    recordApiLog(pid, {
+      route,
+      method: req.method,
+      status: responseStatus,
+      durationMs,
+      errorName: null,
+      errorMessage: null,
+      via: actor?.via || "anon",
+      // ── richer success context ────────────────────────────
+      requestId: reqId,
+      stage: _lastStage,          // will be "completed"
+      bytesIn: bodyBytes,
+      bytesOut: responseBytes,
+      fetchHosts: runResult.fetchHosts || [],
+      userAgent: (req.headers["user-agent"] || "").slice(0, 200),
+      ipHash: hashIp(getClientIp(req)),
+      deploymentId: ctx.deployment?.deploymentId || null,
+    }).catch(() => {});
+  }
+
+  stageLog(reqId, "completed", startTime, { status: responseStatus, bytes: responseBytes });
+
+  res.setHeader("Content-Type", result?.contentType || "application/json");
   res.setHeader("X-Execution-Time", String(durationMs));
   res.setHeader("X-Fetch-Hosts", (runResult.fetchHosts || []).join(","));
 
