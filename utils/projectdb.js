@@ -231,9 +231,9 @@ export async function dbWritePath(pid, key, value) {
     throw err;
   }
 
-  // ── THE FIX ──────────────────────────────────────────────────────────
+  // ── FIX ──────────────────────────────────────────────────────────────
   // Firebase's update() treats keys containing "/" as nested paths and
-  // MERGES only the leaf, preserving sibling keys.
+  // MERGES only the leaf, preserving siblings.
   //
   // OLD (BROKEN): built a nested object { sessions: { <hash>: { lastActivityAt } } }
   //               and passed it to update() — this REPLACED sessions.<hash>
