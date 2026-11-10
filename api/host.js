@@ -147,7 +147,7 @@ const RESERVED_USERNAMES = new Set([
 const RESERVED_SLUGS = new Set([
   "api", "p", "register", "profile", "project", "projects", "tools",
   "settings", "analytics", "offline", "invite", "notifications", "icons",
-  "js", "css", "_next",
+  "js", "css", "_next", "__sandbox",
 ]);
 
 function slugifyProjectName(name) {
