@@ -467,9 +467,31 @@ export async function dbList(pid, path, opts = {}) {
   if (endAt != null) ref = ref.endAt(endAt);
 
   const snap = await ref.limitToFirst(clampLimit).once("value");
+
+  // ── SHAPE FIX ─────────────────────────────────────────────────────
+  // Return flat records. Each item is the value stored at `path/<key>`,
+  // with `_key` appended so callers that need the DB key still have it.
+  //
+  // OLD shape: { key, value }            ← callers did `.value.name`
+  // NEW shape: { ...record, _key: key }  ← callers do `.name` directly
+  //
+  // This is the shape every api/*.js caller in Folio already expects
+  // (they read `p.projectId`, `u.uid`, `t.taskId`, etc. — not
+  // `p.value.projectId`). Prior to this fix, every caller was receiving
+  // `undefined` for every field on every list call, silently.
+  // ─────────────────────────────────────────────────────────────────
   const items = [];
   if (snap.exists()) {
-    snap.forEach((c) => items.push({ key: c.key, value: c.val() }));
+    snap.forEach((c) => {
+      const v = c.val();
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        items.push({ ...v, _key: c.key });
+      } else {
+        // Primitive or array under this key — wrap so callers always
+        // get an object with `_key` available.
+        items.push({ _key: c.key, value: v });
+      }
+    });
   }
 
   return {
