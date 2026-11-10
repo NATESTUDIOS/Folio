@@ -21,6 +21,15 @@
 //    dbSchemaSet(pid, schema)                       → void
 //    dbCacheInvalidate(pid)                         → void
 //    setStorageWarningHandler(fn)                   → void
+//
+//  ⚠  NESTED WRITES (v2 fix — critical)
+//  dbWritePath and dbBatch MUST write via Firebase's `update()` with a
+//  FLAT path object, not a nested one. Firebase treats update() keys
+//  that contain "/" as nested paths and merges only the leaf, preserving
+//  siblings. Building a nested object `{ sessions: { <hash>: { lastActivityAt } } }`
+//  and passing it to update() REPLACES sessions.<hash> wholesale, wiping
+//  every other field. This was the source of the "session dies after
+//  first call" bug in production.
 // ═══════════════════════════════════════════════════════════════════
 
 import { db } from "./firebase.js";
@@ -211,11 +220,7 @@ export async function dbWritePath(pid, key, value) {
   }
 
   const safeParts = validateSegments(parts);
-
-  let nested = value === undefined ? null : value;
-  for (let i = safeParts.length - 1; i >= 0; i--) {
-    nested = { [safeParts[i]]: nested };
-  }
+  const path = safeParts.join("/");
 
   const serialized = JSON.stringify(value === undefined ? null : value);
   if (serialized.length > DB_MAX_SINGLE_WRITE_BYTES) {
@@ -226,14 +231,26 @@ export async function dbWritePath(pid, key, value) {
     throw err;
   }
 
-  await db.ref(`projectData/${pid}`).update(nested);
-  dbCacheApplyWrites(pid, { [safeParts.join("/")]: value === undefined ? null : value });
+  // ── THE FIX ──────────────────────────────────────────────────────────
+  // Firebase's update() treats keys containing "/" as nested paths and
+  // MERGES only the leaf, preserving sibling keys.
+  //
+  // OLD (BROKEN): built a nested object { sessions: { <hash>: { lastActivityAt } } }
+  //               and passed it to update() — this REPLACED sessions.<hash>
+  //               wholesale, wiping uid, expiresAt, createdAt, userAgent.
+  //
+  // NEW (CORRECT): flat path key { "sessions/<hash>/lastActivityAt": ts }
+  //                update() merges only the leaf; siblings survive.
+  // ─────────────────────────────────────────────────────────────────────
+  const flatUpdate = { [path]: value === undefined ? null : value };
+  await db.ref(`projectData/${pid}`).update(flatUpdate);
+  dbCacheApplyWrites(pid, flatUpdate);
 
   const finalSize = await computeDbSize(pid);
   const space = buildSpace(finalSize);
   await maybeWarnStorage(pid, finalSize);
 
-  return { finalSize, space, bytes: serialized.length, path: safeParts.join("/") };
+  return { finalSize, space, bytes: serialized.length, path };
 }
 
 export async function dbMerge(pid, data) {
@@ -350,6 +367,7 @@ export async function dbBatch(pid, updates) {
     throw err;
   }
 
+  // dbBatch already used flat path keys — this was correct. No change needed.
   await db.ref(`projectData/${pid}`).update(flat);
   dbCacheApplyWrites(pid, flat);
 
