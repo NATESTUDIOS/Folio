@@ -4228,3 +4228,12 @@ body.is-offline .offline-banner {
 [data-reduced-motion="true"] .btn-spinner,
 [data-reduced-motion="true"] .note-editor-overlay,
 [data-reduced-motion="true"] .note-card { animation: none !important; transition: none !important; }
+/* ═══════════════════════════════════════════════════════════
+   LIVE URL CARD — polish
+   ═══════════════════════════════════════════════════════════ */
+.live-url-card {
+  border-color: var(--theme-card-border);
+}
+.live-url-card .card-header .card-title svg {
+  color: var(--theme-primary);
+}
