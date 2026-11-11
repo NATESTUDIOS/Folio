@@ -3293,20 +3293,41 @@ async function releaseShortlink() {
   ];
 
   const DOCS_CONTENT = {
-    'getting-started': { title: 'Getting started', body: `
-<h2>What is Folio?</h2><p>Mobile-first code editor with real deployment. Write files, deploy, get a live URL and short link in one tap.</p>
-<h2>Three URLs, three jobs</h2><ul><li><strong>Editor</strong> — <code class="mono">foliostudios.vercel.app</code> — where you write code</li><li><strong>Live site</strong> — <code class="mono">foliosites.vercel.app/{username}/project/{slug}</code> — what visitors see</li><li><strong>Short link</strong> — <code class="mono">folio.xo.je/{key}</code> — what you share</li></ul>
-<h2>Your first deploy</h2><ol><li>Create a project</li><li>Add <code class="mono">index.html</code></li><li>Click Deploy</li><li>Copy your live URL + short link from the result bar</li></ol>
-<h2>Two ways to call your API</h2><pre><code>POST https://foliostudios.vercel.app/{username}/project/{slug}/api/{route}
-POST https://foliostudios.vercel.app/api/{pid}/{route}</code></pre>
-<p>The <strong>friendly URL</strong> uses your username + slug. The <strong>direct URL</strong> uses the pid — faster first call, no lookup.</p>
-<h2>First API route</h2><pre><code>// api/hello.js
-return { message: "Hello from the server!" };</code></pre>
-<p>Deploy. Call it:</p>
+  'getting-started': { title: 'Getting started', body: `
+<h2>What is Folio?</h2>
+<p>Mobile-first code editor with real deployment. Write files, deploy, and get a live URL plus a short link in one tap. Your project runs on its own domain, installs as a PWA, and can call external APIs from a sandboxed server runtime.</p>
+<h2>Your project URLs</h2>
+<table class="db-table">
+  <thead><tr><th>What</th><th>URL</th><th>Used for</th></tr></thead>
+  <tbody>
+    <tr><td>Live site</td><td><code class="mono">foliosites.vercel.app/{username}/project/{slug}/</code></td><td>The actual deployed website</td></tr>
+    <tr><td>Share page</td><td><code class="mono">foliosites.vercel.app/{username}/{slug}</code></td><td>Info card to share — name, description, "Visit live site" button</td></tr>
+    <tr><td>Short link</td><td><code class="mono">folio.xo.je/{key}</code></td><td>Redirects straight to the live site</td></tr>
+    <tr><td>Your profile</td><td><code class="mono">foliosites.vercel.app/{username}</code></td><td>Public page listing your projects</td></tr>
+  </tbody>
+</table>
+<p>The share page and live site are controlled separately in <strong>Settings → Visibility</strong>. The short link is auto-created on your first deploy. All three keep working across re-deploys — only the destination updates.</p>
+<h2>Your first deploy</h2>
+<ol>
+  <li>Create a project</li>
+  <li>Add an <code class="mono">index.html</code> file</li>
+  <li>Click <strong>Deploy</strong></li>
+  <li>Copy your live URL + short link from the result bar</li>
+</ol>
+<h2>Calling your API</h2>
+<p>Any file in <code class="mono">api/</code> becomes a callable route. There is one URL form to remember:</p>
+<pre><code>https://foliosites.vercel.app/{username}/project/{slug}/api/{route}</code></pre>
+<p>If your HTML is served from your own live site, use the relative form:</p>
 <pre><code>const res = await fetch("/{username}/project/{slug}/api/hello", { method: "POST" });
 const { message } = await res.json();</code></pre>
-<p>Whatever your script returns becomes the response. No handler, no res.json.</p>
-<h2>Wrap every script</h2><pre><code>const body = (REQ.body && typeof REQ.body === "object") ? REQ.body : {};
+<p>Same route, no full URL needed. Works from your deployed frontend and from any external tool.</p>
+<h2>First API route</h2>
+<pre><code>// api/hello.js
+return { message: "Hello from the server!" };</code></pre>
+<p>Deploy, then call it. Whatever your script returns becomes the response body. No handler, no <code class="mono">res.json()</code> — just <code class="mono">return</code>.</p>
+<h2>Wrap every script</h2>
+<p>Always close with a fallback return. If a branch falls through without returning, the response body is the string <code class="mono">"null"</code>.</p>
+<pre><code>const body = (REQ.body && typeof REQ.body === "object") ? REQ.body : {};
 const action = typeof body.action === "string" ? body.action : "";
 try {
   if (action === "hello") return { message: "hi" };
@@ -3314,59 +3335,184 @@ try {
 } catch (e) {
   return { __status: 500, error: "Script error: " + e.message };
 }</code></pre>
-<p>If a branch falls through without a return, the response body is the string <code class="mono">"null"</code>. Always close with a fallback return.</p>
 ` },
-    'project-setup': { title: 'Project setup', body: `
-<h2>Visibility axes</h2><p>Five independent switches in Settings:</p><ul><li><strong>Profile</strong> — project appears on your public profile page</li><li><strong>Live site</strong> — visitors can open the deployed site</li><li><strong>Code</strong> — visitors can browse source files</li><li><strong>Languages</strong> — language breakdown shown</li><li><strong>DB</strong> — external clients can read the JSON database</li></ul>
-<h2>Metadata</h2><p>Used for share cards and SEO. Set from Overview → Identity or the Settings page.</p><ul><li>Title, description</li><li>OG image (generated via Flier or pasted)</li><li>Icon (preset or upload)</li><li>Primary file (which HTML is the entry point)</li></ul>
-<h2>Short link</h2><p>Claim a custom short URL from Settings → Short link. See the <strong>Short links</strong> docs section for details.</p>
-<h2>Collaborators</h2><p>Invite by username. Roles: <code class="mono">viewer</code>, <code class="mono">commenter</code>, <code class="mono">editor</code>. Only the owner can invite, remove, or delete.</p>
-<h2>API key</h2><p>Generate from Settings → API key. Shown once. Auto-stored as <code class="mono">ENV.FOLIO_API_KEY</code> in your secrets.</p>
+
+  'project-setup': { title: 'Project setup', body: `
+<h2>Visibility</h2>
+<p>Five independent switches in <strong>Settings</strong>. Each controls a different surface — turning one off doesn't affect the others.</p>
+<table class="db-table">
+  <thead><tr><th>Switch</th><th>Controls</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Profile</strong></td><td>Whether your share page (<code class="mono">foliosites.vercel.app/{username}/{slug}</code>) renders. When off, visitors get a 404.</td></tr>
+    <tr><td><strong>Live site</strong></td><td>Whether your deployed site (<code class="mono">foliosites.vercel.app/{username}/project/{slug}/</code>) is reachable. When off, visitors get a 404.</td></tr>
+    <tr><td><strong>Code</strong></td><td>Whether visitors can browse your source files.</td></tr>
+    <tr><td><strong>Languages</strong></td><td>Whether the language breakdown is shown on the share page and profile.</td></tr>
+    <tr><td><strong>DB</strong></td><td>Whether external clients can read your JSON database.</td></tr>
+  </tbody>
+</table>
+<h2>Metadata</h2>
+<p>Used for share cards, social previews, and search engines. Set from <strong>Overview → Identity</strong> or the <strong>Settings</strong> page.</p>
+<ul>
+  <li>Title and description</li>
+  <li>OG image (auto-generated, or paste your own HTTPS URL)</li>
+  <li>Icon (preset, upload, or from a URL)</li>
+  <li>Primary file — which HTML is the entry point</li>
+</ul>
+<h2>Short link</h2>
+<p>Claim a custom name from <strong>Settings → Short link</strong>. 3-30 lowercase letters and digits, must start with a letter. If the name is taken, you'll be shown three numbered alternatives. You can change or release it at any time. Released names become available to other projects.</p>
+<h2>Collaborators</h2>
+<p>Invite by username. Three roles:</p>
+<ul>
+  <li><strong>Viewer</strong> — can see the project but not edit</li>
+  <li><strong>Commenter</strong> — can see and comment</li>
+  <li><strong>Editor</strong> — can edit files, deploy, manage settings</li>
+</ul>
+<p>Only the owner can invite, remove collaborators, change visibility, or delete the project.</p>
+<h2>API key</h2>
+<p>Generate from <strong>Settings → API key</strong>. The key is shown once — copy it immediately. It's also auto-stored as <code class="mono">ENV.FOLIO_API_KEY</code> in your secrets so your <code class="mono">api/*.js</code> scripts can call Folio's own endpoints. Regenerate it if it ever leaks.</p>
 ` },
-    'deploying': { title: 'Deploying', body: `
-<h2>What a deploy does</h2><ol><li>Uploads all files to Firebase</li><li>Creates a version snapshot</li><li>Writes a deployment record</li><li>Creates or repoints the short link</li><li>Regenerates the OG image + thumbnail</li></ol>
-<h2>Deployment limit</h2><p>Only the <strong>5 most recent</strong> are kept. Older ones are pruned with their snapshots.</p>
-<h2>Preview URLs</h2><p>Each deployment has a preview URL with <code class="mono">?from={deploymentId}</code>. Editor-only.</p>
-<h2>Taking a site offline</h2><p>Owners can set the current deployment to <code class="mono">OFFLINE</code>. The URL stops working; the last live URL is kept in <code class="mono">previousUrl</code>.</p>
-<h2>What gets deployed</h2><ul><li>All files (system files like <code class="mono">notes.json</code> skipped)</li><li><code class="mono">api/*.js</code> as private routes</li><li><code class="mono">_system.js</code> auto-injected if missing</li></ul>
-<h2>Deploy progress</h2><p>The bottom-right progress bar shows percentage and elapsed time. You can navigate the dashboard while a deploy is running. Leaving the page triggers a confirmation dialog if a deploy is in-flight.</p>
+
+  'deploying': { title: 'Deploying', body: `
+<h2>What a deploy does</h2>
+<ol>
+  <li>Uploads all your files</li>
+  <li>Creates a version snapshot</li>
+  <li>Writes a deployment record</li>
+  <li>Creates or updates your short link</li>
+  <li>Regenerates your OG image and thumbnail</li>
+</ol>
+<h2>What gets deployed</h2>
+<ul>
+  <li>Every file under your project, except system files like <code class="mono">notes.json</code></li>
+  <li><code class="mono">api/*.js</code> files become private API routes</li>
+  <li>A default <code class="mono">api/_system.js</code> is auto-injected if you don't have one</li>
+</ul>
+<h2>Deployment limit</h2>
+<p>Only the <strong>5 most recent</strong> deployments are kept. Older ones — and their snapshots — are deleted automatically.</p>
+<h2>Preview URLs</h2>
+<p>Every deployment has its own snapshot. You can preview a specific deploy by appending <code class="mono">?from={deploymentId}</code> to your live URL. This is useful for comparing a new deploy against an older one before deciding to roll back.</p>
+<p><strong>Preview URLs require editor access.</strong> Signed-out visitors get a 404. Only you and your collaborators can open them.</p>
+<h2>Taking a site offline</h2>
+<p>From the Deploy tab you can take the current deployment offline. Your live URL stops working immediately. The last live URL is kept on the record so you can see what it used to be. Redeploy at any time to bring it back.</p>
+<h2>Deploy progress</h2>
+<p>A progress card shows percentage and elapsed time. You can navigate the dashboard while a deploy is running. If you try to leave the page mid-deploy, you'll get a confirmation dialog.</p>
+<h2>Redeploying a previous version</h2>
+<p>From the Deploy tab → History, click any past deployment to see details, or use the Redeploy button to roll back. The live site switches to that version immediately.</p>
 ` },
-    'files': { title: 'Files & assets', body: `
-<h2>Size limits</h2><table class="db-table"><thead><tr><th>Limit</th><th>Value</th></tr></thead><tbody><tr><td>Serve file</td><td>4 MB</td></tr><tr><td>Upload file</td><td>4 MB</td></tr><tr><td>API file</td><td>50 KB</td></tr><tr><td>API total</td><td>200 KB</td></tr><tr><td>API file count</td><td>10</td></tr></tbody></table>
-<h2>Binary uploads</h2><p>Images, PDFs, fonts, video, audio are automatically routed through the CDN. Stored as HTTPS URLs, not base64.</p>
-<h2>Reserved paths</h2><ul><li><code class="mono">api/</code> — private API routes</li><li><code class="mono">notes.json</code> — managed by the Notes tab</li><li><code class="mono">.gitkeep</code> / <code class="mono">.keep</code> — placeholders, skipped on deploy</li></ul>
-<h2>What gets served</h2><p>Every file under <code class="mono">files/{pid}</code> is served from <code class="mono">foliosites.vercel.app/{username}/project/{slug}/path</code>. HTML gets meta injection + tracking. CSS gets URL rewriting. Binary returns the stored URL or data URI.</p>
+
+  'files': { title: 'Files & assets', body: `
+<h2>Size limits</h2>
+<table class="db-table">
+  <thead><tr><th>Limit</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Serve file (per request)</td><td>4 MB</td></tr>
+    <tr><td>Upload file (per file)</td><td>4 MB</td></tr>
+    <tr><td>API file (per <code class="mono">api/*.js</code>)</td><td>50 KB</td></tr>
+    <tr><td>API total (<code class="mono">api/</code> folder)</td><td>200 KB</td></tr>
+    <tr><td>API file count</td><td>10 (including <code class="mono">_system.js</code>)</td></tr>
+  </tbody>
+</table>
+<h2>Binary uploads</h2>
+<p>Images, PDFs, fonts, video, and audio are automatically routed through the CDN. They're stored as HTTPS URLs, not base64 strings. Reference them normally in HTML or CSS — no special handling needed.</p>
+<h2>Reserved paths</h2>
+<ul>
+  <li><code class="mono">api/</code> — private API routes. Never served as files.</li>
+  <li><code class="mono">notes.json</code> — managed by the Notes tab</li>
+  <li><code class="mono">.gitkeep</code> and <code class="mono">.keep</code> — placeholder files, skipped on deploy</li>
+</ul>
+<h2>What URL loads what</h2>
+<p>Every file in your project is reachable at a URL that mirrors its path:</p>
+<table class="db-table">
+  <thead><tr><th>URL</th><th>Loads</th></tr></thead>
+  <tbody>
+    <tr><td><code class="mono">/{username}/project/{slug}/</code></td><td>Your <code class="mono">index.html</code></td></tr>
+    <tr><td><code class="mono">/{username}/project/{slug}/about.html</code></td><td>The <code class="mono">about.html</code> file</td></tr>
+    <tr><td><code class="mono">/{username}/project/{slug}/assets/style.css</code></td><td>The CSS file, served verbatim</td></tr>
+    <tr><td><code class="mono">/{username}/project/{slug}/subfolder</code></td><td>A folder listing (if the live site is public)</td></tr>
+  </tbody>
+</table>
+<p>Relative paths in your HTML and CSS are rewritten automatically. If your HTML has <code class="mono">&lt;link href="assets/style.css"&gt;</code>, it resolves to <code class="mono">foliosites.vercel.app/{username}/project/{slug}/assets/style.css</code> without you needing to change anything.</p>
+<h2>HTML and CSS processing</h2>
+<ul>
+  <li><strong>HTML</strong> — your metadata (title, description, OG tags) is injected automatically, and a small analytics tracker is added so you get traffic numbers</li>
+  <li><strong>CSS</strong> — <code class="mono">url(...)</code> references are rewritten to absolute URLs so relative assets work</li>
+  <li><strong>Everything else</strong> — served as-is</li>
+</ul>
 ` },
-    'secrets': { title: 'Secrets', body: `
-<h2>Private vs public</h2><ul><li><strong>Private</strong> — only in <code class="mono">ENV</code> from <code class="mono">api/*.js</code></li><li><strong>Public</strong> — also injected as <code class="mono">window.__SECRETS__</code> in served HTML (when injection is on)</li></ul>
-<h2>Access from API</h2><pre><code>const key = ENV.OPENAI_API_KEY;</code></pre>
-<h2>Access from frontend</h2><pre><code>const k = window.__SECRETS__ && window.__SECRETS__.STRIPE_PUBLISHABLE_KEY;</code></pre>
-<h2>Reserved ENV names</h2><p>Auto-injected at runtime. Users cannot create secrets with these names.</p><ul><li><code class="mono">PROJECT_ID</code>, <code class="mono">PROJECT_NAME</code>, <code class="mono">PROJECT_SLUG</code>, <code class="mono">PROJECT_URL</code></li><li><code class="mono">OWNER_USERNAME</code>, <code class="mono">OWNER_UID</code></li><li><code class="mono">DEPLOYMENT_ID</code>, <code class="mono">DEPLOYMENT_URL</code></li><li><code class="mono">FOLIO_BASE_URL</code>, <code class="mono">FOLIO_API_URL</code></li><li><code class="mono">API_ROUTE</code>, <code class="mono">REQUEST_ID</code>, <code class="mono">FOLIO_API_KEY</code></li></ul>
-<h2>Limits</h2><ul><li>16 KB per value</li><li>512 KB total per project</li><li>50 secrets max</li></ul>
-<h2>Auth secrets (for user accounts)</h2><p>If your app has user accounts, set these as secrets:</p><ul><li><code class="mono">PASSWORD_SALT</code> — 16+ chars, never change after users register</li><li><code class="mono">SESSION_SECRET</code> — 16+ chars, rotating signs everyone out</li></ul>
+
+  'secrets': { title: 'Secrets', body: `
+<h2>What secrets are for</h2>
+<p>API keys, tokens, and config values that should never appear in your source. Store them once, use them from <code class="mono">api/*.js</code> as <code class="mono">ENV.NAME</code>. Encrypted at rest.</p>
+<h2>Private vs public</h2>
+<ul>
+  <li><strong>Private</strong> — only visible inside <code class="mono">api/*.js</code> as <code class="mono">ENV.NAME</code></li>
+  <li><strong>Public</strong> — also injected into served HTML as <code class="mono">window.__SECRETS__.NAME</code> (only if injection is enabled in Settings)</li>
+</ul>
+<p>Use private for anything sensitive (OpenAI keys, session secrets). Use public only for values that are safe to expose in page source (Stripe publishable key, public API base URLs).</p>
+<h2>Access from API</h2>
+<pre><code>const key = ENV.OPENAI_API_KEY;</code></pre>
+<h2>Access from frontend</h2>
+<p>Only for secrets marked <strong>public</strong>, and only when injection is on:</p>
+<pre><code>const k = window.__SECRETS__ && window.__SECRETS__.STRIPE_PUBLISHABLE_KEY;</code></pre>
+<h2>Reserved ENV names</h2>
+<p>These are auto-injected at runtime. You can't create secrets with these names.</p>
+<ul>
+  <li><code class="mono">PROJECT_ID</code>, <code class="mono">PROJECT_NAME</code>, <code class="mono">PROJECT_SLUG</code>, <code class="mono">PROJECT_URL</code></li>
+  <li><code class="mono">OWNER_USERNAME</code>, <code class="mono">OWNER_UID</code></li>
+  <li><code class="mono">DEPLOYMENT_ID</code>, <code class="mono">DEPLOYMENT_URL</code></li>
+  <li><code class="mono">FOLIO_BASE_URL</code>, <code class="mono">FOLIO_API_URL</code></li>
+  <li><code class="mono">API_ROUTE</code>, <code class="mono">REQUEST_ID</code>, <code class="mono">FOLIO_API_KEY</code></li>
+</ul>
+<h2>Limits</h2>
+<ul>
+  <li>16 KB per value</li>
+  <li>512 KB total per project</li>
+  <li>50 secrets max</li>
+</ul>
+<h2>For user-account apps</h2>
+<p>If your project has its own user login, store these as secrets:</p>
+<ul>
+  <li><code class="mono">PASSWORD_SALT</code> — 16+ chars. <strong>Never change after users register</strong> or their passwords stop working.</li>
+  <li><code class="mono">SESSION_SECRET</code> — 16+ chars. Rotating this signs everyone out.</li>
+</ul>
 <pre><code>if (!ENV.PASSWORD_SALT || ENV.PASSWORD_SALT.length < 16) {
   return { __status: 500, error: "PASSWORD_SALT not configured" };
 }</code></pre>
-<h2>Never return ENV directly</h2><p>To inspect which secrets exist (names only):</p><pre><code>return { envKeys: Object.keys(ENV || {}) };</code></pre>
+<h2>Never return ENV directly</h2>
+<p>Your whole <code class="mono">ENV</code> object contains private secrets. If you want to debug which secrets exist, return only the names:</p>
+<pre><code>return { envKeys: Object.keys(ENV || {}) };</code></pre>
 ` },
-    'data-api': { title: 'Data API', body: `
-<h2>What it is</h2><p>Per-project key/value store. Firebase Realtime Database. 15 MB per project. Read and write from <code class="mono">api/*.js</code> via fetch — the runtime intercepts these calls in-process.</p>
-<h2>Read the whole tree</h2><pre><code>const BASE = ENV.FOLIO_BASE_URL;
+
+  'data-api': { title: 'Data API', body: `
+<h2>What it is</h2>
+<p>Per-project key/value database. Up to <strong>15 MB</strong> per project. Accessible from <code class="mono">api/*.js</code> via <code class="mono">fetch</code> — the runtime handles the calls in-process, so no external network round-trip.</p>
+<p>Firebase Realtime Database under the hood. That means no native arrays (they become <code class="mono">{"0":…,"1":…}</code>) and writing <code class="mono">null</code> deletes a path.</p>
+<h2>Reading from your API route</h2>
+<p><strong>The DB is only accessible from <code class="mono">api/*.js</code>.</strong> Your frontend can't read it directly — you need to write a route that reads it and returns JSON. This is intentional: it lets you gate access on auth, rate limits, or any logic you want.</p>
+<pre><code>// api/load-todos.js
+const BASE = ENV.FOLIO_BASE_URL;
 const r = await fetch(BASE + "/api/host?action=db/get&pid=" + ENV.PROJECT_ID);
 const { data } = await r.json();
-const users = data.users || {};</code></pre>
-<p><strong>Always use an absolute URL</strong> built from <code class="mono">ENV.FOLIO_BASE_URL</code>. Relative URLs throw in the sandbox.</p>
-<h2>Write a single path</h2><pre><code>await fetch(BASE + "/api/host?action=db/set", {
+return { todos: data.todos || {} };</code></pre>
+<p>Then call it from your frontend:</p>
+<pre><code>const { todos } = await (await fetch("/{username}/project/{slug}/api/load-todos", { method: "POST" })).json();</code></pre>
+<p><strong>Always use an absolute URL</strong> built from <code class="mono">ENV.FOLIO_BASE_URL</code>. Relative URLs throw inside the sandbox.</p>
+<h2>Write a single path</h2>
+<pre><code>await fetch(BASE + "/api/host?action=db/set", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ pid: ENV.PROJECT_ID, key: "todos/123", value: { text: "Buy milk", done: false } }),
 });</code></pre>
-<h2>Delete a path</h2><p>Write <code class="mono">null</code>:</p><pre><code>await fetch(BASE + "/api/host?action=db/set", {
+<h2>Delete a path</h2>
+<p>Write <code class="mono">null</code>:</p>
+<pre><code>await fetch(BASE + "/api/host?action=db/set", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ pid: ENV.PROJECT_ID, key: "todos/123", value: null }),
 });</code></pre>
-<h2>Atomic multi-write</h2><pre><code>await fetch(BASE + "/api/host?action=db/batch", {
+<h2>Atomic multi-write</h2>
+<p>Update several paths in one round-trip. Either all succeed or all fail.</p>
+<pre><code>await fetch(BASE + "/api/host?action=db/batch", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -3377,123 +3523,398 @@ const users = data.users || {};</code></pre>
     ],
   }),
 });</code></pre>
-<h2>Atomic increment</h2><pre><code>await fetch(BASE + "/api/host?action=db/increment", {
+<h2>Atomic increment</h2>
+<p>Safe for concurrent counters — two calls arriving at the same time both land correctly.</p>
+<pre><code>await fetch(BASE + "/api/host?action=db/increment", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ pid: ENV.PROJECT_ID, key: "counters/views", by: 1 }),
 });</code></pre>
-<h2>Compare-and-swap</h2><pre><code>await fetch(BASE + "/api/host?action=db/cas", {
+<h2>Compare-and-swap</h2>
+<p>Safe for concurrent edits. Only writes if the current value matches what you expected — otherwise returns a 409 with the current value so you can retry.</p>
+<pre><code>await fetch(BASE + "/api/host?action=db/cas", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ pid: ENV.PROJECT_ID, key: "todos/123", expected: oldValue, value: newValue }),
-});
-// 409 if expected doesn't match current</code></pre>
-<h2>Cache external API responses</h2><pre><code>const cacheUrl = BASE + "/api/host?action=db/get&pid=" + ENV.PROJECT_ID;
+});</code></pre>
+<h2>Cache external API responses</h2>
+<p>Save on external API calls by caching the response in your DB with a timestamp:</p>
+<pre><code>const cacheUrl = BASE + "/api/host?action=db/get&pid=" + ENV.PROJECT_ID;
 const cached = await (await fetch(cacheUrl)).json();
 const hit = cached.data?.cache?.weather;
-if (hit && Date.now() - hit.at < 60000) return { data: hit.data, cached: true };
-const fresh = await (await fetch("https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41")).json();
+if (hit && Date.now() - hit.at &lt; 60000) return { data: hit.data, cached: true };
+const fresh = await (await fetch("https://api.open-meteo.com/v1/forecast?latitude=52.52&amp;longitude=13.41")).json();
 await fetch(BASE + "/api/host?action=db/set", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ pid: ENV.PROJECT_ID, key: "cache/weather", value: { data: fresh, at: Date.now() } }),
 });
 return { data: fresh, cached: false };</code></pre>
-<h2>Reading from the frontend</h2><pre><code>const r = await fetch("/api/host?action=db/get&pid=" + YOUR_PID);
-const { data } = await r.json();</code></pre>
-<h2>Rules</h2><ul><li>Firebase doesn't support arrays — they become <code class="mono">{"0":…,"1":…}</code></li><li>Writing <code class="mono">null</code> deletes the path</li><li>Key segments can't contain <code class="mono">. # $ / [ ]</code></li><li>Only <code class="mono">action=db/*</code> endpoints are allowed from <code class="mono">api/*.js</code></li><li>Max 15 MB per project, 100 writes/min</li></ul>
+<h2>Rules</h2>
+<ul>
+  <li>Arrays become objects with numeric keys — always check with <code class="mono">Array.isArray()</code> or use <code class="mono">Object.values()</code></li>
+  <li>Writing <code class="mono">null</code> deletes the path</li>
+  <li>Key segments can't contain <code class="mono">. # $ / [ ]</code></li>
+  <li>Only <code class="mono">action=db/*</code> endpoints are allowed from <code class="mono">api/*.js</code></li>
+  <li>Max 15 MB per project, 100 writes per minute</li>
+</ul>
 ` },
-    'private-api': { title: 'Private API', body: `
-<h2>What it is</h2><p><code class="mono">api/*.js</code> files are private: never served, only executed when called. Runtime is headless Chromium at <code class="mono">about:blank</code> — a non-secure context.</p>
-<h2>Sandbox restrictions</h2><table class="db-table"><thead><tr><th>Unavailable</th><th>Use instead</th></tr></thead><tbody><tr><td><code class="mono">crypto.subtle</code></td><td>Pure-JS SHA-256 (see Examples)</td></tr><tr><td><code class="mono">crypto.randomUUID</code></td><td><code class="mono">crypto.getRandomValues</code>-based UUID</td></tr><tr><td>Relative fetch URLs</td><td><code class="mono">ENV.FOLIO_BASE_URL + "/api/…"</code></td></tr></tbody></table>
-<h2>Allowed external hosts</h2><p>Four tiers:</p><ol><li><strong>Built-in</strong> — <code class="mono">api.openai.com</code>, <code class="mono">api.groq.com</code>, <code class="mono">api.anthropic.com</code>, <code class="mono">api.stripe.com</code>, <code class="mono">api.paystack.co</code>, <code class="mono">api.supabase.co</code>, <code class="mono">api.resend.com</code>, <code class="mono">api.github.com</code>, <code class="mono">raw.githubusercontent.com</code>, <code class="mono">gist.githubusercontent.com</code></li><li><strong>Trusted image hosts</strong> — <code class="mono">picsum.photos</code>, <code class="mono">images.unsplash.com</code>, <code class="mono">images.pexels.com</code>, <code class="mono">cdn.pixabay.com</code>, <code class="mono">upload.wikimedia.org</code></li><li><strong>Allowed import CDNs</strong> — <code class="mono">cdn.jsdelivr.net</code>, <code class="mono">esm.sh</code>, <code class="mono">unpkg.com</code>, <code class="mono">cdnjs.cloudflare.com</code>, <code class="mono">ga.jspm.io</code>, <code class="mono">cdn.skypack.dev</code></li><li><strong>Per-project</strong> — anything detected from your script or added via dashboard</li></ol>
-<h2>Three ways to allow a host</h2><ol><li><strong>Already trusted</strong> — no declaration needed. Just call.</li><li><strong>Literal URL in your script</strong> — auto-detected on deploy:<pre><code>const r = await fetch("https://api.weather.com/v1/today");</code></pre></li><li><strong>Dynamic host</strong> — must be declared:<pre><code>// @allow api.example.com
+
+  'private-api': { title: 'Private API', body: `
+<h2>What it is</h2>
+<p>Files in <code class="mono">api/</code> become private routes. They're never served as files — only executed when called. Your script runs in an isolated browser sandbox, not on the raw server.</p>
+<h2>How to call your routes</h2>
+<p>Every <code class="mono">api/name.js</code> file is reachable at:</p>
+<pre><code>https://foliosites.vercel.app/{username}/project/{slug}/api/{name}</code></pre>
+<p>From your own frontend, use the relative form:</p>
+<pre><code>const res = await fetch("/{username}/project/{slug}/api/{name}", { method: "POST" });</code></pre>
+<p>From any external tool (curl, Postman, a backend server), use the full URL. Same route, same script, same response.</p>
+<h2>Sandbox restrictions</h2>
+<p>Your script runs in a browser sandbox, not a full Node.js environment. A few things you might expect aren't available:</p>
+<table class="db-table">
+  <thead><tr><th>Unavailable</th><th>Use instead</th></tr></thead>
+  <tbody>
+    <tr><td><code class="mono">crypto.subtle</code></td><td>Pure-JS SHA-256 (see Examples)</td></tr>
+    <tr><td><code class="mono">crypto.randomUUID</code></td><td><code class="mono">crypto.getRandomValues</code>-based UUID (see Examples)</td></tr>
+    <tr><td>Relative fetch URLs</td><td><code class="mono">ENV.FOLIO_BASE_URL + "/api/…"</code></td></tr>
+  </tbody>
+</table>
+<h2>External hosts you can reach</h2>
+<p>By default you can call a curated list of well-known APIs and image hosts. Anything else needs to be allowed.</p>
+<p><strong>Already trusted (no declaration needed):</strong> OpenAI, Groq, Anthropic, Stripe, Paystack, Supabase, Resend, GitHub, and a few image CDNs like picsum.photos, unsplash, pexels.</p>
+<p><strong>Import CDNs (already trusted):</strong> <code class="mono">cdn.jsdelivr.net</code>, <code class="mono">esm.sh</code>, <code class="mono">unpkg.com</code>, <code class="mono">cdnjs.cloudflare.com</code>, <code class="mono">ga.jspm.io</code>, <code class="mono">cdn.skypack.dev</code>.</p>
+<h2>Three ways to allow a host</h2>
+<ol>
+  <li><strong>Already trusted</strong> — just call it. No setup.</li>
+  <li><strong>Literal URL in your script</strong> — auto-detected on deploy:
+    <pre><code>const r = await fetch("https://api.weather.com/v1/today");</code></pre>
+  </li>
+  <li><strong>Dynamic host</strong> — must be declared with a comment:
+    <pre><code>// @allow api.example.com
 const host = REQ.body.host || "api.example.com";
-const r = await fetch("https://" + host + "/v1/data");</code></pre></li></ol>
-<h2>Detected (and missed) patterns</h2><table class="db-table"><thead><tr><th>Pattern</th><th>Auto-detected?</th></tr></thead><tbody><tr><td><code class="mono">fetch("https://api.x.com/v1")</code></td><td>✅</td></tr><tr><td><code class="mono">fetch("https://api.x.com/v1?id=" + id)</code></td><td>✅</td></tr><tr><td><code class="mono">const u = "https://api.x.com/v1"; fetch(u)</code></td><td>✅</td></tr><tr><td><code class="mono">fetch("https://" + H + "/v1")</code></td><td>❌ — needs <code class="mono">@allow</code></td></tr><tr><td><code class="mono">fetch(REQ.body.url)</code></td><td>❌ — user-controlled</td></tr></tbody></table>
-<h2>Importing from CDNs</h2><pre><code>import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";
+const r = await fetch("https://" + host + "/v1/data");</code></pre>
+  </li>
+</ol>
+<h2>What's detected automatically</h2>
+<table class="db-table">
+  <thead><tr><th>Pattern</th><th>Auto-detected?</th></tr></thead>
+  <tbody>
+    <tr><td><code class="mono">fetch("https://api.x.com/v1")</code></td><td>✅</td></tr>
+    <tr><td><code class="mono">fetch("https://api.x.com/v1?id=" + id)</code></td><td>✅</td></tr>
+    <tr><td><code class="mono">const u = "https://api.x.com/v1"; fetch(u)</code></td><td>✅</td></tr>
+    <tr><td><code class="mono">fetch("https://" + H + "/v1")</code></td><td>❌ — needs <code class="mono">// @allow</code></td></tr>
+    <tr><td><code class="mono">fetch(REQ.body.url)</code></td><td>❌ — user-controlled</td></tr>
+  </tbody>
+</table>
+<h2>Importing from CDNs</h2>
+<pre><code>import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";
 return { html: marked(REQ.body.md) };</code></pre>
-<h2>Response shape</h2><table class="db-table"><thead><tr><th>Return</th><th>Status</th><th>Content-Type</th></tr></thead><tbody><tr><td><code class="mono">{ success: true }</code></td><td>200</td><td>application/json</td></tr><tr><td><code class="mono">"hello"</code></td><td>200</td><td>text/plain</td></tr><tr><td><code class="mono">{ __status: 404, __body: "x", error: "x" }</code></td><td>404</td><td>application/json</td></tr><tr><td><code class="mono">{ __contentType: "text/html", __body: "<h1>Hi</h1>" }</code></td><td>200</td><td>text/html</td></tr></tbody></table>
-<h2>_system.js</h2><p>Auto-created. Six free routes:</p><ul><li><code class="mono">GET /api/health</code> — <code class="mono">{ status, pid, deployed, responseMs }</code></li><li><code class="mono">GET /api/whoami</code> — <code class="mono">{ pid, name, deployedAt, apiVersion }</code></li><li><code class="mono">GET /api/files</code> — <code class="mono">{ files, count, totalBytes }</code></li><li><code class="mono">GET /api/status</code> — richer health</li><li><code class="mono">GET /api/version</code> — <code class="mono">{ deploymentId, deployedAt, url }</code></li><li><code class="mono">GET /api/robots</code> — plain text robots.txt</li></ul>
-<h2>File rules</h2><ul><li>Flat folder — no subfolders</li><li>Lowercase, <code class="mono">.js</code> only</li><li>No <code class="mono">_</code> prefix except <code class="mono">_system.js</code></li><li>Reserved: <code class="mono">index.js</code>, <code class="mono">run.js</code>, <code class="mono">health.js</code>, <code class="mono">whoami.js</code>, <code class="mono">files.js</code>, <code class="mono">status.js</code>, <code class="mono">version.js</code>, <code class="mono">robots.js</code></li><li>Max 10 files, 50 KB each, 200 KB total</li></ul>
+<h2>How your return value becomes the response</h2>
+<table class="db-table">
+  <thead><tr><th>What you return</th><th>Status</th><th>Content-Type</th></tr></thead>
+  <tbody>
+    <tr><td><code class="mono">{ success: true }</code></td><td>200</td><td>application/json</td></tr>
+    <tr><td><code class="mono">"hello"</code></td><td>200</td><td>text/plain</td></tr>
+    <tr><td><code class="mono">{ __status: 404, __body: "x", error: "x" }</code></td><td>404</td><td>application/json</td></tr>
+    <tr><td><code class="mono">{ __contentType: "text/html", __body: "&lt;h1&gt;Hi&lt;/h1&gt;" }</code></td><td>200</td><td>text/html</td></tr>
+  </tbody>
+</table>
+<h2>_system.js — your free default routes</h2>
+<p>Auto-created if you don't have one. Provides six routes you don't have to write:</p>
+<ul>
+  <li><code class="mono">GET /api/health</code> — <code class="mono">{ status, pid, deployed, responseMs }</code></li>
+  <li><code class="mono">GET /api/whoami</code> — <code class="mono">{ pid, name, deployedAt, apiVersion }</code></li>
+  <li><code class="mono">GET /api/files</code> — <code class="mono">{ files, count, totalBytes }</code></li>
+  <li><code class="mono">GET /api/status</code> — richer health info</li>
+  <li><code class="mono">GET /api/version</code> — <code class="mono">{ deploymentId, deployedAt, url }</code></li>
+  <li><code class="mono">GET /api/robots</code> — plain text robots.txt</li>
+</ul>
+<p>Example: <code class="mono">GET https://foliosites.vercel.app/{username}/project/{slug}/api/health</code></p>
+<h2>File rules for api/</h2>
+<ul>
+  <li>Flat folder — no subfolders</li>
+  <li>Lowercase, <code class="mono">.js</code> only</li>
+  <li>No <code class="mono">_</code> prefix except <code class="mono">_system.js</code></li>
+  <li>Reserved names: <code class="mono">index.js</code>, <code class="mono">run.js</code>, <code class="mono">health.js</code>, <code class="mono">whoami.js</code>, <code class="mono">files.js</code>, <code class="mono">status.js</code>, <code class="mono">version.js</code>, <code class="mono">robots.js</code></li>
+  <li>Max 10 files, 50 KB each, 200 KB total</li>
+</ul>
 ` },
-    'shortlinks': { title: 'Short links', body: `
-<h2>What it is</h2><p>A custom short URL on <code class="mono">folio.xo.je</code> that redirects to your live site. Auto-created on first deploy using your project slug, or you can claim a custom name from Settings.</p>
-<h2>Claiming a name</h2><ol><li>Open Settings → Short link</li><li>Enter 3-30 lowercase chars, starts with a letter</li><li>Click Claim</li><li>If taken, pick from 3 suggestions or try another</li></ol>
-<h2>Release</h2><p>Settings → Short link → Release. The short link stops working immediately. Another project can claim it.</p>
-<h2>Naming strategies</h2><ul><li><code class="mono">custom</code> — user-chosen name, no auto-numbering</li><li><code class="mono">proj</code> — auto from project slug (used on deploy)</li></ul>
-<h2>Collision handling</h2><p>If a name is taken, the API returns 409 with 3 suggested numbered variants. Frontend shows a picker modal.</p>
-<h2>Rate limits</h2><ul><li>Claim: 15/min per project</li><li>Release: 10/min</li><li>Info: 120/min</li></ul>
-<h2>Click tracking</h2><p>Each visit increments a counter on the shortlink record. Not real-time — batched on the shortlink API.</p>
-<h2>Reserved names</h2><p>Blocked: <code class="mono">api</code>, <code class="mono">www</code>, <code class="mono">admin</code>, <code class="mono">login</code>, <code class="mono">register</code>, <code class="mono">settings</code>, <code class="mono">dashboard</code>, <code class="mono">help</code>, <code class="mono">docs</code>, and similar.</p>
+
+  'shortlinks': { title: 'Short links', body: `
+<h2>What it is</h2>
+<p>A short, memorable URL on <code class="mono">folio.xo.je</code> that redirects to your <strong>live site</strong> — not the share page. So <code class="mono">folio.xo.je/portfolio</code> lands directly on your deployed website.</p>
+<p>A short link is automatically created on your first deploy, based on your project slug. You can claim a custom name from Settings at any time.</p>
+<h2>Claiming a name</h2>
+<ol>
+  <li>Open <strong>Settings → Short link</strong></li>
+  <li>Enter 3-30 lowercase letters and digits, starting with a letter</li>
+  <li>Click <strong>Claim</strong></li>
+  <li>If taken, pick from three numbered suggestions or try another name</li>
+</ol>
+<h2>Changing and releasing</h2>
+<p>From the same Settings section:</p>
+<ul>
+  <li><strong>Change</strong> — pick a new name for the same project. The old name is freed immediately.</li>
+  <li><strong>Release</strong> — frees the name so another project can claim it. <strong>Your short link stops working immediately</strong> — anyone visiting it sees a 404.</li>
+</ul>
+<h2>Reserved names</h2>
+<p>A short list of names is blocked because they'd conflict with real services: <code class="mono">api</code>, <code class="mono">www</code>, <code class="mono">admin</code>, <code class="mono">login</code>, <code class="mono">register</code>, <code class="mono">settings</code>, <code class="mono">dashboard</code>, <code class="mono">help</code>, <code class="mono">docs</code>, and similar.</p>
+<h2>Click tracking</h2>
+<p>Every visit through your short link is counted. Click totals and last-access time appear in Settings → Short link. Counts are batched — not real-time, but accurate within a few seconds.</p>
+<h2>What happens on redeploy</h2>
+<p>Your short link stays the same across re-deploys. Only the destination URL updates to the new live deployment. Nobody who bookmarked your short link has to do anything.</p>
 ` },
-    'api-logs': { title: 'Logs & debugging', body: `
-<h2>Where to find logs</h2><ul><li><strong>API tab → Recent calls</strong> — last 50 user-route calls with filters</li><li><strong>Insights tab → Logs</strong> — project event log (deploys, secrets, DB writes)</li><li><strong>Vercel logs</strong> — structured per-request output</li></ul>
-<h2>Log entry fields</h2><table class="db-table"><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody><tr><td><code class="mono">route</code></td><td>API route name</td></tr><tr><td><code class="mono">status</code></td><td>Response code</td></tr><tr><td><code class="mono">durationMs</code></td><td>Total wall time</td></tr><tr><td><code class="mono">via</code></td><td><code class="mono">anon</code>, <code class="mono">session</code>, <code class="mono">api-key</code></td></tr><tr><td><code class="mono">requestId</code></td><td>Matches <code class="mono">X-Request-Id</code> header</td></tr><tr><td><code class="mono">stage</code></td><td>Last stage reached (useful for timeouts)</td></tr><tr><td><code class="mono">fetchHosts</code></td><td>External hosts the script actually hit</td></tr><tr><td><code class="mono">errorName</code> / <code class="mono">errorMessage</code></td><td>Thrown error — null if script returned cleanly</td></tr><tr><td><code class="mono">errorClass</code></td><td><code class="mono">timeout</code>, <code class="mono">rate_limit</code>, <code class="mono">syntax_error</code>, <code class="mono">blocked_host</code>, <code class="mono">network</code>, <code class="mono">server_error</code></td></tr></tbody></table>
-<h2>Reading logs from outside</h2><pre><code>GET /api/host?action=api-logs&pid={pid}&limit=20&offset=0
-GET /api/host?action=api-logs&pid={pid}&status=error
-GET /api/host?action=api-logs&pid={pid}&route=notes&via=api-key</code></pre>
-<h2>Debugging a timeout</h2><p>Functions cap at 30s (7s for user code). Look at the <code class="mono">stage</code> field. Common culprits: unresolved <code class="mono">await</code>, external fetch hang, Chromium cold start.</p>
-<h2>Debugging a blocked fetch</h2><p>Look for <code class="mono">run.host_blocked</code> in Vercel logs. If the host is trusted, something else failed. If it's dynamic, add <code class="mono">// @allow host.name</code> and redeploy.</p>
-<h2>Debugging a null response</h2><p>If the body is the string <code class="mono">"null"</code>, the script returned <code class="mono">undefined</code>. Wrap in try/catch with a fallback return.</p>
-<h2>Temporary debug action</h2><pre><code>if (REQ.body && REQ.body.action === "__debug") {
-  return { envKeys: Object.keys(ENV || {}), pid: ENV.PROJECT_ID, hasAuth: !!REQ.headers.authorization };
+
+  'api-logs': { title: 'Logs & debugging', body: `
+<h2>Where to find logs</h2>
+<ul>
+  <li><strong>API tab → Recent calls</strong> — last 50 requests to your API routes, with filters by route, status, and source</li>
+  <li><strong>Insights tab → Logs</strong> — project event log (deploys, secret changes, DB writes)</li>
+</ul>
+<h2>What each log entry tells you</h2>
+<table class="db-table">
+  <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code class="mono">route</code></td><td>Which API route was called</td></tr>
+    <tr><td><code class="mono">status</code></td><td>HTTP status code returned</td></tr>
+    <tr><td><code class="mono">durationMs</code></td><td>Total wall time for the call</td></tr>
+    <tr><td><code class="mono">via</code></td><td><code class="mono">anon</code>, <code class="mono">session</code>, or <code class="mono">api-key</code> — how the caller was authenticated</td></tr>
+    <tr><td><code class="mono">requestId</code></td><td>Unique ID for this call — useful for correlating with client-side errors</td></tr>
+    <tr><td><code class="mono">fetchHosts</code></td><td>External hosts your script actually called</td></tr>
+    <tr><td><code class="mono">errorName</code> / <code class="mono">errorMessage</code></td><td>The error thrown, if any</td></tr>
+    <tr><td><code class="mono">errorClass</code></td><td><code class="mono">timeout</code>, <code class="mono">rate_limit</code>, <code class="mono">syntax_error</code>, <code class="mono">blocked_host</code>, <code class="mono">network</code>, or <code class="mono">server_error</code></td></tr>
+  </tbody>
+</table>
+<h2>Debugging a timeout</h2>
+<p>Each function has 30 seconds total, and your script gets 7 seconds of that. If you see a <code class="mono">timeout</code> error, look at the last stage reached. Common culprits: an unresolved <code class="mono">await</code>, an external fetch that hangs, or a cold start that eats most of the budget.</p>
+<p><strong>Fixes:</strong> batch DB calls, reduce the number of external fetches, and add <code class="mono">AbortSignal.timeout(ms)</code> to external fetches so they fail fast.</p>
+<h2>Debugging a blocked fetch</h2>
+<p>If your script throws <code class="mono">TypeError: Failed to fetch</code>, the host you tried to reach wasn't on your allow list. Check whether the host is on the trusted list, add <code class="mono">// @allow host.name</code> above the fetch, and redeploy.</p>
+<h2>Debugging a null response</h2>
+<p>If your response body is the string <code class="mono">"null"</code>, your script returned <code class="mono">undefined</code>. This happens when a code branch falls through without a return. Add a fallback return at the end of every script.</p>
+<h2>Temporary debug action</h2>
+<p>While debugging, add an action that returns useful internals:</p>
+<pre><code>if (REQ.body && REQ.body.action === "__debug") {
+  return {
+    envKeys: Object.keys(ENV || {}),
+    pid: ENV.PROJECT_ID,
+    hasAuth: !!REQ.headers.authorization,
+  };
 }</code></pre>
-<p><strong>Remove before shipping</strong> — leaks env key names.</p>
+<p><strong>Remove this before shipping.</strong> It leaks the names of your secrets (not their values, but still shouldn't ship).</p>
 ` },
-    'limits': { title: 'Limits', body: `
-<h2>API folder</h2><ul><li>10 files max (incl <code class="mono">_system.js</code>)</li><li>50 KB per file</li><li>200 KB total</li><li>20 <code class="mono">@allow</code> lines per file</li><li>50 unique allowed hosts per project</li></ul>
-<h2>Runtime</h2><ul><li>Function timeout: 30 s</li><li>User code timeout: 7 s</li><li>Memory: 1024 MB</li><li>Max response: 5 MB</li><li>Max request body: 1 MB</li><li>Recursion depth: 3</li></ul>
-<h2>Rate limits (runtime)</h2><ul><li>Per session, per route: 10/min</li><li>Per session, all routes: 50/min</li><li>Per project: 500/hour</li><li>Per project: 2,000/day</li><li>Per project, per route: 100/hour</li></ul>
-<h2>Rate limits (hosting API)</h2><ul><li><code class="mono">deploy</code>: 10/hour</li><li><code class="mono">redeploy</code>: 10/hour</li><li><code class="mono">db/set</code>: 300/min</li><li><code class="mono">db/get</code>: 600/min</li><li><code class="mono">db/batch</code>: 100/min</li><li><code class="mono">db/cas</code>: 200/min</li><li><code class="mono">db/increment</code>: 300/min</li><li><code class="mono">secrets/set</code>: 20/hour</li><li><code class="mono">hosts/add</code>: 30/hour</li><li><code class="mono">shortlink/claim</code>: 15/min</li><li><code class="mono">shortlink/release</code>: 10/min</li></ul>
-<h2>Secrets</h2><ul><li>16 KB per value</li><li>512 KB total</li><li>50 max</li></ul>
-<h2>JSON DB</h2><ul><li>15 MB per project</li><li>2 MB per write</li><li>100 batch entries</li><li>100 writes/min</li></ul>
-<h2>Deployments</h2><ul><li>5 kept per project</li></ul>
-<h2>Logs</h2><ul><li>50 API log entries</li><li>200 project events</li></ul>
+
+  'limits': { title: 'Limits', body: `
+<h2>API folder</h2>
+<ul>
+  <li>10 files max (including <code class="mono">_system.js</code>)</li>
+  <li>50 KB per file</li>
+  <li>200 KB total</li>
+  <li>20 <code class="mono">@allow</code> lines per file</li>
+  <li>50 unique allowed hosts per project</li>
+</ul>
+<h2>Runtime</h2>
+<ul>
+  <li>Function timeout: 30 seconds</li>
+  <li>Your script's timeout: 7 seconds</li>
+  <li>Memory: 1024 MB</li>
+  <li>Max response size: 5 MB</li>
+  <li>Max request body: 1 MB</li>
+  <li>Recursion depth: 3</li>
+</ul>
+<h2>Rate limits — API runtime</h2>
+<ul>
+  <li>Per session, per route: 10/min</li>
+  <li>Per session, all routes: 50/min</li>
+  <li>Per project: 500/hour</li>
+  <li>Per project: 2,000/day</li>
+  <li>Per project, per route: 100/hour</li>
+</ul>
+<h2>Rate limits — hosting API</h2>
+<ul>
+  <li><code class="mono">deploy</code>: 10/hour</li>
+  <li><code class="mono">redeploy</code>: 10/hour</li>
+  <li><code class="mono">db/set</code>: 300/min</li>
+  <li><code class="mono">db/get</code>: 600/min</li>
+  <li><code class="mono">db/batch</code>: 100/min</li>
+  <li><code class="mono">db/cas</code>: 200/min</li>
+  <li><code class="mono">db/increment</code>: 300/min</li>
+  <li><code class="mono">secrets/set</code>: 20/hour</li>
+  <li><code class="mono">hosts/add</code>: 30/hour</li>
+  <li><code class="mono">shortlink/claim</code>: 15/min</li>
+  <li><code class="mono">shortlink/release</code>: 10/min</li>
+</ul>
+<h2>Secrets</h2>
+<ul>
+  <li>16 KB per value</li>
+  <li>512 KB total per project</li>
+  <li>50 secrets max</li>
+</ul>
+<h2>JSON database</h2>
+<ul>
+  <li>15 MB per project</li>
+  <li>2 MB per write</li>
+  <li>100 batch entries per call</li>
+  <li>100 writes per minute</li>
+</ul>
+<h2>Deployments and logs</h2>
+<ul>
+  <li>5 deployments kept per project</li>
+  <li>50 API log entries kept per project</li>
+  <li>200 project events kept per project</li>
+</ul>
 ` },
-    'errors': { title: 'Errors', body: `
-<h2>Runtime errors</h2><table class="db-table"><thead><tr><th>Cause</th><th>Status</th></tr></thead><tbody><tr><td>Script throws</td><td>500</td></tr><tr><td>Timeout (7s)</td><td>504</td></tr><tr><td>Blocked fetch</td><td>500 (script sees <code class="mono">TypeError: Failed to fetch</code>)</td></tr><tr><td>Route not found</td><td>404</td></tr><tr><td>Rate limited</td><td>429</td></tr><tr><td>Secrets failed to decrypt</td><td>500</td></tr><tr><td>Recursion limit</td><td>508</td></tr><tr><td>Response > 5 MB</td><td>413</td></tr><tr><td>Request body > 1 MB</td><td>413</td></tr></tbody></table>
-<h2>Common script errors</h2><table class="db-table"><thead><tr><th>Error</th><th>Fix</th></tr></thead><tbody><tr><td><code class="mono">Failed to parse URL from /api/…</code></td><td>Use <code class="mono">ENV.FOLIO_BASE_URL + "/api/…"</code></td></tr><tr><td><code class="mono">crypto.randomUUID is not a function</code></td><td>Use <code class="mono">crypto.getRandomValues</code>-based UUID</td></tr><tr><td><code class="mono">Cannot read properties of undefined (reading 'digest')</code></td><td><code class="mono">crypto.subtle</code> unavailable — pure-JS SHA-256</td></tr><tr><td><code class="mono">TypeError: Failed to fetch</code></td><td>Blocked host — add <code class="mono">@allow</code> or literal URL</td></tr><tr><td>Body is <code class="mono">"null"</code></td><td>Script returned undefined — add fallback return</td></tr><tr><td><code class="mono">Function timed out</code></td><td>Batch DB calls, reduce fetches</td></tr></tbody></table>
-<h2>Deploy errors</h2><ul><li>Invalid <code class="mono">@allow</code> host → 400, whole deploy rejected</li><li>Too many <code class="mono">@allow</code> lines → 400</li><li>Too many unique hosts → 400</li><li>Reserved file name → 400</li><li>File too large → 400</li></ul>
-<h2>What gets rejected by @allow</h2><ul><li>IP addresses</li><li>Hosts resolving to private IPs</li><li><code class="mono">localhost</code></li><li><code class="mono">*.vercel.app</code></li><li>Wildcards</li><li>Ports, paths</li><li>Non-HTTPS hosts</li></ul>
-<h2>Clean rejection vs thrown error</h2><p><code class="mono">return { __status: 400, error: "Invalid" }</code> → client sees <code class="mono">{ error: "Invalid" }</code>, <code class="mono">errorName</code> null in log. That's a clean rejection.</p><p><code class="mono">throw new Error("boom")</code> → client sees 500, <code class="mono">errorName</code> + <code class="mono">errorMessage</code> populated in log.</p>
+
+  'errors': { title: 'Errors', body: `
+<h2>Runtime errors</h2>
+<table class="db-table">
+  <thead><tr><th>Cause</th><th>Status returned</th></tr></thead>
+  <tbody>
+    <tr><td>Your script throws</td><td>500</td></tr>
+    <tr><td>Timeout (7s)</td><td>504</td></tr>
+    <tr><td>Blocked fetch</td><td>500 (your script sees <code class="mono">TypeError: Failed to fetch</code>)</td></tr>
+    <tr><td>Route not found</td><td>404</td></tr>
+    <tr><td>Rate limited</td><td>429</td></tr>
+    <tr><td>Secrets failed to decrypt</td><td>500</td></tr>
+    <tr><td>Recursion limit hit</td><td>508</td></tr>
+    <tr><td>Response over 5 MB</td><td>413</td></tr>
+    <tr><td>Request body over 1 MB</td><td>413</td></tr>
+  </tbody>
+</table>
+<h2>Common script errors and fixes</h2>
+<table class="db-table">
+  <thead><tr><th>Error</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td><code class="mono">Failed to parse URL from /api/…</code></td><td>Use <code class="mono">ENV.FOLIO_BASE_URL + "/api/…"</code> — relative URLs aren't allowed in the sandbox</td></tr>
+    <tr><td><code class="mono">crypto.randomUUID is not a function</code></td><td>Use <code class="mono">crypto.getRandomValues</code>-based UUID (see Examples)</td></tr>
+    <tr><td><code class="mono">Cannot read properties of undefined (reading 'digest')</code></td><td><code class="mono">crypto.subtle</code> isn't available — use pure-JS SHA-256 (see Examples)</td></tr>
+    <tr><td><code class="mono">TypeError: Failed to fetch</code></td><td>Blocked host — add <code class="mono">// @allow host.name</code> or use a literal URL that gets detected on deploy</td></tr>
+    <tr><td>Response body is the string <code class="mono">"null"</code></td><td>Your script returned <code class="mono">undefined</code> — add a fallback return at the end</td></tr>
+    <tr><td><code class="mono">Function timed out</code></td><td>Batch DB calls, reduce fetches, add <code class="mono">AbortSignal.timeout(ms)</code> to external fetches</td></tr>
+  </tbody>
+</table>
+<h2>Deploy errors</h2>
+<ul>
+  <li>Invalid <code class="mono">@allow</code> host — whole deploy rejected with a list of which files declared which invalid host</li>
+  <li>Too many <code class="mono">@allow</code> lines in one file</li>
+  <li>Too many unique hosts across the whole project</li>
+  <li>Reserved file name in <code class="mono">api/</code></li>
+  <li>File too large</li>
+</ul>
+<h2>What hosts are rejected by @allow</h2>
+<ul>
+  <li>IP addresses</li>
+  <li>Hosts that resolve to private IPs (10.x, 192.168.x, 172.16-31.x, localhost)</li>
+  <li><code class="mono">*.vercel.app</code> hosts</li>
+  <li>Wildcards</li>
+  <li>Ports and paths</li>
+  <li>Non-HTTPS hosts</li>
+</ul>
+<h2>Clean rejection vs thrown error</h2>
+<p><strong>Clean rejection</strong>: you return <code class="mono">{ __status: 400, error: "Invalid" }</code>. Client sees <code class="mono">{ error: "Invalid" }</code> with a 400 status. This is a normal, expected outcome.</p>
+<p><strong>Thrown error</strong>: your script throws <code class="mono">new Error("boom")</code>. Client sees 500, and the error details appear in the API logs so you can debug.</p>
+<h2>Page 404s on your live site or share page</h2>
+<table class="db-table">
+  <thead><tr><th>What you visit</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr><td><code class="mono">/{username}/{slug}</code> when Profile visibility is private</td><td>404 "This project page is private"</td></tr>
+    <tr><td><code class="mono">/{username}/project/{slug}/</code> when Live site visibility is private</td><td>404 "This site is not live"</td></tr>
+    <tr><td><code class="mono">/{username}/project/{slug}/</code> when deployment is offline</td><td>404 "This site is offline"</td></tr>
+    <tr><td><code class="mono">/{username}</code> for an unknown user</td><td>404 "Profile not found"</td></tr>
+    <tr><td><code class="mono">/{username}/project/{slug}/missing.html</code></td><td>404 "Not found"</td></tr>
+  </tbody>
+</table>
+<p>If you see a 404 on a URL you expect to work, first check the project's visibility switches in Settings.</p>
 ` },
-    'examples': { title: 'Examples', body: `
-<h2>AI chat with OpenAI</h2><pre><code>const r = await fetch("https://api.openai.com/v1/chat/completions", {
+
+  'examples': { title: 'Examples', body: `
+<h2>AI chat with OpenAI</h2>
+<pre><code>const r = await fetch("https://api.openai.com/v1/chat/completions", {
   method: "POST",
-  headers: { "Content-Type": "application/json", "Authorization": "Bearer " + ENV.OPENAI_API_KEY },
-  body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "user", content: REQ.body.message }] }),
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer " + ENV.OPENAI_API_KEY
+  },
+  body: JSON.stringify({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: REQ.body.message }]
+  }),
 });
 const data = await r.json();
 return { reply: data.choices[0].message.content };</code></pre>
-<h2>External weather API (auto-detected)</h2><pre><code>const url = "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m";
+
+<h2>External weather API (auto-detected)</h2>
+<pre><code>const url = "https://api.open-meteo.com/v1/forecast?latitude=52.52&amp;longitude=13.41&amp;current=temperature_2m";
 return await (await fetch(url)).json();</code></pre>
-<h2>Dynamic host (declared)</h2><pre><code>// @allow api.example.com
+
+<h2>Dynamic host (must be declared)</h2>
+<pre><code>// @allow api.example.com
 const host = REQ.body.host || "api.example.com";
 return await (await fetch("https://" + host + "/v1/today")).json();</code></pre>
-<h2>Picsum image list</h2><pre><code>const items = await (await fetch("https://picsum.photos/v2/list?page=1&limit=12")).json();
-return { images: items.map(it => ({ id: it.id, thumb: "https://picsum.photos/id/" + it.id + "/400/300" })) };</code></pre>
-<h2>Read JSON DB</h2><pre><code>const BASE = ENV.FOLIO_BASE_URL;
+
+<h2>Picsum image list</h2>
+<pre><code>const items = await (await fetch("https://picsum.photos/v2/list?page=1&amp;limit=12")).json();
+return {
+  images: items.map(it => ({
+    id: it.id,
+    thumb: "https://picsum.photos/id/" + it.id + "/400/300"
+  }))
+};</code></pre>
+
+<h2>Read from your JSON DB — in an API route</h2>
+<pre><code>// api/load-todos.js
+const BASE = ENV.FOLIO_BASE_URL;
 const r = await fetch(BASE + "/api/host?action=db/get&pid=" + ENV.PROJECT_ID);
 const { data } = await r.json();
 return { todos: data.todos || {} };</code></pre>
-<h2>Write JSON DB</h2><pre><code>const id = "t_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
-await fetch(BASE + "/api/host?action=db/set", {
+
+<h2>Write to your JSON DB — in an API route</h2>
+<pre><code>// api/add-todo.js
+const id = "t_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+await fetch(ENV.FOLIO_BASE_URL + "/api/host?action=db/set", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ pid: ENV.PROJECT_ID, key: "todos/" + id, value: { text: REQ.body.text, done: false } }),
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: "todos/" + id,
+    value: { text: REQ.body.text, done: false }
+  }),
 });
 return { ok: true, id };</code></pre>
-<h2>uuid() — sandbox-safe</h2><pre><code>function uuid() {
+
+<h2>Call your API from the frontend</h2>
+<p>Your HTML is deployed at <code class="mono">foliosites.vercel.app/{username}/project/{slug}/</code>. Call your own routes with a relative path:</p>
+<pre><code>// In your deployed frontend
+const res = await fetch("/{username}/project/{slug}/api/chat", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: "Hello" }),
+});
+const { reply } = await res.json();</code></pre>
+
+<h2>Call your API from anywhere</h2>
+<p>From a different origin (a bookmarklet, another website, curl), use the full URL:</p>
+<pre><code>const res = await fetch("https://foliosites.vercel.app/{username}/project/{slug}/api/chat", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: "Hello" }),
+});</code></pre>
+
+<h2>uuid() — sandbox-safe</h2>
+<p><code class="mono">crypto.randomUUID()</code> isn't available in the sandbox. This pure-JS version works:</p>
+<pre><code>function uuid() {
   const b = new Uint8Array(16);
   crypto.getRandomValues(b);
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
+  b[6] = (b[6] &amp; 0x0f) | 0x40;
+  b[8] = (b[8] &amp; 0x3f) | 0x80;
   const h = [];
-  for (let i = 0; i < 16; i++) h.push(b[i].toString(16).padStart(2, "0"));
+  for (let i = 0; i &lt; 16; i++) h.push(b[i].toString(16).padStart(2, "0"));
   return h.slice(0,4).join("") + "-" + h.slice(4,6).join("") + "-" + h.slice(6,8).join("") + "-" + h.slice(8,10).join("") + "-" + h.slice(10,16).join("");
 }</code></pre>
-<h2>sha256Hex() — sandbox-safe</h2><p>Pure-JS SHA-256. About 40 lines. Use it instead of <code class="mono">crypto.subtle.digest</code>.</p><pre><code>function sha256Hex(str) {
+
+<h2>sha256Hex() — sandbox-safe</h2>
+<p><code class="mono">crypto.subtle.digest</code> isn't available in the sandbox. This pure-JS SHA-256 works for hashing passwords and building session tokens:</p>
+<pre><code>function sha256Hex(str) {
   function rightRotate(v, n) { return (v >>> n) | (v << (32 - n)); }
   const bytes = new TextEncoder().encode(String(str));
   const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
@@ -3501,45 +3922,39 @@ return { ok: true, id };</code></pre>
   const data = Array.from(bytes); const l = data.length;
   data.push(0x80); while (data.length % 64 !== 56) data.push(0);
   const bitLen = l * 8;
-  for (let i = 7; i >= 0; i--) data.push(Math.floor(bitLen / Math.pow(2, i * 8)) & 0xff);
+  for (let i = 7; i &gt;= 0; i--) data.push(Math.floor(bitLen / Math.pow(2, i * 8)) &amp; 0xff);
   const w = new Array(64);
-  for (let i = 0; i < data.length; i += 64) {
-    for (let j = 0; j < 16; j++) w[j] = (data[i+j*4]<<24)|(data[i+j*4+1]<<16)|(data[i+j*4+2]<<8)|data[i+j*4+3];
-    for (let j = 16; j < 64; j++) { const s0 = rightRotate(w[j-15],7)^rightRotate(w[j-15],18)^(w[j-15]>>>3); const s1 = rightRotate(w[j-2],17)^rightRotate(w[j-2],19)^(w[j-2]>>>10); w[j] = (w[j-16]+s0+w[j-7]+s1)|0; }
+  for (let i = 0; i &lt; data.length; i += 64) {
+    for (let j = 0; j &lt; 16; j++) w[j] = (data[i+j*4]&lt;&lt;24)|(data[i+j*4+1]&lt;&lt;16)|(data[i+j*4+2]&lt;&lt;8)|data[i+j*4+3];
+    for (let j = 16; j &lt; 64; j++) { const s0 = rightRotate(w[j-15],7)^rightRotate(w[j-15],18)^(w[j-15]&gt;&gt;&gt;3); const s1 = rightRotate(w[j-2],17)^rightRotate(w[j-2],19)^(w[j-2]&gt;&gt;&gt;10); w[j] = (w[j-16]+s0+w[j-7]+s1)|0; }
     let a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
-    for (let j = 0; j < 64; j++) { const S1=rightRotate(e,6)^rightRotate(e,11)^rightRotate(e,25); const ch=(e&f)^(~e&g); const t1=(h+S1+ch+K[j]+w[j])|0; const S0=rightRotate(a,2)^rightRotate(a,13)^rightRotate(a,22); const maj=(a&b)^(a&c)^(b&c); const t2=(S0+maj)|0; h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0; }
+    for (let j = 0; j &lt; 64; j++) { const S1=rightRotate(e,6)^rightRotate(e,11)^rightRotate(e,25); const ch=(e&amp;f)^(~e&amp;g); const t1=(h+S1+ch+K[j]+w[j])|0; const S0=rightRotate(a,2)^rightRotate(a,13)^rightRotate(a,22); const maj=(a&amp;b)^(a&amp;c)^(b&amp;c); const t2=(S0+maj)|0; h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0; }
     H[0]=(H[0]+a)|0;H[1]=(H[1]+b)|0;H[2]=(H[2]+c)|0;H[3]=(H[3]+d)|0;H[4]=(H[4]+e)|0;H[5]=(H[5]+f)|0;H[6]=(H[6]+g)|0;H[7]=(H[7]+h)|0;
   }
-  return H.map(x => (x>>>0).toString(16).padStart(8,"0")).join("");
+  return H.map(x =&gt; (x&gt;&gt;&gt;0).toString(16).padStart(8,"0")).join("");
 }</code></pre>
-<h2>Password hashing</h2><pre><code>function hashPassword(password) {
+
+<h2>Password hashing</h2>
+<pre><code>function hashPassword(password) {
   const SALT = ENV.PASSWORD_SALT;
-  if (!SALT || SALT.length < 16) throw new Error("PASSWORD_SALT not configured");
+  if (!SALT || SALT.length &lt; 16) throw new Error("PASSWORD_SALT not configured");
   return sha256Hex(SALT + "|" + password + "|" + SALT);
 }</code></pre>
-<h2>Session tokens</h2><pre><code>const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+<h2>Session tokens</h2>
+<pre><code>const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 function createSessionToken(userId) {
   const expiry = Date.now() + SESSION_TTL_MS;
   const payload = userId + "|" + expiry;
-  const sig = hmacSign(payload);
-  return btoa(payload).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_") + "." + sig;
+  const sig = sha256Hex(payload + ENV.SESSION_SECRET);
+  return btoa(payload).replace(/=+$/, "").replace(/\\+/g, "-").replace(/\\//g, "_") + "." + sig;
 }</code></pre>
-<h2>Markdown from CDN</h2><pre><code>import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";
+
+<h2>Markdown from CDN</h2>
+<pre><code>import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/marked.esm.js";
 return { html: marked(REQ.body.md) };</code></pre>
-<h2>Frontend: calling the friendly URL</h2><pre><code>const res = await fetch("/" + USERNAME + "/project/" + SLUG + "/api/chat", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ message: "Hello" }),
-});
-const { reply } = await res.json();</code></pre>
-<h2>Frontend: sending a session token</h2><pre><code>const token = localStorage.getItem("token");
-await fetch("/alice/project/notes/api/notes", {
-  method: "POST",
-  headers: { "Content-Type": "application/json", "Authorization": token ? ("Bearer " + token) : "" },
-  body: JSON.stringify({ action: "listNotes" }),
-});</code></pre>
 ` },
-  };
+};
   let _docsActiveSection = 'getting-started';
 
   function openDocsOverlay(section) {
