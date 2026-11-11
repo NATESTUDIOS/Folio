@@ -53,7 +53,6 @@
   --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Monaco, monospace;
   --content-max: 1200px;
 }
-
 [data-theme="light"] {
   --theme-primary: #D97706;
   --theme-primary-hover: #B45309;
@@ -76,7 +75,6 @@
   --theme-danger: #DC2626;
   --theme-warning: #B45309;
 }
-
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 html, body {
@@ -108,9 +106,7 @@ a { color: var(--theme-primary); text-decoration: none; }
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; touch-action: manipulation; }
 img { display: block; max-width: 100%; height: auto; }
 svg { display: block; flex-shrink: 0; }
-
 :focus-visible { outline: 2px solid var(--theme-primary); outline-offset: 3px; border-radius: 4px; }
-
 .skip-link {
   position: absolute; top: -100px; left: 8px;
   padding: 8px 16px; background: var(--theme-primary); color: #0a0c10;
@@ -119,7 +115,6 @@ svg { display: block; flex-shrink: 0; }
 .skip-link:focus { top: 8px; }
 
 .page { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
-
 .page-header {
   position: sticky; top: 0; z-index: 40;
   background: color-mix(in srgb, var(--theme-bg) 82%, transparent);
@@ -136,7 +131,6 @@ svg { display: block; flex-shrink: 0; }
   padding-right: calc(16px + var(--safe-right));
 }
 @media (min-width: 1024px) { .page-header-inner { padding: 9px 20px; } }
-
 .brand { display: inline-flex; align-items: center; gap: 7px; color: var(--theme-text); font-weight: 800; font-size: 14px; letter-spacing: -0.3px; flex-shrink: 0; }
 .brand-icon {
   width: 24px; height: 24px; border-radius: 7px;
@@ -150,9 +144,7 @@ svg { display: block; flex-shrink: 0; }
 .brand-icon.fallback img { display: none; }
 .brand-wordmark { color: var(--theme-text); }
 @media (max-width: 400px) { .brand-wordmark { display: none; } }
-
 .header-spacer { flex: 1; }
-
 .header-user {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 3px 9px 3px 3px; border-radius: 999px;
@@ -176,6 +168,16 @@ svg { display: block; flex-shrink: 0; }
   transition: background 0.15s var(--ease);
 }
 .btn-signin:hover { background: var(--theme-primary-hover); }
+.auth-skeleton {
+  display: inline-block;
+  width: 72px;
+  height: 28px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--theme-glass-bg) 0%, var(--theme-glass-border) 50%, var(--theme-glass-bg) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
 .page-main {
   flex: 1; width: 100%; max-width: var(--content-max); margin: 0 auto;
@@ -183,9 +185,8 @@ svg { display: block; flex-shrink: 0; }
   padding-left: calc(16px + var(--safe-left));
   padding-right: calc(16px + var(--safe-right));
 }
-@media (min-width: 640px) { .page-main { padding: 20px 20px 40px; font-size: 15px; } }
-@media (min-width: 1024px) { .page-main { padding: 16px 20px 40px; padding-bottom: 32px; font-size: 14px; } }
-
+@media (min-width: 640px) { .page-main { padding: 20px 20px 40px; } }
+@media (min-width: 1024px) { .page-main { padding: 16px 20px 40px; padding-bottom: 32px; } }
 .page-main > .reveal {
   opacity: 0; transform: translateY(8px);
   animation: reveal 400ms var(--ease) forwards;
@@ -193,13 +194,8 @@ svg { display: block; flex-shrink: 0; }
 .page-main > .reveal:nth-child(1) { animation-delay: 0ms; }
 .page-main > .reveal:nth-child(2) { animation-delay: 70ms; }
 .page-main > .reveal:nth-child(3) { animation-delay: 140ms; }
-.page-main > .reveal:nth-child(4) { animation-delay: 210ms; }
-.page-main > .reveal:nth-child(5) { animation-delay: 280ms; }
 @keyframes reveal { to { opacity: 1; transform: translateY(0); } }
 
-/* ═══════════════════════════════════════════════════════════════
-   HERO — FIX #4: contain + isolation to keep cover image clipped
-   ═══════════════════════════════════════════════════════════════ */
 .hero {
   margin-bottom: 14px;
   border-radius: var(--r-lg);
@@ -208,7 +204,6 @@ svg { display: block; flex-shrink: 0; }
   background: var(--theme-surface-card);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  /* FIX: clip all descendants — critical for background-image containment */
   contain: layout paint;
   isolation: isolate;
   position: relative;
@@ -222,7 +217,6 @@ svg { display: block; flex-shrink: 0; }
     radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.3) 0%, transparent 70%),
     linear-gradient(135deg, #1a0f2e 0%, #2d1b4e 100%);
   overflow: hidden;
-  /* FIX: explicit background sizing so images stay inside the card */
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -258,8 +252,6 @@ svg { display: block; flex-shrink: 0; }
     padding: 0 18px 14px;
   }
 }
-
-/* FIX: isolation + z-index keeps avatar overlap inside the card */
 .hero-avatar-wrap {
   margin-top: -34px; margin-bottom: 10px;
   display: inline-block; position: relative; align-self: end;
@@ -267,7 +259,6 @@ svg { display: block; flex-shrink: 0; }
   z-index: 1;
 }
 @media (min-width: 1024px) { .hero-avatar-wrap { margin-top: -46px; margin-bottom: 0; } }
-
 .hero-avatar {
   width: 76px; height: 76px; border-radius: 50%; overflow: hidden;
   border: 3px solid var(--theme-surface-card-solid);
@@ -281,7 +272,6 @@ svg { display: block; flex-shrink: 0; }
 @keyframes avatarIn { to { opacity: 1; transform: scale(1); } }
 @media (min-width: 640px) { .hero-avatar { width: 84px; height: 84px; border-width: 4px; } }
 @media (min-width: 1024px) { .hero-avatar { width: 88px; height: 88px; border-width: 4px; } }
-
 .hero-avatar .initials {
   font-size: 28px; font-weight: 900; color: #0a0c10;
   background: linear-gradient(135deg, #F59E0B, #f97316);
@@ -289,9 +279,7 @@ svg { display: block; flex-shrink: 0; }
   display: flex; align-items: center; justify-content: center;
 }
 @media (min-width: 1024px) { .hero-avatar .initials { font-size: 32px; } }
-
 .hero-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
 .hero-avatar .status-dot {
   position: absolute; right: 2px; bottom: 2px;
   width: 16px; height: 16px; border-radius: 50%;
@@ -310,7 +298,6 @@ svg { display: block; flex-shrink: 0; }
   opacity: 0; animation: fadeIn 400ms var(--ease) 180ms forwards;
 }
 @media (min-width: 1024px) { .hero-name { font-size: 24px; } }
-
 .hero-meta-line {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   font-size: 12.5px; color: var(--theme-text-tertiary);
@@ -321,6 +308,7 @@ svg { display: block; flex-shrink: 0; }
 .hero-meta-line .proj-count { display: inline-flex; align-items: center; gap: 4px; }
 .hero-meta-line .proj-count svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; }
 
+/* FIXED: now a div, accepts inner HTML or text without nested <p> */
 .hero-bio {
   font-size: 13px; color: var(--theme-text-secondary); line-height: 1.5;
   max-width: 640px; overflow-wrap: break-word;
@@ -420,14 +408,11 @@ body.is-owner .hero-actions { display: none; }
 
 .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 @media (min-width: 1024px) { .toolbar { flex: 1; gap: 10px; min-width: 0; } }
-
 .toolbar-tabs {
   display: flex; gap: 2px; flex: 1; min-width: 0;
   overflow-x: auto; scrollbar-width: none; padding-bottom: 0;
 }
 .toolbar-tabs::-webkit-scrollbar { display: none; }
-@media (min-width: 1024px) { .toolbar-tabs { border-bottom: none; } }
-
 .toolbar-tab {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 7px 11px 9px; font-size: 11.5px; font-weight: 700;
@@ -481,7 +466,6 @@ body.is-owner .hero-actions { display: none; }
 @media (min-width: 1024px) {
   .bento { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(130px, auto); gap: 10px; margin-bottom: 16px; }
 }
-
 .bento:has(.project-card:only-child) { grid-template-columns: 1fr; }
 .bento:has(.project-card:only-child) .project-card {
   grid-column: 1 / -1 !important; grid-row: span 1 !important;
@@ -585,7 +569,6 @@ body.is-owner .star-btn { display: inline-flex; }
 .project-card:not(.has-thumb) .project-body { padding-top: 38px; }
 
 .project-head-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-
 .project-icon {
   width: 28px; height: 28px; border-radius: 7px; overflow: hidden;
   background: var(--theme-surface-elevated); border: 1px solid var(--theme-glass-border);
@@ -618,6 +601,71 @@ body.is-owner .star-btn { display: inline-flex; }
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
 @container (min-width: 400px) { .project-desc { font-size: 12px; -webkit-line-clamp: 3; } }
+
+.project-url-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.project-url-row:empty { display: none; }
+
+.url-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 6px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--theme-text-secondary);
+  transition: all 0.15s var(--ease);
+}
+.url-display:hover {
+  background: var(--theme-surface-elevated);
+  border-color: var(--theme-primary-glow);
+}
+.url-display .url-host {
+  color: var(--theme-text-tertiary);
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.url-display a {
+  color: var(--theme-text);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+  font-weight: 600;
+}
+.url-display a:hover { color: var(--theme-primary); }
+.url-display .url-path { color: var(--theme-text-tertiary); font-weight: 500; }
+.url-display button {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+}
+.url-display button:hover { background: var(--theme-primary-soft); color: var(--theme-primary); }
+.url-display button.copied { color: var(--theme-success); }
+.url-display button svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.2; }
 
 .project-meta {
   display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
@@ -686,7 +734,6 @@ body.is-owner .star-btn { display: inline-flex; }
 .empty-state h3 { font-size: 14px; font-weight: 800; color: var(--theme-text); margin-bottom: 5px; }
 .empty-state p { font-size: 12px; color: var(--theme-text-tertiary); line-height: 1.5; max-width: 300px; margin-bottom: 14px; }
 
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .skeleton {
   background: linear-gradient(90deg, var(--theme-glass-bg) 0%, var(--theme-surface-elevated) 50%, var(--theme-glass-bg) 100%);
   background-size: 200% 100%;
@@ -802,11 +849,9 @@ body.is-owner .star-btn { display: inline-flex; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .toast.success { border-color: rgba(16, 185, 129, 0.4); color: var(--theme-success); }
 
-/* ── Small QR icon button ── */
 .icon-btn-qr { padding: 7px 9px; min-height: 30px; }
 .icon-btn-qr svg { width: 13px; height: 13px; }
 
-/* ── Share modal ── */
 .share-modal-overlay {
   position: fixed; inset: 0; z-index: 900;
   background: rgba(6, 8, 12, 0.72);
@@ -849,7 +894,6 @@ body.is-owner .star-btn { display: inline-flex; }
 .share-modal-actions { display: flex; gap: 5px; flex-wrap: wrap; }
 .share-modal-actions .util-btn { flex: 1; min-width: 0; }
 
-/* ── Fullscreen QR page ── */
 .qr-page {
   position: fixed; inset: 0; z-index: 950;
   background: #06080c; color: #e8ecf1;
@@ -915,30 +959,20 @@ body.qr-open { overflow: hidden; }
   letter-spacing: -0.4px; color: #fff; margin-bottom: 4px;
 }
 .qr-page-sub { font-size: 13px; color: rgba(255, 255, 255, 0.55); margin-bottom: 22px; line-height: 1.5; max-width: 320px; }
-.qr-page-sub strong { color: rgba(255, 255, 255, 0.9); font-weight: 700; }
-
 .qr-page-frame-wrap { position: relative; margin-bottom: 18px; animation: qrEnter 500ms var(--ease-spring); }
 @keyframes qrEnter { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
-
 .qr-page-frame {
   position: relative; background: #ffffff;
   border-radius: 26px; padding: 22px;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 24px 60px -16px rgba(0, 0, 0, 0.6),
-    0 0 120px -20px var(--theme-primary-glow);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 60px -16px rgba(0, 0, 0, 0.6), 0 0 120px -20px var(--theme-primary-glow);
   width: min(78vw, 62vh, 420px); height: min(78vw, 62vh, 420px);
   display: flex; align-items: center; justify-content: center;
 }
 @media (max-width: 639px) {
-  .qr-page-frame {
-    padding: 18px; border-radius: 22px;
-    width: min(82vw, 55vh, 340px); height: min(82vw, 55vh, 340px);
-  }
+  .qr-page-frame { padding: 18px; border-radius: 22px; width: min(82vw, 55vh, 340px); height: min(82vw, 55vh, 340px); }
 }
 .qr-page-code { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 .qr-page-code svg { width: 100%; height: 100%; display: block; }
-
 .qr-page-logo {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
@@ -950,14 +984,7 @@ body.qr-open { overflow: hidden; }
 }
 @media (max-width: 639px) { .qr-page-logo { border-width: 5px; border-radius: 13px; } }
 .qr-page-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-.qr-page-url {
-  margin-top: 12px; font-family: var(--font-mono);
-  font-size: 10.5px; color: rgba(255, 255, 255, 0.4);
-  text-align: center; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; max-width: 100%;
-}
-
+.qr-page-url { margin-top: 12px; font-family: var(--font-mono); font-size: 10.5px; color: rgba(255, 255, 255, 0.4); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .qr-page-actions { display: flex; gap: 8px; margin-bottom: 18px; width: 100%; max-width: 380px; }
 .qr-page-action {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -971,8 +998,6 @@ body.qr-open { overflow: hidden; }
 .qr-page-action.primary { background: var(--theme-primary); color: #0a0c10; border-color: transparent; }
 .qr-page-action.primary:hover { background: var(--theme-primary-hover); color: #0a0c10; }
 .qr-page-action svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.qr-page-action:disabled { opacity: 0.5; cursor: not-allowed; }
-
 .qr-page-join {
   display: flex; align-items: center; gap: 12px;
   padding: 14px; border-radius: 14px;
@@ -1039,7 +1064,7 @@ body.qr-open { overflow: hidden; }
       </a>
       <div class="header-spacer"></div>
       <div id="authSlot">
-        <a class="btn-signin" href="/register">Sign in</a>
+        <span class="auth-skeleton"></span>
       </div>
     </div>
   </header>
@@ -1067,7 +1092,7 @@ body.qr-open { overflow: hidden; }
             <span class="sep" id="heroJoinedSep">·</span>
             <span id="heroJoined">Joined {{JOINED_AT}}</span>
           </div>
-          <p class="hero-bio" id="heroBio">{{BIO_BLOCK}}</p>
+          <div class="hero-bio" id="heroBio">{{BIO_BLOCK}}</div>
           <button class="bio-toggle" id="bioToggle" type="button" hidden>Read more</button>
           {{LINKS_BLOCK}}
         </div>
@@ -1148,9 +1173,7 @@ body.qr-open { overflow: hidden; }
       </div>
     </div>
 
-    <div class="bento" id="bento">
-      {{PROJECT_GRID}}
-    </div>
+    <div class="bento" id="bento"></div>
 
     <div class="folio-cta reveal" id="folioCta" hidden>
       <div class="folio-cta-inner">
@@ -1198,7 +1221,6 @@ body.qr-open { overflow: hidden; }
   </footer>
 </div>
 
-<!-- Share modal -->
 <div class="share-modal-overlay" id="shareModal" role="dialog" aria-modal="true">
   <div class="share-modal">
     <button class="share-modal-close" id="shareModalClose" type="button" aria-label="Close">
@@ -1223,7 +1245,6 @@ body.qr-open { overflow: hidden; }
   </div>
 </div>
 
-<!-- Fullscreen QR page -->
 <div class="qr-page" id="qrPage" role="dialog" aria-modal="true" aria-labelledby="qrPageTitle" hidden>
   <div class="qr-page-nav">
     <button class="qr-page-back" id="qrPageBack" type="button" aria-label="Back to profile">
@@ -1249,7 +1270,6 @@ body.qr-open { overflow: hidden; }
   <div class="qr-page-main">
     <h1 class="qr-page-title" id="qrPageTitle">Scan to open</h1>
     <p class="qr-page-sub" id="qrPageSub">Point your camera at the code below</p>
-
     <div class="qr-page-frame-wrap">
       <div class="qr-page-frame">
         <div class="qr-page-code" id="qrPageCode"></div>
@@ -1263,7 +1283,6 @@ body.qr-open { overflow: hidden; }
       </div>
       <div class="qr-page-url" id="qrPageUrl"></div>
     </div>
-
     <div class="qr-page-actions">
       <button class="qr-page-action primary" id="qrDownloadBtn" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
@@ -1289,7 +1308,6 @@ body.qr-open { overflow: hidden; }
         Copy
       </button>
     </div>
-
     <div class="qr-page-join">
       <div class="qr-page-join-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
@@ -1327,26 +1345,11 @@ body.qr-open { overflow: hidden; }
   var PROFILE_HANDLE = P.username || '';
 
   var LANG_COLORS = {
-    HTML: '#E34F26',
-    CSS: '#264DE4',
-    SCSS: '#C6538C',
-    JavaScript: '#F7DF1E',
-    TypeScript: '#3178C6',
-    JSX: '#61DAFB',
-    TSX: '#61DAFB',
-    JSON: '#8BC34A',
-    Markdown: '#083FA1',
-    Python: '#3776AB',
-    Ruby: '#CC342D',
-    Go: '#00ADD8',
-    Rust: '#CE422B',
-    PHP: '#777BB4',
-    Java: '#B07219',
-    Kotlin: '#A97BFF',
-    Swift: '#FA7343',
-    SVG: '#FFB13B',
-    XML: '#0060AC',
-    YAML: '#CB171E'
+    HTML: '#E34F26', CSS: '#264DE4', SCSS: '#C6538C',
+    JavaScript: '#F7DF1E', TypeScript: '#3178C6', JSX: '#61DAFB', TSX: '#61DAFB',
+    JSON: '#8BC34A', Markdown: '#083FA1', Python: '#3776AB', Ruby: '#CC342D',
+    Go: '#00ADD8', Rust: '#CE422B', PHP: '#777BB4', Java: '#B07219',
+    Kotlin: '#A97BFF', Swift: '#FA7343', SVG: '#FFB13B', XML: '#0060AC', YAML: '#CB171E'
   };
 
   var GRAD_PALETTES = [
@@ -1484,7 +1487,6 @@ body.qr-open { overflow: hidden; }
     });
   }
 
-  // ── QR generation (demo pattern — replace with real qrcode lib in production) ──
   function generateQR(text, options) {
     options = options || {};
     if (!text) return '';
@@ -1492,7 +1494,6 @@ body.qr-open { overflow: hidden; }
     var logoSizeRatio = options.logoSizeRatio || 0;
     var logoCells = logoSizeRatio > 0 ? Math.ceil(cells * logoSizeRatio) : 0;
     var logoStart = logoCells > 0 ? Math.floor((cells - logoCells) / 2) : -1;
-
     var h = 0;
     for (var i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
     var rand = (function (seed) {
@@ -1501,14 +1502,12 @@ body.qr-open { overflow: hidden; }
         return (seed >>> 0) / 4294967296;
       };
     })(h);
-
     var grid = [];
     for (var y = 0; y < cells; y++) {
       var row = [];
       for (var x = 0; x < cells; x++) row.push(rand() > 0.5 ? 1 : 0);
       grid.push(row);
     }
-
     function drawFinder(gx, gy) {
       for (var dy = 0; dy < 7; dy++) {
         for (var dx = 0; dx < 7; dx++) {
@@ -1529,7 +1528,6 @@ body.qr-open { overflow: hidden; }
     drawFinder(0, 0);
     drawFinder(cells - 7, 0);
     drawFinder(0, cells - 7);
-
     if (logoCells > 0) {
       for (var ly = logoStart; ly < logoStart + logoCells; ly++) {
         for (var lx = logoStart; lx < logoStart + logoCells; lx++) {
@@ -1537,7 +1535,6 @@ body.qr-open { overflow: hidden; }
         }
       }
     }
-
     var size = 240;
     var cellSize = size / cells;
     var paths = '';
@@ -1552,7 +1549,6 @@ body.qr-open { overflow: hidden; }
       '<rect width="' + size + '" height="' + size + '" fill="#fff"/>' + paths + '</svg>';
   }
 
-  // ── Hydrate projects from P.projects payload ──
   function hydrateProjects() {
     var list = P.projects || [];
     state.projects = list.map(function (p) {
@@ -1566,15 +1562,15 @@ body.qr-open { overflow: hidden; }
         thumb: p.thumbnailUrl || null,
         langs: p.languages || {},
         updated: p.updatedAt || 0,
-        live: !!p.deploymentUrl || false,
+        live: !!p.deploymentUrl || !!p.liveUrl,
         visits: typeof p.viewCount === 'number' ? p.viewCount : 0,
-        // FIX #2: use /username/slug (not /username/project/slug/)
-        url: p.url || (BASE_URL + '/' + PROFILE_HANDLE + '/' + encodeURIComponent(p.slug || ''))
+        url: p.url || (BASE_URL + '/' + PROFILE_HANDLE + '/' + encodeURIComponent(p.slug || '')),
+        liveUrl: p.liveUrl || null,
+        liveUrlDisplay: p.liveUrlDisplay || ''
       };
     });
   }
 
-  // ── Render links ──
   function renderLinks() {
     var wrap = document.querySelector('.hero-links');
     if (wrap) return;
@@ -1594,25 +1590,21 @@ body.qr-open { overflow: hidden; }
     if (infoEl) infoEl.appendChild(linksEl);
   }
 
-  // ── Cover (FIX #4: preload before applying, so image stays clipped) ──
   function renderCover() {
     var cover = $('heroCover');
     if (!cover || !P.ogImageUrl) return;
     var testImg = new Image();
     testImg.onload = function () {
+      cover.classList.add('has-image');
       cover.style.backgroundImage = 'url("' + P.ogImageUrl + '")';
       cover.style.backgroundSize = 'cover';
       cover.style.backgroundPosition = 'center';
       cover.style.backgroundRepeat = 'no-repeat';
-      cover.classList.add('has-image');
     };
-    testImg.onerror = function () {
-      if (window.console) console.warn('[Profile] cover image failed to load:', P.ogImageUrl);
-    };
+    testImg.onerror = function () {};
     testImg.src = P.ogImageUrl;
   }
 
-  // ── Status dot ──
   function renderStatusDot() {
     var dot = $('heroStatusDot');
     if (!dot) return;
@@ -1622,22 +1614,16 @@ body.qr-open { overflow: hidden; }
     if (recent) dot.hidden = false;
   }
 
-  // ── Bio toggle ──
   function setupBioToggle() {
     var bio = $('heroBio');
     var toggle = $('bioToggle');
     if (!bio || !toggle) return;
     var text = (bio.textContent || '').trim();
-    if (!text) {
-      bio.style.display = 'none';
-      return;
-    }
+    if (!text) { bio.style.display = 'none'; return; }
     requestAnimationFrame(function () {
       var lineHeight = parseFloat(getComputedStyle(bio).lineHeight) || 20;
       var maxHeight = lineHeight * 2;
-      if (bio.scrollHeight > maxHeight + 4) {
-        toggle.hidden = false;
-      }
+      if (bio.scrollHeight > maxHeight + 4) toggle.hidden = false;
     });
     toggle.addEventListener('click', function () {
       state.bioExpanded = !state.bioExpanded;
@@ -1646,7 +1632,6 @@ body.qr-open { overflow: hidden; }
     });
   }
 
-  // ── Tabs ──
   function renderTabs() {
     var tabs = $('toolbarTabs');
     if (!tabs) return;
@@ -1675,7 +1660,32 @@ body.qr-open { overflow: hidden; }
     });
   }
 
-  // ── Card ──
+  function renderUrlDisplay(url, options) {
+    options = options || {};
+    if (!url) return '';
+    var label = options.label || null;
+    var host, path;
+    try {
+      var u = new URL(url);
+      host = u.host;
+      path = u.pathname + (u.search || '') + (u.hash || '');
+      if (path === '/') path = '';
+    } catch (e) {
+      return '';
+    }
+    var escaped = escapeHtml(url);
+    return '<span class="url-display">' +
+      (label ? '<span class="url-host">' + escapeHtml(label) + '</span>' : '') +
+      '<a href="' + escaped + '" target="_blank" rel="noopener" title="' + escaped + '">' +
+        escapeHtml(host) +
+        '<span class="url-path">' + escapeHtml(path) + '</span>' +
+      '</a>' +
+      '<button type="button" data-copy-text="' + escaped + '" aria-label="Copy URL" title="Copy URL">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
+      '</button>' +
+    '</span>';
+  }
+
   function renderCard(p) {
     var thumbUrl = p.thumb || thumbDataUrl(p.name);
     var langEntries = Object.entries(p.langs || {}).slice(0, 3);
@@ -1684,19 +1694,15 @@ body.qr-open { overflow: hidden; }
       var color = LANG_COLORS[name] || 'var(--theme-primary)';
       return '<span class="project-lang-pill"><span class="project-lang-dot" style="background:' + color + '"></span>' + escapeHtml(name) + ' ' + pct + '%</span>';
     }).join('');
-
     var iconHtml = p.icon
       ? '<img src="' + escapeHtml(p.icon) + '" alt="" loading="lazy">'
       : '<span>' + escapeHtml(p.initial) + '</span>';
-
     var liveBadge = p.live
       ? '<span class="badge-live"><span class="dot"></span>Live</span>'
       : '';
-
     var starBtn = '<button class="star-btn" type="button" data-pid="' + escapeHtml(p.pid) + '" title="Set as featured" aria-label="Set as featured">' +
         '<svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' +
       '</button>';
-
     var microStats = '<div class="project-microstats">' +
       (p.visits > 0 ? '<span class="project-microstat">' +
         '<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' +
@@ -1708,7 +1714,13 @@ body.qr-open { overflow: hidden; }
         timeAgo(p.updated) +
       '</span>' : '') +
     '</div>';
-
+    // NEW: URL display row inside the card body
+    var urlRow = '';
+    if (p.liveUrlDisplay) {
+      urlRow = '<div class="project-url-row">' + p.liveUrlDisplay + '</div>';
+    } else if (p.liveUrl) {
+      urlRow = '<div class="project-url-row">' + renderUrlDisplay(p.liveUrl, { label: 'live' }) + '</div>';
+    }
     return '<a class="project-card has-thumb" href="' + escapeHtml(p.url) + '" data-pid="' + escapeHtml(p.pid) + '">' +
       '<div class="project-thumb"><img src="' + escapeHtml(thumbUrl) + '" alt="" loading="lazy"></div>' +
       liveBadge +
@@ -1719,6 +1731,7 @@ body.qr-open { overflow: hidden; }
           '<div class="project-name">' + escapeHtml(p.name) + '</div>' +
         '</div>' +
         (p.desc ? '<div class="project-desc">' + escapeHtml(p.desc) + '</div>' : '') +
+        urlRow +
         '<div class="project-meta">' +
           langPills +
           (p.updated ? '<span class="project-time">' + timeAgo(p.updated) + '</span>' : '') +
@@ -1729,26 +1742,18 @@ body.qr-open { overflow: hidden; }
     '</a>';
   }
 
-  // ── Bento ──
   function renderBento() {
     var bento = $('bento');
     var filtered = state.projects.slice();
-
     if (state.filter === 'live') filtered = filtered.filter(function (p) { return p.live; });
     else if (state.filter === 'draft') filtered = filtered.filter(function (p) { return !p.live; });
-
     if (state.sort === 'newest') filtered.sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
     else if (state.sort === 'oldest') filtered.sort(function (a, b) { return (a.updated || 0) - (b.updated || 0); });
     else if (state.sort === 'name') filtered.sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
-
     if (state.pinnedFeatured) {
       var idx = filtered.findIndex(function (p) { return p.pid === state.pinnedFeatured; });
-      if (idx > 0) {
-        var pinned = filtered.splice(idx, 1)[0];
-        filtered.unshift(pinned);
-      }
+      if (idx > 0) { var pinned = filtered.splice(idx, 1)[0]; filtered.unshift(pinned); }
     }
-
     if (filtered.length === 0) {
       var emptyData;
       if (state.projects.length === 0) {
@@ -1756,12 +1761,7 @@ body.qr-open { overflow: hidden; }
           ? { title: "You haven't published anything yet", desc: 'Create your first project to share it here.', cta: 'Create your first project', href: '/' }
           : { title: 'No public projects yet', desc: 'When @' + PROFILE_HANDLE + ' publishes a project, it will appear here.', cta: null, href: null };
       } else {
-        emptyData = {
-          title: 'No ' + (state.filter === 'live' ? 'live' : 'draft') + ' projects',
-          desc: 'Try a different filter.',
-          cta: 'Show all projects',
-          href: null
-        };
+        emptyData = { title: 'No ' + (state.filter === 'live' ? 'live' : 'draft') + ' projects', desc: 'Try a different filter.', cta: 'Show all projects', href: null };
       }
       bento.innerHTML =
         '<div class="empty-state">' +
@@ -1783,9 +1783,7 @@ body.qr-open { overflow: hidden; }
       }
       return;
     }
-
     bento.innerHTML = filtered.map(renderCard).join('');
-
     if (P.isOwner) {
       bento.querySelectorAll('.star-btn').forEach(function (btn) {
         if (btn.dataset.pid === state.pinnedFeatured) btn.classList.add('pinned');
@@ -1804,7 +1802,6 @@ body.qr-open { overflow: hidden; }
 
   window.__profileState = state;
 
-  // ── Share modal ──
   function openShareModal() {
     var modal = $('shareModal');
     if (!modal) return;
@@ -1817,7 +1814,6 @@ body.qr-open { overflow: hidden; }
     if (m) m.classList.remove('open');
   }
 
-  // ── Fullscreen QR ──
   function openQrPage() {
     if (state.qrOpen) return;
     state.qrOpen = true;
@@ -1827,7 +1823,6 @@ body.qr-open { overflow: hidden; }
     void page.offsetWidth;
     $('qrPageCode').innerHTML = generateQR(PROFILE_URL, { cells: 29, logoSizeRatio: 0.22 });
     $('qrPageUrl').textContent = PROFILE_URL;
-    $('qrPageSub').innerHTML = 'Point your camera at the code below';
     page.classList.add('open');
     document.body.classList.add('qr-open');
     try { history.pushState({ qrOpen: true }, '', location.href); } catch (err) {}
@@ -1844,21 +1839,16 @@ body.qr-open { overflow: hidden; }
       try { if (history.state && history.state.qrOpen) history.back(); } catch (err) {}
     }
   }
-  window.addEventListener('popstate', function () {
-    if (state.qrOpen) closeQrPage(true);
-  });
+  window.addEventListener('popstate', function () { if (state.qrOpen) closeQrPage(true); });
 
-  // ── QR download ──
   function downloadQR() {
     var svg = generateQR(PROFILE_URL, { cells: 29, logoSizeRatio: 0.22 });
     var canvas = document.createElement('canvas');
     var size = 1024;
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = size; canvas.height = size;
     var ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, size, size);
-
     var blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
     var url = URL.createObjectURL(blob);
     var img = new Image();
@@ -1894,7 +1884,6 @@ body.qr-open { overflow: hidden; }
       ctx.closePath();
       ctx.fill();
       ctx.restore();
-
       var logoImg = new Image();
       logoImg.crossOrigin = 'anonymous';
       logoImg.onload = function () {
@@ -1923,7 +1912,6 @@ body.qr-open { overflow: hidden; }
         triggerDownload();
       };
       logoImg.src = '/icons/icon.jpg';
-
       function triggerDownload() {
         canvas.toBlob(function (pngBlob) {
           var pngUrl = URL.createObjectURL(pngBlob);
@@ -1938,18 +1926,18 @@ body.qr-open { overflow: hidden; }
         }, 'image/png');
       }
     };
-    img.onerror = function () {
-      toast('Could not generate QR', 'error');
-      URL.revokeObjectURL(url);
-    };
+    img.onerror = function () { toast('Could not generate QR', 'error'); URL.revokeObjectURL(url); };
     img.src = url;
   }
 
-  // ── Auth hydrate ──
   function hydrateAuth() {
     var session = null;
     try { session = localStorage.getItem('folio.session'); } catch (e) {}
-    if (!session) return Promise.resolve(null);
+    if (!session) {
+      renderAuthSlot(null);
+      if (!P.isOwner) showCtaForGuest();
+      return Promise.resolve(null);
+    }
     return fetch('/api/auth?action=me', {
       headers: { 'Authorization': 'Bearer ' + session },
       signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(5000) : undefined
@@ -1957,6 +1945,7 @@ body.qr-open { overflow: hidden; }
       .then(function (res) {
         if (!res.ok) {
           try { localStorage.removeItem('folio.session'); localStorage.removeItem('folio.user'); } catch (e) {}
+          renderAuthSlot(null);
           return null;
         }
         return res.json();
@@ -1966,14 +1955,21 @@ body.qr-open { overflow: hidden; }
           upgradeAuthUI(data.user);
           return data.user;
         }
+        renderAuthSlot(null);
         return null;
       })
-      .catch(function () { return null; });
+      .catch(function () { renderAuthSlot(null); return null; });
+  }
+
+  function renderAuthSlot(viewer) {
+    var slot = $('authSlot');
+    if (!slot) return;
+    if (!viewer) {
+      slot.innerHTML = '<a class="btn-signin" href="/register">Sign in</a>';
+    }
   }
 
   function upgradeAuthUI(viewer) {
-    var isOwner = P.isOwner || (viewer.uid && P.uid === viewer.uid);
-
     var slot = $('authSlot');
     if (slot) {
       var displayName = (viewer.profile && viewer.profile.displayName) || viewer.username || '';
@@ -1987,12 +1983,8 @@ body.qr-open { overflow: hidden; }
           '<span>@' + escapeHtml(viewer.username || '') + '</span>' +
         '</a>';
     }
-
-    if (isOwner) {
-      document.body.classList.add('is-owner');
-    }
-
-    // Hide CTA for any signed-in user
+    var isOwner = P.isOwner || (viewer.uid && P.uid === viewer.uid);
+    if (isOwner) document.body.classList.add('is-owner');
     var cta = $('folioCta');
     if (cta) cta.hidden = true;
   }
@@ -2002,7 +1994,25 @@ body.qr-open { overflow: hidden; }
     if (cta && !P.isOwner) cta.hidden = false;
   }
 
-  // ── Wire events ──
+  // Global copy handler
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-copy-text]');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var text = btn.getAttribute('data-copy-text');
+    if (!text) return;
+    copyText(text).then(function (ok) {
+      if (ok) {
+        btn.classList.add('copied');
+        toast('Copied', 'success');
+        setTimeout(function () { btn.classList.remove('copied'); }, 1400);
+      } else {
+        toast('Copy failed', 'error');
+      }
+    });
+  });
+
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action]');
     if (!btn) return;
@@ -2015,17 +2025,14 @@ body.qr-open { overflow: hidden; }
   $('shareModal')?.addEventListener('click', function (e) {
     if (e.target === $('shareModal')) closeShareModal();
   });
-
   $('shareCopyBtn')?.addEventListener('click', function () {
     var btn = $('shareCopyBtn');
     withCopyFeedback(btn, function () { return copyText(PROFILE_URL); });
   });
-
   $('shareNativeBtn')?.addEventListener('click', function () {
     var btn = $('shareNativeBtn');
     withCopyFeedback(btn, function () { return shareOrCopy(PROFILE_URL, (P.displayName || PROFILE_HANDLE) + ' on Folio'); });
   });
-
   $('qrPageBack')?.addEventListener('click', function () { closeQrPage(false); });
   $('qrDownloadBtn')?.addEventListener('click', downloadQR);
   $('qrShareBtn')?.addEventListener('click', function () {
@@ -2036,27 +2043,23 @@ body.qr-open { overflow: hidden; }
     var btn = $('qrCopyBtn');
     withCopyFeedback(btn, function () { return copyText(PROFILE_URL); });
   });
-
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       closeShareModal();
       if (state.qrOpen) closeQrPage(false);
     }
   });
-
   $('sortSelect')?.addEventListener('change', function (e) {
     state.sort = e.target.value;
     renderBento();
   });
 
-  // ── Boot ──
   hydrateProjects();
   renderCover();
   renderStatusDot();
   setupBioToggle();
   renderLinks();
 
-  // Visits stat
   var totalVisits = state.projects.reduce(function (sum, p) { return sum + (p.visits || 0); }, 0);
   var visitsEl = $('statVisits');
   var visitsWrap = $('statVisitsWrap');
@@ -2068,19 +2071,19 @@ body.qr-open { overflow: hidden; }
     }
   }
 
-  // Restore pinned featured
-  try {
-    var saved = localStorage.getItem('folio.profile.pinnedFeatured.' + PROFILE_HANDLE);
-    if (saved) state.pinnedFeatured = saved;
-  } catch (err) {}
+  // Only restore pinnedFeatured for the owner
+  if (P.isOwner) {
+    try {
+      var saved = localStorage.getItem('folio.profile.pinnedFeatured.' + PROFILE_HANDLE);
+      if (saved) state.pinnedFeatured = saved;
+    } catch (err) {}
+  }
 
   renderTabs();
   renderBento();
 
   hydrateAuth().then(function (viewer) {
-    if (!viewer) {
-      if (!P.isOwner) showCtaForGuest();
-    }
+    if (!viewer && !P.isOwner) showCtaForGuest();
   });
 
 })();

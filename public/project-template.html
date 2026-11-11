@@ -169,6 +169,16 @@ svg { display: block; flex-shrink: 0; }
 .btn-signin:hover { background: var(--theme-primary-hover); }
 .header-utility { display: none; gap: 4px; align-items: center; }
 @media (min-width: 1024px) { .header-utility { display: flex; } }
+.auth-skeleton {
+  display: inline-block;
+  width: 72px;
+  height: 28px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--theme-glass-bg) 0%, var(--theme-glass-border) 50%, var(--theme-glass-bg) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
 .page-main {
   flex: 1; width: 100%; max-width: var(--content-max); margin: 0 auto;
@@ -178,7 +188,6 @@ svg { display: block; flex-shrink: 0; }
 }
 @media (min-width: 640px) { .page-main { padding: 24px 20px 40px; } }
 @media (min-width: 1024px) { .page-main { padding: 20px 20px 40px; padding-bottom: 40px; } }
-
 .page-main > .reveal {
   opacity: 0; transform: translateY(8px);
   animation: reveal 400ms var(--ease) forwards;
@@ -229,11 +238,12 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
     gap: 20px;
     align-items: stretch;
   }
+  /* When there's no preview image, the head takes the whole width */
+  body.no-preview .hero-block {
+    grid-template-columns: 1fr;
+  }
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   Project preview (server-rendered .project-hero from host.js)
-   ═══════════════════════════════════════════════════════════════ */
 .project-hero {
   border-radius: var(--r-lg);
   overflow: hidden;
@@ -270,56 +280,6 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
   letter-spacing: -3px;
 }
 
-/* Legacy .browser-frame support (in case host.js still uses it) */
-.browser-frame {
-  border-radius: var(--r-lg); overflow: hidden;
-  border: 1px solid var(--theme-card-border);
-  background: var(--theme-surface-card-solid);
-  box-shadow: 0 16px 48px -16px rgba(0, 0, 0, 0.35);
-  transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
-}
-.browser-frame:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 24px 56px -20px rgba(0, 0, 0, 0.4);
-}
-.browser-frame-chrome {
-  display: flex; align-items: center; gap: 7px;
-  padding: 8px 12px; background: var(--theme-surface);
-  border-bottom: 1px solid var(--theme-glass-border);
-}
-.browser-frame-chrome .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.dot-r { background: #EF4444; }
-.dot-y { background: #F59E0B; }
-.dot-g { background: #10B981; }
-.browser-frame-url {
-  flex: 1; margin-left: 6px; padding: 3px 10px;
-  background: var(--theme-glass-bg); border: 1px solid var(--theme-glass-border);
-  border-radius: 5px; font-family: var(--font-mono); font-size: 10.5px;
-  color: var(--theme-text-tertiary); overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; min-width: 0;
-}
-.browser-frame-content {
-  position: relative; aspect-ratio: 16 / 10;
-  background: var(--theme-surface-elevated); overflow: hidden;
-}
-@media (min-width: 1024px) { .browser-frame-content { aspect-ratio: 16 / 9; } }
-.browser-frame-content .hero-art {
-  width: 100%; height: 100%; object-fit: cover; display: block;
-  transition: transform 0.5s var(--ease);
-}
-.browser-frame:hover .browser-frame-content .hero-art { transform: scale(1.02); }
-.browser-frame-cta {
-  position: absolute; right: 12px; bottom: 12px;
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 13px; border-radius: 8px;
-  background: var(--theme-primary); color: #0a0c10;
-  font-size: 12px; font-weight: 700;
-  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.35);
-  transition: all 0.15s var(--ease);
-}
-.browser-frame-cta:hover { background: var(--theme-primary-hover); transform: translateY(-1px); }
-.browser-frame-cta svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.4; }
-
 .project-head {
   display: grid;
   grid-template-columns: 48px 1fr;
@@ -345,7 +305,6 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
     width: 56px; height: 56px;
     border-radius: 14px;
   }
-  .project-head > .project-icon-wrap span { font-size: 22px; }
 }
 
 .project-icon-wrap {
@@ -362,6 +321,14 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
   background: linear-gradient(135deg, #F59E0B, #f97316);
   color: #0a0c10; font-weight: 800; font-size: 18px;
 }
+/* Defensive: force any child (img or span) to fill the wrapper */
+.project-icon-wrap > img,
+.project-icon-wrap > span {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  font-size: clamp(14px, 40%, 22px) !important;
+}
 
 .project-head-body { min-width: 0; }
 .project-name {
@@ -374,8 +341,88 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
   font-size: 13.5px; color: var(--theme-text-secondary); line-height: 1.5;
   margin-bottom: 8px; overflow-wrap: break-word;
 }
+.project-desc:empty { display: none; }
 @media (min-width: 1024px) { .project-desc { font-size: 13px; line-height: 1.55; } }
 @media (max-width: 639px) { .project-desc { font-size: 13px; } }
+
+/* URL display row (live + short links) */
+.url-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 6px 0 8px;
+  min-width: 0;
+}
+.url-row:empty { display: none; }
+
+.url-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  transition: all 0.15s var(--ease);
+}
+.url-display:hover {
+  background: var(--theme-surface-elevated);
+  border-color: var(--theme-primary-glow);
+}
+.url-display .url-host {
+  color: var(--theme-text-tertiary);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.url-display a {
+  color: var(--theme-text);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+  font-weight: 600;
+}
+.url-display a:hover { color: var(--theme-primary); }
+.url-display .url-path {
+  color: var(--theme-text-tertiary);
+  font-weight: 500;
+}
+.url-display button {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-tertiary);
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+}
+.url-display button:hover {
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+}
+.url-display button.copied { color: var(--theme-success); }
+.url-display button svg {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+}
 
 .pill-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
 .pill {
@@ -391,12 +438,8 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
 .pill.live { background: var(--theme-success-soft); border-color: rgba(16, 185, 129, 0.28); color: var(--theme-success); }
 .pill.public { background: var(--theme-success-soft); border-color: rgba(16, 185, 129, 0.28); color: var(--theme-success); }
 .pill.code { background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.28); color: var(--theme-info); }
-.pill.owner { background: var(--theme-primary-soft); border-color: var(--theme-primary-glow); color: var(--theme-primary); text-transform: none; letter-spacing: 0; font-size: 11px; }
 .pill[hidden] { display: none; }
 
-/* ═══════════════════════════════════════════════════════════════
-   Server-rendered badge classes from host.js
-   ═══════════════════════════════════════════════════════════════ */
 .status-badge {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 9px; border-radius: 999px;
@@ -414,7 +457,6 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
   background: currentColor; flex-shrink: 0;
 }
 
-/* ── Language badges (from host.js {{LANGUAGES}}) ── */
 .lang-badge {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 9px; border-radius: 6px;
@@ -426,11 +468,14 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
 .lang-badge:hover { background: var(--theme-surface-elevated); color: var(--theme-text); }
 .lang-badge .lang-dot {
   width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
-  /* Default colour if host.js didn't inline one */
   background: var(--theme-primary);
 }
+.lang-badge .lang-pct {
+  color: var(--theme-text-tertiary);
+  font-weight: 500;
+  margin-left: 2px;
+}
 
-/* ── People row ── */
 .people-row {
   display: flex;
   align-items: center;
@@ -443,10 +488,7 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
 @media (min-width: 1024px) {
   .people-row { gap: 16px; margin-top: 12px; padding-top: 12px; }
 }
-/* When there are no contributors, remove horizontal gap so owner chip doesn't look orphaned */
-.people-row.no-contributors {
-  gap: 0;
-}
+.people-row.no-contributors { gap: 0; }
 .people-by { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .people-label {
   font-size: 9.5px; font-weight: 800; text-transform: uppercase;
@@ -493,7 +535,6 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
   color: var(--theme-text-tertiary); white-space: nowrap;
 }
 @media (max-width: 639px) { .people-handle { display: none; } }
-
 .people-contributors { display: flex; align-items: center; }
 .people-contributors[hidden] { display: none !important; }
 .people-contributors-btn {
@@ -535,6 +576,7 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
 .stat-inline-value { color: var(--theme-text); font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .project-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+.project-actions:empty { display: none; }
 @media (min-width: 1024px) { .project-actions { justify-content: flex-end; margin-bottom: 24px; } }
 @media (max-width: 639px) {
   .project-actions {
@@ -575,7 +617,6 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
   border-color: var(--theme-glass-border);
 }
 .btn.ghost:hover:not(:disabled) { background: var(--theme-glass-bg); color: var(--theme-text); }
-
 @keyframes successPulse {
   0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
   70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
@@ -596,43 +637,25 @@ body.is-owner .util-btn.owner-only { display: inline-flex; }
     align-items: start;
   }
 }
-/* Collapse the split-row when both children are empty/hidden */
 .split-row.is-empty {
   display: none !important;
   margin-bottom: 0 !important;
   padding: 0 !important;
   border: 0 !important;
 }
-
 .section-title {
   display: flex; align-items: center; gap: 8px;
   font-size: 10.5px; font-weight: 800; text-transform: uppercase;
   letter-spacing: 0.6px; color: var(--theme-text-tertiary); margin-bottom: 10px;
 }
 .section-title::after { content: ""; flex: 1; height: 1px; background: var(--theme-divider); }
-
 .lang-bar {
   display: flex; height: 8px; border-radius: 4px; overflow: hidden;
   background: var(--theme-divider); margin-bottom: 10px;
 }
 .lang-bar-seg { height: 100%; transition: width 0.6s var(--ease); width: 0; }
 body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
-
 .lang-pills { display: flex; flex-wrap: wrap; gap: 5px; }
-.lang-pill {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 4px 9px; border-radius: 6px;
-  background: var(--theme-glass-bg); border: 1px solid var(--theme-glass-border);
-  font-size: 11px; font-weight: 700;
-  color: var(--theme-text-secondary); font-family: var(--font-mono);
-  transition: all 0.15s var(--ease);
-}
-.lang-pill:hover { background: var(--theme-surface-elevated); color: var(--theme-text); }
-.lang-pill .lang-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--theme-primary); }
-.lang-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--theme-primary); }
-.lang-pct { color: var(--theme-text-tertiary); font-weight: 500; margin-left: 1px; }
-
-/* Owner OG preview panel (from host.js {{OG_PREVIEW_HTML}}) */
 .og-preview-panel {
   padding: 14px;
   background: var(--theme-surface-card);
@@ -660,38 +683,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
   border-radius: 8px; border: 1px solid var(--theme-glass-border);
   background: var(--theme-surface-elevated);
 }
-
-/* Legacy .share-preview-* aliases (also map to OG preview) */
-.share-preview-panel {
-  padding: 14px;
-  background: var(--theme-surface-card);
-  border: 1px dashed var(--theme-glass-border);
-  border-radius: var(--r-lg);
-  display: none;
-}
-.share-preview-panel.open { display: block; animation: reveal 300ms var(--ease); }
-.share-preview-head {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 10px; gap: 8px; flex-wrap: wrap;
-}
-.share-preview-label {
-  font-size: 10px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.6px; color: var(--theme-text-tertiary);
-}
-.share-preview-meta { display: flex; gap: 5px; flex-wrap: wrap; }
-.share-preview-badge {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 7px; border-radius: 4px;
-  background: var(--theme-primary-soft); color: var(--theme-primary);
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
-}
-.share-preview-badge.palette { background: rgba(168, 85, 247, 0.12); color: #c084fc; }
-.share-preview-image {
-  width: 100%; aspect-ratio: 1200 / 630; object-fit: cover;
-  border-radius: 8px; border: 1px solid var(--theme-glass-border);
-  background: var(--theme-surface-elevated);
-}
-
 .folio-cta {
   margin: 24px 0 12px; padding: 18px;
   border-radius: var(--r-lg);
@@ -706,10 +697,7 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
   pointer-events: none; opacity: 0.5;
 }
 @media (min-width: 1024px) { .folio-cta { padding: 22px 24px; margin: 28px 0 14px; } }
-.folio-cta-inner {
-  position: relative; z-index: 1;
-  display: flex; flex-direction: column; gap: 12px;
-}
+.folio-cta-inner { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 12px; }
 @media (min-width: 640px) {
   .folio-cta-inner { flex-direction: row; align-items: center; justify-content: space-between; gap: 18px; }
 }
@@ -800,7 +788,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
 .icon-btn-qr { padding: 7px 9px; min-height: 30px; }
 .icon-btn-qr svg { width: 13px; height: 13px; }
 
-/* ── Contributors modal ── */
 .contrib-modal-overlay {
   position: fixed; inset: 0; z-index: 910;
   background: rgba(6, 8, 12, 0.72);
@@ -865,7 +852,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
 .contrib-item-role.editor { background: rgba(59, 130, 246, 0.12); color: var(--theme-info); }
 .contrib-item-role.viewer { background: var(--theme-glass-bg); color: var(--theme-text-tertiary); }
 
-/* ── Share modal ── */
 .share-modal-overlay {
   position: fixed; inset: 0; z-index: 900;
   background: rgba(6, 8, 12, 0.72);
@@ -914,7 +900,7 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  .page-main > .reveal, .project-card, .skeleton-card { opacity: 1 !important; transform: none !important; }
+  .page-main > .reveal, .project-card { opacity: 1 !important; transform: none !important; }
 }
 [data-reduced-motion="true"] *,
 [data-reduced-motion="true"] *::before,
@@ -928,7 +914,7 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
 @media (max-width: 639px) { .page-main { padding-bottom: 90px; } }
 </style>
 </head>
-<body>
+<body class="{{PROJECT_HAS_PREVIEW === 'true' ? 'has-preview' : 'no-preview'}}">
 
 <a class="skip-link" href="#main">Skip to content</a>
 
@@ -959,7 +945,7 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
       </div>
 
       <div id="authSlot">
-        <a class="btn-signin" href="/register">Sign in</a>
+        <span class="auth-skeleton"></span>
       </div>
     </div>
   </header>
@@ -992,6 +978,10 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
         <div class="project-head-body">
           <h1 class="project-name">{{PROJECT_NAME}}</h1>
           <p class="project-desc">{{PROJECT_DESCRIPTION}}</p>
+          <div class="url-row">
+            {{LIVE_URL_DISPLAY}}
+            {{PROJECT_SHORT_URL_DISPLAY}}
+          </div>
           <div class="pill-row">
             {{LIVE_BADGE_HTML}}
             <span class="pill public" id="pillPublic" hidden>
@@ -1113,7 +1103,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
   </footer>
 </div>
 
-<!-- Share modal -->
 <div class="share-modal-overlay" id="shareModal" role="dialog" aria-modal="true">
   <div class="share-modal">
     <button class="share-modal-close" id="shareModalClose" type="button" aria-label="Close">
@@ -1138,7 +1127,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
   </div>
 </div>
 
-<!-- Contributors modal -->
 <div class="contrib-modal-overlay" id="contribModal" role="dialog" aria-modal="true" aria-labelledby="contribModalTitle">
   <div class="contrib-modal">
     <button class="contrib-modal-close" id="contribModalClose" type="button" aria-label="Close">
@@ -1167,26 +1155,11 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     : (P.pid ? BASE_URL + '/project?pid=' + P.pid : location.href);
 
   var LANG_COLORS = {
-    HTML: '#E34F26',
-    CSS: '#264DE4',
-    SCSS: '#C6538C',
-    JavaScript: '#F7DF1E',
-    TypeScript: '#3178C6',
-    JSX: '#61DAFB',
-    TSX: '#61DAFB',
-    JSON: '#8BC34A',
-    Markdown: '#083FA1',
-    Python: '#3776AB',
-    Ruby: '#CC342D',
-    Go: '#00ADD8',
-    Rust: '#CE422B',
-    PHP: '#777BB4',
-    Java: '#B07219',
-    Kotlin: '#A97BFF',
-    Swift: '#FA7343',
-    SVG: '#FFB13B',
-    XML: '#0060AC',
-    YAML: '#CB171E'
+    HTML: '#E34F26', CSS: '#264DE4', SCSS: '#C6538C',
+    JavaScript: '#F7DF1E', TypeScript: '#3178C6', JSX: '#61DAFB', TSX: '#61DAFB',
+    JSON: '#8BC34A', Markdown: '#083FA1', Python: '#3776AB', Ruby: '#CC342D',
+    Go: '#00ADD8', Rust: '#CE422B', PHP: '#777BB4', Java: '#B07219',
+    Kotlin: '#A97BFF', Swift: '#FA7343', SVG: '#FFB13B', XML: '#0060AC', YAML: '#CB171E'
   };
 
   function timeAgo(ts) {
@@ -1287,7 +1260,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     });
   }
 
-  // ── Render pills ──
   function renderPills() {
     if (P.visibility && P.visibility.profile === 'public') {
       var el = $('pillPublic');
@@ -1299,42 +1271,26 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     }
   }
 
-  // ── Stats ──
   function renderStats() {
     if (P.updatedAt) {
       var u = $('statUpdated');
-      if (u) {
-        u.hidden = false;
-        $('statUpdatedVal').textContent = timeAgo(P.updatedAt);
-      }
+      if (u) { u.hidden = false; $('statUpdatedVal').textContent = timeAgo(P.updatedAt); }
     }
     if (P.deployedAt) {
       var d = $('statDeployed');
-      if (d) {
-        d.hidden = false;
-        $('statDeployedVal').textContent = timeAgo(P.deployedAt);
-      }
+      if (d) { d.hidden = false; $('statDeployedVal').textContent = timeAgo(P.deployedAt); }
     }
     if (P.createdAt) {
       var c = $('statCreated');
-      if (c) {
-        c.hidden = false;
-        $('statCreatedVal').textContent = timeAgo(P.createdAt);
-      }
+      if (c) { c.hidden = false; $('statCreatedVal').textContent = timeAgo(P.createdAt); }
     }
     var totalLines = P.languages && P.languages.totalLines;
     if (typeof totalLines === 'number' && totalLines > 0) {
       var l = $('statLines');
-      if (l) {
-        l.hidden = false;
-        $('statLinesVal').textContent = '~' + totalLines.toLocaleString();
-      }
+      if (l) { l.hidden = false; $('statLinesVal').textContent = '~' + totalLines.toLocaleString(); }
     }
   }
 
-  // ── Language bar + pills ──
-  // FIX: this also rewrites the SSR-rendered {{LANGUAGES}} pills with
-  // per-language colours, matching the bar segments.
   function renderLangBar() {
     var bar = $('langBar');
     if (!bar) return;
@@ -1351,11 +1307,8 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
       if (pillsWrap) pillsWrap.innerHTML = '';
       if (splitRow) {
         var previewOpen = splitRow.querySelector('.og-preview-panel.open, .share-preview-panel.open');
-        if (previewOpen) {
-          splitRow.style.gridTemplateColumns = '1fr';
-        } else {
-          splitRow.classList.add('is-empty');
-        }
+        if (previewOpen) splitRow.style.gridTemplateColumns = '1fr';
+        else splitRow.classList.add('is-empty');
       }
       return;
     }
@@ -1363,11 +1316,9 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     if (splitRow) splitRow.classList.remove('is-empty');
     if (section) section.style.display = '';
 
-    var sorted = keys.map(function (k) {
-      return { name: k, pct: langs[k] };
-    }).sort(function (a, b) { return b.pct - a.pct; });
+    var sorted = keys.map(function (k) { return { name: k, pct: langs[k] }; })
+      .sort(function (a, b) { return b.pct - a.pct; });
 
-    // Bar segments
     var html = '';
     for (var i = 0; i < sorted.length; i++) {
       var lang = sorted[i];
@@ -1376,15 +1327,10 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     }
     bar.innerHTML = html;
 
-    // FIX: rewrite the SSR pills with coloured dots + percentages.
-    // This replaces whatever host.js emitted so colours always match
-    // the bar segments, and every dot gets its language colour.
     if (pillsWrap) {
       pillsWrap.innerHTML = sorted.map(function (lang) {
         var color = LANG_COLORS[lang.name] || 'var(--theme-primary)';
-        var pctLabel = Number.isFinite(lang.pct)
-          ? (Math.round(lang.pct * 10) / 10) + '%'
-          : '';
+        var pctLabel = Number.isFinite(lang.pct) ? (Math.round(lang.pct * 10) / 10) + '%' : '';
         return '<span class="lang-badge">' +
           '<span class="lang-dot" style="background:' + color + '"></span>' +
           escapeHtml(lang.name) +
@@ -1394,8 +1340,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     }
   }
 
-  // ── Cover fallback ──
-  // FIX: targets .project-hero (server-rendered) as well as legacy .browser-frame.
   function applyCoverFallback() {
     var hero = document.querySelector('.project-hero');
     if (hero) {
@@ -1410,22 +1354,9 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
           hero.appendChild(ph);
         });
       }
-      return;
     }
-    var frame = document.querySelector('.browser-frame-content');
-    if (!frame) return;
-    var frameImg = frame.querySelector('img');
-    if (!frameImg) return;
-    frameImg.addEventListener('error', function () {
-      frameImg.style.display = 'none';
-      var ph2 = document.createElement('div');
-      ph2.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:linear-gradient(135deg,var(--theme-primary-soft),var(--theme-surface-elevated));color:var(--theme-primary);font-size:48px;font-weight:900;letter-spacing:-2px;';
-      ph2.textContent = (P.name || '?').charAt(0).toUpperCase();
-      frame.appendChild(ph2);
-    });
   }
 
-  // ── Contributors ──
   function renderContributors() {
     var contributors = Array.isArray(P.contributors) ? P.contributors : [];
     var wrap = $('peopleContributors');
@@ -1435,7 +1366,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     if (!wrap || !stack || !count) return;
 
     if (!contributors.length) {
-      // Remove the entire contributors block from the DOM so no gap remains
       if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
       if (row) row.classList.add('no-contributors');
       return;
@@ -1473,7 +1403,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
         : contributors.length + ' people have access to this project';
     }
 
-    // Owner row
     var ownerInitials = getInitials(P.ownerDisplayName || P.ownerUsername);
     var ownerColor = getAvatarColor(P.ownerUsername || ownerInitials);
     var ownerAvatar = P.ownerAvatarUrl
@@ -1490,7 +1419,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
         '<span class="contrib-item-role owner">Owner</span>' +
       '</a>';
 
-    // Contributor rows
     var contribHtml = contributors.map(function (c) {
       var initials = getInitials(c.displayName || c.username);
       var color = getAvatarColor(c.username || initials);
@@ -1518,7 +1446,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     if (modal) modal.classList.remove('open');
   }
 
-  // ── QR ──
   function generateQR(text) {
     if (!text) return '';
     var cells = 25;
@@ -1576,12 +1503,12 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     if (modal) modal.classList.remove('open');
   }
 
-  // ── Auth ──
   function hydrateAuth() {
     var session = null;
     try { session = localStorage.getItem('folio.session'); } catch (e) {}
     if (!session) {
       if (!P.isOwnerViewer) showCtaForGuest();
+      renderAuthSlot(null);
       return Promise.resolve(null);
     }
     return fetch('/api/auth?action=me', {
@@ -1591,6 +1518,7 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
       .then(function (res) {
         if (!res.ok) {
           try { localStorage.removeItem('folio.session'); localStorage.removeItem('folio.user'); } catch (e) {}
+          renderAuthSlot(null);
           return null;
         }
         return res.json();
@@ -1600,9 +1528,18 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
           upgradeAuthUI(data.user);
           return data.user;
         }
+        renderAuthSlot(null);
         return null;
       })
-      .catch(function () { return null; });
+      .catch(function () { renderAuthSlot(null); return null; });
+  }
+
+  function renderAuthSlot(viewer) {
+    var slot = $('authSlot');
+    if (!slot) return;
+    if (!viewer) {
+      slot.innerHTML = '<a class="btn-signin" href="/register">Sign in</a>';
+    }
   }
 
   function upgradeAuthUI(viewer) {
@@ -1625,7 +1562,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
       document.body.classList.add('is-owner');
     }
 
-    // CTA hidden for any signed-in user (guest only)
     var cta = $('folioCta');
     if (cta) cta.hidden = true;
   }
@@ -1635,7 +1571,25 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     if (cta) cta.hidden = false;
   }
 
-  // ── Copy buttons ──
+  // Global copy handler — matches every [data-copy-text] button
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-copy-text]');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var text = btn.getAttribute('data-copy-text');
+    if (!text) return;
+    copyText(text).then(function (ok) {
+      if (ok) {
+        btn.classList.add('copied');
+        toast('Copied', 'success');
+        setTimeout(function () { btn.classList.remove('copied'); }, 1400);
+      } else {
+        toast('Copy failed', 'error');
+      }
+    });
+  });
+
   function wireCopyButtons() {
     document.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-action]');
@@ -1752,7 +1706,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
       .catch(function () { toast('Network error', 'error'); });
   }
 
-  // ── Preview toggle ──
   function renderPreviewToggle() {
     var btn = document.querySelector('[data-action="toggle-preview"]');
     if (!btn) return;
@@ -1783,7 +1736,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     });
   }
 
-  // ── Sticky bar ──
   function wireStickyBar() {
     var lastY = 0;
     var actions = $('projectActions');
@@ -1816,7 +1768,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     }
   }
 
-  // ── Events ──
   $('shareModalClose')?.addEventListener('click', closeShareModal);
   $('shareModal')?.addEventListener('click', function (e) {
     if (e.target === $('shareModal')) closeShareModal();
@@ -1841,7 +1792,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     }
   });
 
-  // Open share modal from "share" actions
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action="share"], [data-action="copy-link"]');
     if (!btn) return;
@@ -1851,7 +1801,6 @@ body.loaded .lang-bar-seg { width: var(--seg-pct, 0%); }
     }
   });
 
-  // ── Boot ──
   renderPills();
   renderStats();
   renderLangBar();
