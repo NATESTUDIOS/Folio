@@ -3896,3 +3896,4 @@ svg { display: block; }
   background: var(--theme-glass-bg);
   color: var(--theme-text-tertiary);
 }
+.menu-divider { height: 1px; background: var(--theme-divider); margin: 4px 0; }
