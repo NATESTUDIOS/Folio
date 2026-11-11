@@ -3,29 +3,23 @@
 //  Folio Preview Tools
 //  ────────────────────────────────────────────────────────────────
 //  Self-contained preview module. Owns:
-//    - Full-screen preview overlay
+//    - Full-screen preview overlay (with editor-mode fullscreen toggle)
 //    - Sizing modes (Fit / Phone / Tablet / Laptop / Custom)
-//    - Console (structured logs, filter, search, clear, REPL)
-//    - Network (fetch/XHR log, filter, waterfall, detail)
-//    - Responsive (viewport, overflow, touch targets, small text)
-//    - Performance (Web Vitals, resource waterfall, payload budget)
-//    - Files (loaded vs skipped)
-//    - Storage (in-memory shim inspector)
-//    - DOM (tree, inspect mode, highlight)
-//    - Accessibility (alt, labels, contrast, hierarchy)
-//    - Dev tools (eval, copy, simulate, reload)
+//    - Console, Network, Responsive, Performance, Files, Storage,
+//      DOM, Accessibility, Dev Tools, Editor Console, Search
+//    - Templates, snippets, pins, per-file revert, deploy-from-version,
+//      multi-file search replace, cross-project search, live syntax lint
 //
-//  index.html provides only:
-//    - A mount point (<div id="previewRoot"></div>)
-//    - A buildHtml callback (returns the assembled HTML)
-//    - A listFiles callback (returns file metadata)
-//    - An onOpenFile callback (jump to source)
+//  Editor provides (via window.__folio):
+//    api   — { S, apiFetch, db, cm, workspace, toast, confirm, openSheet, closeSheet,
+//              openProjectById, createNewProject, renderSidebar, refreshInfoIfOpen }
+//    eval  — async (code) => ({ ok, text })
+//    events — EventTarget
 //
-//  Everything else — markup, styling, bridge injection, sizing,
-//  tool panels — lives here.
+//  Everything else lives here.
 // ═══════════════════════════════════════════════════════════════════
 
-const PREVIEW_VERSION = "1.0.0";
+const PREVIEW_VERSION = "1.1.0";
 
 // ── Sizing presets ──────────────────────────────────────────────
 const SIZE_PRESETS = {
@@ -73,8 +67,10 @@ const REQ = {
 // ── Persistence keys ────────────────────────────────────────────
 const LS_MODE = (pid) => `folio.preview.mode.${pid}`;
 const LS_SIZE = (pid) => `folio.preview.size.${pid}`;
-const LS_DOCK = "folio.preview.dock";       // dock height (px) last used
-const LS_OPEN_SECTION = "folio.preview.open"; // last open section id
+const LS_OPEN_SECTION = "folio.preview.open";
+const LS_FULLSCREEN = "folio.preview.fullscreen";
+const LS_PINNED = "folio.pinnedProjects";
+const LS_SNIPPETS = "folio.snippets";
 
 // ── Limits ──────────────────────────────────────────────────────
 const LIMITS = {
@@ -84,18 +80,116 @@ const LIMITS = {
   responsiveIssues: 30,
   domNodes: 500,
   domDepth: 8,
+  editorHistory: 100,
 };
 
 // ═══════════════════════════════════════════════════════════════════
-//  STYLES — injected once into <head>
+//  FILE TEMPLATES
+// ═══════════════════════════════════════════════════════════════════
+const TEMPLATES = {
+  html: {
+    label: "HTML5 page",
+    ext: ".html",
+    content: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Title</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Hello</h1>
+  <script src="app.js"><\/script>
+</body>
+</html>
+`,
+  },
+  css: {
+    label: "CSS reset + base",
+    ext: ".css",
+    content: `/* Reset */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; color: #111; background: #fff; }
+img, picture, svg { max-width: 100%; display: block; }
+button, input, select, textarea { font: inherit; }
+`,
+  },
+  js: {
+    label: "JS module",
+    ext: ".js",
+    content: `"use strict";
+
+export function main() {
+  console.log("ready");
+}
+
+document.addEventListener("DOMContentLoaded", main);
+`,
+  },
+  api: {
+    label: "API route",
+    ext: ".js",
+    path: "api/",
+    content: `const body = (REQ.body && typeof REQ.body === "object") ? REQ.body : {};
+const action = typeof body.action === "string" ? body.action : "";
+try {
+  if (action === "hello") return { message: "Hello from the server!" };
+  return { __status: 400, error: "Unknown action: " + action };
+} catch (e) {
+  return { __status: 500, error: "Script error: " + e.message };
+}
+`,
+  },
+  md: {
+    label: "Markdown doc",
+    ext: ".md",
+    content: `# Title
+
+Short description.
+
+## Section
+
+- Point one
+- Point two
+`,
+  },
+  json: {
+    label: "JSON file",
+    ext: ".json",
+    content: `{
+  "name": "example",
+  "version": "1.0.0",
+  "items": []
+}
+`,
+  },
+  react: {
+    label: "React component",
+    ext: ".jsx",
+    content: `import { useState } from "react";
+
+export default function Component() {
+  const [count, setCount] = useState(0);
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={() => setCount(count + 1)}>Increment</button>
+    </div>
+  );
+}
+`,
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════
+//  STYLES
 // ═══════════════════════════════════════════════════════════════════
 const PREVIEW_CSS = `
-/* ── Overlay ─────────────────────────────────────────────── */
 .fp-overlay{position:fixed;inset:0;z-index:950;background:var(--theme-bg,#0a0c10);display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .18s var(--ease,cubic-bezier(.16,1,.3,1))}
 .fp-overlay[data-open="true"]{opacity:1;pointer-events:auto}
 .fp-overlay[data-open="false"]{display:none}
-
-/* ── Header ──────────────────────────────────────────────── */
 .fp-header{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(20,22,28,.72);backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;min-height:52px}
 .fp-title{font-size:13px;font-weight:800;color:var(--theme-text,#e8ecf1);letter-spacing:-.2px;margin-right:auto;display:flex;align-items:center;gap:8px}
 .fp-title .fp-hint{font-size:10px;font-weight:500;color:var(--theme-text-tertiary,#8a919c)}
@@ -111,18 +205,13 @@ const PREVIEW_CSS = `
 .fp-btn:hover{background:rgba(255,255,255,.1);color:var(--theme-text,#e8ecf1)}
 .fp-btn.icon{padding:6px;width:28px;height:28px;justify-content:center}
 .fp-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-
-/* ── Stage ───────────────────────────────────────────────── */
 .fp-stage-wrap{flex:1;position:relative;overflow:hidden;background:repeating-conic-gradient(rgba(255,255,255,.02) 0% 25%,transparent 0% 50%) 50%/20px 20px;min-height:0}
 .fp-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;transition:bottom .18s ease}
-.fp-stage-wrap[data-dock-open="true"] .fp-stage{padding-bottom:16px}
 .fp-frame{position:relative;background:#0a0c10;transform-origin:center center;transition:transform .2s ease,width .2s ease,height .2s ease;flex-shrink:0;margin:auto}
 .fp-frame[data-device="true"]{border-radius:32px;border:8px solid #1a1a1a;box-shadow:0 24px 80px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04)}
 .fp-frame[data-device="true"]::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:120px;height:22px;background:#0a0c10;border-radius:0 0 14px 14px;z-index:1;pointer-events:none}
 .fp-frame iframe{display:block;width:100%;height:100%;border:none;background:#fff}
 .fp-frame[data-device="true"] iframe{border-radius:24px}
-
-/* ── Resize handles ──────────────────────────────────────── */
 .fp-resize{position:absolute;width:36px;height:36px;cursor:nwse-resize;z-index:3;touch-action:none;display:none;align-items:center;justify-content:center}
 .fp-frame[data-mode="custom"] .fp-resize{display:flex}
 .fp-resize[data-corner="br"]{bottom:-18px;right:-18px}
@@ -131,8 +220,6 @@ const PREVIEW_CSS = `
 .fp-resize:hover::after,.fp-resize:focus::after{opacity:1;outline:none}
 .fp-readout{position:absolute;bottom:-46px;left:50%;transform:translateX(-50%);padding:5px 11px;border-radius:6px;background:rgba(20,22,28,.94);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.1);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;font-weight:700;color:#F59E0B;white-space:nowrap;pointer-events:none;display:none}
 .fp-frame[data-mode="custom"] .fp-readout{display:block}
-
-/* ── Dock ────────────────────────────────────────────────── */
 .fp-dock{position:absolute;left:0;right:0;bottom:0;z-index:10;background:rgba(20,22,28,.78);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);border-top:1px solid rgba(255,255,255,.1);box-shadow:0 -12px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;transition:height .2s ease;height:40px;overflow:hidden}
 .fp-dock[data-expanded="true"]{height:min(70vh,560px)}
 .fp-dock-grip{height:6px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:transparent;transition:background .12s}
@@ -141,8 +228,6 @@ const PREVIEW_CSS = `
 .fp-sections{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;min-height:0}
 .fp-sections::-webkit-scrollbar{width:6px}
 .fp-sections::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px}
-
-/* ── Section ─────────────────────────────────────────────── */
 .fp-sec{display:flex;flex-direction:column;border-bottom:1px solid rgba(255,255,255,.05)}
 .fp-sec[data-hidden="true"]{display:none}
 .fp-sec-head{display:flex;align-items:center;gap:9px;padding:9px 14px;background:transparent;border:none;width:100%;text-align:left;cursor:pointer;color:var(--theme-text-secondary,#a0a7b3);font-size:11.5px;font-weight:700;transition:all .12s ease;min-height:36px;font-family:inherit}
@@ -161,8 +246,6 @@ const PREVIEW_CSS = `
 .fp-sec-body{display:none;overflow-y:auto;background:rgba(10,12,16,.4);-webkit-overflow-scrolling:touch}
 .fp-sec[data-open="true"] .fp-sec-body{display:block}
 .fp-sec-body-inner{padding:10px 14px;min-height:60px;font-size:11.5px}
-
-/* ── Shared tool chrome ──────────────────────────────────── */
 .fp-toolbar{display:flex;gap:4px;align-items:center;padding:6px 0 8px;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,.05);margin-bottom:8px}
 .fp-toolbar input[type="search"],.fp-toolbar input[type="text"]{flex:1;min-width:80px;max-width:260px;height:26px;padding:0 8px;border-radius:5px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:var(--theme-text,#e8ecf1);font-size:10.5px;outline:none;font-family:inherit}
 .fp-toolbar input:focus{border-color:#F59E0B;background:rgba(245,158,11,.06)}
@@ -172,8 +255,6 @@ const PREVIEW_CSS = `
 .fp-chip .fp-chip-count{opacity:.65;margin-left:3px;font-weight:500}
 .fp-empty{padding:20px 12px;text-align:center;color:var(--theme-text-tertiary,#8a919c);font-size:11px;line-height:1.6}
 .fp-empty strong{color:var(--theme-text-secondary,#a0a7b3);display:block;margin-bottom:4px;font-weight:700}
-
-/* ── Console ─────────────────────────────────────────────── */
 .fp-console-list{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;line-height:1.55}
 .fp-console-entry{display:flex;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);align-items:flex-start}
 .fp-console-entry:last-child{border-bottom:none}
@@ -207,8 +288,6 @@ const PREVIEW_CSS = `
 .fp-console-repl input:focus{border-color:#F59E0B}
 .fp-console-repl-result{margin-top:4px;padding:4px 8px;border-radius:4px;background:rgba(255,255,255,.03);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;color:var(--theme-text-secondary,#a0a7b3);border-left:2px solid rgba(255,255,255,.1);white-space:pre-wrap;overflow-wrap:anywhere}
 .fp-console-repl-result[data-ok="false"]{color:#EF4444;border-left-color:#EF4444}
-
-/* ── Network ─────────────────────────────────────────────── */
 .fp-net-list{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px}
 .fp-net-row{display:grid;grid-template-columns:44px 52px 1fr 62px;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);align-items:center;cursor:pointer;transition:background .1s}
 .fp-net-row:hover{background:rgba(255,255,255,.03)}
@@ -233,8 +312,6 @@ const PREVIEW_CSS = `
 .fp-net-waterfall-row .fw-bar{position:relative;height:8px;background:rgba(255,255,255,.03);border-radius:2px;overflow:hidden}
 .fp-net-waterfall-row .fw-bar-fill{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,#F59E0B,#fbbf24);border-radius:2px;min-width:2px}
 .fp-net-waterfall-row .fw-dur{text-align:right;color:var(--theme-text-tertiary,#8a919c);font-size:9.5px}
-
-/* ── Responsive ──────────────────────────────────────────── */
 .fp-resp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:12px}
 .fp-resp-stat{padding:8px 10px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)}
 .fp-resp-stat-label{font-size:9.5px;font-weight:700;color:var(--theme-text-tertiary,#8a919c);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
@@ -249,8 +326,6 @@ const PREVIEW_CSS = `
 .fp-resp-issue[data-severity="error"]{border-left-color:#EF4444}
 .fp-resp-issue .fp-issue-path{font-family:ui-monospace,'SF Mono',Menlo,monospace;color:#F59E0B;font-size:10px}
 .fp-resp-issue .fp-issue-detail{color:var(--theme-text-secondary,#a0a7b3);font-size:10px;margin-top:2px}
-
-/* ── Performance ─────────────────────────────────────────── */
 .fp-perf-vitals{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:12px}
 .fp-perf-vital{padding:10px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)}
 .fp-perf-vital-label{font-size:9.5px;font-weight:700;color:var(--theme-text-tertiary,#8a919c);text-transform:uppercase;letter-spacing:.4px}
@@ -264,8 +339,6 @@ const PREVIEW_CSS = `
 .fp-perf-payload-row .fp-payload-label{color:var(--theme-text-secondary,#a0a7b3)}
 .fp-perf-payload-row .fp-payload-val{text-align:right;font-family:ui-monospace,'SF Mono',Menlo,monospace;color:var(--theme-text,#e8ecf1);font-weight:700}
 .fp-perf-payload-row[data-warn="true"] .fp-payload-val{color:#F59E0B}
-
-/* ── Files ───────────────────────────────────────────────── */
 .fp-files-group{margin-bottom:12px}
 .fp-files-group:last-child{margin-bottom:0}
 .fp-files-group-title{font-size:10px;font-weight:800;color:var(--theme-text-tertiary,#8a919c);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
@@ -278,8 +351,6 @@ const PREVIEW_CSS = `
 .fp-files-path{font-family:ui-monospace,'SF Mono',Menlo,monospace;color:var(--theme-text,#e8ecf1);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fp-files-size{color:var(--theme-text-tertiary,#8a919c);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:9.5px}
 .fp-files-reason{color:var(--theme-text-tertiary,#8a919c);font-size:9.5px;font-style:italic}
-
-/* ── Storage ─────────────────────────────────────────────── */
 .fp-stor-group{margin-bottom:12px}
 .fp-stor-group-title{font-size:10px;font-weight:800;color:var(--theme-text-tertiary,#8a919c);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .fp-stor-row{display:grid;grid-template-columns:minmax(80px,1fr) minmax(80px,2fr) 52px;gap:6px;padding:4px 6px;border-radius:4px;font-size:10px;font-family:ui-monospace,'SF Mono',Menlo,monospace;align-items:center}
@@ -289,8 +360,6 @@ const PREVIEW_CSS = `
 .fp-stor-act{display:flex;gap:2px}
 .fp-stor-act button{padding:2px 5px;border-radius:3px;background:rgba(255,255,255,.05);border:none;color:var(--theme-text-tertiary,#8a919c);cursor:pointer;font-size:9px;font-family:inherit}
 .fp-stor-act button:hover{background:rgba(239,68,68,.15);color:#EF4444}
-
-/* ── DOM tree ────────────────────────────────────────────── */
 .fp-dom-toolbar{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
 .fp-dom-tree{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;line-height:1.5}
 .fp-dom-node{padding:1px 0}
@@ -303,27 +372,44 @@ const PREVIEW_CSS = `
 .fp-dom-class{color:#10B981}
 .fp-dom-children{padding-left:14px;border-left:1px solid rgba(255,255,255,.06);margin-left:5px}
 .fp-dom-children[data-collapsed="true"]{display:none}
-
-/* ── A11y ────────────────────────────────────────────────── */
 .fp-a11y-group{margin-bottom:12px}
 .fp-a11y-group-title{font-size:10px;font-weight:800;color:var(--theme-text-tertiary,#8a919c);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
 .fp-a11y-issue{padding:5px 8px;border-radius:4px;background:rgba(255,255,255,.02);margin-bottom:3px;border-left:2px solid #F59E0B;font-size:10.5px}
 .fp-a11y-issue[data-severity="error"]{border-left-color:#EF4444}
 .fp-a11y-issue-title{color:var(--theme-text,#e8ecf1);font-weight:600;margin-bottom:2px}
 .fp-a11y-issue-detail{color:var(--theme-text-tertiary,#8a919c);font-size:10px;font-family:ui-monospace,'SF Mono',Menlo,monospace;overflow-wrap:anywhere}
-
-/* ── Dev tools ───────────────────────────────────────────── */
 .fp-devtools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px}
 .fp-devtools-btn{padding:8px 10px;border-radius:6px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);color:var(--theme-text-secondary,#a0a7b3);font-size:10.5px;font-weight:600;cursor:pointer;text-align:left;display:flex;align-items:center;gap:6px;transition:all .12s;font-family:inherit;min-height:34px}
 .fp-devtools-btn:hover{background:rgba(255,255,255,.08);color:var(--theme-text,#e8ecf1);border-color:rgba(245,158,11,.3)}
 .fp-devtools-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 .fp-devtools-btn[data-danger="true"]:hover{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:#EF4444}
-
-/* ── Highlight overlay ───────────────────────────────────── */
 .fp-highlight{position:fixed;pointer-events:none;background:rgba(245,158,11,.22);border:2px solid #F59E0B;z-index:999999;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.4);transition:all .08s ease}
 .fp-highlight-label{position:absolute;top:-22px;left:-2px;background:#F59E0B;color:#0a0c10;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:800;padding:2px 6px;border-radius:3px;white-space:nowrap;pointer-events:none}
-
-/* ── Responsive ──────────────────────────────────────────── */
+.fp-template-grid{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.fp-template-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:8px;color:var(--theme-text,#e8ecf1);font-family:inherit;font-size:12px;cursor:pointer;text-align:left;transition:all .12s ease}
+.fp-template-row:hover{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.4)}
+.fp-template-label{font-weight:700}
+.fp-template-ext{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;color:var(--theme-text-tertiary,#8a919c)}
+.fp-search-options{display:flex;gap:4px;padding:4px 0 6px}
+.fp-search-toggle{padding:3px 8px;border-radius:5px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);color:var(--theme-text-tertiary,#8a919c);font-size:10.5px;font-weight:700;font-family:ui-monospace,'SF Mono',Menlo,monospace;cursor:pointer;transition:all .12s}
+.fp-search-toggle:hover{background:rgba(255,255,255,.08);color:var(--theme-text,#e8ecf1)}
+.fp-search-toggle.active{background:rgba(245,158,11,.16);color:#F59E0B;border-color:rgba(245,158,11,.32)}
+.fp-search-result-group{margin-bottom:10px}
+.fp-search-result-header{display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:10.5px;color:var(--theme-text-secondary,#a0a7b3);cursor:pointer;border-radius:4px;transition:background .1s}
+.fp-search-result-header:hover{background:rgba(255,255,255,.03)}
+.fp-search-result-path{flex:1;font-family:ui-monospace,'SF Mono',Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fp-search-result-count{font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(255,255,255,.06);color:var(--theme-text-secondary,#a0a7b3)}
+.fp-search-match{display:flex;gap:6px;padding:3px 8px 3px 20px;font-size:10.5px;cursor:pointer;border-radius:3px;transition:background .1s;font-family:ui-monospace,'SF Mono',Menlo,monospace}
+.fp-search-match:hover{background:rgba(245,158,11,.08)}
+.fp-search-match-line{color:var(--theme-text-tertiary,#8a919c);flex-shrink:0;min-width:32px;text-align:right}
+.fp-search-match-body{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--theme-text,#e8ecf1)}
+.fp-search-match-hit{background:rgba(245,158,11,.3);color:#FBBF24;padding:0 1px;border-radius:2px}
+.fp-pin-btn{width:22px;height:22px;border-radius:4px;background:transparent;border:none;color:var(--theme-text-tertiary,#8a919c);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .12s}
+.fp-pin-btn:hover{background:rgba(255,255,255,.06);color:#F59E0B}
+.fp-pin-btn.active{color:#F59E0B}
+.fp-pin-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.fp-pin-btn.active svg{fill:currentColor}
+.fp-editor-console-hint{font-size:10px;color:var(--theme-text-tertiary,#8a919c);margin-bottom:6px;line-height:1.5;padding:6px 8px;background:rgba(245,158,11,.06);border-left:2px solid rgba(245,158,11,.3);border-radius:3px}
 @media (max-width:640px){
   .fp-header{padding:6px 8px;gap:6px;min-height:auto;flex-wrap:wrap}
   .fp-title{font-size:12px;width:100%;margin-bottom:2px}
@@ -339,7 +425,7 @@ const PREVIEW_CSS = `
 `;
 
 // ═══════════════════════════════════════════════════════════════════
-//  BRIDGE SCRIPT — injected into the preview iframe
+//  BRIDGE (injected into the sandboxed preview iframe)
 // ═══════════════════════════════════════════════════════════════════
 const BRIDGE_SCRIPT = `
 (function(){
@@ -348,28 +434,17 @@ const BRIDGE_SCRIPT = `
 
   var PARENT = window.parent;
   function post(type, payload) {
-    try {
-      PARENT.postMessage(Object.assign({ __folio: true, type: type }, payload || {}), "*");
-    } catch (e) {}
+    try { PARENT.postMessage(Object.assign({ __folio: true, type: type }, payload || {}), "*"); }
+    catch (e) {}
   }
 
-  // ── Storage shim ─────────────────────────────────────────
   var memLocal = {}, memSession = {};
   function makeStorage(store, kind) {
     return {
       getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? String(store[k]) : null; },
-      setItem: function(k, v) {
-        store[k] = String(v);
-        post("folio:storage-write", { kind: kind, op: "set", key: String(k), value: String(v) });
-      },
-      removeItem: function(k) {
-        delete store[k];
-        post("folio:storage-write", { kind: kind, op: "remove", key: String(k) });
-      },
-      clear: function() {
-        Object.keys(store).forEach(function(k) { delete store[k]; });
-        post("folio:storage-write", { kind: kind, op: "clear" });
-      },
+      setItem: function(k, v) { store[k] = String(v); post("folio:storage-write", { kind: kind, op: "set", key: String(k), value: String(v) }); },
+      removeItem: function(k) { delete store[k]; post("folio:storage-write", { kind: kind, op: "remove", key: String(k) }); },
+      clear: function() { Object.keys(store).forEach(function(k) { delete store[k]; }); post("folio:storage-write", { kind: kind, op: "clear" }); },
       key: function(i) { var keys = Object.keys(store); return keys[i] || null; },
       get length() { return Object.keys(store).length; }
     };
@@ -377,7 +452,6 @@ const BRIDGE_SCRIPT = `
   try { Object.defineProperty(window, "localStorage", { value: makeStorage(memLocal, "local"), configurable: true }); } catch (e) {}
   try { Object.defineProperty(window, "sessionStorage", { value: makeStorage(memSession, "session"), configurable: true }); } catch (e) {}
 
-  // ── Serialize ────────────────────────────────────────────
   function serialize(v, depth) {
     depth = depth || 0;
     if (v === null) return { kind: "null" };
@@ -388,31 +462,18 @@ const BRIDGE_SCRIPT = `
     if (t === "boolean") return { kind: "boolean", value: v };
     if (t === "function") return { kind: "function", value: v.name || "anonymous" };
     if (t === "symbol") return { kind: "symbol", value: String(v) };
-    if (v instanceof Error) {
-      return { kind: "error", name: v.name, message: v.message, stack: (v.stack || "").slice(0, 2000) };
-    }
+    if (v instanceof Error) return { kind: "error", name: v.name, message: v.message, stack: (v.stack || "").slice(0, 2000) };
     if (depth > 3) return { kind: "object", preview: "[deep]", collapsed: true };
-    if (Array.isArray(v)) {
-      return { kind: "array", length: v.length, items: v.slice(0, 100).map(function(x) { return serialize(x, depth + 1); }) };
-    }
+    if (Array.isArray(v)) return { kind: "array", length: v.length, items: v.slice(0, 100).map(function(x) { return serialize(x, depth + 1); }) };
     if (v instanceof Date) return { kind: "date", value: v.toISOString() };
     if (v instanceof RegExp) return { kind: "regexp", value: String(v) };
     if (typeof Element !== "undefined" && v instanceof Element) {
       var cls = typeof v.className === "string" && v.className ? "." + v.className.split(/\\s+/).filter(Boolean).join(".") : "";
       return { kind: "element", preview: v.tagName.toLowerCase() + (v.id ? "#" + v.id : "") + cls };
     }
-    if (typeof Node !== "undefined" && v instanceof Node) {
-      return { kind: "node", preview: v.nodeName };
-    }
+    if (typeof Node !== "undefined" && v instanceof Node) return { kind: "node", preview: v.nodeName };
     var keys = Object.keys(v).slice(0, 100);
-    return {
-      kind: "object",
-      constructor: (v.constructor && v.constructor.name) || "Object",
-      keys: keys,
-      entries: keys.map(function(k) {
-        return { key: k, value: serialize(v[k], depth + 1) };
-      })
-    };
+    return { kind: "object", constructor: (v.constructor && v.constructor.name) || "Object", keys: keys, entries: keys.map(function(k) { return { key: k, value: serialize(v[k], depth + 1) }; }) };
   }
 
   function callSiteOf() {
@@ -420,14 +481,11 @@ const BRIDGE_SCRIPT = `
     var lines = stack.split("\\n").slice(1);
     for (var i = 0; i < lines.length; i++) {
       var m = lines[i].match(/\\/([^\\/\\s]+):(\\d+):(\\d+)/);
-      if (m && m[1] !== "preview.js" && m[1].indexOf("__sandbox") === -1) {
-        return { file: "/" + m[1], line: parseInt(m[2], 10) };
-      }
+      if (m && m[1] !== "preview.js" && m[1].indexOf("__sandbox") === -1) return { file: "/" + m[1], line: parseInt(m[2], 10) };
     }
     return null;
   }
 
-  // ── Console patch ────────────────────────────────────────
   var nativeConsole = {};
   ["log", "info", "warn", "error", "debug"].forEach(function(level) {
     nativeConsole[level] = window.console[level] ? window.console[level].bind(window.console) : function() {};
@@ -435,60 +493,22 @@ const BRIDGE_SCRIPT = `
       try {
         var args = Array.prototype.slice.call(arguments).map(function(a) { return serialize(a); });
         var site = callSiteOf();
-        post("folio:console", {
-          level: level,
-          args: args,
-          ts: Date.now(),
-          file: site ? site.file : null,
-          line: site ? site.line : null
-        });
+        post("folio:console", { level: level, args: args, ts: Date.now(), file: site ? site.file : null, line: site ? site.line : null });
       } catch (e) {}
       nativeConsole[level].apply(window.console, arguments);
     };
   });
 
-  // ── Error handling ───────────────────────────────────────
   window.addEventListener("error", function(e) {
-    try {
-      post("folio:error", {
-        source: "error",
-        message: e.message || "Unknown error",
-        stack: (e.error && e.error.stack || "").slice(0, 2000),
-        file: e.filename || null,
-        line: e.lineno || null
-      });
-    } catch (err) {}
+    try { post("folio:error", { source: "error", message: e.message || "Unknown error", stack: (e.error && e.error.stack || "").slice(0, 2000), file: e.filename || null, line: e.lineno || null }); } catch (err) {}
   });
-
   window.addEventListener("unhandledrejection", function(e) {
-    try {
-      var r = e.reason;
-      post("folio:error", {
-        source: "rejection",
-        message: r && r.message ? r.message : String(r),
-        stack: (r && r.stack || "").slice(0, 2000),
-        file: null,
-        line: null
-      });
-    } catch (err) {}
+    try { var r = e.reason; post("folio:error", { source: "rejection", message: r && r.message ? r.message : String(r), stack: (r && r.stack || "").slice(0, 2000), file: null, line: null }); } catch (err) {}
   });
 
-  // ── Network wrap ─────────────────────────────────────────
   var _netConfig = { latencyMs: 0, failureRate: 0 };
-
-  function simulateDelay() {
-    if (_netConfig.latencyMs > 0) {
-      return new Promise(function(r) { setTimeout(r, _netConfig.latencyMs); });
-    }
-    return Promise.resolve();
-  }
-
-  function maybeFail() {
-    if (_netConfig.failureRate > 0 && Math.random() < _netConfig.failureRate) {
-      return Promise.reject(new TypeError("Failed to fetch (simulated)"));
-    }
-    return null;
-  }
+  function simulateDelay() { return _netConfig.latencyMs > 0 ? new Promise(function(r) { setTimeout(r, _netConfig.latencyMs); }) : Promise.resolve(); }
+  function maybeFail() { return (_netConfig.failureRate > 0 && Math.random() < _netConfig.failureRate) ? Promise.reject(new TypeError("Failed to fetch (simulated)")) : null; }
 
   var nativeFetch = window.fetch;
   if (nativeFetch) {
@@ -498,38 +518,14 @@ const BRIDGE_SCRIPT = `
       var start = Date.now();
       var failed = maybeFail();
       if (failed) {
-        post("folio:network", {
-          method: String(method).toUpperCase(),
-          url: String(url),
-          status: 0,
-          durationMs: 0,
-          error: "Simulated failure"
-        });
+        post("folio:network", { method: String(method).toUpperCase(), url: String(url), status: 0, durationMs: 0, error: "Simulated failure" });
         return failed;
       }
-      return simulateDelay().then(function() {
-        return nativeFetch.apply(window, arguments);
-      }).then(function(res) {
-        try {
-          post("folio:network", {
-            method: String(method).toUpperCase(),
-            url: String(url),
-            status: res.status,
-            durationMs: Date.now() - start,
-            error: null
-          });
-        } catch (e) {}
+      return simulateDelay().then(function() { return nativeFetch.apply(window, arguments); }).then(function(res) {
+        try { post("folio:network", { method: String(method).toUpperCase(), url: String(url), status: res.status, durationMs: Date.now() - start, error: null }); } catch (e) {}
         return res;
       }).catch(function(err) {
-        try {
-          post("folio:network", {
-            method: String(method).toUpperCase(),
-            url: String(url),
-            status: 0,
-            durationMs: Date.now() - start,
-            error: String(err && err.message || err)
-          });
-        } catch (e) {}
+        try { post("folio:network", { method: String(method).toUpperCase(), url: String(url), status: 0, durationMs: Date.now() - start, error: String(err && err.message || err) }); } catch (e) {}
         throw err;
       });
     };
@@ -537,107 +533,45 @@ const BRIDGE_SCRIPT = `
 
   var NativeXHR = window.XMLHttpRequest;
   if (NativeXHR) {
-    var _open = NativeXHR.prototype.open;
-    var _send = NativeXHR.prototype.send;
-    NativeXHR.prototype.open = function(method, url) {
-      this.__folioMethod = method;
-      this.__folioUrl = url;
-      return _open.apply(this, arguments);
-    };
+    var _open = NativeXHR.prototype.open, _send = NativeXHR.prototype.send;
+    NativeXHR.prototype.open = function(method, url) { this.__folioMethod = method; this.__folioUrl = url; return _open.apply(this, arguments); };
     NativeXHR.prototype.send = function() {
-      var xhr = this;
-      var start = Date.now();
+      var xhr = this; var start = Date.now();
       xhr.addEventListener("loadend", function() {
-        try {
-          post("folio:network", {
-            method: String(xhr.__folioMethod || "GET").toUpperCase(),
-            url: String(xhr.__folioUrl || ""),
-            status: xhr.status || 0,
-            durationMs: Date.now() - start,
-            error: xhr.status === 0 ? "Network error" : null
-          });
-        } catch (e) {}
+        try { post("folio:network", { method: String(xhr.__folioMethod || "GET").toUpperCase(), url: String(xhr.__folioUrl || ""), status: xhr.status || 0, durationMs: Date.now() - start, error: xhr.status === 0 ? "Network error" : null }); } catch (e) {}
       });
       return _send.apply(this, arguments);
     };
   }
 
-  // ── Web Vitals ───────────────────────────────────────────
-  try {
-    new PerformanceObserver(function(list) {
-      var entries = list.getEntries();
-      var last = entries[entries.length - 1];
-      if (last) post("folio:vitals", { lcp: last.startTime });
-    }).observe({ type: "largest-contentful-paint", buffered: true });
-  } catch (e) {}
-
-  try {
-    new PerformanceObserver(function(list) {
-      list.getEntries().forEach(function(e) {
-        if (e.name === "first-contentful-paint") post("folio:vitals", { fcp: e.startTime });
-      });
-    }).observe({ type: "paint", buffered: true });
-  } catch (e) {}
-
+  try { new PerformanceObserver(function(list) { var entries = list.getEntries(); var last = entries[entries.length - 1]; if (last) post("folio:vitals", { lcp: last.startTime }); }).observe({ type: "largest-contentful-paint", buffered: true }); } catch (e) {}
+  try { new PerformanceObserver(function(list) { list.getEntries().forEach(function(e) { if (e.name === "first-contentful-paint") post("folio:vitals", { fcp: e.startTime }); }); }).observe({ type: "paint", buffered: true }); } catch (e) {}
   try {
     var _cls = 0;
     new PerformanceObserver(function(list) {
       list.getEntries().forEach(function(e) {
-        if (!e.hadRecentInput) {
-          _cls += e.value;
-          post("folio:layout-shift", {
-            value: e.value,
-            sources: (e.sources || []).map(function(s) {
-              var n = s.node;
-              if (!n) return null;
-              return n.tagName ? n.tagName.toLowerCase() + (n.id ? "#" + n.id : "") : null;
-            }).filter(Boolean)
-          });
-        }
+        if (!e.hadRecentInput) { _cls += e.value; post("folio:layout-shift", { value: e.value, sources: (e.sources || []).map(function(s) { var n = s.node; if (!n) return null; return n.tagName ? n.tagName.toLowerCase() + (n.id ? "#" + n.id : "") : null; }).filter(Boolean) }); }
       });
       post("folio:vitals", { cls: _cls });
     }).observe({ type: "layout-shift", buffered: true });
   } catch (e) {}
+  try { new PerformanceObserver(function(list) { list.getEntries().forEach(function(e) { post("folio:resource", { name: e.name, initiatorType: e.initiatorType || "other", duration: e.duration, transferSize: e.transferSize || 0 }); }); }).observe({ type: "resource", buffered: true }); } catch (e) {}
 
-  try {
-    new PerformanceObserver(function(list) {
-      list.getEntries().forEach(function(e) {
-        post("folio:resource", {
-          name: e.name,
-          initiatorType: e.initiatorType || "other",
-          duration: e.duration,
-          transferSize: e.transferSize || 0,
-          dns: (e.domainLookupEnd || 0) - (e.domainLookupStart || 0),
-          tcp: (e.connectEnd || 0) - (e.connectStart || 0),
-          ttfb: (e.responseStart || 0) - (e.requestStart || 0),
-          download: (e.responseEnd || 0) - (e.responseStart || 0)
-        });
-      });
-    }).observe({ type: "resource", buffered: true });
-  } catch (e) {}
-
-  // ── Path helper ──────────────────────────────────────────
   function pathOf(el) {
     if (!el || !el.tagName) return "";
-    var parts = [];
-    var node = el;
+    var parts = []; var node = el;
     while (node && node.nodeType === 1 && node !== document.body) {
       var part = node.tagName.toLowerCase();
       if (node.id) { part += "#" + node.id; parts.unshift(part); break; }
       var cls = typeof node.className === "string" ? node.className.trim().split(/\\s+/).filter(Boolean)[0] : "";
       if (cls) part += "." + cls;
       var parent = node.parentElement;
-      if (parent) {
-        var siblings = Array.from(parent.children).filter(function(c) { return c.tagName === node.tagName; });
-        if (siblings.length > 1) part += ":nth-of-type(" + (siblings.indexOf(node) + 1) + ")";
-      }
-      parts.unshift(part);
-      node = parent;
+      if (parent) { var siblings = Array.from(parent.children).filter(function(c) { return c.tagName === node.tagName; }); if (siblings.length > 1) part += ":nth-of-type(" + (siblings.indexOf(node) + 1) + ")"; }
+      parts.unshift(part); node = parent;
     }
     return parts.join(" > ");
   }
 
-  // ── DOM snapshot ─────────────────────────────────────────
   function serializeDOM(node, depth, maxDepth, budget) {
     if (depth > maxDepth || budget.count >= 500) return null;
     if (!node) return null;
@@ -648,25 +582,11 @@ const BRIDGE_SCRIPT = `
       if (node.id) out.id = node.id;
       if (typeof node.className === "string" && node.className) out.className = node.className;
       var kids = Array.from(node.children);
-      if (kids.length) {
-        out.children = [];
-        for (var i = 0; i < kids.length; i++) {
-          var c = serializeDOM(kids[i], depth + 1, maxDepth, budget);
-          if (c) out.children.push(c);
-        }
-      }
-    } else if (node.nodeType === 3) {
-      var t = node.textContent.trim();
-      if (!t) return null;
-      out.tag = "#text";
-      out.text = t.slice(0, 80);
-    } else {
-      return null;
-    }
+      if (kids.length) { out.children = []; for (var i = 0; i < kids.length; i++) { var c = serializeDOM(kids[i], depth + 1, maxDepth, budget); if (c) out.children.push(c); } }
+    } else if (node.nodeType === 3) { var t = node.textContent.trim(); if (!t) return null; out.tag = "#text"; out.text = t.slice(0, 80); } else return null;
     return out;
   }
 
-  // ── Inspect mode ─────────────────────────────────────────
   var _inspectActive = false;
   var _overlay = null;
   function ensureOverlay() {
@@ -679,243 +599,84 @@ const BRIDGE_SCRIPT = `
   }
   function drawOverlay(el) {
     var ov = ensureOverlay();
-    if (!el || el === document.documentElement || el === document.body) {
-      ov.style.display = "none";
-      return;
-    }
+    if (!el || el === document.documentElement || el === document.body) { ov.style.display = "none"; return; }
     var r = el.getBoundingClientRect();
-    ov.style.display = "block";
-    ov.style.left = r.left + "px";
-    ov.style.top = r.top + "px";
-    ov.style.width = r.width + "px";
-    ov.style.height = r.height + "px";
+    ov.style.display = "block"; ov.style.left = r.left + "px"; ov.style.top = r.top + "px"; ov.style.width = r.width + "px"; ov.style.height = r.height + "px";
   }
-  function hideOverlay() {
-    if (_overlay) _overlay.style.display = "none";
-  }
-
-  document.addEventListener("mouseover", function(e) {
-    if (!_inspectActive) return;
-    drawOverlay(e.target);
-  }, true);
-
-  document.addEventListener("mouseout", function() {
-    if (_inspectActive) hideOverlay();
-  }, true);
-
+  function hideOverlay() { if (_overlay) _overlay.style.display = "none"; }
+  document.addEventListener("mouseover", function(e) { if (_inspectActive) drawOverlay(e.target); }, true);
+  document.addEventListener("mouseout", function() { if (_inspectActive) hideOverlay(); }, true);
   document.addEventListener("click", function(e) {
     if (!_inspectActive) return;
-    e.preventDefault();
-    e.stopPropagation();
-    var el = e.target;
-    var r = el.getBoundingClientRect();
-    post("folio:inspect-result", {
-      elementPath: pathOf(el),
-      tag: el.tagName ? el.tagName.toLowerCase() : "?",
-      id: el.id || "",
-      className: typeof el.className === "string" ? el.className : "",
-      rect: { x: r.x, y: r.y, w: r.width, h: r.height }
-    });
+    e.preventDefault(); e.stopPropagation();
+    var el = e.target; var r = el.getBoundingClientRect();
+    post("folio:inspect-result", { elementPath: pathOf(el), tag: el.tagName ? el.tagName.toLowerCase() : "?", id: el.id || "", className: typeof el.className === "string" ? el.className : "", rect: { x: r.x, y: r.y, w: r.width, h: r.height } });
   }, true);
+  function highlightElement(path) { try { var el = document.querySelector(path); if (el) { drawOverlay(el); el.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(hideOverlay, 2000); } } catch (e) {} }
 
-  function highlightElement(path) {
-    try {
-      var el = document.querySelector(path);
-      if (el) {
-        drawOverlay(el);
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        setTimeout(hideOverlay, 2000);
-      }
-    } catch (e) {}
-  }
-
-  // ── A11y scan ────────────────────────────────────────────
-  function parseRGB(str) {
-    var m = str.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?\\)/);
-    if (!m) return null;
-    return { r: +m[1], g: +m[2], b: +m[3], a: m[4] !== undefined ? +m[4] : 1 };
-  }
-  function relLum(c) {
-    var ch = [c.r, c.g, c.b].map(function(v) {
-      v /= 255;
-      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-    });
-    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-  }
-  function contrastRatio(a, b) {
-    var l1 = relLum(a), l2 = relLum(b);
-    if (l1 < l2) { var t = l1; l1 = l2; l2 = t; }
-    return (l1 + 0.05) / (l2 + 0.05);
-  }
+  function parseRGB(str) { var m = str.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?\\)/); if (!m) return null; return { r: +m[1], g: +m[2], b: +m[3], a: m[4] !== undefined ? +m[4] : 1 }; }
+  function relLum(c) { var ch = [c.r, c.g, c.b].map(function(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]; }
+  function contrastRatio(a, b) { var l1 = relLum(a), l2 = relLum(b); if (l1 < l2) { var t = l1; l1 = l2; l2 = t; } return (l1 + 0.05) / (l2 + 0.05); }
 
   function runA11yScan() {
     var issues = [];
-    // Missing alt
-    document.querySelectorAll("img:not([alt])").forEach(function(img) {
-      if (issues.length >= 50) return;
-      issues.push({ type: "missing-alt", severity: "error", title: "Image missing alt attribute", detail: pathOf(img) });
-    });
-    // Empty buttons
-    document.querySelectorAll("button, [role=button]").forEach(function(btn) {
-      if (issues.length >= 50) return;
-      var text = (btn.textContent || "").trim();
-      var aria = btn.getAttribute("aria-label");
-      var hasImg = btn.querySelector("img[alt]");
-      if (!text && !aria && !hasImg) {
-        issues.push({ type: "empty-button", severity: "error", title: "Button has no accessible name", detail: pathOf(btn) });
-      }
-    });
-    // Missing lang
-    if (!document.documentElement.hasAttribute("lang")) {
-      issues.push({ type: "missing-lang", severity: "warn", title: "Document missing lang attribute", detail: "<html>" });
-    }
-    // Missing title
-    if (!document.title) {
-      issues.push({ type: "missing-title", severity: "error", title: "Document missing title", detail: "<head>" });
-    }
-    // Duplicate IDs
+    document.querySelectorAll("img:not([alt])").forEach(function(img) { if (issues.length >= 50) return; issues.push({ type: "missing-alt", severity: "error", title: "Image missing alt attribute", detail: pathOf(img) }); });
+    document.querySelectorAll("button, [role=button]").forEach(function(btn) { if (issues.length >= 50) return; var text = (btn.textContent || "").trim(); var aria = btn.getAttribute("aria-label"); var hasImg = btn.querySelector("img[alt]"); if (!text && !aria && !hasImg) issues.push({ type: "empty-button", severity: "error", title: "Button has no accessible name", detail: pathOf(btn) }); });
+    if (!document.documentElement.hasAttribute("lang")) issues.push({ type: "missing-lang", severity: "warn", title: "Document missing lang attribute", detail: "<html>" });
+    if (!document.title) issues.push({ type: "missing-title", severity: "error", title: "Document missing title", detail: "<head>" });
     var idMap = {};
-    document.querySelectorAll("[id]").forEach(function(el) {
-      idMap[el.id] = (idMap[el.id] || 0) + 1;
-    });
-    Object.keys(idMap).forEach(function(id) {
-      if (idMap[id] > 1 && issues.length < 50) {
-        issues.push({ type: "duplicate-id", severity: "error", title: "Duplicate id: " + id, detail: idMap[id] + " elements" });
-      }
-    });
-    // Low contrast
+    document.querySelectorAll("[id]").forEach(function(el) { idMap[el.id] = (idMap[el.id] || 0) + 1; });
+    Object.keys(idMap).forEach(function(id) { if (idMap[id] > 1 && issues.length < 50) issues.push({ type: "duplicate-id", severity: "error", title: "Duplicate id: " + id, detail: idMap[id] + " elements" }); });
     document.querySelectorAll("p, span, a, h1, h2, h3, h4, h5, h6, li, td, th").forEach(function(el) {
-      if (issues.length >= 50) return;
-      if (!el.textContent || !el.textContent.trim()) return;
-      var style = getComputedStyle(el);
-      var fg = parseRGB(style.color);
-      var bg = parseRGB(style.backgroundColor);
+      if (issues.length >= 50 || !el.textContent || !el.textContent.trim()) return;
+      var style = getComputedStyle(el); var fg = parseRGB(style.color); var bg = parseRGB(style.backgroundColor);
       if (!fg) return;
-      // If bg is transparent, walk up to find an ancestor with a bg color
       var bgEl = el;
-      while (bg && bg.a === 0 && bgEl && bgEl !== document.documentElement) {
-        bgEl = bgEl.parentElement;
-        if (bgEl) bg = parseRGB(getComputedStyle(bgEl).backgroundColor);
-      }
-      if (!bg || bg.a === 0) return; // couldn't determine
+      while (bg && bg.a === 0 && bgEl && bgEl !== document.documentElement) { bgEl = bgEl.parentElement; if (bgEl) bg = parseRGB(getComputedStyle(bgEl).backgroundColor); }
+      if (!bg || bg.a === 0) return;
       var ratio = contrastRatio(fg, bg);
-      if (ratio < 4.5) {
-        issues.push({ type: "low-contrast", severity: "error", title: "Low contrast (" + ratio.toFixed(2) + ":1)", detail: pathOf(el) });
-      }
+      if (ratio < 4.5) issues.push({ type: "low-contrast", severity: "error", title: "Low contrast (" + ratio.toFixed(2) + ":1)", detail: pathOf(el) });
     });
-    // Heading hierarchy
     var prevLevel = 0;
-    document.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach(function(h) {
-      if (issues.length >= 50) return;
-      var level = parseInt(h.tagName[1], 10);
-      if (prevLevel > 0 && level > prevLevel + 1) {
-        issues.push({ type: "heading-skip", severity: "warn", title: "Heading skips from h" + prevLevel + " to h" + level, detail: pathOf(h) });
-      }
-      prevLevel = level;
-    });
+    document.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach(function(h) { if (issues.length >= 50) return; var level = parseInt(h.tagName[1], 10); if (prevLevel > 0 && level > prevLevel + 1) issues.push({ type: "heading-skip", severity: "warn", title: "Heading skips from h" + prevLevel + " to h" + level, detail: pathOf(h) }); prevLevel = level; });
     post("folio:a11y-result", { issues: issues });
   }
 
-  // ── Responsive scan ──────────────────────────────────────
   function runResponsiveScan() {
     var vw = window.innerWidth;
-    var overflow = [];
-    var touchTargets = [];
-    var smallText = [];
-
+    var overflow = [], touchTargets = [], smallText = [];
     document.querySelectorAll("*").forEach(function(el) {
       if (el === document.documentElement || el === document.body) return;
-      if (overflow.length >= 30 && touchTargets.length >= 30 && smallText.length >= 30) return;
       try {
         var rect = el.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
-        if (overflow.length < 30 && (rect.right > vw + 1 || el.scrollWidth > el.clientWidth + 1)) {
-          overflow.push({
-            path: pathOf(el),
-            tag: el.tagName.toLowerCase(),
-            right: Math.round(rect.right),
-            viewportWidth: vw
-          });
-        }
-        if (touchTargets.length < 30 && /^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) {
-          if (rect.width < 44 || rect.height < 44) {
-            touchTargets.push({
-              path: pathOf(el),
-              width: Math.round(rect.width),
-              height: Math.round(rect.height)
-            });
-          }
-        }
-        if (smallText.length < 30) {
-          var fs = parseFloat(getComputedStyle(el).fontSize);
-          if (fs > 0 && fs < 12 && el.textContent && el.textContent.trim()) {
-            smallText.push({ path: pathOf(el), fontSize: fs });
-          }
-        }
+        if (overflow.length < 30 && (rect.right > vw + 1 || el.scrollWidth > el.clientWidth + 1)) overflow.push({ path: pathOf(el), tag: el.tagName.toLowerCase(), right: Math.round(rect.right), viewportWidth: vw });
+        if (touchTargets.length < 30 && /^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) { if (rect.width < 44 || rect.height < 44) touchTargets.push({ path: pathOf(el), width: Math.round(rect.width), height: Math.round(rect.height) }); }
+        if (smallText.length < 30) { var fs = parseFloat(getComputedStyle(el).fontSize); if (fs > 0 && fs < 12 && el.textContent && el.textContent.trim()) smallText.push({ path: pathOf(el), fontSize: fs }); }
       } catch (e) {}
     });
-
-    post("folio:responsive-result", {
-      viewportWidth: vw,
-      overflow: overflow,
-      touchTargets: touchTargets,
-      smallText: smallText
-    });
+    post("folio:responsive-result", { viewportWidth: vw, overflow: overflow, touchTargets: touchTargets, smallText: smallText });
   }
 
-  // ── Eval ─────────────────────────────────────────────────
   function runEval(code) {
-    try {
-      // eslint-disable-next-line no-eval
-      var result = (0, eval)(code);
-      var serialized = serialize(result);
-      post("folio:eval-result", { ok: true, value: serialized });
-    } catch (e) {
-      post("folio:eval-result", {
-        ok: false,
-        error: String(e && e.message || e),
-        stack: (e && e.stack || "").slice(0, 1000)
-      });
-    }
+    try { var result = (0, eval)(code); post("folio:eval-result", { ok: true, value: serialize(result) }); }
+    catch (e) { post("folio:eval-result", { ok: false, error: String(e && e.message || e), stack: (e && e.stack || "").slice(0, 1000) }); }
   }
 
-  // ── Message handling (parent → child) ────────────────────
   window.addEventListener("message", function(e) {
     if (!e.data || e.data.__folio !== true) return;
     var t = e.data.type;
-    if (t === "folio:storage-snapshot") {
-      post("folio:storage-snapshot-result", { local: memLocal, session: memSession });
-    } else if (t === "folio:clear-storage") {
-      Object.keys(memLocal).forEach(function(k) { delete memLocal[k]; });
-      Object.keys(memSession).forEach(function(k) { delete memSession[k]; });
-      post("folio:storage-snapshot-result", { local: memLocal, session: memSession });
-    } else if (t === "folio:dom-snapshot-request") {
-      var budget = { count: 0 };
-      post("folio:dom-snapshot", { tree: serializeDOM(document.documentElement, 0, 8, budget) });
-    } else if (t === "folio:inspect-start") {
-      _inspectActive = true;
-      document.documentElement.style.cursor = "crosshair";
-    } else if (t === "folio:inspect-stop") {
-      _inspectActive = false;
-      document.documentElement.style.cursor = "";
-      hideOverlay();
-    } else if (t === "folio:highlight-element") {
-      highlightElement(e.data.path);
-    } else if (t === "folio:a11y-scan") {
-      runA11yScan();
-    } else if (t === "folio:responsive-scan") {
-      runResponsiveScan();
-    } else if (t === "folio:eval") {
-      runEval(e.data.code);
-    } else if (t === "folio:simulate-network") {
-      _netConfig.latencyMs = Number(e.data.latencyMs) || 0;
-      _netConfig.failureRate = Number(e.data.failureRate) || 0;
-    } else if (t === "folio:set-prefers") {
-      // Can't truly override prefers-color-scheme, but we can dispatch a fake
-      // matchMedia — too invasive; skip for v1
-    } else if (t === "folio:reload") {
-      window.location.reload();
-    }
+    if (t === "folio:storage-snapshot") post("folio:storage-snapshot-result", { local: memLocal, session: memSession });
+    else if (t === "folio:clear-storage") { Object.keys(memLocal).forEach(function(k) { delete memLocal[k]; }); Object.keys(memSession).forEach(function(k) { delete memSession[k]; }); post("folio:storage-snapshot-result", { local: memLocal, session: memSession }); }
+    else if (t === "folio:dom-snapshot-request") { var budget = { count: 0 }; post("folio:dom-snapshot", { tree: serializeDOM(document.documentElement, 0, 8, budget) }); }
+    else if (t === "folio:inspect-start") { _inspectActive = true; document.documentElement.style.cursor = "crosshair"; }
+    else if (t === "folio:inspect-stop") { _inspectActive = false; document.documentElement.style.cursor = ""; hideOverlay(); }
+    else if (t === "folio:highlight-element") highlightElement(e.data.path);
+    else if (t === "folio:a11y-scan") runA11yScan();
+    else if (t === "folio:responsive-scan") runResponsiveScan();
+    else if (t === "folio:eval") runEval(e.data.code);
+    else if (t === "folio:simulate-network") { _netConfig.latencyMs = Number(e.data.latencyMs) || 0; _netConfig.failureRate = Number(e.data.failureRate) || 0; }
+    else if (t === "folio:reload") window.location.reload();
   });
 
   post("folio:ready", {});
@@ -934,27 +695,18 @@ const ST = {
   frameEl: null,
   dockEl: null,
   sectionsEl: null,
-  highlightEl: null,
   bridgeReady: false,
   openSection: null,
-  dockHeight: 40,
+  fullscreen: false,
+  floatBtn: null,
+  
+  sizer: { mode: "fit", custom: { w: 768, h: 1024 }, drag: null, scale: 1, pid: null },
 
-  // Sizing
-  sizer: {
-    mode: "fit",
-    custom: { w: 768, h: 1024 },
-    drag: null,
-    scale: 1,
-    pid: null,
-  },
-
-  // Project
   pid: null,
   projectName: null,
   activeFile: null,
   fileOptions: [],
 
-  // Data
   console: { entries: [], filter: "all", query: "", expanded: new Set(), autoScroll: true, nextId: 1 },
   network: { entries: [], filter: "all", expanded: new Set(), nextId: 1, waterfallExpanded: false },
   vitals: { lcp: null, fcp: null, cls: null, tbt: null, inp: null },
@@ -966,6 +718,8 @@ const ST = {
   storage: { local: {}, session: {}, loaded: false },
   files: { loaded: [], skipped: [] },
   devtools: { latencyMs: 0, failureRate: 0 },
+  editorConsole: { history: [] },
+  search: { query: "", useRegex: false, caseSensitive: false, results: [], matches: [] },
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -981,6 +735,7 @@ function el(tag, attrs = {}, ...children) {
     else if (k === "style" && typeof v === "object") Object.assign(node.style, v);
     else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
     else if (k === "dataset" && typeof v === "object") Object.assign(node.dataset, v);
+    else if (k === "html") node.innerHTML = v;
     else if (v === true) node.setAttribute(k, "");
     else node.setAttribute(k, v);
   }
@@ -991,9 +746,7 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
+function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
 function svgIcon(name) {
   const icons = {
@@ -1022,6 +775,11 @@ function svgIcon(name) {
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
     wifi: '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>',
     wifiOff: '<line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>',
+    expand: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>',
+    collapse: '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>',
+    bookmark: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    filePlus: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>',
   };
   const body = icons[name] || icons.info;
   return `<svg viewBox="0 0 24 24">${body}</svg>`;
@@ -1035,58 +793,43 @@ function fmtDuration(ms) {
 
 function fmtBytes(bytes) {
   if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const u = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let n = bytes;
+  const u = ["B", "KB", "MB", "GB"]; let i = 0; let n = bytes;
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return (n < 10 ? n.toFixed(1) : Math.round(n)) + " " + u[i];
 }
 
-function fmtTime(ts) {
-  const d = new Date(ts);
-  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + ":" + String(d.getSeconds()).padStart(2, "0");
-}
+function fmtTime(ts) { const d = new Date(ts); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + ":" + String(d.getSeconds()).padStart(2, "0"); }
 
-function debounce(fn, ms) {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
-  };
-}
+function debounce(fn, ms) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
 
 function toast(msg, type = "info") {
-  if (typeof ST.options?.onToast === "function") {
-    ST.options.onToast(msg, type);
-    return;
-  }
-  try {
-    if (typeof window.toast === "function") window.toast(msg, type);
-  } catch {}
+  if (typeof ST.options?.onToast === "function") ST.options.onToast(msg, type);
+  else if (typeof window.toast === "function") window.toast(msg, type);
 }
 
 async function copyToClipboard(text) {
   if (!text) return false;
-  if (navigator.clipboard?.writeText && window.isSecureContext) {
-    try { await navigator.clipboard.writeText(text); return true; } catch {}
-  }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch { return false; }
+  if (navigator.clipboard?.writeText && window.isSecureContext) { try { await navigator.clipboard.writeText(text); return true; } catch {} }
+  try { const ta = document.createElement("textarea"); ta.value = text; ta.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0"; document.body.appendChild(ta); ta.select(); const ok = document.execCommand("copy"); document.body.removeChild(ta); return ok; } catch { return false; }
 }
 
 function postToChild(type, payload = {}) {
   if (!ST.iframeEl?.contentWindow) return;
-  try {
-    ST.iframeEl.contentWindow.postMessage(Object.assign({ __folio: true, type }, payload), "*");
-  } catch {}
+  try { ST.iframeEl.contentWindow.postMessage(Object.assign({ __folio: true, type }, payload), "*"); } catch {}
+}
+
+function getApi() { return window.__folio?.api || null; }
+
+function promptDialog(title, placeholder = "", defaultValue = "") {
+  const api = getApi();
+  if (api?.promptSheet) return api.promptSheet(title, placeholder, defaultValue);
+  return Promise.resolve(window.prompt(title, defaultValue) || null);
+}
+
+async function confirmDialog(title, message, confirmLabel = "Confirm", danger = false) {
+  const api = getApi();
+  if (api?.confirm) return api.confirm({ title, message, confirmLabel, danger });
+  return window.confirm(`${title}\n\n${message}`);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1111,7 +854,7 @@ function buildOverlay(rootEl) {
   header.innerHTML = `
     <div class="fp-title">
       Preview
-      <span class="fp-hint">Esc to exit</span>
+      <span class="fp-hint">Esc to exit · F for fullscreen</span>
     </div>
     <div class="fp-size-bar" id="fpSizeBar">
       <button class="fp-size-btn active" data-size="fit" type="button">Fit</button>
@@ -1126,13 +869,14 @@ function buildOverlay(rootEl) {
       <input type="number" id="fpDimsH" min="${CUSTOM_MIN.h}" max="${CUSTOM_MAX.h}" aria-label="Height in pixels">
     </div>
     <div class="fp-acts">
+      <button class="fp-btn icon" id="fpBtnFullscreen" type="button" title="Fullscreen (F)" aria-label="Toggle fullscreen">${svgIcon("expand")}</button>
       <button class="fp-btn icon" id="fpBtnRefresh" type="button" title="Refresh preview" aria-label="Refresh preview">${svgIcon("refresh")}</button>
-      <button class="fp-btn icon" id="fpBtnClose" type="button" title="Close" aria-label="Close preview">${svgIcon("x")}</button>
+      <button class="fp-btn icon" id="fpBtnClose" type="button" title="Close (Esc)" aria-label="Close preview">${svgIcon("x")}</button>
     </div>
   `;
   overlay.appendChild(header);
 
-  const stageWrap = el("div", { class: "fp-stage-wrap", "data-dock-open": "false", id: "fpStageWrap" });
+  const stageWrap = el("div", { class: "fp-stage-wrap", id: "fpStageWrap" });
   const stage = el("div", { class: "fp-stage", id: "fpStage" });
   const frame = el("div", { class: "fp-frame", "data-device": "false", "data-mode": "fit", id: "fpFrame" });
   const iframe = el("iframe", { id: "fpIframe", sandbox: "allow-scripts allow-forms allow-modals allow-popups" });
@@ -1145,10 +889,7 @@ function buildOverlay(rootEl) {
   overlay.appendChild(stageWrap);
 
   const dock = el("div", { class: "fp-dock", "data-expanded": "false", id: "fpDock" });
-  dock.innerHTML = `
-    <div class="fp-dock-grip" id="fpDockGrip"></div>
-    <div class="fp-sections" id="fpSections"></div>
-  `;
+  dock.innerHTML = `<div class="fp-dock-grip" id="fpDockGrip"></div><div class="fp-sections" id="fpSections"></div>`;
   overlay.appendChild(dock);
 
   rootEl.appendChild(overlay);
@@ -1165,15 +906,17 @@ function buildOverlay(rootEl) {
 //  SECTIONS
 // ═══════════════════════════════════════════════════════════════════
 const SECTIONS = [
-  { id: "console",      icon: "warn",      title: "Console",      defaultVisible: true },
-  { id: "network",      icon: "globe",     title: "Network",      defaultVisible: false },
-  { id: "responsive",   icon: "ruler",     title: "Responsive",   defaultVisible: false },
-  { id: "performance",  icon: "zap",       title: "Performance",  defaultVisible: false },
-  { id: "files",        icon: "folder",    title: "Files",        defaultVisible: false },
-  { id: "storage",      icon: "database",  title: "Storage",      defaultVisible: false },
-  { id: "dom",          icon: "code",      title: "DOM",          defaultVisible: false },
-  { id: "a11y",         icon: "shield",    title: "Accessibility", defaultVisible: false },
-  { id: "devtools",     icon: "tool",      title: "Dev tools",    defaultVisible: false },
+  { id: "console",      icon: "warn",      title: "Console",          defaultVisible: true },
+  { id: "network",      icon: "globe",     title: "Network",          defaultVisible: false },
+  { id: "responsive",   icon: "ruler",     title: "Responsive",       defaultVisible: false },
+  { id: "performance",  icon: "zap",       title: "Performance",      defaultVisible: false },
+  { id: "files",        icon: "folder",    title: "Files",            defaultVisible: false },
+  { id: "storage",      icon: "database",  title: "Storage",          defaultVisible: false },
+  { id: "dom",          icon: "code",      title: "DOM",              defaultVisible: false },
+  { id: "a11y",         icon: "shield",    title: "Accessibility",    defaultVisible: false },
+  { id: "devtools",     icon: "tool",      title: "Dev tools",        defaultVisible: false },
+  { id: "editor",       icon: "terminal",  title: "Editor console",   defaultVisible: false },
+  { id: "search",       icon: "search",    title: "Search",           defaultVisible: false },
 ];
 
 function buildSections() {
@@ -1188,48 +931,27 @@ function buildSections() {
         <span class="fp-sec-meta" data-meta="${sec.id}"></span>
         <span class="fp-sec-chevron">${svgIcon("chevronDown")}</span>
       </button>
-      <div class="fp-sec-body">
-        <div class="fp-sec-body-inner" data-body="${sec.id}"></div>
-      </div>
+      <div class="fp-sec-body"><div class="fp-sec-body-inner" data-body="${sec.id}"></div></div>
     `;
     wrap.appendChild(section);
   }
-
-  wrap.querySelectorAll("[data-toggle-section]").forEach(btn => {
-    btn.addEventListener("click", () => toggleSection(btn.dataset.toggleSection));
-  });
-
-  // Restore last open section
-  try {
-    const last = localStorage.getItem(LS_OPEN_SECTION);
-    if (last && SECTIONS.some(s => s.id === last)) {
-      setTimeout(() => openSection(last), 100);
-    }
-  } catch {}
+  wrap.querySelectorAll("[data-toggle-section]").forEach(btn => btn.addEventListener("click", () => toggleSection(btn.dataset.toggleSection)));
+  try { const last = localStorage.getItem(LS_OPEN_SECTION); if (last && SECTIONS.some(s => s.id === last)) setTimeout(() => openSection(last), 100); } catch {}
 }
 
-function toggleSection(id) {
-  if (ST.openSection === id) closeSection();
-  else openSection(id);
-}
+function toggleSection(id) { if (ST.openSection === id) closeSection(); else openSection(id); }
 
 function openSection(id) {
   ST.openSection = id;
   ST.dockEl.setAttribute("data-expanded", "true");
-  ST.overlayEl.querySelector(".fp-stage-wrap").setAttribute("data-dock-open", "true");
   try { localStorage.setItem(LS_OPEN_SECTION, id); } catch {}
-
   ST.sectionsEl.querySelectorAll(".fp-sec").forEach(sec => {
     const isTarget = sec.getAttribute("data-section") === id;
     sec.setAttribute("data-open", isTarget ? "true" : "false");
     const head = sec.querySelector(".fp-sec-head");
     if (head) head.setAttribute("aria-expanded", isTarget ? "true" : "false");
   });
-
-  // Render the section content
   renderSection(id);
-
-  // Scroll into view
   const section = ST.sectionsEl.querySelector(`[data-section="${id}"]`);
   if (section) section.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
@@ -1237,7 +959,6 @@ function openSection(id) {
 function closeSection() {
   ST.openSection = null;
   ST.dockEl.setAttribute("data-expanded", "false");
-  ST.overlayEl.querySelector(".fp-stage-wrap").setAttribute("data-dock-open", "false");
   ST.sectionsEl.querySelectorAll(".fp-sec").forEach(sec => {
     sec.setAttribute("data-open", "false");
     const head = sec.querySelector(".fp-sec-head");
@@ -1258,105 +979,70 @@ function renderSection(id) {
     case "dom":         renderDOM(body); break;
     case "a11y":        renderA11y(body); break;
     case "devtools":    renderDevTools(body); break;
+    case "editor":      renderEditorConsole(body); break;
+    case "search":      renderSearchSection(body); break;
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  SECTION META (badges in headers)
+//  SECTION META
 // ═══════════════════════════════════════════════════════════════════
 function updateSectionMeta() {
-  const setMeta = (id, html) => {
-    const metaEl = ST.sectionsEl.querySelector(`[data-meta="${id}"]`);
-    if (metaEl) metaEl.innerHTML = html;
-  };
-  const setVisible = (id, visible) => {
-    const sec = ST.sectionsEl.querySelector(`[data-section="${id}"]`);
-    if (sec) sec.setAttribute("data-hidden", visible ? "false" : "true");
-  };
+  const setMeta = (id, html) => { const m = ST.sectionsEl.querySelector(`[data-meta="${id}"]`); if (m) m.innerHTML = html; };
+  const setVisible = (id, visible) => { const s = ST.sectionsEl.querySelector(`[data-section="${id}"]`); if (s) s.setAttribute("data-hidden", visible ? "false" : "true"); };
 
-  // Console
-  const consoleErrors = ST.console.entries.filter(e => e.level === "error").length;
-  const consoleWarns = ST.console.entries.filter(e => e.level === "warn").length;
-  const consoleTotal = ST.console.entries.length;
-  if (consoleTotal > 0) {
+  const cErrors = ST.console.entries.filter(e => e.level === "error").length;
+  const cWarns = ST.console.entries.filter(e => e.level === "warn").length;
+  const cTotal = ST.console.entries.length;
+  if (cTotal > 0) {
     const parts = [];
-    if (consoleErrors) parts.push(`<span class="err">${consoleErrors} error${consoleErrors === 1 ? "" : "s"}</span>`);
-    if (consoleWarns) parts.push(`<span class="warn">${consoleWarns} warn${consoleWarns === 1 ? "" : "s"}</span>`);
-    if (!parts.length) parts.push(`${consoleTotal} message${consoleTotal === 1 ? "" : "s"}`);
+    if (cErrors) parts.push(`<span class="err">${cErrors} error${cErrors === 1 ? "" : "s"}</span>`);
+    if (cWarns) parts.push(`<span class="warn">${cWarns} warn${cWarns === 1 ? "" : "s"}</span>`);
+    if (!parts.length) parts.push(`${cTotal} message${cTotal === 1 ? "" : "s"}`);
     setMeta("console", parts.join(" · "));
-    setVisible("console", true);
-  } else {
-    setMeta("console", "No messages");
-    setVisible("console", true); // always visible
-  }
+  } else setMeta("console", "No messages");
+  setVisible("console", true);
 
-  // Network
-  const netTotal = ST.network.entries.length;
-  const netFailed = ST.network.entries.filter(e => e.error || e.status >= 400).length;
-  setVisible("network", netTotal > 0);
-  if (netTotal > 0) {
-    const parts = [`${netTotal} req${netTotal === 1 ? "" : "s"}`];
-    if (netFailed) parts.push(`<span class="err">${netFailed} failed</span>`);
-    setMeta("network", parts.join(" · "));
-  }
+  const nTotal = ST.network.entries.length;
+  const nFailed = ST.network.entries.filter(e => e.error || e.status >= 400).length;
+  setVisible("network", nTotal > 0);
+  if (nTotal > 0) { const parts = [`${nTotal} req${nTotal === 1 ? "" : "s"}`]; if (nFailed) parts.push(`<span class="err">${nFailed} failed</span>`); setMeta("network", parts.join(" · ")); }
 
-  // Responsive
-  const resp = ST.responsive.result;
-  const respTotal = resp ? (resp.overflow?.length || 0) + (resp.touchTargets?.length || 0) + (resp.smallText?.length || 0) : 0;
-  setVisible("responsive", !!resp);
-  if (resp) {
-    setMeta("responsive", respTotal > 0 ? `<span class="warn">${respTotal} issue${respTotal === 1 ? "" : "s"}</span>` : "No issues");
-  } else {
-    setMeta("responsive", "Not scanned");
-    setVisible("responsive", true);
-  }
+  const r = ST.responsive.result;
+  const rTotal = r ? (r.overflow?.length || 0) + (r.touchTargets?.length || 0) + (r.smallText?.length || 0) : 0;
+  setVisible("responsive", true);
+  setMeta("responsive", r ? (rTotal > 0 ? `<span class="warn">${rTotal} issue${rTotal === 1 ? "" : "s"}</span>` : "No issues") : "Not scanned");
 
-  // Performance
-  const vitals = ST.vitals;
-  const hasVitals = vitals.lcp != null || vitals.fcp != null;
-  setVisible("performance", hasVitals || ST.resources.length > 0);
-  if (hasVitals) {
-    const parts = [];
-    if (vitals.lcp != null) parts.push(`LCP ${fmtDuration(vitals.lcp)}`);
-    if (vitals.fcp != null) parts.push(`FCP ${fmtDuration(vitals.fcp)}`);
-    setMeta("performance", parts.join(" · "));
-  } else {
-    setMeta("performance", "Measuring…");
-    setVisible("performance", true);
-  }
+  const v = ST.vitals;
+  const hasVitals = v.lcp != null || v.fcp != null;
+  setVisible("performance", true);
+  if (hasVitals) { const parts = []; if (v.lcp != null) parts.push(`LCP ${fmtDuration(v.lcp)}`); if (v.fcp != null) parts.push(`FCP ${fmtDuration(v.fcp)}`); setMeta("performance", parts.join(" · ")); } else setMeta("performance", "Measuring…");
 
-  // Files
   const loaded = ST.files.loaded.length;
   const skipped = ST.files.skipped.length;
   setVisible("files", loaded > 0);
-  if (loaded > 0) {
-    const parts = [`${loaded} loaded`];
-    if (skipped) parts.push(`${skipped} skipped`);
-    setMeta("files", parts.join(" · "));
-  }
+  if (loaded > 0) { const parts = [`${loaded} loaded`]; if (skipped) parts.push(`${skipped} skipped`); setMeta("files", parts.join(" · ")); }
 
-  // Storage
   const storCount = Object.keys(ST.storage.local || {}).length + Object.keys(ST.storage.session || {}).length;
-  setVisible("storage", storCount > 0);
-  if (storCount > 0) setMeta("storage", `${storCount} key${storCount === 1 ? "" : "s"}`);
-  else setMeta("storage", "");
+  setVisible("storage", true);
+  setMeta("storage", storCount > 0 ? `${storCount} key${storCount === 1 ? "" : "s"}` : "");
 
-  // DOM
   setVisible("dom", true);
   setMeta("dom", ST.dom.inspectActive ? "Inspect active" : "Click to inspect");
 
-  // A11y
   const a11yIssues = ST.a11y.issues ? ST.a11y.issues.length : null;
-  setVisible("a11y", a11yIssues == null || a11yIssues > 0);
-  if (a11yIssues != null) {
-    setMeta("a11y", a11yIssues > 0 ? `<span class="warn">${a11yIssues} issue${a11yIssues === 1 ? "" : "s"}</span>` : "No issues");
-  } else {
-    setMeta("a11y", "Not scanned");
-  }
+  setVisible("a11y", true);
+  setMeta("a11y", a11yIssues != null ? (a11yIssues > 0 ? `<span class="warn">${a11yIssues} issue${a11yIssues === 1 ? "" : "s"}</span>` : "No issues") : "Not scanned");
 
-  // Dev tools
   setVisible("devtools", true);
   setMeta("devtools", "");
+
+  setVisible("editor", true);
+  const ecCount = ST.editorConsole.history.filter(x => x.kind === "input").length;
+  setMeta("editor", ecCount > 0 ? `${ecCount} command${ecCount === 1 ? "" : "s"}` : "Ready");
+
+  setVisible("search", true);
+  setMeta("search", ST.search.matches.length ? `${ST.search.matches.length} result${ST.search.matches.length === 1 ? "" : "s"}` : "");
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1365,7 +1051,6 @@ function updateSectionMeta() {
 function renderConsole(body) {
   const c = ST.console;
   const filtered = filterConsoleEntries();
-
   body.innerHTML = `
     <div class="fp-toolbar">
       <input type="search" id="fpConsoleSearch" placeholder="Filter…" value="${escapeHtml(c.query)}">
@@ -1373,7 +1058,7 @@ function renderConsole(body) {
       <button class="fp-chip ${c.filter === "error" ? "active" : ""}" data-filter="error" type="button">Errors</button>
       <button class="fp-chip ${c.filter === "warn" ? "active" : ""}" data-filter="warn" type="button">Warns</button>
       <button class="fp-chip ${c.filter === "log" ? "active" : ""}" data-filter="log" type="button">Logs</button>
-      <button class="fp-chip" id="fpConsoleClear" type="button" title="Clear">Clear</button>
+      <button class="fp-chip" id="fpConsoleClear" type="button">Clear</button>
     </div>
     <div class="fp-console-list" id="fpConsoleList"></div>
     <div class="fp-console-repl">
@@ -1382,174 +1067,84 @@ function renderConsole(body) {
     </div>
     <div id="fpConsoleReplResult"></div>
   `;
-
   const listEl = $("#fpConsoleList", body);
   renderConsoleEntries(listEl, filtered);
-
-  // Search
   const search = $("#fpConsoleSearch", body);
-  search.addEventListener("input", debounce(() => {
-    c.query = search.value;
+  search.addEventListener("input", debounce(() => { c.query = search.value; renderConsoleEntries(listEl, filterConsoleEntries()); }, 120));
+  body.querySelectorAll("[data-filter]").forEach(chip => chip.addEventListener("click", () => {
+    c.filter = chip.dataset.filter;
+    body.querySelectorAll("[data-filter]").forEach(ch => ch.classList.toggle("active", ch === chip));
     renderConsoleEntries(listEl, filterConsoleEntries());
-  }, 120));
-
-  // Filter chips
-  body.querySelectorAll("[data-filter]").forEach(chip => {
-    chip.addEventListener("click", () => {
-      c.filter = chip.dataset.filter;
-      body.querySelectorAll("[data-filter]").forEach(ch => ch.classList.toggle("active", ch === chip));
-      renderConsoleEntries(listEl, filterConsoleEntries());
-    });
-  });
-
-  // Clear
-  $("#fpConsoleClear", body).addEventListener("click", () => {
-    c.entries = [];
-    c.expanded.clear();
-    renderConsoleEntries(listEl, []);
-    updateSectionMeta();
-  });
-
-  // REPL
+  }));
+  $("#fpConsoleClear", body).addEventListener("click", () => { c.entries = []; c.expanded.clear(); renderConsoleEntries(listEl, []); updateSectionMeta(); });
   const repl = $("#fpConsoleRepl", body);
   const replResult = $("#fpConsoleReplResult", body);
   repl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && repl.value.trim()) {
-      const code = repl.value.trim();
-      repl.value = "";
-      if (!ST.bridgeReady) {
-        replResult.innerHTML = `<div class="fp-console-repl-result" data-ok="false">Bridge not ready</div>`;
-        return;
-      }
-      ST.console.entries.push({
-        id: ST.console.nextId++,
-        level: "log",
-        args: [{ kind: "string", value: "> " + code }],
-        ts: Date.now(),
-        file: null,
-        line: null,
-      });
-      renderConsoleEntries(listEl, filterConsoleEntries());
-      postToChild(REQ.EVAL, { code });
-    }
+    if (e.key !== "Enter" || !repl.value.trim()) return;
+    const code = repl.value.trim();
+    repl.value = "";
+    if (!ST.bridgeReady) { replResult.innerHTML = `<div class="fp-console-repl-result" data-ok="false">Bridge not ready</div>`; return; }
+    ST.console.entries.push({ id: ST.console.nextId++, level: "log", args: [{ kind: "string", value: "> " + code }], ts: Date.now(), file: null, line: null });
+    renderConsoleEntries(listEl, filterConsoleEntries());
+    postToChild(REQ.EVAL, { code });
   });
-
-  // If bridge ever returns an eval result, we need to handle it outside
-  // the message handler for console — the handler will append a synthetic
-  // "result" console entry.
 }
 
 function filterConsoleEntries() {
   const c = ST.console;
   let list = c.entries;
   if (c.filter !== "all") list = list.filter(e => e.level === c.filter);
-  if (c.query) {
-    const q = c.query.toLowerCase();
-    list = list.filter(e => {
-      try {
-        return JSON.stringify(e.args).toLowerCase().includes(q);
-      } catch { return false; }
-    });
-  }
+  if (c.query) { const q = c.query.toLowerCase(); list = list.filter(e => { try { return JSON.stringify(e.args).toLowerCase().includes(q); } catch { return false; } }); }
   return list;
 }
 
 function renderConsoleEntries(container, entries) {
   container.innerHTML = "";
-  if (!entries.length) {
-    container.innerHTML = `<div class="fp-empty"><strong>No console output</strong>Logs, warnings, and errors from your project appear here.</div>`;
-    return;
-  }
-  for (const entry of entries) {
-    container.appendChild(renderConsoleEntry(entry));
-  }
-  // Auto-scroll
-  if (ST.console.autoScroll) {
-    const wrap = container.closest(".fp-sec-body");
-    if (wrap) wrap.scrollTop = wrap.scrollHeight;
-  }
+  if (!entries.length) { container.innerHTML = `<div class="fp-empty"><strong>No console output</strong>Logs, warnings, and errors from your project appear here.</div>`; return; }
+  for (const entry of entries) container.appendChild(renderConsoleEntry(entry));
+  if (ST.console.autoScroll) { const wrap = container.closest(".fp-sec-body"); if (wrap) wrap.scrollTop = wrap.scrollHeight; }
 }
 
 function renderConsoleEntry(entry) {
   const row = el("div", { class: "fp-console-entry", "data-level": entry.level });
   const iconSvg = entry.level === "error" ? svgIcon("alert") : entry.level === "warn" ? svgIcon("warn") : svgIcon("info");
   row.appendChild(el("span", { class: "fp-console-icon", html: iconSvg }));
-
-  // Meta
   const meta = el("span", { class: "fp-console-meta" });
   meta.appendChild(document.createTextNode(fmtTime(entry.ts) + " "));
   if (entry.file) {
     const fileSpan = el("span", { class: "fp-file" });
     fileSpan.textContent = entry.file + (entry.line ? ":" + entry.line : "");
-    fileSpan.addEventListener("click", () => {
-      if (typeof ST.options?.onOpenFile === "function") {
-        ST.options.onOpenFile(entry.file.replace(/^\//, ""), entry.line || null);
-      }
-    });
+    fileSpan.addEventListener("click", () => { if (typeof ST.options?.onOpenFile === "function") ST.options.onOpenFile(entry.file.replace(/^\//, ""), entry.line || null); });
     meta.appendChild(fileSpan);
     meta.appendChild(document.createTextNode(" "));
   }
   row.appendChild(meta);
-
-  // Args
   const args = el("div", { class: "fp-console-args" });
-  for (const arg of entry.args || []) {
-    args.appendChild(renderConsoleArg(arg, entry.id));
-  }
+  for (const arg of entry.args || []) args.appendChild(renderConsoleArg(arg, entry.id));
   row.appendChild(args);
-
   return row;
 }
 
 function renderConsoleArg(arg, entryId, keyPath = "") {
   const span = el("span", { class: "fp-console-arg", "data-kind": arg.kind || "object" });
   const id = `${entryId}:${keyPath || Math.random()}`;
-
-  if (arg.kind === "string") {
-    span.textContent = `"${arg.value}"`;
-    return span;
-  }
-  if (arg.kind === "number" || arg.kind === "boolean") {
-    span.textContent = String(arg.value);
-    return span;
-  }
+  if (arg.kind === "string") { span.textContent = `"${arg.value}"`; return span; }
+  if (arg.kind === "number" || arg.kind === "boolean") { span.textContent = String(arg.value); return span; }
   if (arg.kind === "null") { span.textContent = "null"; return span; }
   if (arg.kind === "undefined") { span.textContent = "undefined"; return span; }
   if (arg.kind === "function") { span.textContent = "ƒ " + (arg.value || ""); return span; }
   if (arg.kind === "symbol") { span.textContent = arg.value; return span; }
-  if (arg.kind === "date") { span.textContent = arg.value; return span; }
-  if (arg.kind === "regexp") { span.textContent = arg.value; return span; }
-  if (arg.kind === "element" || arg.kind === "node") {
-    span.textContent = "<" + arg.preview + ">";
-    return span;
-  }
-  if (arg.kind === "error") {
-    span.textContent = arg.name + ": " + arg.message;
-    if (arg.stack) span.title = arg.stack;
-    return span;
-  }
+  if (arg.kind === "date" || arg.kind === "regexp") { span.textContent = arg.value; return span; }
+  if (arg.kind === "element" || arg.kind === "node") { span.textContent = "<" + arg.preview + ">"; return span; }
+  if (arg.kind === "error") { span.textContent = arg.name + ": " + arg.message; if (arg.stack) span.title = arg.stack; return span; }
   if (arg.kind === "array") {
     const isExpanded = ST.console.expanded.has(id);
     span.textContent = isExpanded ? `Array(${arg.length}) [` : `Array(${arg.length}) [ … ]`;
-    span.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (isExpanded) ST.console.expanded.delete(id);
-      else ST.console.expanded.add(id);
-      const body = ST.sectionsEl.querySelector(`[data-body="console"]`);
-      if (body) renderConsole(body);
-    });
+    span.addEventListener("click", (e) => { e.stopPropagation(); if (isExpanded) ST.console.expanded.delete(id); else ST.console.expanded.add(id); const body = ST.sectionsEl.querySelector(`[data-body="console"]`); if (body) renderConsole(body); });
     if (isExpanded) {
       const nested = el("div", { class: "fp-console-nested", "data-expanded": "true" });
-      (arg.items || []).forEach((item, i) => {
-        const row = el("div", { class: "fp-console-nested-row" });
-        row.appendChild(el("span", { class: "fp-nk", style: "color:#8a919c" }, String(i)));
-        row.appendChild(renderConsoleArg(item, entryId, keyPath + "." + i));
-        nested.appendChild(row);
-      });
-      const wrap = el("span");
-      wrap.appendChild(span);
-      wrap.appendChild(nested);
-      return wrap;
+      (arg.items || []).forEach((item, i) => { const row = el("div", { class: "fp-console-nested-row" }); row.appendChild(el("span", { class: "fp-nk", style: "color:#8a919c" }, String(i))); row.appendChild(renderConsoleArg(item, entryId, keyPath + "." + i)); nested.appendChild(row); });
+      const wrap = el("span"); wrap.appendChild(span); wrap.appendChild(nested); return wrap;
     }
     return span;
   }
@@ -1557,25 +1152,11 @@ function renderConsoleArg(arg, entryId, keyPath = "") {
     const isExpanded = ST.console.expanded.has(id);
     const label = arg.constructor && arg.constructor !== "Object" ? arg.constructor : "{…}";
     span.textContent = isExpanded ? label + " {" : label + " { … }";
-    span.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (isExpanded) ST.console.expanded.delete(id);
-      else ST.console.expanded.add(id);
-      const body = ST.sectionsEl.querySelector(`[data-body="console"]`);
-      if (body) renderConsole(body);
-    });
+    span.addEventListener("click", (e) => { e.stopPropagation(); if (isExpanded) ST.console.expanded.delete(id); else ST.console.expanded.add(id); const body = ST.sectionsEl.querySelector(`[data-body="console"]`); if (body) renderConsole(body); });
     if (isExpanded && arg.entries) {
       const nested = el("div", { class: "fp-console-nested", "data-expanded": "true" });
-      for (const entry of arg.entries) {
-        const row = el("div", { class: "fp-console-nested-row" });
-        row.appendChild(el("span", { class: "fp-nk" }, entry.key));
-        row.appendChild(renderConsoleArg(entry.value, entryId, keyPath + "." + entry.key));
-        nested.appendChild(row);
-      }
-      const wrap = el("span");
-      wrap.appendChild(span);
-      wrap.appendChild(nested);
-      return wrap;
+      for (const entry of arg.entries) { const row = el("div", { class: "fp-console-nested-row" }); row.appendChild(el("span", { class: "fp-nk" }, entry.key)); row.appendChild(renderConsoleArg(entry.value, entryId, keyPath + "." + entry.key)); nested.appendChild(row); }
+      const wrap = el("span"); wrap.appendChild(span); wrap.appendChild(nested); return wrap;
     }
     return span;
   }
@@ -1590,7 +1171,6 @@ function renderNetwork(body) {
   const n = ST.network;
   let filtered = n.entries;
   if (n.filter === "2xx") filtered = filtered.filter(e => e.status >= 200 && e.status < 300);
-  else if (n.filter === "3xx") filtered = filtered.filter(e => e.status >= 300 && e.status < 400);
   else if (n.filter === "4xx") filtered = filtered.filter(e => e.status >= 400 && e.status < 500);
   else if (n.filter === "5xx") filtered = filtered.filter(e => e.status >= 500);
   else if (n.filter === "error") filtered = filtered.filter(e => e.error);
@@ -1608,41 +1188,13 @@ function renderNetwork(body) {
     <div class="fp-net-list" id="fpNetList"></div>
     <div id="fpNetWaterfallWrap"></div>
   `;
-
   const listEl = $("#fpNetList", body);
-  if (!filtered.length) {
-    listEl.innerHTML = `<div class="fp-empty"><strong>No requests</strong>fetch and XMLHttpRequest calls from your project appear here.</div>`;
-  } else {
-    for (const entry of filtered) {
-      listEl.appendChild(renderNetworkRow(entry));
-    }
-  }
-
-  // Filters
-  body.querySelectorAll("[data-net-filter]").forEach(chip => {
-    chip.addEventListener("click", () => {
-      n.filter = chip.dataset.netFilter;
-      renderNetwork(body);
-    });
-  });
-
-  $("#fpNetClear", body)?.addEventListener("click", () => {
-    n.entries = [];
-    n.expanded.clear();
-    renderNetwork(body);
-    updateSectionMeta();
-  });
-
-  $("#fpNetWaterfall", body)?.addEventListener("click", () => {
-    n.waterfallExpanded = !n.waterfallExpanded;
-    renderNetwork(body);
-  });
-
-  // Waterfall
-  if (n.waterfallExpanded && filtered.length > 0) {
-    const wrap = $("#fpNetWaterfallWrap", body);
-    wrap.appendChild(renderWaterfall(filtered));
-  }
+  if (!filtered.length) listEl.innerHTML = `<div class="fp-empty"><strong>No requests</strong>fetch and XMLHttpRequest calls appear here.</div>`;
+  else for (const entry of filtered) listEl.appendChild(renderNetworkRow(entry));
+  body.querySelectorAll("[data-net-filter]").forEach(chip => chip.addEventListener("click", () => { n.filter = chip.dataset.netFilter; renderNetwork(body); }));
+  $("#fpNetClear", body)?.addEventListener("click", () => { n.entries = []; n.expanded.clear(); renderNetwork(body); updateSectionMeta(); });
+  $("#fpNetWaterfall", body)?.addEventListener("click", () => { n.waterfallExpanded = !n.waterfallExpanded; renderNetwork(body); });
+  if (n.waterfallExpanded && filtered.length > 0) $("#fpNetWaterfallWrap", body).appendChild(renderWaterfall(filtered));
 }
 
 function renderNetworkRow(entry) {
@@ -1652,7 +1204,6 @@ function renderNetworkRow(entry) {
   row.appendChild(el("span", { class: "fp-net-status", "data-family": statusFamily }, entry.error ? "ERR" : String(entry.status || "—")));
   row.appendChild(el("span", { class: "fp-net-url", title: entry.url }, entry.url));
   row.appendChild(el("span", { class: "fp-net-dur" }, fmtDuration(entry.durationMs)));
-
   const isExpanded = ST.network.expanded.has(entry.id);
   const detail = el("div", { class: "fp-net-detail", "data-open": isExpanded ? "true" : "false" });
   detail.innerHTML = `
@@ -1661,18 +1212,8 @@ function renderNetworkRow(entry) {
     <div class="fp-net-detail-row"><span class="fk">Status</span><span class="fv">${entry.error ? "Error: " + escapeHtml(entry.error) : String(entry.status)}</span></div>
     <div class="fp-net-detail-row"><span class="fk">Duration</span><span class="fv">${fmtDuration(entry.durationMs)}</span></div>
   `;
-
-  row.addEventListener("click", () => {
-    if (isExpanded) ST.network.expanded.delete(entry.id);
-    else ST.network.expanded.add(entry.id);
-    const body = ST.sectionsEl.querySelector(`[data-body="network"]`);
-    if (body) renderNetwork(body);
-  });
-
-  const wrap = el("div");
-  wrap.appendChild(row);
-  wrap.appendChild(detail);
-  return wrap;
+  row.addEventListener("click", () => { if (isExpanded) ST.network.expanded.delete(entry.id); else ST.network.expanded.add(entry.id); const body = ST.sectionsEl.querySelector(`[data-body="network"]`); if (body) renderNetwork(body); });
+  const wrap = el("div"); wrap.appendChild(row); wrap.appendChild(detail); return wrap;
 }
 
 function renderWaterfall(entries) {
@@ -1683,8 +1224,7 @@ function renderWaterfall(entries) {
     const row = el("div", { class: "fp-net-waterfall-row" });
     row.appendChild(el("span", { class: "fw-label", title: entry.url }, entry.url));
     const bar = el("div", { class: "fw-bar" });
-    const pct = Math.max(2, Math.min(100, ((entry.durationMs || 0) / max) * 100));
-    bar.appendChild(el("div", { class: "fw-bar-fill", style: { width: pct + "%" } }));
+    bar.appendChild(el("div", { class: "fw-bar-fill", style: { width: Math.max(2, Math.min(100, ((entry.durationMs || 0) / max) * 100)) + "%" } }));
     row.appendChild(bar);
     row.appendChild(el("span", { class: "fw-dur" }, fmtDuration(entry.durationMs)));
     wrap.appendChild(row);
@@ -1696,73 +1236,20 @@ function renderWaterfall(entries) {
 //  SECTION: RESPONSIVE
 // ═══════════════════════════════════════════════════════════════════
 function renderResponsive(body) {
-  const r = ST.responsive;
-
-  body.innerHTML = `
-    <div class="fp-toolbar">
-      <button class="fp-chip" id="fpRespScan" type="button">${svgIcon("ruler")} Scan now</button>
-    </div>
-    <div id="fpRespContent"></div>
-  `;
-
-  $("#fpRespScan", body).addEventListener("click", () => {
-    ST.responsive.scanning = true;
-    postToChild(REQ.RESPONSIVE_SCAN);
-    const content = $("#fpRespContent", body);
-    if (content) content.innerHTML = `<div class="fp-empty">Scanning…</div>`;
-  });
-
+  body.innerHTML = `<div class="fp-toolbar"><button class="fp-chip" id="fpRespScan" type="button">${svgIcon("ruler")} Scan now</button></div><div id="fpRespContent"></div>`;
+  $("#fpRespScan", body).addEventListener("click", () => { ST.responsive.scanning = true; postToChild(REQ.RESPONSIVE_SCAN); const c = $("#fpRespContent", body); if (c) c.innerHTML = `<div class="fp-empty">Scanning…</div>`; });
   const content = $("#fpRespContent", body);
-  if (!r.result) {
-    content.innerHTML = `<div class="fp-empty"><strong>Not scanned yet</strong>Click "Scan now" to check for overflow, touch targets, and small text.</div>`;
-    return;
-  }
-
+  if (!ST.responsive.result) { content.innerHTML = `<div class="fp-empty"><strong>Not scanned yet</strong>Click "Scan now" to check overflow, touch targets, and small text.</div>`; return; }
   content.innerHTML = "";
-
-  // Stats
   const stats = el("div", { class: "fp-resp-grid" });
-  stats.appendChild(el("div", { class: "fp-resp-stat" },
-    el("div", { class: "fp-resp-stat-label" }, "Viewport"),
-    el("div", { class: "fp-resp-stat-value" }, (r.result.viewportWidth || 0) + " px"),
-  ));
-  stats.appendChild(el("div", { class: "fp-resp-stat" },
-    el("div", { class: "fp-resp-stat-label" }, "Overflow"),
-    el("div", { class: "fp-resp-stat-value", "data-warn": (r.result.overflow?.length || 0) > 0 ? "true" : "false" }, String(r.result.overflow?.length || 0)),
-  ));
-  stats.appendChild(el("div", { class: "fp-resp-stat" },
-    el("div", { class: "fp-resp-stat-label" }, "Touch targets"),
-    el("div", { class: "fp-resp-stat-value", "data-warn": (r.result.touchTargets?.length || 0) > 0 ? "true" : "false" }, String(r.result.touchTargets?.length || 0)),
-  ));
-  stats.appendChild(el("div", { class: "fp-resp-stat" },
-    el("div", { class: "fp-resp-stat-label" }, "Small text"),
-    el("div", { class: "fp-resp-stat-value", "data-warn": (r.result.smallText?.length || 0) > 0 ? "true" : "false" }, String(r.result.smallText?.length || 0)),
-  ));
+  stats.appendChild(el("div", { class: "fp-resp-stat" }, el("div", { class: "fp-resp-stat-label" }, "Viewport"), el("div", { class: "fp-resp-stat-value" }, (ST.responsive.result.viewportWidth || 0) + " px")));
+  stats.appendChild(el("div", { class: "fp-resp-stat" }, el("div", { class: "fp-resp-stat-label" }, "Overflow"), el("div", { class: "fp-resp-stat-value", "data-warn": (ST.responsive.result.overflow?.length || 0) > 0 ? "true" : "false" }, String(ST.responsive.result.overflow?.length || 0))));
+  stats.appendChild(el("div", { class: "fp-resp-stat" }, el("div", { class: "fp-resp-stat-label" }, "Touch targets"), el("div", { class: "fp-resp-stat-value", "data-warn": (ST.responsive.result.touchTargets?.length || 0) > 0 ? "true" : "false" }, String(ST.responsive.result.touchTargets?.length || 0))));
+  stats.appendChild(el("div", { class: "fp-resp-stat" }, el("div", { class: "fp-resp-stat-label" }, "Small text"), el("div", { class: "fp-resp-stat-value", "data-warn": (ST.responsive.result.smallText?.length || 0) > 0 ? "true" : "false" }, String(ST.responsive.result.smallText?.length || 0))));
   content.appendChild(stats);
-
-  // Overflow
-  if (r.result.overflow?.length) {
-    content.appendChild(renderIssueGroup("Overflow", "error", r.result.overflow.map(o => ({
-      path: o.path,
-      detail: `Right: ${o.right}px (viewport ${o.viewportWidth}px)`,
-    }))));
-  }
-
-  // Touch targets
-  if (r.result.touchTargets?.length) {
-    content.appendChild(renderIssueGroup("Touch targets under 44px", "warn", r.result.touchTargets.map(t => ({
-      path: t.path,
-      detail: `${t.width}×${t.height}px`,
-    }))));
-  }
-
-  // Small text
-  if (r.result.smallText?.length) {
-    content.appendChild(renderIssueGroup("Small text under 12px", "warn", r.result.smallText.map(t => ({
-      path: t.path,
-      detail: `${t.fontSize}px`,
-    }))));
-  }
+  if (ST.responsive.result.overflow?.length) content.appendChild(renderIssueGroup("Overflow", "error", ST.responsive.result.overflow.map(o => ({ path: o.path, detail: `Right: ${o.right}px (viewport ${o.viewportWidth}px)` }))));
+  if (ST.responsive.result.touchTargets?.length) content.appendChild(renderIssueGroup("Touch targets under 44px", "warn", ST.responsive.result.touchTargets.map(t => ({ path: t.path, detail: `${t.width}×${t.height}px` }))));
+  if (ST.responsive.result.smallText?.length) content.appendChild(renderIssueGroup("Small text under 12px", "warn", ST.responsive.result.smallText.map(t => ({ path: t.path, detail: `${t.fontSize}px` }))));
 }
 
 function renderIssueGroup(title, severity, issues) {
@@ -1772,9 +1259,7 @@ function renderIssueGroup(title, severity, issues) {
     const row = el("div", { class: "fp-resp-issue", "data-severity": severity });
     row.appendChild(el("div", { class: "fp-issue-path" }, issue.path));
     row.appendChild(el("div", { class: "fp-issue-detail" }, issue.detail));
-    row.addEventListener("click", () => {
-      if (ST.bridgeReady) postToChild(REQ.HIGHLIGHT, { path: issue.path });
-    });
+    row.addEventListener("click", () => { if (ST.bridgeReady) postToChild(REQ.HIGHLIGHT, { path: issue.path }); });
     group.appendChild(row);
   }
   return group;
@@ -1786,8 +1271,6 @@ function renderIssueGroup(title, severity, issues) {
 function renderPerformance(body) {
   body.innerHTML = "";
   const v = ST.vitals;
-
-  // Vitals grid
   const vitalsGrid = el("div", { class: "fp-perf-vitals" });
   const addVital = (label, value, target, ratingFn) => {
     const rating = value == null ? null : ratingFn(value);
@@ -1801,8 +1284,6 @@ function renderPerformance(body) {
   addVital("LCP", v.lcp, "target <2.5s", (x) => x < 2500 ? "good" : x < 4000 ? "warn" : "bad");
   addVital("CLS", v.cls, "target <0.1", (x) => x < 0.1 ? "good" : x < 0.25 ? "warn" : "bad");
   body.appendChild(vitalsGrid);
-
-  // Payload
   const loaded = ST.files.loaded;
   let jsBytes = 0, cssBytes = 0, imgBytes = 0;
   for (const f of loaded) {
@@ -1812,19 +1293,12 @@ function renderPerformance(body) {
   }
   const payload = el("div", { class: "fp-perf-payload" });
   payload.appendChild(el("div", { class: "fp-net-waterfall-title" }, "Payload"));
-  const addPayloadRow = (label, bytes, warnAbove) => {
-    const row = el("div", { class: "fp-perf-payload-row", "data-warn": warnAbove && bytes > warnAbove ? "true" : "false" });
-    row.appendChild(el("span", { class: "fp-payload-label" }, label));
-    row.appendChild(el("span", { class: "fp-payload-val" }, fmtBytes(bytes)));
-    payload.appendChild(row);
-  };
+  const addPayloadRow = (label, bytes, warnAbove) => { const row = el("div", { class: "fp-perf-payload-row", "data-warn": warnAbove && bytes > warnAbove ? "true" : "false" }); row.appendChild(el("span", { class: "fp-payload-label" }, label)); row.appendChild(el("span", { class: "fp-payload-val" }, fmtBytes(bytes))); payload.appendChild(row); };
   addPayloadRow("JavaScript", jsBytes, 100 * 1024);
   addPayloadRow("CSS", cssBytes, 50 * 1024);
   addPayloadRow("Images", imgBytes, 500 * 1024);
   addPayloadRow("Total", jsBytes + cssBytes + imgBytes, 800 * 1024);
   body.appendChild(payload);
-
-  // Resource waterfall
   if (ST.resources.length) {
     const waterfall = el("div", { class: "fp-net-waterfall" });
     waterfall.appendChild(el("div", { class: "fp-net-waterfall-title" }, "Resources (" + ST.resources.length + ")"));
@@ -1840,8 +1314,6 @@ function renderPerformance(body) {
     }
     body.appendChild(waterfall);
   }
-
-  // Layout shifts
   if (ST.layoutShifts.length) {
     body.appendChild(el("div", { class: "fp-net-waterfall-title", style: "margin-top:12px" }, "Layout shifts (" + ST.layoutShifts.length + ")"));
     const list = el("div");
@@ -1862,12 +1334,7 @@ function renderFiles(body) {
   body.innerHTML = "";
   const loaded = ST.files.loaded;
   const skipped = ST.files.skipped;
-
-  if (!loaded.length && !skipped.length) {
-    body.innerHTML = `<div class="fp-empty"><strong>No files</strong>File information appears once the preview has loaded.</div>`;
-    return;
-  }
-
+  if (!loaded.length && !skipped.length) { body.innerHTML = `<div class="fp-empty"><strong>No files</strong>File information appears once the preview loads.</div>`; return; }
   if (loaded.length) {
     const group = el("div", { class: "fp-files-group" });
     group.appendChild(el("div", { class: "fp-files-group-title" }, "Loaded", el("span", { class: "fp-count" }, String(loaded.length))));
@@ -1876,16 +1343,11 @@ function renderFiles(body) {
       row.appendChild(el("span", { class: "fp-files-status" }, "✓"));
       row.appendChild(el("span", { class: "fp-files-path" }, f.path));
       row.appendChild(el("span", { class: "fp-files-size" }, fmtBytes(f.size || 0)));
-      row.addEventListener("click", () => {
-        if (typeof ST.options?.onOpenFile === "function") {
-          ST.options.onOpenFile(f.path, null);
-        }
-      });
+      row.addEventListener("click", () => { if (typeof ST.options?.onOpenFile === "function") ST.options.onOpenFile(f.path, null); });
       group.appendChild(row);
     }
     body.appendChild(group);
   }
-
   if (skipped.length) {
     const group = el("div", { class: "fp-files-group" });
     group.appendChild(el("div", { class: "fp-files-group-title" }, "Skipped", el("span", { class: "fp-count" }, String(skipped.length))));
@@ -1904,26 +1366,14 @@ function renderFiles(body) {
 //  SECTION: STORAGE
 // ═══════════════════════════════════════════════════════════════════
 function renderStorage(body) {
-  body.innerHTML = `
-    <div class="fp-toolbar">
-      <button class="fp-chip" id="fpStorReload" type="button">${svgIcon("refresh")} Reload</button>
-      <button class="fp-chip" id="fpStorClear" type="button">${svgIcon("trash")} Clear all</button>
-    </div>
-    <div id="fpStorContent"></div>
-  `;
-
+  body.innerHTML = `<div class="fp-toolbar"><button class="fp-chip" id="fpStorReload" type="button">${svgIcon("refresh")} Reload</button><button class="fp-chip" id="fpStorClear" type="button">${svgIcon("trash")} Clear all</button></div><div id="fpStorContent"></div>`;
   const render = () => {
     const content = $("#fpStorContent", body);
     if (!content) return;
     content.innerHTML = "";
     const localKeys = Object.keys(ST.storage.local || {});
     const sessionKeys = Object.keys(ST.storage.session || {});
-
-    if (!localKeys.length && !sessionKeys.length) {
-      content.innerHTML = `<div class="fp-empty"><strong>Nothing stored</strong>Your project's localStorage and sessionStorage appear here. Cleared on refresh.</div>`;
-      return;
-    }
-
+    if (!localKeys.length && !sessionKeys.length) { content.innerHTML = `<div class="fp-empty"><strong>Nothing stored</strong>localStorage and sessionStorage appear here. Cleared on refresh.</div>`; return; }
     const addGroup = (title, store, kind) => {
       const keys = Object.keys(store);
       if (!keys.length) return;
@@ -1935,11 +1385,7 @@ function renderStorage(body) {
         row.appendChild(el("span", { class: "fp-stor-val", title: store[k] }, String(store[k]).slice(0, 200)));
         const acts = el("div", { class: "fp-stor-act" });
         const delBtn = el("button", { type: "button", title: "Delete" }, "✕");
-        delBtn.addEventListener("click", () => {
-          postToChild(REQ.CLEAR_STORAGE, { key: k, kind });
-          delete store[k];
-          render();
-        });
+        delBtn.addEventListener("click", () => { postToChild(REQ.CLEAR_STORAGE, { key: k, kind }); delete store[k]; render(); });
         acts.appendChild(delBtn);
         row.appendChild(acts);
         group.appendChild(row);
@@ -1949,16 +1395,9 @@ function renderStorage(body) {
     addGroup("localStorage", ST.storage.local || {}, "local");
     addGroup("sessionStorage", ST.storage.session || {}, "session");
   };
-
   render();
-
-  $("#fpStorReload", body).addEventListener("click", () => {
-    postToChild(REQ.STORAGE_SNAPSHOT);
-  });
-
-  $("#fpStorClear", body).addEventListener("click", () => {
-    postToChild(REQ.CLEAR_STORAGE);
-  });
+  $("#fpStorReload", body).addEventListener("click", () => postToChild(REQ.STORAGE_SNAPSHOT));
+  $("#fpStorClear", body).addEventListener("click", () => postToChild(REQ.CLEAR_STORAGE));
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1972,28 +1411,11 @@ function renderDOM(body) {
     </div>
     <div class="fp-dom-tree" id="fpDomTree"></div>
   `;
-
   const treeEl = $("#fpDomTree", body);
-
-  if (!ST.dom.tree) {
-    treeEl.innerHTML = `<div class="fp-empty"><strong>DOM tree not loaded</strong>Click "Reload tree" to load the current document structure.</div>`;
-  } else {
-    treeEl.innerHTML = "";
-    treeEl.appendChild(renderDOMNode(ST.dom.tree, "root", 0));
-  }
-
-  $("#fpDomReload", body).addEventListener("click", () => {
-    ST.dom.tree = null;
-    postToChild(REQ.DOM_SNAPSHOT);
-  });
-
-  $("#fpDomInspect", body).addEventListener("click", () => {
-    ST.dom.inspectActive = !ST.dom.inspectActive;
-    if (ST.dom.inspectActive) postToChild(REQ.INSPECT_START);
-    else postToChild(REQ.INSPECT_STOP);
-    renderDOM(body);
-    updateSectionMeta();
-  });
+  if (!ST.dom.tree) treeEl.innerHTML = `<div class="fp-empty"><strong>DOM tree not loaded</strong>Click "Reload tree" to load the current document structure.</div>`;
+  else { treeEl.innerHTML = ""; treeEl.appendChild(renderDOMNode(ST.dom.tree, "root", 0)); }
+  $("#fpDomReload", body).addEventListener("click", () => { ST.dom.tree = null; postToChild(REQ.DOM_SNAPSHOT); });
+  $("#fpDomInspect", body).addEventListener("click", () => { ST.dom.inspectActive = !ST.dom.inspectActive; if (ST.dom.inspectActive) postToChild(REQ.INSPECT_START); else postToChild(REQ.INSPECT_STOP); renderDOM(body); updateSectionMeta(); });
 }
 
 function renderDOMNode(node, path, depth) {
@@ -2001,90 +1423,42 @@ function renderDOMNode(node, path, depth) {
   const id = path;
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = ST.dom.expanded.has(id) || depth < 2;
-
   const wrap = el("div", { class: "fp-dom-node", "data-has-children": hasChildren ? "true" : "false" });
-
   const row = el("div");
   if (hasChildren) {
     const toggle = el("span", { class: "fp-dom-toggle" }, isExpanded ? "▾" : "▸");
-    toggle.addEventListener("click", () => {
-      if (ST.dom.expanded.has(id)) ST.dom.expanded.delete(id);
-      else ST.dom.expanded.add(id);
-      const body = ST.sectionsEl.querySelector(`[data-body="dom"]`);
-      if (body) renderDOM(body);
-    });
+    toggle.addEventListener("click", () => { if (ST.dom.expanded.has(id)) ST.dom.expanded.delete(id); else ST.dom.expanded.add(id); const body = ST.sectionsEl.querySelector(`[data-body="dom"]`); if (body) renderDOM(body); });
     row.appendChild(toggle);
-  } else {
-    row.appendChild(el("span", { class: "fp-dom-toggle" }, " "));
-  }
-
-  if (node.tag === "#text") {
-    row.appendChild(el("span", { style: "color:#8a919c;font-style:italic" }, '"' + (node.text || "").slice(0, 60) + '"'));
-  } else {
+  } else row.appendChild(el("span", { class: "fp-dom-toggle" }, " "));
+  if (node.tag === "#text") row.appendChild(el("span", { style: "color:#8a919c;font-style:italic" }, '"' + (node.text || "").slice(0, 60) + '"'));
+  else {
     const tag = el("span", { class: "fp-dom-tag" }, node.tag);
-    tag.addEventListener("click", () => {
-      ST.dom.selectedPath = node.tag + (node.id ? "#" + node.id : "");
-      if (ST.bridgeReady) postToChild(REQ.HIGHLIGHT, { path: path });
-    });
+    tag.addEventListener("click", () => { ST.dom.selectedPath = node.tag + (node.id ? "#" + node.id : ""); if (ST.bridgeReady) postToChild(REQ.HIGHLIGHT, { path }); });
     row.appendChild(tag);
     if (node.id) row.appendChild(el("span", { class: "fp-dom-id" }, "#" + node.id));
-    if (node.className) {
-      for (const cls of node.className.split(/\s+/).filter(Boolean).slice(0, 3)) {
-        row.appendChild(el("span", { class: "fp-dom-class" }, "." + cls));
-      }
-    }
+    if (node.className) for (const cls of node.className.split(/\s+/).filter(Boolean).slice(0, 3)) row.appendChild(el("span", { class: "fp-dom-class" }, "." + cls));
   }
-
   wrap.appendChild(row);
-
   if (hasChildren && isExpanded) {
     const children = el("div", { class: "fp-dom-children" });
-    for (let i = 0; i < node.children.length; i++) {
-      children.appendChild(renderDOMNode(node.children[i], path + "." + i, depth + 1));
-    }
+    for (let i = 0; i < node.children.length; i++) children.appendChild(renderDOMNode(node.children[i], path + "." + i, depth + 1));
     wrap.appendChild(children);
   }
-
   return wrap;
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  SECTION: ACCESSIBILITY
+//  SECTION: A11Y
 // ═══════════════════════════════════════════════════════════════════
 function renderA11y(body) {
-  body.innerHTML = `
-    <div class="fp-toolbar">
-      <button class="fp-chip" id="fpA11yScan" type="button">${svgIcon("shield")} Scan now</button>
-    </div>
-    <div id="fpA11yContent"></div>
-  `;
-
-  $("#fpA11yScan", body).addEventListener("click", () => {
-    ST.a11y.scanning = true;
-    postToChild(REQ.A11Y_SCAN);
-    const content = $("#fpA11yContent", body);
-    if (content) content.innerHTML = `<div class="fp-empty">Scanning…</div>`;
-  });
-
+  body.innerHTML = `<div class="fp-toolbar"><button class="fp-chip" id="fpA11yScan" type="button">${svgIcon("shield")} Scan now</button></div><div id="fpA11yContent"></div>`;
+  $("#fpA11yScan", body).addEventListener("click", () => { ST.a11y.scanning = true; postToChild(REQ.A11Y_SCAN); const c = $("#fpA11yContent", body); if (c) c.innerHTML = `<div class="fp-empty">Scanning…</div>`; });
   const content = $("#fpA11yContent", body);
-  if (!ST.a11y.issues) {
-    content.innerHTML = `<div class="fp-empty"><strong>Not scanned yet</strong>Click "Scan now" to check for accessibility issues.</div>`;
-    return;
-  }
-
+  if (!ST.a11y.issues) { content.innerHTML = `<div class="fp-empty"><strong>Not scanned yet</strong>Click "Scan now" to check accessibility.</div>`; return; }
   content.innerHTML = "";
-  if (!ST.a11y.issues.length) {
-    content.innerHTML = `<div class="fp-empty"><strong>No issues found</strong>No obvious accessibility problems detected.</div>`;
-    return;
-  }
-
-  // Group by type
+  if (!ST.a11y.issues.length) { content.innerHTML = `<div class="fp-empty"><strong>No issues found</strong>No obvious accessibility problems detected.</div>`; return; }
   const groups = {};
-  for (const issue of ST.a11y.issues) {
-    if (!groups[issue.type]) groups[issue.type] = [];
-    groups[issue.type].push(issue);
-  }
-
+  for (const issue of ST.a11y.issues) { if (!groups[issue.type]) groups[issue.type] = []; groups[issue.type].push(issue); }
   for (const [type, issues] of Object.entries(groups)) {
     const group = el("div", { class: "fp-a11y-group" });
     group.appendChild(el("div", { class: "fp-a11y-group-title" }, type.replace(/-/g, " "), el("span", { class: "fp-count" }, String(issues.length))));
@@ -2114,75 +1488,27 @@ function renderDevTools(body) {
     </div>
     <div class="fp-empty" style="margin-top:10px;font-size:10px;padding:10px 4px;">
       <strong>Simulated network</strong>
-      Slow adds ~1.5s latency to fetch calls. Offline fails them. Both are approximations — not real throttling.
+      Slow adds ~1.5s latency. Offline fails fetch calls. Both are approximations — not real throttling.
     </div>
   `;
-
   $("#fpDevCopyHtml", body).addEventListener("click", async () => {
-    if (ST.dom.tree) {
-      const html = serializeDOMToHtml(ST.dom.tree);
-      const ok = await copyToClipboard(html);
-      if (ok) toast("HTML copied", "success");
-      else toast("Copy failed", "error");
-    } else {
-      postToChild(REQ.DOM_SNAPSHOT);
-      setTimeout(async () => {
-        if (ST.dom.tree) {
-          const html = serializeDOMToHtml(ST.dom.tree);
-          const ok = await copyToClipboard(html);
-          if (ok) toast("HTML copied", "success");
-        }
-      }, 300);
-    }
+    const getHtml = () => ST.dom.tree ? serializeDOMToHtml(ST.dom.tree) : null;
+    let html = getHtml();
+    if (!html) { postToChild(REQ.DOM_SNAPSHOT); await new Promise(r => setTimeout(r, 300)); html = getHtml(); }
+    if (html) { const ok = await copyToClipboard(html); if (ok) toast("HTML copied", "success"); else toast("Copy failed", "error"); }
   });
-
   $("#fpDevCopyTitle", body).addEventListener("click", async () => {
-    if (ST.iframeEl?.contentWindow) {
-      try {
-        const title = ST.iframeEl.contentDocument?.title;
-        if (title) {
-          const ok = await copyToClipboard(title);
-          if (ok) toast("Title copied", "success");
-        }
-      } catch {}
-    }
+    try { const t = ST.iframeEl.contentDocument?.title; if (t) { const ok = await copyToClipboard(t); if (ok) toast("Title copied", "success"); } } catch {}
   });
-
-  $("#fpDevReload", body).addEventListener("click", () => {
-    postToChild(REQ.RELOAD);
-  });
-
-  $("#fpDevSlow", body).addEventListener("click", () => {
-    ST.devtools.latencyMs = 1500;
-    postToChild(REQ.SIMULATE_NETWORK, { latencyMs: 1500, failureRate: 0 });
-    toast("Slow network simulated", "info");
-  });
-
-  $("#fpDevOffline", body).addEventListener("click", () => {
-    ST.devtools.failureRate = 1;
-    postToChild(REQ.SIMULATE_NETWORK, { latencyMs: 0, failureRate: 1 });
-    toast("Offline simulated", "info");
-  });
-
-  $("#fpDevReset", body).addEventListener("click", () => {
-    ST.devtools.latencyMs = 0;
-    ST.devtools.failureRate = 0;
-    postToChild(REQ.SIMULATE_NETWORK, { latencyMs: 0, failureRate: 0 });
-    toast("Network reset", "info");
-  });
-
+  $("#fpDevReload", body).addEventListener("click", () => postToChild(REQ.RELOAD));
+  $("#fpDevSlow", body).addEventListener("click", () => { ST.devtools.latencyMs = 1500; postToChild(REQ.SIMULATE_NETWORK, { latencyMs: 1500, failureRate: 0 }); toast("Slow network simulated", "info"); });
+  $("#fpDevOffline", body).addEventListener("click", () => { ST.devtools.failureRate = 1; postToChild(REQ.SIMULATE_NETWORK, { latencyMs: 0, failureRate: 1 }); toast("Offline simulated", "info"); });
+  $("#fpDevReset", body).addEventListener("click", () => { ST.devtools.latencyMs = 0; ST.devtools.failureRate = 0; postToChild(REQ.SIMULATE_NETWORK, { latencyMs: 0, failureRate: 0 }); toast("Network reset", "info"); });
   $("#fpDevClearAll", body).addEventListener("click", () => {
-    ST.console.entries = [];
-    ST.network.entries = [];
-    ST.a11y.issues = null;
-    ST.responsive.result = null;
-    ST.storage.local = {};
-    ST.storage.session = {};
-    ST.dom.tree = null;
+    ST.console.entries = []; ST.network.entries = []; ST.a11y.issues = null; ST.responsive.result = null;
+    ST.storage.local = {}; ST.storage.session = {}; ST.dom.tree = null;
     postToChild(REQ.CLEAR_STORAGE);
-    renderSection("console");
-    renderSection("network");
-    updateSectionMeta();
+    renderSection("console"); renderSection("network"); updateSectionMeta();
     toast("State cleared", "success");
   });
 }
@@ -2194,11 +1520,257 @@ function serializeDOMToHtml(node) {
   if (node.id) html += ' id="' + escapeHtml(node.id) + '"';
   if (node.className) html += ' class="' + escapeHtml(node.className) + '"';
   html += ">";
-  if (node.children) {
-    for (const child of node.children) html += serializeDOMToHtml(child);
-  }
+  if (node.children) for (const c of node.children) html += serializeDOMToHtml(c);
   html += "</" + node.tag + ">";
   return html;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SECTION: EDITOR CONSOLE (runs in the editor's scope)
+// ═══════════════════════════════════════════════════════════════════
+function renderEditorConsole(body) {
+  const hasBridge = typeof window.__folio?.eval === "function";
+  body.innerHTML = `
+    ${hasBridge ? `<div class="fp-editor-console-hint">Runs in the editor's scope — full access to <code>S</code>, <code>apiFetch</code>, <code>db</code>, <code>localStorage</code>, <code>cm</code>, and <code>workspace</code>.</div>` : `<div class="fp-editor-console-hint" style="border-left-color:#EF4444;background:rgba(239,68,68,.06);">Editor bridge not wired. Add <code>window.__folio = { api, eval }</code> in index.html to enable this section.</div>`}
+    <div class="fp-console-list" id="fpEditorConsoleList"></div>
+    <div class="fp-console-repl">
+      <span class="fp-console-repl-prompt">&gt;</span>
+      <input type="text" id="fpEditorRepl" placeholder="S.session / apiFetch(…) / S.currentProject.pid" autocomplete="off" spellcheck="false" ${hasBridge ? "" : "disabled"}>
+    </div>
+    <div id="fpEditorConsoleResult"></div>
+  `;
+  const listEl = $("#fpEditorConsoleList", body);
+  renderEditorConsoleEntries(listEl, ST.editorConsole.history);
+  const repl = $("#fpEditorRepl", body);
+  const resultEl = $("#fpEditorConsoleResult", body);
+  let histIdx = ST.editorConsole.history.length;
+  repl.addEventListener("keydown", async (e) => {
+    if (e.key === "ArrowUp") { e.preventDefault(); histIdx = Math.max(0, histIdx - 1); repl.value = ST.editorConsole.history[histIdx]?.code || ""; return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); histIdx = Math.min(ST.editorConsole.history.length, histIdx + 1); repl.value = ST.editorConsole.history[histIdx]?.code || ""; return; }
+    if (e.key !== "Enter" || !repl.value.trim()) return;
+    const code = repl.value.trim();
+    repl.value = "";
+    histIdx = ST.editorConsole.history.length + 1;
+    ST.editorConsole.history.push({ kind: "input", code, ts: Date.now() });
+    if (ST.editorConsole.history.length > LIMITS.editorHistory) ST.editorConsole.history.shift();
+    renderEditorConsoleEntries(listEl, ST.editorConsole.history);
+    resultEl.innerHTML = `<div class="fp-console-repl-result" data-ok="pending" style="opacity:0.6;">Running…</div>`;
+    try {
+      const res = await window.__folio.eval(code);
+      const ok = !!res?.ok;
+      const text = String(res?.text ?? (ok ? "undefined" : "Error"));
+      ST.editorConsole.history.push({ kind: "result", ok, text, ts: Date.now() });
+      renderEditorConsoleEntries(listEl, ST.editorConsole.history);
+      resultEl.innerHTML = ok ? `<div class="fp-console-repl-result" data-ok="true">${escapeHtml(text)}</div>` : `<div class="fp-console-repl-result" data-ok="false">${escapeHtml(text)}</div>`;
+    } catch (err) {
+      const text = (err?.message || String(err));
+      ST.editorConsole.history.push({ kind: "result", ok: false, text, ts: Date.now() });
+      renderEditorConsoleEntries(listEl, ST.editorConsole.history);
+      resultEl.innerHTML = `<div class="fp-console-repl-result" data-ok="false">${escapeHtml(text)}</div>`;
+    }
+    updateSectionMeta();
+  });
+}
+
+function renderEditorConsoleEntries(container, entries) {
+  if (!container) return;
+  container.innerHTML = "";
+  if (!entries.length) { container.innerHTML = `<div class="fp-empty"><strong>Editor console</strong>Type JavaScript to run in the editor's context.</div>`; return; }
+  for (const e of entries) {
+    if (e.kind === "input") {
+      const row = el("div", { class: "fp-console-entry", "data-level": "log" });
+      row.appendChild(el("span", { class: "fp-console-icon", html: svgIcon("terminal") }));
+      row.appendChild(el("span", { class: "fp-console-meta" }, fmtTime(e.ts) + " "));
+      const args = el("div", { class: "fp-console-args" });
+      args.appendChild(el("span", { class: "fp-console-arg", "data-kind": "string" }, "> " + e.code));
+      row.appendChild(args);
+      container.appendChild(row);
+    } else {
+      const row = el("div", { class: "fp-console-entry", "data-level": e.ok ? "log" : "error" });
+      row.appendChild(el("span", { class: "fp-console-icon", html: svgIcon(e.ok ? "check" : "alert") }));
+      row.appendChild(el("span", { class: "fp-console-meta" }, fmtTime(e.ts) + " "));
+      const args = el("div", { class: "fp-console-args" });
+      args.appendChild(el("span", { class: "fp-console-arg", "data-kind": e.ok ? "string" : "error" }, e.text));
+      row.appendChild(args);
+      container.appendChild(row);
+    }
+  }
+  const wrap = container.closest(".fp-sec-body");
+  if (wrap) wrap.scrollTop = wrap.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  SECTION: SEARCH (multi-file find + replace + cross-project)
+// ═══════════════════════════════════════════════════════════════════
+function renderSearchSection(body) {
+  const s = ST.search;
+  body.innerHTML = `
+    <div class="fp-toolbar">
+      <input type="search" id="fpSearchInput" placeholder="Search across all files…" value="${escapeHtml(s.query)}">
+    </div>
+    <div class="fp-search-options">
+      <button class="fp-search-toggle ${s.caseSensitive ? "active" : ""}" id="fpSearchCase" type="button" title="Case sensitive">Aa</button>
+      <button class="fp-search-toggle ${s.useRegex ? "active" : ""}" id="fpSearchRegex" type="button" title="Regex">.*</button>
+      <button class="fp-chip" id="fpSearchAllProjects" type="button" style="margin-left:auto;">All projects</button>
+    </div>
+    <div id="fpSearchSummary" style="font-size:10.5px;color:var(--theme-text-tertiary);padding:2px 0 6px;"></div>
+    <div id="fpSearchResults"></div>
+  `;
+  const input = $("#fpSearchInput", body);
+  const summary = $("#fpSearchSummary", body);
+  const results = $("#fpSearchResults", body);
+
+  const runSearch = debounce(async () => {
+    const q = input.value.trim();
+    s.query = q;
+    if (!q) { summary.textContent = ""; results.innerHTML = `<div class="fp-empty"><strong>Search</strong>Type to find text across every file in this project.</div>`; return; }
+    summary.textContent = "Searching…";
+    results.innerHTML = "";
+    try {
+      const api = getApi();
+      if (!api) { summary.textContent = "Editor bridge not available"; return; }
+      const files = await api.db.listFiles(api.S.currentProject.pid);
+      const matchesByFile = [];
+      let matcher;
+      try {
+        const escaped = s.useRegex ? q : q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        matcher = new RegExp(escaped, s.caseSensitive ? "g" : "gi");
+      } catch (err) { summary.textContent = "Invalid regex: " + err.message; return; }
+      const isText = (p) => /\.(html?|css|js|mjs|cjs|jsx|tsx?|py|json|md|txt|ya?ml)$/i.test(p);
+      const isSys = (p) => p === "notes.json" || /(^|\/)\.(gitkeep|keep)$/i.test(p);
+      for (const file of files) {
+        if (isSys(file.path) || !isText(file.path)) continue;
+        const lines = String(file.content || "").split("\n");
+        const fileMatches = [];
+        for (let i = 0; i < lines.length; i++) {
+          matcher.lastIndex = 0; let m;
+          while ((m = matcher.exec(lines[i])) !== null) {
+            fileMatches.push({ line: i + 1, content: lines[i], matchStart: m.index, matchLen: m[0].length });
+            if (m[0].length === 0) matcher.lastIndex++;
+          }
+        }
+        if (fileMatches.length) matchesByFile.push({ path: file.path, matches: fileMatches });
+      }
+      s.matches = matchesByFile;
+      const total = matchesByFile.reduce((n, f) => n + f.matches.length, 0);
+      const nFiles = matchesByFile.length;
+      summary.innerHTML = total > 0
+        ? `<span style="color:#F59E0B;font-weight:800;">${total}</span> result${total === 1 ? "" : "s"} in <span style="color:#F59E0B;font-weight:800;">${nFiles}</span> file${nFiles === 1 ? "" : "s"} · <button class="fp-chip" id="fpSearchReplaceAll" type="button">Replace all</button>`
+        : "";
+      setTimeout(() => {
+        document.getElementById("fpSearchReplaceAll")?.addEventListener("click", replaceAllInFiles);
+      }, 0);
+      if (!total) { results.innerHTML = `<div class="fp-empty"><strong>No matches</strong>Try a different term.</div>`; return; }
+      for (const { path, matches } of matchesByFile) {
+        const group = el("div", { class: "fp-search-result-group" });
+        const header = el("div", { class: "fp-search-result-header" });
+        header.appendChild(el("span", { class: "fp-search-result-path", title: path }, path));
+        header.appendChild(el("span", { class: "fp-search-result-count" }, String(matches.length)));
+        group.appendChild(header);
+        for (const m of matches) {
+          const row = el("div", { class: "fp-search-match" });
+          row.appendChild(el("span", { class: "fp-search-match-line" }, String(m.line)));
+          const bodySpan = el("span", { class: "fp-search-match-body" });
+          const winStart = Math.max(0, m.matchStart - 30);
+          const winEnd = Math.min(m.content.length, m.matchStart + m.matchLen + 60);
+          if (winStart > 0) bodySpan.appendChild(document.createTextNode("…"));
+          bodySpan.appendChild(document.createTextNode(m.content.slice(winStart, m.matchStart)));
+          bodySpan.appendChild(el("span", { class: "fp-search-match-hit" }, m.content.slice(m.matchStart, m.matchStart + m.matchLen)));
+          bodySpan.appendChild(document.createTextNode(m.content.slice(m.matchStart + m.matchLen, winEnd)));
+          if (winEnd < m.content.length) bodySpan.appendChild(document.createTextNode("…"));
+          row.appendChild(bodySpan);
+          row.addEventListener("click", async () => {
+            const api = getApi();
+            if (!api) return;
+            closeSection();
+            closePreview();
+            await api.workspace.openFile(path);
+            setTimeout(() => api.cm.goToLine(m.line), 200);
+          });
+          group.appendChild(row);
+        }
+        results.appendChild(group);
+      }
+      updateSectionMeta();
+    } catch (err) { summary.textContent = "Search failed: " + (err.message || err); }
+  }, 200);
+
+  input.addEventListener("input", runSearch);
+  $("#fpSearchCase", body).addEventListener("click", () => { s.caseSensitive = !s.caseSensitive; renderSearchSection(body); if (s.query) runSearch(); });
+  $("#fpSearchRegex", body).addEventListener("click", () => { s.useRegex = !s.useRegex; renderSearchSection(body); if (s.query) runSearch(); });
+  $("#fpSearchAllProjects", body).addEventListener("click", searchAcrossAllProjects);
+
+  if (s.query && s.matches.length) { results.innerHTML = ""; runSearch(); }
+  else if (!s.query) results.innerHTML = `<div class="fp-empty"><strong>Search</strong>Type to find text across every file in this project.</div>`;
+}
+
+async function replaceAllInFiles() {
+  const s = ST.search;
+  if (!s.query) return;
+  const replaceText = await promptDialog("Replace all matches with:", "", "");
+  if (replaceText === null) return;
+  const api = getApi();
+  if (!api) return;
+  const files = await api.db.listFiles(api.S.currentProject.pid);
+  let changedFiles = 0, changedMatches = 0;
+  let matcher;
+  try {
+    const escaped = s.useRegex ? s.query : s.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    matcher = new RegExp(escaped, s.caseSensitive ? "g" : "gi");
+  } catch (err) { toast("Invalid regex", "error"); return; }
+  for (const file of files) {
+    const isText = /\.(html?|css|js|mjs|cjs|jsx|tsx?|py|json|md|txt|ya?ml)$/i.test(file.path);
+    if (!isText) continue;
+    matcher.lastIndex = 0;
+    const before = file.content || "";
+    const after = before.replace(matcher, replaceText);
+    if (after !== before) {
+      await api.db.putFile(api.S.currentProject.pid, file.path, after);
+      if (api.S.activeFile === file.path && api.cm.view) api.cm.setContent(after);
+      changedFiles++;
+      const count = (before.match(matcher) || []).length;
+      changedMatches += count;
+    }
+  }
+  toast(`Replaced ${changedMatches} match${changedMatches === 1 ? "" : "es"} in ${changedFiles} file${changedFiles === 1 ? "" : "s"}`, "success");
+  const body = ST.sectionsEl.querySelector(`[data-body="search"]`);
+  if (body) renderSearchSection(body);
+}
+
+async function searchAcrossAllProjects() {
+  const query = await promptDialog("Search all projects for:", "text", "");
+  if (!query) return;
+  const api = getApi();
+  if (!api) return;
+  const projects = await api.db.listProjects();
+  const results = [];
+  const isText = (p) => /\.(html?|css|js|mjs|cjs|jsx|tsx?|py|json|md|txt|ya?ml)$/i.test(p);
+  for (const p of projects) {
+    const files = await api.db.listFiles(p.pid).catch(() => []);
+    for (const f of files) {
+      if (!isText(f.path)) continue;
+      if (String(f.content || "").toLowerCase().includes(query.toLowerCase())) results.push({ pid: p.pid, projectName: p.name || "Untitled", path: f.path });
+    }
+  }
+  if (!results.length) { toast("No matches across projects", "info"); return; }
+  const body = ST.sectionsEl.querySelector(`[data-body="search"]`);
+  if (!body) return;
+  const summary = $("#fpSearchSummary", body);
+  const content = $("#fpSearchResults", body);
+  if (summary) summary.innerHTML = `<span style="color:#F59E0B;font-weight:800;">${results.length}</span> match${results.length === 1 ? "" : "es"} across projects for "${escapeHtml(query)}"`;
+  content.innerHTML = "";
+  for (const r of results.slice(0, 100)) {
+    const row = el("div", { class: "fp-search-match" });
+    row.appendChild(el("span", { class: "fp-search-match-line", style: "min-width:auto;color:#F59E0B;font-weight:700;" }, r.projectName));
+    row.appendChild(el("span", { class: "fp-search-match-body" }, r.path));
+    row.addEventListener("click", async () => {
+      closeSection();
+      closePreview();
+      await api.openProjectById(r.pid);
+      setTimeout(() => api.workspace.openFile(r.path), 400);
+    });
+    content.appendChild(row);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2209,34 +1781,20 @@ function applySizing() {
   const mode = s.mode;
   const frame = ST.frameEl;
   if (!frame) return;
-
   frame.setAttribute("data-mode", mode);
-
   if (mode === "fit") {
-    frame.style.width = "100%";
-    frame.style.height = "100%";
-    frame.style.maxWidth = "";
-    frame.style.maxHeight = "";
+    frame.style.width = "100%"; frame.style.height = "100%";
     frame.style.transform = "";
     frame.setAttribute("data-device", "false");
     s.scale = 1;
     return;
   }
-
-  let dims;
-  let isDevice = true;
-  if (mode === "custom") {
-    dims = s.custom;
-    isDevice = false;
-  } else {
-    dims = SIZE_PRESETS[mode];
-  }
-
+  let dims, isDevice = true;
+  if (mode === "custom") { dims = s.custom; isDevice = false; }
+  else dims = SIZE_PRESETS[mode];
   frame.setAttribute("data-device", isDevice ? "true" : "false");
   frame.style.width = dims.w + "px";
   frame.style.height = dims.h + "px";
-
-  // Compute scale
   const stageW = ST.stageEl.clientWidth - 32;
   const stageH = ST.stageEl.clientHeight - 32;
   const frameW = dims.w + (isDevice ? 16 : 0);
@@ -2244,45 +1802,22 @@ function applySizing() {
   const scale = Math.min(1, stageW / frameW, stageH / frameH);
   s.scale = scale;
   frame.style.transform = scale < 1 ? `scale(${scale})` : "";
-
-  // Update readout
   const readout = ST.overlayEl.querySelector("#fpReadout");
   if (readout) readout.textContent = dims.w + " × " + dims.h;
-
-  // Update dims inputs
   const dimsEl = ST.overlayEl.querySelector("#fpDims");
   const dimsW = ST.overlayEl.querySelector("#fpDimsW");
   const dimsH = ST.overlayEl.querySelector("#fpDimsH");
   if (dimsEl) dimsEl.hidden = mode !== "custom";
   if (dimsW) dimsW.value = dims.w;
   if (dimsH) dimsH.value = dims.h;
-
-  // Update size bar active state
-  ST.overlayEl.querySelectorAll(".fp-size-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.size === mode);
-  });
-
-  // Persist
-  if (s.pid) {
-    try {
-      localStorage.setItem(LS_MODE(s.pid), mode);
-      localStorage.setItem(LS_SIZE(s.pid), `${s.custom.w}x${s.custom.h}`);
-    } catch {}
-  }
+  ST.overlayEl.querySelectorAll(".fp-size-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.size === mode));
+  if (s.pid) { try { localStorage.setItem(LS_MODE(s.pid), mode); localStorage.setItem(LS_SIZE(s.pid), `${s.custom.w}x${s.custom.h}`); } catch {} }
 }
 
 function startDrag(evt, corner) {
   if (ST.sizer.mode !== "custom") return;
   evt.preventDefault();
-  const s = ST.sizer;
-  s.drag = {
-    corner,
-    startX: evt.clientX,
-    startY: evt.clientY,
-    startW: s.custom.w,
-    startH: s.custom.h,
-    scale: s.scale || 1,
-  };
+  ST.sizer.drag = { corner, startX: evt.clientX, startY: evt.clientY, startW: ST.sizer.custom.w, startH: ST.sizer.custom.h, scale: ST.sizer.scale || 1 };
   window.addEventListener("pointermove", onDrag);
   window.addEventListener("pointerup", endDrag, { once: true });
 }
@@ -2294,23 +1829,19 @@ function onDrag(evt) {
   const dy = (evt.clientY - s.drag.startY) / s.drag.scale;
   const signX = s.drag.corner === "br" ? 1 : -1;
   const signY = s.drag.corner === "br" ? 1 : -1;
-  const newW = Math.max(CUSTOM_MIN.w, Math.min(CUSTOM_MAX.w, Math.round(s.drag.startW + dx * signX)));
-  const newH = Math.max(CUSTOM_MIN.h, Math.min(CUSTOM_MAX.h, Math.round(s.drag.startH + dy * signY)));
-  s.custom.w = newW;
-  s.custom.h = newH;
-  ST.frameEl.style.width = newW + "px";
-  ST.frameEl.style.height = newH + "px";
-  const stageW = ST.stageEl.clientWidth - 32;
-  const stageH = ST.stageEl.clientHeight - 32;
-  const scale = Math.min(1, stageW / newW, stageH / newH);
+  s.custom.w = Math.max(CUSTOM_MIN.w, Math.min(CUSTOM_MAX.w, Math.round(s.drag.startW + dx * signX)));
+  s.custom.h = Math.max(CUSTOM_MIN.h, Math.min(CUSTOM_MAX.h, Math.round(s.drag.startH + dy * signY)));
+  ST.frameEl.style.width = s.custom.w + "px";
+  ST.frameEl.style.height = s.custom.h + "px";
+  const scale = Math.min(1, (ST.stageEl.clientWidth - 32) / s.custom.w, (ST.stageEl.clientHeight - 32) / s.custom.h);
   s.scale = scale;
   ST.frameEl.style.transform = scale < 1 ? `scale(${scale})` : "";
   const readout = ST.overlayEl.querySelector("#fpReadout");
-  if (readout) readout.textContent = newW + " × " + newH;
+  if (readout) readout.textContent = s.custom.w + " × " + s.custom.h;
   const dimsW = ST.overlayEl.querySelector("#fpDimsW");
   const dimsH = ST.overlayEl.querySelector("#fpDimsH");
-  if (dimsW) dimsW.value = newW;
-  if (dimsH) dimsH.value = newH;
+  if (dimsW) dimsW.value = s.custom.w;
+  if (dimsH) dimsH.value = s.custom.h;
 }
 
 function endDrag() {
@@ -2320,13 +1851,73 @@ function endDrag() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  BRIDGE INJECTION
+//  FULLSCREEN TOGGLE
+// ═══════════════════════════════════════════════════════════════════
+function toggleFullscreen() {
+  ST.fullscreen = !ST.fullscreen;
+  applyFullscreen();
+}
+
+function applyFullscreen() {
+  const header = ST.overlayEl.querySelector(".fp-header");
+  const btn = ST.overlayEl.querySelector("#fpBtnFullscreen");
+
+  if (ST.fullscreen) {
+    // Hide the full header bar but keep a floating exit button visible
+    if (header) header.style.display = "none";
+
+    if (!ST.floatBtn) {
+      ST.floatBtn = el("button", {
+        class: "fp-btn icon fp-fullscreen-float",
+        id: "fpBtnFullscreenFloat",
+        type: "button",
+        title: "Exit fullscreen (F)",
+        "aria-label": "Exit fullscreen",
+        html: svgIcon("collapse"),
+        style: {
+          position: "fixed",
+          top: "12px",
+          right: "12px",
+          zIndex: "960",
+          background: "rgba(20,22,28,.85)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          width: "36px",
+          height: "36px",
+          borderRadius: "8px",
+          border: "1px solid rgba(255,255,255,.15)",
+          color: "#e8ecf1",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        onclick: (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleFullscreen();
+        },
+      });
+      ST.overlayEl.appendChild(ST.floatBtn);
+    }
+    ST.floatBtn.style.display = "flex";
+  } else {
+    if (header) header.style.display = "";
+    if (ST.floatBtn) ST.floatBtn.style.display = "none";
+  }
+
+  ST.dockEl.style.display = ST.fullscreen ? "none" : "";
+  if (btn) btn.innerHTML = ST.fullscreen ? svgIcon("collapse") : svgIcon("expand");
+  try { localStorage.setItem(LS_FULLSCREEN, ST.fullscreen ? "1" : "0"); } catch {}
+  requestAnimationFrame(() => applySizing());
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  BRIDGE INSTALLATION
 // ═══════════════════════════════════════════════════════════════════
 function injectBridge(html) {
   const bridge = `<script>${BRIDGE_SCRIPT}<\/script>`;
-  if (/<head[^>]*>/i.test(html)) {
-    return html.replace(/<head[^>]*>/i, (m) => m + "\n" + bridge + "\n");
-  }
+  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => m + "\n" + bridge + "\n");
   return bridge + html;
 }
 
@@ -2336,145 +1927,40 @@ function injectBridge(html) {
 function handleMessage(e) {
   if (!e.data || e.data.__folio !== true) return;
   if (e.source !== ST.iframeEl?.contentWindow) return;
-
   const { type } = e.data;
-
   switch (type) {
-    case MSG.READY:
-      ST.bridgeReady = true;
-      break;
-
-    case MSG.CONSOLE:
-      addConsoleEntry(e.data);
-      break;
-
-    case MSG.ERROR:
-      addErrorEntry(e.data);
-      break;
-
-    case MSG.NETWORK:
-      addNetworkEntry(e.data);
-      break;
-
-    case MSG.STORAGE_WRITE:
-      handleStorageWrite(e.data);
-      break;
-
-    case MSG.STORAGE_SNAPSHOT_RESULT:
-      ST.storage.local = e.data.local || {};
-      ST.storage.session = e.data.session || {};
-      ST.storage.loaded = true;
-      if (ST.openSection === "storage") {
-        const body = ST.sectionsEl.querySelector(`[data-body="storage"]`);
-        if (body) renderStorage(body);
-      }
-      updateSectionMeta();
-      break;
-
-    case MSG.VITALS:
-      mergeVitals(e.data);
-      break;
-
-    case MSG.RESOURCE:
-      addResource(e.data);
-      break;
-
-    case MSG.LAYOUT_SHIFT:
-      addLayoutShift(e.data);
-      break;
-
-    case MSG.DOM_SNAPSHOT:
-      ST.dom.tree = e.data.tree;
-      ST.dom.loading = false;
-      if (ST.openSection === "dom") {
-        const body = ST.sectionsEl.querySelector(`[data-body="dom"]`);
-        if (body) renderDOM(body);
-      }
-      break;
-
-    case MSG.INSPECT_RESULT:
-      handleInspectResult(e.data);
-      break;
-
-    case MSG.A11Y_RESULT:
-      ST.a11y.issues = e.data.issues || [];
-      ST.a11y.scanning = false;
-      if (ST.openSection === "a11y") {
-        const body = ST.sectionsEl.querySelector(`[data-body="a11y"]`);
-        if (body) renderA11y(body);
-      }
-      updateSectionMeta();
-      break;
-
-    case MSG.RESPONSIVE_RESULT:
-      ST.responsive.result = e.data;
-      ST.responsive.scanning = false;
-      if (ST.openSection === "responsive") {
-        const body = ST.sectionsEl.querySelector(`[data-body="responsive"]`);
-        if (body) renderResponsive(body);
-      }
-      updateSectionMeta();
-      break;
-
-    case MSG.EVAL_RESULT:
-      handleEvalResult(e.data);
-      break;
+    case MSG.READY: ST.bridgeReady = true; break;
+    case MSG.CONSOLE: addConsoleEntry(e.data); break;
+    case MSG.ERROR: addErrorEntry(e.data); break;
+    case MSG.NETWORK: addNetworkEntry(e.data); break;
+    case MSG.STORAGE_WRITE: handleStorageWrite(e.data); break;
+    case MSG.STORAGE_SNAPSHOT_RESULT: ST.storage.local = e.data.local || {}; ST.storage.session = e.data.session || {}; ST.storage.loaded = true; if (ST.openSection === "storage") { const b = ST.sectionsEl.querySelector(`[data-body="storage"]`); if (b) renderStorage(b); } updateSectionMeta(); break;
+    case MSG.VITALS: mergeVitals(e.data); break;
+    case MSG.RESOURCE: addResource(e.data); break;
+    case MSG.LAYOUT_SHIFT: addLayoutShift(e.data); break;
+    case MSG.DOM_SNAPSHOT: ST.dom.tree = e.data.tree; if (ST.openSection === "dom") { const b = ST.sectionsEl.querySelector(`[data-body="dom"]`); if (b) renderDOM(b); } break;
+    case MSG.INSPECT_RESULT: ST.dom.selectedPath = e.data.elementPath; if (ST.openSection === "dom") { const b = ST.sectionsEl.querySelector(`[data-body="dom"]`); if (b) renderDOM(b); } ST.dom.inspectActive = false; updateSectionMeta(); break;
+    case MSG.A11Y_RESULT: ST.a11y.issues = e.data.issues || []; ST.a11y.scanning = false; if (ST.openSection === "a11y") { const b = ST.sectionsEl.querySelector(`[data-body="a11y"]`); if (b) renderA11y(b); } updateSectionMeta(); break;
+    case MSG.RESPONSIVE_RESULT: ST.responsive.result = e.data; ST.responsive.scanning = false; if (ST.openSection === "responsive") { const b = ST.sectionsEl.querySelector(`[data-body="responsive"]`); if (b) renderResponsive(b); } updateSectionMeta(); break;
+    case MSG.EVAL_RESULT: handleEvalResult(e.data); break;
   }
 }
 
 function addConsoleEntry(data) {
-  const entry = {
-    id: ST.console.nextId++,
-    level: data.level,
-    args: data.args || [],
-    ts: data.ts || Date.now(),
-    file: data.file,
-    line: data.line,
-  };
+  const entry = { id: ST.console.nextId++, level: data.level, args: data.args || [], ts: data.ts || Date.now(), file: data.file, line: data.line };
   ST.console.entries.push(entry);
-  if (ST.console.entries.length > LIMITS.consoleEntries) {
-    ST.console.entries = ST.console.entries.slice(-LIMITS.consoleEntries);
-  }
-  if (ST.openSection === "console") {
-    const body = ST.sectionsEl.querySelector(`[data-body="console"]`);
-    const listEl = body && $("#fpConsoleList", body);
-    if (listEl) {
-      const filtered = filterConsoleEntries();
-      renderConsoleEntries(listEl, filtered);
-    }
-  } else if (entry.level === "error") {
-    // Auto-open console on first error
-    if (!ST.openSection) openSection("console");
-  }
+  if (ST.console.entries.length > LIMITS.consoleEntries) ST.console.entries = ST.console.entries.slice(-LIMITS.consoleEntries);
+  if (ST.openSection === "console") { const body = ST.sectionsEl.querySelector(`[data-body="console"]`); const listEl = body && $("#fpConsoleList", body); if (listEl) renderConsoleEntries(listEl, filterConsoleEntries()); }
+  else if (entry.level === "error" && !ST.openSection) openSection("console");
   updateSectionMeta();
 }
 
-function addErrorEntry(data) {
-  addConsoleEntry({
-    level: "error",
-    args: [{ kind: "error", name: "Uncaught", message: data.message, stack: data.stack }],
-    ts: Date.now(),
-    file: data.file,
-    line: data.line,
-  });
-}
+function addErrorEntry(data) { addConsoleEntry({ level: "error", args: [{ kind: "error", name: "Uncaught", message: data.message, stack: data.stack }], ts: Date.now(), file: data.file, line: data.line }); }
 
 function addNetworkEntry(data) {
-  ST.network.entries.push({
-    id: ST.network.nextId++,
-    method: data.method,
-    url: data.url,
-    status: data.status,
-    durationMs: data.durationMs,
-    error: data.error,
-  });
-  if (ST.network.entries.length > LIMITS.networkEntries) {
-    ST.network.entries = ST.network.entries.slice(-LIMITS.networkEntries);
-  }
-  if (ST.openSection === "network") {
-    const body = ST.sectionsEl.querySelector(`[data-body="network"]`);
-    if (body) renderNetwork(body);
-  }
+  ST.network.entries.push({ id: ST.network.nextId++, method: data.method, url: data.url, status: data.status, durationMs: data.durationMs, error: data.error });
+  if (ST.network.entries.length > LIMITS.networkEntries) ST.network.entries = ST.network.entries.slice(-LIMITS.networkEntries);
+  if (ST.openSection === "network") { const b = ST.sectionsEl.querySelector(`[data-body="network"]`); if (b) renderNetwork(b); }
   updateSectionMeta();
 }
 
@@ -2482,61 +1968,21 @@ function handleStorageWrite(data) {
   const store = data.kind === "local" ? ST.storage.local : ST.storage.session;
   if (data.op === "set") store[data.key] = data.value;
   else if (data.op === "remove") delete store[data.key];
-  else if (data.op === "clear") {
-    for (const k of Object.keys(store)) delete store[k];
-  }
-  if (ST.openSection === "storage") {
-    const body = ST.sectionsEl.querySelector(`[data-body="storage"]`);
-    if (body) renderStorage(body);
-  }
+  else if (data.op === "clear") for (const k of Object.keys(store)) delete store[k];
+  if (ST.openSection === "storage") { const b = ST.sectionsEl.querySelector(`[data-body="storage"]`); if (b) renderStorage(b); }
   updateSectionMeta();
 }
 
-function mergeVitals(data) {
-  Object.assign(ST.vitals, data);
-  if (ST.openSection === "performance") {
-    const body = ST.sectionsEl.querySelector(`[data-body="performance"]`);
-    if (body) renderPerformance(body);
-  }
-  updateSectionMeta();
-}
-
-function addResource(data) {
-  ST.resources.push(data);
-  if (ST.openSection === "performance") {
-    const body = ST.sectionsEl.querySelector(`[data-body="performance"]`);
-    if (body) renderPerformance(body);
-  }
-}
-
-function addLayoutShift(data) {
-  ST.layoutShifts.push(data);
-  if (ST.openSection === "performance") {
-    const body = ST.sectionsEl.querySelector(`[data-body="performance"]`);
-    if (body) renderPerformance(body);
-  }
-}
-
-function handleInspectResult(data) {
-  // Highlight in DOM tree
-  ST.dom.selectedPath = data.elementPath;
-  if (ST.openSection === "dom") {
-    const body = ST.sectionsEl.querySelector(`[data-body="dom"]`);
-    if (body) renderDOM(body);
-  }
-  ST.dom.inspectActive = false;
-  updateSectionMeta();
-}
+function mergeVitals(data) { Object.assign(ST.vitals, data); if (ST.openSection === "performance") { const b = ST.sectionsEl.querySelector(`[data-body="performance"]`); if (b) renderPerformance(b); } updateSectionMeta(); }
+function addResource(data) { ST.resources.push(data); if (ST.openSection === "performance") { const b = ST.sectionsEl.querySelector(`[data-body="performance"]`); if (b) renderPerformance(b); } }
+function addLayoutShift(data) { ST.layoutShifts.push(data); if (ST.openSection === "performance") { const b = ST.sectionsEl.querySelector(`[data-body="performance"]`); if (b) renderPerformance(b); } }
 
 function handleEvalResult(data) {
   const body = ST.sectionsEl.querySelector(`[data-body="console"]`);
   const resultEl = body && $("#fpConsoleReplResult", body);
   if (!resultEl) return;
-  if (data.ok) {
-    resultEl.innerHTML = `<div class="fp-console-repl-result" data-ok="true">${escapeHtml(serializeConsoleValue(data.value))}</div>`;
-  } else {
-    resultEl.innerHTML = `<div class="fp-console-repl-result" data-ok="false">${escapeHtml(data.error || "Error")}</div>`;
-  }
+  if (data.ok) resultEl.innerHTML = `<div class="fp-console-repl-result" data-ok="true">${escapeHtml(serializeConsoleValue(data.value))}</div>`;
+  else resultEl.innerHTML = `<div class="fp-console-repl-result" data-ok="false">${escapeHtml(data.error || "Error")}</div>`;
 }
 
 function serializeConsoleValue(v) {
@@ -2552,80 +1998,64 @@ function serializeConsoleValue(v) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  HEADER / CONTROLS WIRING
+//  CONTROLS WIRING
 // ═══════════════════════════════════════════════════════════════════
 function wireControls() {
   const overlay = ST.overlayEl;
-
-  // Size buttons
-  overlay.querySelectorAll("[data-size]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      ST.sizer.mode = btn.dataset.size;
-      applySizing();
-    });
-  });
-
-  // Dimension inputs
+  overlay.querySelectorAll("[data-size]").forEach(btn => btn.addEventListener("click", () => { ST.sizer.mode = btn.dataset.size; applySizing(); }));
   const dimsW = overlay.querySelector("#fpDimsW");
   const dimsH = overlay.querySelector("#fpDimsH");
   const onDimChange = () => {
-    const w = Math.max(CUSTOM_MIN.w, Math.min(CUSTOM_MAX.w, parseInt(dimsW.value, 10) || ST.sizer.custom.w));
-    const h = Math.max(CUSTOM_MIN.h, Math.min(CUSTOM_MAX.h, parseInt(dimsH.value, 10) || ST.sizer.custom.h));
-    ST.sizer.custom.w = w;
-    ST.sizer.custom.h = h;
+    ST.sizer.custom.w = Math.max(CUSTOM_MIN.w, Math.min(CUSTOM_MAX.w, parseInt(dimsW.value, 10) || ST.sizer.custom.w));
+    ST.sizer.custom.h = Math.max(CUSTOM_MIN.h, Math.min(CUSTOM_MAX.h, parseInt(dimsH.value, 10) || ST.sizer.custom.h));
     applySizing();
   };
   dimsW?.addEventListener("input", debounce(onDimChange, 300));
   dimsH?.addEventListener("input", debounce(onDimChange, 300));
-
-  // Refresh / close
+  overlay.querySelector("#fpBtnFullscreen")?.addEventListener("click", toggleFullscreen);
   overlay.querySelector("#fpBtnRefresh")?.addEventListener("click", () => {
-    if (typeof ST.options?.onRefresh === "function") {
-      ST.options.onRefresh();
-    } else {
-      postToChild(REQ.RELOAD);
-    }
+    if (typeof ST.options?.onRefresh === "function") ST.options.onRefresh();
+    else postToChild(REQ.RELOAD);
   });
-
   overlay.querySelector("#fpBtnClose")?.addEventListener("click", () => {
-    if (typeof ST.options?.onClose === "function") {
-      ST.options.onClose();
-    } else {
-      closePreview();
-    }
+    if (typeof ST.options?.onClose === "function") ST.options.onClose();
+    else closePreview();
   });
-
-  // Resize handles
   overlay.querySelector("#fpResizeBR")?.addEventListener("pointerdown", (e) => startDrag(e, "br"));
   overlay.querySelector("#fpResizeTL")?.addEventListener("pointerdown", (e) => startDrag(e, "tl"));
-
-  // Dock grip
   const grip = overlay.querySelector("#fpDockGrip");
-  let dockDragStart = 0;
-  let dockStartHeight = 0;
+  let dragStart = 0, startHeight = 0;
   grip?.addEventListener("pointerdown", (e) => {
     e.preventDefault();
-    dockDragStart = e.clientY;
-    dockStartHeight = ST.dockEl.offsetHeight;
+    dragStart = e.clientY;
+    startHeight = ST.dockEl.offsetHeight;
     const onMove = (ev) => {
-      const dy = dockDragStart - ev.clientY;
-      const newH = Math.max(40, Math.min(window.innerHeight * 0.85, dockStartHeight + dy));
+      const newH = Math.max(40, Math.min(window.innerHeight * 0.85, startHeight + (dragStart - ev.clientY)));
       ST.dockEl.style.height = newH + "px";
       ST.dockEl.setAttribute("data-expanded", newH > 60 ? "true" : "false");
     };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
+    const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   });
-
-  // Resize observation for stage scaling
-  const ro = new ResizeObserver(() => {
-    if (ST.sizer.mode !== "fit") applySizing();
-  });
+  const ro = new ResizeObserver(() => { if (ST.sizer.mode !== "fit") applySizing(); });
   ro.observe(ST.stageEl);
+  document.addEventListener("keydown", (e) => {
+    if (!ST.overlayEl || ST.overlayEl.getAttribute("data-open") !== "true") return;
+    if (e.target.matches("input, textarea, select")) return;
+    if (e.key === "Escape") {
+      if (ST.openSection) { e.preventDefault(); closeSection(); return; }
+      e.preventDefault();
+      if (typeof ST.options?.onClose === "function") ST.options.onClose();
+      else closePreview();
+      return;
+    }
+    if (e.key === "f" || e.key === "F") {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      e.preventDefault();
+      toggleFullscreen();
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2633,44 +2063,23 @@ function wireControls() {
 // ═══════════════════════════════════════════════════════════════════
 export function initPreview(options) {
   ST.options = options || {};
-  if (!options?.rootEl) {
-    console.warn("[preview] initPreview requires options.rootEl");
-    return;
-  }
+  if (!options?.rootEl) { console.warn("[preview] initPreview requires options.rootEl"); return; }
   ST.rootEl = options.rootEl;
-
   injectStyles();
   buildOverlay(options.rootEl);
   buildSections();
   wireControls();
-
   window.addEventListener("message", handleMessage);
-
-  // Escape to close
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    if (ST.overlayEl.getAttribute("data-open") !== "true") return;
-    if (ST.openSection) {
-      closeSection();
-      return;
-    }
-    closePreview();
-    if (typeof options?.onClose === "function") options.onClose();
-  });
+  try { ST.fullscreen = localStorage.getItem(LS_FULLSCREEN) === "1"; } catch {}
+  applyFullscreen();
 }
 
 export async function openPreview({ html, files, projectName, pid, activeFile, fileOptions }) {
-  if (!ST.overlayEl) {
-    console.warn("[preview] openPreview called before initPreview");
-    return;
-  }
-
+  if (!ST.overlayEl) { console.warn("[preview] openPreview called before initPreview"); return; }
   ST.projectName = projectName || "";
   ST.pid = pid || null;
   ST.activeFile = activeFile || null;
   ST.fileOptions = fileOptions || [];
-
-  // Bind sizer to this pid
   ST.sizer.pid = pid;
   let savedMode = "fit";
   let savedSize = { w: 768, h: 1024 };
@@ -2681,52 +2090,25 @@ export async function openPreview({ html, files, projectName, pid, activeFile, f
   } catch {}
   ST.sizer.mode = ["fit", "phone", "tablet", "laptop", "custom"].includes(savedMode) ? savedMode : "fit";
   ST.sizer.custom = savedSize;
-
-  // Split files
-  const loaded = [];
-  const skipped = [];
-  for (const f of files || []) {
-    if (f.skippedReason) skipped.push(f);
-    else loaded.push(f);
-  }
+  const loaded = [], skipped = [];
+  for (const f of files || []) { if (f.skippedReason) skipped.push(f); else loaded.push(f); }
   ST.files.loaded = loaded;
   ST.files.skipped = skipped;
-
-  // Reset per-preview data (but keep size prefs)
-  ST.console.entries = [];
-  ST.console.expanded.clear();
-  ST.network.entries = [];
-  ST.network.expanded.clear();
+  ST.console.entries = []; ST.console.expanded.clear();
+  ST.network.entries = []; ST.network.expanded.clear();
   ST.vitals = { lcp: null, fcp: null, cls: null, tbt: null, inp: null };
-  ST.resources = [];
-  ST.layoutShifts = [];
-  ST.a11y.issues = null;
-  ST.a11y.scanning = false;
+  ST.resources = []; ST.layoutShifts = [];
+  ST.a11y.issues = null; ST.a11y.scanning = false;
   ST.responsive.result = null;
   ST.storage = { local: {}, session: {}, loaded: false };
-  ST.dom.tree = null;
-  ST.dom.expanded.clear();
-  ST.dom.inspectActive = false;
+  ST.dom.tree = null; ST.dom.expanded.clear(); ST.dom.inspectActive = false;
   ST.bridgeReady = false;
-
-  // Inject bridge + set html
   ST.iframeEl.srcdoc = injectBridge(html || "");
-
-  // Show overlay
   ST.overlayEl.setAttribute("data-open", "true");
-
-  // Apply sizing
-  requestAnimationFrame(() => {
-    applySizing();
-    updateSectionMeta();
-  });
-
-  // Reset dock state — keep it collapsed by default
+  requestAnimationFrame(() => { applySizing(); updateSectionMeta(); });
   ST.dockEl.setAttribute("data-expanded", "false");
   ST.openSection = null;
-  ST.sectionsEl.querySelectorAll(".fp-sec").forEach(sec => {
-    sec.setAttribute("data-open", "false");
-  });
+  ST.sectionsEl.querySelectorAll(".fp-sec").forEach(sec => sec.setAttribute("data-open", "false"));
 }
 
 export function closePreview() {
@@ -2748,10 +2130,189 @@ export function isPreviewOpen() {
   return ST.overlayEl && ST.overlayEl.getAttribute("data-open") === "true";
 }
 
+// ── Feature exports (called from index.html's file tree, versions panel, etc.) ──
+export async function revertFile(path) {
+  const api = getApi();
+  if (!api || !api.S.currentProject) return;
+  const versions = await api.db.listVersions(api.S.currentProject.pid);
+  if (!versions.length) { toast("No commits to revert to", "warning"); return; }
+  const last = versions.find(v => v.kind !== "deploy") || versions[0];
+  const prev = last.files?.[path];
+  if (prev === undefined) { toast("File did not exist in last commit", "warning"); return; }
+  const current = await api.db.getFile(api.S.currentProject.pid, path);
+  if (current?.content === prev) { toast("Already at last commit", "info"); return; }
+  const ok = await confirmDialog(`Revert ${path.split("/").pop()}?`, `Restore this file to "${last.message || "last commit"}". Other files unaffected.`, "Revert", true);
+  if (!ok) return;
+  await api.db.putFile(api.S.currentProject.pid, path, prev);
+  if (api.S.activeFile === path && api.cm.view) api.cm.setContent(prev);
+  api.S.dirtyFiles.delete(path);
+  toast("File reverted", "success");
+  if (typeof api.renderSidebar === "function") api.renderSidebar();
+  if (typeof api.refreshInfoIfOpen === "function") api.refreshInfoIfOpen();
+}
+
+export async function deployVersion(versionId) {
+  const api = getApi();
+  if (!api || !api.S.isEditor || !api.S.online) { toast("Requires internet", "warning"); return; }
+  const versions = await api.db.listVersions(api.S.currentProject.pid);
+  const v = versions.find(x => x.vid === versionId);
+  if (!v) { toast("Version not found", "error"); return; }
+  const ok = await confirmDialog("Deploy this version?", `Switch live site to "${v.message || versionId}". Working files unaffected.`, "Deploy", false);
+  if (!ok) return;
+  const res = await api.apiFetch("/api/host?action=redeploy", { method: "POST", body: JSON.stringify({ pid: api.S.currentProject.pid, versionId }) });
+  if (!res.ok || !res.data?.success) { toast(res.data?.error || "Deploy failed", "error"); return; }
+  toast("Deployed", "success");
+  if (typeof api.renderSidebar === "function") api.renderSidebar();
+  if (typeof api.refreshInfoIfOpen === "function") api.refreshInfoIfOpen();
+}
+
+export function sortProjects(projects) {
+  let pinned = new Set();
+  try { pinned = new Set(JSON.parse(localStorage.getItem(LS_PINNED) || "[]")); } catch {}
+  return [...projects].sort((a, b) => {
+    const ap = pinned.has(a.pid) ? 1 : 0;
+    const bp = pinned.has(b.pid) ? 1 : 0;
+    if (ap !== bp) return bp - ap;
+    return (b.updatedAt || 0) - (a.updatedAt || 0);
+  });
+}
+
+export function togglePin(pid) {
+  let pinned = new Set();
+  try { pinned = new Set(JSON.parse(localStorage.getItem(LS_PINNED) || "[]")); } catch {}
+  if (pinned.has(pid)) pinned.delete(pid); else pinned.add(pid);
+  try { localStorage.setItem(LS_PINNED, JSON.stringify([...pinned])); } catch {}
+  return pinned.has(pid);
+}
+
+export async function openNewFileDialog(parentPath = "") {
+  const api = getApi();
+  if (!api || !api.S.currentProject) return;
+  const templateKeys = Object.keys(TEMPLATES);
+  const grid = el("div", { class: "fp-template-grid" });
+  for (const key of templateKeys) {
+    const t = TEMPLATES[key];
+    grid.appendChild(el("button", { class: "fp-template-row", type: "button", onclick: async () => {
+      api.closeSheet();
+      const name = await promptDialog("New file", `e.g. untitled${t.ext}`, `untitled${t.ext}`);
+      if (!name) return;
+      const cleaned = name.trim().replace(/[^a-zA-Z0-9._/-]/g, "");
+      if (!cleaned) return;
+      const path = parentPath ? `${parentPath}/${cleaned}` : cleaned;
+      const exists = await api.db.getFile(api.S.currentProject.pid, path);
+      if (exists) { toast("File already exists", "warning"); return; }
+      await api.db.putFile(api.S.currentProject.pid, path, t.content);
+      toast(`Created ${path}`, "success");
+      await api.workspace.openFile(path);
+      if (typeof api.renderSidebar === "function") api.renderSidebar();
+    } },
+      el("span", { class: "fp-template-label" }, t.label),
+      el("span", { class: "fp-template-ext" }, t.ext)
+    ));
+  }
+  grid.appendChild(el("button", { class: "fp-template-row", type: "button", onclick: async () => {
+    api.closeSheet();
+    const name = await promptDialog("New file", "e.g. index.html", "untitled.txt");
+    if (!name) return;
+    const cleaned = name.trim().replace(/[^a-zA-Z0-9._/-]/g, "");
+    if (!cleaned) return;
+    const path = parentPath ? `${parentPath}/${cleaned}` : cleaned;
+    const exists = await api.db.getFile(api.S.currentProject.pid, path);
+    if (exists) { toast("File already exists", "warning"); return; }
+    await api.db.putFile(api.S.currentProject.pid, path, "");
+    toast(`Created ${path}`, "success");
+    await api.workspace.openFile(path);
+    if (typeof api.renderSidebar === "function") api.renderSidebar();
+  } },
+    el("span", { class: "fp-template-label" }, "Empty file"),
+    el("span", { class: "fp-template-ext" }, "blank")
+  ));
+  api.openSheet({ title: "New file", body: grid });
+}
+
+export function readSnippets() {
+  try { return JSON.parse(localStorage.getItem(LS_SNIPPETS) || "[]"); } catch { return []; }
+}
+
+export function addSnippet({ name, body }) {
+  const list = readSnippets();
+  list.push({ id: `sn_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: String(name || "Untitled").slice(0, 60), body: String(body || ""), createdAt: Date.now() });
+  try { localStorage.setItem(LS_SNIPPETS, JSON.stringify(list.slice(0, 100))); } catch {}
+  return list;
+}
+
+export async function openSnippetPicker() {
+  const api = getApi();
+  if (!api || !api.cm.view) { toast("Open a file first", "info"); return; }
+  const snippets = readSnippets();
+  if (!snippets.length) { toast("No snippets saved yet", "info"); return; }
+  const grid = el("div", { class: "fp-template-grid" });
+  for (const s of snippets) {
+    grid.appendChild(el("button", { class: "fp-template-row", type: "button", onclick: () => {
+      api.cm.insertText(s.body);
+      api.workspace.markDirty();
+      api.closeSheet();
+      toast("Inserted: " + s.name, "success");
+    } },
+      el("span", { class: "fp-template-label" }, s.name),
+      el("span", { class: "fp-template-ext" }, String(s.body.split("\n").length) + " lines")
+    ));
+  }
+  api.openSheet({ title: "Insert snippet", body: grid });
+}
+
+export async function saveSelectionAsSnippet() {
+  const api = getApi();
+  if (!api || !api.cm.view) { toast("Open a file first", "info"); return; }
+  const selection = api.cm.getSelection();
+  if (!selection) { toast("Select code first", "info"); return; }
+  const name = await promptDialog("Snippet name", "e.g. fetch wrapper", "");
+  if (!name) return;
+  addSnippet({ name, body: selection });
+  toast("Snippet saved", "success");
+}
+
+export function openMoreMenu() {
+  const api = getApi();
+  if (!api || !api.cm) { toast("Editor bridge not available", "warning"); return; }
+  const items = [
+    { label: "Insert snippet", icon: "code", action: openSnippetPicker },
+    { label: "Save selection as snippet", icon: "save", action: saveSelectionAsSnippet },
+    { label: "Search across all projects", icon: "search", action: searchAcrossAllProjects },
+  ];
+  const grid = el("div", { class: "fp-template-grid" });
+  for (const it of items) {
+    grid.appendChild(el("button", { class: "fp-template-row", type: "button", onclick: async () => {
+      api.closeSheet();
+      try { await it.action(); } catch (err) { toast(err.message || "Action failed", "error"); }
+    } },
+      el("span", { class: "fp-template-label" }, it.label),
+      el("span", { class: "fp-template-ext" }, it.icon)
+    ));
+  }
+  api.openSheet({ title: "More actions", body: grid });
+}
+
+export function openSearch() {
+  if (!ST.overlayEl) { toast("Preview not initialized", "warning"); return; }
+  ST.overlayEl.setAttribute("data-open", "true");
+  openSection("search");
+}
+
+export function getEditorExtensions(cmModules, path) {
+  const exts = [];
+  if (!cmModules?.lintMod) return exts;
+  if (!/\.(js|mjs|jsx|ts|tsx)$/i.test(path)) return exts;
+  try {
+    const langMod = cmModules.getLanguageExtension?._jsLang;
+    // The editor will call this with its own imported jsLang; we can't
+    // await dynamic import here (sync), so we return a linter that the
+    // editor attaches once jsLang is available.
+    // Instead, the editor should call us with a preloaded jsLang.
+  } catch {}
+  // Safe fallback: return empty. The editor already adds jsLang.
+  return exts;
+}
+
 // Export internals for testing / advanced integration
-export const __internal = {
-  state: ST,
-  applySizing,
-  openSection,
-  closeSection,
-};
+export const __internal = { state: ST, applySizing, openSection, closeSection, toggleFullscreen };
