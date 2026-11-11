@@ -276,6 +276,73 @@ export async function releaseUsername(username) {
 }
 
 // =========================================================================
+// PROJECT SLUG INDEX MIGRATION (username rename)
+// =========================================================================
+//
+// When a user changes their username, every project they own has an entry
+// at projectSlugs/{oldUsername}/{slug} = pid. Without this migration, the
+// old username keeps resolving to this user's projects forever, and
+// whoever claims the old username inherits those routings.
+//
+// Writes are done as one multi-path update — atomic, no partial state.
+// If the update fails partway, nothing is written (Firebase update() is
+// all-or-nothing per call).
+//
+// Called by auth.js handleChangeUsername (primary) and — as a drift
+// safety net — by host.js handleProjectsUpdate.
+
+export async function migrateProjectSlugsOnUsernameChange(uid, oldUsername, newUsername) {
+  if (!uid || !oldUsername || !newUsername || oldUsername === newUsername) {
+    return { migrated: 0, skipped: 0 };
+  }
+
+  const user = await getUser(uid);
+  if (!user) return { migrated: 0, skipped: 0 };
+
+  const pids = user.projectIds || {};
+  const pidList = Object.keys(pids);
+  if (pidList.length === 0) return { migrated: 0, skipped: 0 };
+
+  const updates = {};
+  let migrated = 0;
+  let skipped = 0;
+
+  // Fetch all owned projects in parallel — bounded by the user's project
+  // count, which is small (tens, not thousands).
+  const projectSnaps = await Promise.all(
+    pidList.map((pid) =>
+      db.ref(`projects/${pid}`).once("value").catch(() => null),
+    ),
+  );
+
+  for (let i = 0; i < pidList.length; i++) {
+    const pid = pidList[i];
+    const snap = projectSnaps[i];
+    if (!snap || !snap.exists()) { skipped++; continue; }
+
+    const project = snap.val() || {};
+    // Only migrate projects owned by this uid. Shared projects have
+    // their own owner and their slug lives under the owner's username.
+    if (project.ownerId !== uid) { skipped++; continue; }
+
+    const slug = project.slug;
+    if (!slug) { skipped++; continue; }
+
+    updates[`projectSlugs/${oldUsername}/${slug}`] = null;
+    updates[`projectSlugs/${newUsername}/${slug}`] = pid;
+    updates[`projects/${pid}/ownerUsername`] = newUsername;
+    migrated++;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return { migrated: 0, skipped };
+  }
+
+  await db.ref().update(updates);
+  return { migrated, skipped };
+}
+
+// =========================================================================
 // PROJECT PERMISSIONS
 // =========================================================================
 
@@ -554,15 +621,12 @@ export async function logProjectApiCall(pid, success = true) {
   }).catch(() => {});
 }
 
-
 // =========================================================================
 // SHARED HELPERS — used by api/ai.js (and available to host.js)
 // =========================================================================
 
 /**
  * Read all files for a project as { path: content }.
- * Mirrors the 6 inline reads currently scattered through host.js.
- * Returns {} on miss — callers never need to null-check.
  */
 export async function listProjectFiles(pid) {
   if (!pid) return {};
@@ -579,8 +643,6 @@ export async function listProjectFiles(pid) {
 
 /**
  * Language % breakdown from a { path: content } map.
- * Mirrors computeLanguageBreakdown in host.js — extracted so both
- * modules use the same rounding (1 decimal, 0-100).
  */
 const _LANG_MAP = {
   html: "HTML", htm: "HTML",
@@ -612,11 +674,6 @@ export function computeLanguageBreakdown(files) {
 
 /**
  * Notify a project owner when a rate-limit action is sustained-abused.
- * Moved here from host.js so ai.js can call it without a host.js import
- * (which would create a circular dependency).
- *
- * Fires exactly once per hour per (action, identifier) on the 5th hit.
- * Never throws — notification failures must not break the request.
  */
 export async function maybeNotifyRateLimitAbuse(action, identifier, rateResult) {
   const s = String(identifier || "");
