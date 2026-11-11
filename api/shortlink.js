@@ -47,7 +47,8 @@ import {
 
 const API_NAME = "shortlink";
 
-const SHORT_DOMAIN = process.env.SHORT_DOMAIN || "folio.xo.je";
+const SHORT_URL =
+  (process.env.SHORT_URL || "https://folio.xo.je").replace(/\/+$/, "");
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "";
 const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN || "";
@@ -374,7 +375,7 @@ async function releaseKey(key, pid) {
 // =========================================================================
 
 function shortUrlFor(key) {
-  return `https://${SHORT_DOMAIN}/${key}`;
+  return `${SHORT_URL}/${key}`;
 }
 
 function publicRecord(key, record) {
