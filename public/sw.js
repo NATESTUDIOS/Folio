@@ -165,6 +165,7 @@ const CACHED_FILES = [
   "/css/app.css",
   "/css/project.css",
   "/css/ai.css",
+ 
 
   // ── PWA ──────────────────────────────────────────────────
   "/manifest.json",
@@ -190,6 +191,7 @@ const CACHED_FILES = [
   "/notifications.js",
   "/js/ai.js",
   "/js/create-project.js",
+  "/js/preview.js",
 
   // ── Firebase compat (self-hosted) ────────────────────────
   "/vendor/firebase/firebase-app-compat.js",
