@@ -1,0 +1,1429 @@
+    <!-- ═══════════════════════════════════════════════════════
+         FILES & ASSETS
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="files">
+      <span class="docs-eyebrow">Building</span>
+      <h1 class="docs-h1">Files &amp; assets</h1>
+      <p class="docs-lede">Everything you write in the editor becomes a file. Everything you upload becomes a file too — but with a few quiet rules.</p>
+
+      <h2 class="docs-h2" id="f-create">Creating files
+        <a class="docs-anchor" href="#f-create" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Three ways to add a file:</p>
+      <ul class="docs-ul">
+        <li><strong>Sidebar → files panel → <code class="docs-code">+</code> button</strong> — prompts for a path.</li>
+        <li><strong>Toolbar → More → New</strong> — same prompt.</li>
+        <li><strong>Import</strong> — pick one or more local files. Binary assets (images, PDFs, fonts, audio, video) are automatically uploaded to a CDN and stored as HTTPS URLs.</li>
+      </ul>
+      <p class="docs-p">Paths support nesting with <code class="docs-code">/</code>: <code class="docs-code">src/components/button.js</code>. Folders are implicit — they exist because a file lives under that prefix.</p>
+
+      <h2 class="docs-h2" id="f-limits">File size limits
+        <a class="docs-anchor" href="#f-limits" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Limit</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Max size per file</td><td>4 MB</td></tr>
+          <tr><td>Max total per project</td><td>10 MB (default; can be raised)</td></tr>
+          <tr><td>Max path length</td><td>500 characters</td></tr>
+          <tr><td>Max path segment</td><td>100 characters</td></tr>
+        </tbody>
+      </table>
+      <p class="docs-p">Files over the limit are rejected before upload. The editor shows a clear error and skips that file — other files in the same batch still upload.</p>
+
+      <h2 class="docs-h2" id="f-binary">Binary assets
+        <a class="docs-anchor" href="#f-binary" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">When you import a binary file, Folio uploads it to the image host and stores the resulting HTTPS URL as the file's content. When the site is served, the browser receives a redirect (302) to the CDN — not a base64 blob. This keeps the database small and pages fast.</p>
+      <p class="docs-p">The following extensions trigger binary handling:</p>
+      <ul class="docs-ul">
+        <li><strong>Images</strong> — <code class="docs-code">png</code>, <code class="docs-code">jpg</code>, <code class="docs-code">jpeg</code>, <code class="docs-code">gif</code>, <code class="docs-code">webp</code>, <code class="docs-code">svg</code>, <code class="docs-code">bmp</code>, <code class="docs-code">ico</code>, <code class="docs-code">avif</code></li>
+        <li><strong>Documents</strong> — <code class="docs-code">pdf</code></li>
+        <li><strong>Fonts</strong> — <code class="docs-code">woff</code>, <code class="docs-code">woff2</code>, <code class="docs-code">ttf</code>, <code class="docs-code">otf</code></li>
+        <li><strong>Media</strong> — <code class="docs-code">mp4</code>, <code class="docs-code">webm</code>, <code class="docs-code">mp3</code>, <code class="docs-code">wav</code>, <code class="docs-code">ogg</code></li>
+      </ul>
+
+      <h2 class="docs-h2" id="f-reserved">Reserved paths
+        <a class="docs-anchor" href="#f-reserved" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Path</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">api/*.js</code></td><td>Private API routes — executed but not served as files</td></tr>
+          <tr><td><code class="docs-code">notes.json</code></td><td>Managed by the Notes tab, treated as a system file</td></tr>
+          <tr><td><code class="docs-code">.gitkeep</code> / <code class="docs-code">.keep</code></td><td>Placeholders — skipped on deploy</td></tr>
+        </tbody>
+      </table>
+
+      <div class="docs-callout warning">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="docs-callout-body">
+          <strong>Don't put secrets in files</strong>
+          <p style="margin:0">Files are served publicly. API keys belong in <a href="#secrets">Secrets</a>, not in <code class="docs-code">config.js</code>.</p>
+        </div>
+      </div>
+
+      <h2 class="docs-h2" id="f-delete">Deleting files
+        <a class="docs-anchor" href="#f-delete" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Hover a file in the sidebar to see the trash icon. Deleting removes the file from IndexedDB and, if you're online, from the server. Deleted files are not recoverable unless you committed a version beforehand — so commit before destructive edits.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         PREVIEW
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="preview">
+      <span class="docs-eyebrow">Building</span>
+      <h1 class="docs-h1">Preview</h1>
+      <p class="docs-lede">See what you're building without leaving the editor. Three preview modes for three workflows.</p>
+
+      <h2 class="docs-h2" id="p-modes">Three modes
+        <a class="docs-anchor" href="#p-modes" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Mode</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Fullscreen</strong></td><td>Checking layouts on the real viewport. Comes with a console underneath.</td></tr>
+          <tr><td><strong>New tab</strong></td><td>Testing on a second monitor, or debugging with full browser devtools.</td></tr>
+          <tr><td><strong>Mini panel</strong></td><td>Watching changes as you type. Floats in the corner.</td></tr>
+        </tbody>
+      </table>
+      <p class="docs-p">The caret next to the <strong>Preview</strong> button in the header opens a mode picker. Your choice persists across sessions.</p>
+
+      <h2 class="docs-h2" id="p-what">What preview does
+        <a class="docs-anchor" href="#p-what" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">The preview assembles a live page from your files, in memory. It:</p>
+      <ul class="docs-ul">
+        <li><strong>Inlines CSS</strong> — <code class="docs-code">&lt;link href="style.css"&gt;</code> becomes inline <code class="docs-code">&lt;style&gt;</code>.</li>
+        <li><strong>Inlines images</strong> — <code class="docs-code">&lt;img src="logo.png"&gt;</code> uses the stored data URI or CDN URL.</li>
+        <li><strong>Bridges console</strong> — <code class="docs-code">console.log</code> from the iframe flows to the preview console.</li>
+        <li><strong>Injects meta tags</strong> — your title, description, and OG image are inserted automatically.</li>
+      </ul>
+
+      <div class="docs-callout info">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <div class="docs-callout-body">
+          <strong>Preview is not deployment</strong>
+          <p style="margin:0">Preview runs entirely in your browser. API calls in preview hit Folio's live API; if you haven't deployed with the current secrets, you may see errors. Deploy to see the real thing.</p>
+        </div>
+      </div>
+
+      <h2 class="docs-h2" id="p-file">Previewing a specific file
+        <a class="docs-anchor" href="#p-file" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">When you have more than one HTML file, a dropdown appears in the preview toolbar. Choose any file to preview it. Default is <code class="docs-code">index.html</code>.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         VERSIONS & COMMITS
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="commit">
+      <span class="docs-eyebrow">Building</span>
+      <h1 class="docs-h1">Versions &amp; commits</h1>
+      <p class="docs-lede">Snapshots of your whole project. Restore in one click, diff any two versions.</p>
+
+      <h2 class="docs-h2" id="c-commit">Making a commit
+        <a class="docs-anchor" href="#c-commit" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ol class="docs-steps">
+        <li><strong>Save</strong> the files you want in the snapshot (or accept they won't be included).</li>
+        <li>Click <strong>Commit</strong> in the toolbar, or <strong>Commit version</strong> in the Versions tab.</li>
+        <li>The dialog shows changed files with +/- line estimates, plus an auto-generated message. Edit it if you want.</li>
+        <li>Tap <strong>Commit</strong>. Done.</li>
+      </ol>
+      <p class="docs-p">Auto-message format: <code class="docs-code">edit: index.html (+12, −3)</code> for a single-file change, <code class="docs-code">edit: 3 files (+40, −8)</code> for multiple. It's meant to be readable, not perfect.</p>
+
+      <h2 class="docs-h2" id="c-offline">Offline commits
+        <a class="docs-anchor" href="#c-offline" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Commit with no internet? The commit saves to IndexedDB immediately and queues a server sync. When you reconnect:</p>
+      <ul class="docs-ul">
+        <li>The queue auto-flushes every 30 seconds while online.</li>
+        <li>Failed syncs retry up to 5 times, then drop with a warning.</li>
+        <li>The sync badge on the notification bell shows pending count.</li>
+      </ul>
+
+      <h2 class="docs-h2" id="c-restore">Restoring a version
+        <a class="docs-anchor" href="#c-restore" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Open the <strong>Versions</strong> tab in the sidebar. Each commit shows restore and delete. Restoring:</p>
+      <ol class="docs-steps">
+        <li>Auto-commits the current state first (so you can undo the undo).</li>
+        <li>Replaces all files with the version's snapshot.</li>
+        <li>If the version was a deploy, the live site stays on the current deployment until you redeploy.</li>
+      </ol>
+
+      <div class="docs-callout warning">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="docs-callout-body">
+          <strong>Restore replaces, it doesn't merge</strong>
+          <p style="margin:0">Any uncommitted files not in the version will be deleted. Commit first if you're unsure.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         DEPLOYING
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="deploy">
+      <span class="docs-eyebrow">Shipping</span>
+      <h1 class="docs-h1">Deploying</h1>
+      <p class="docs-lede">One tap to a live URL. Here's what happens under the hood.</p>
+
+      <h2 class="docs-h2" id="d-flow">What a deploy does
+        <a class="docs-anchor" href="#d-flow" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ol class="docs-steps">
+        <li><strong>Upload files</strong> — all regular files go to the file store.</li>
+        <li><strong>Upload api/*.js</strong> — validated and stored separately.</li>
+        <li><strong>Create a version snapshot</strong> — full state, immutable.</li>
+        <li><strong>Write a deployment record</strong> — URL, timestamp, version reference.</li>
+        <li><strong>Create or repoint the short link</strong> — auto-created on first deploy.</li>
+        <li><strong>Generate OG image + thumbnail</strong> — for share cards.</li>
+      </ol>
+
+      <h2 class="docs-h2" id="d-progress">Progress card
+        <a class="docs-anchor" href="#d-progress" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">During deploy, a persistent progress card appears in the top-right corner (top-center on mobile). It shows:</p>
+      <ul class="docs-ul">
+        <li>Stage text — <em>Preparing → Uploading → Activating → Live</em></li>
+        <li>Percentage — 0% → 100%</li>
+        <li>Elapsed time — a running counter</li>
+      </ul>
+      <p class="docs-p">You can keep editing, switch tabs, open panels, or navigate around the editor while it's running. When it's done, the card flashes green and disappears.</p>
+
+      <div class="docs-callout info">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <div class="docs-callout-body">
+          <strong>Don't close the tab</strong>
+          <p style="margin:0">Leaving the page mid-deploy triggers a confirmation dialog. You can stay or leave — the deploy continues server-side either way, but you won't see the result bar if you leave.</p>
+        </div>
+      </div>
+
+      <h2 class="docs-h2" id="d-result">Result bar
+        <a class="docs-anchor" href="#d-result" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">When deploy succeeds, a persistent bar appears at the bottom of the editor. It contains:</p>
+      <ul class="docs-ul">
+        <li>The <strong>live URL</strong> on <code class="docs-code">foliosites.vercel.app</code>.</li>
+        <li>The <strong>short link</strong> on <code class="docs-code">folio.xo.je</code> (if one exists).</li>
+        <li>A copy button next to each — tap to copy.</li>
+        <li>A close button — the bar stays until you dismiss it.</li>
+      </ul>
+
+      <h2 class="docs-h2" id="d-history">Deployment history
+        <a class="docs-anchor" href="#d-history" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">The last 5 deployments are kept. Each has:</p>
+      <ul class="docs-ul">
+        <li>A <strong>preview URL</strong> — append <code class="docs-code">?from={deploymentId}</code> to see that specific version.</li>
+        <li>The deployment's <strong>version snapshot</strong> — can be restored or redeployed.</li>
+        <li>The <strong>state</strong> — <code class="docs-code">READY</code> or <code class="docs-code">OFFLINE</code>.</li>
+      </ul>
+      <p class="docs-p">Older deployments drop off the list. To keep a version permanently, commit it first — commits aren't pruned.</p>
+
+      <h2 class="docs-h2" id="d-offline">Taking a site offline
+        <a class="docs-anchor" href="#d-offline" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Owners can take a live site offline. The URL stops working immediately; the last live URL is preserved. Redeploying brings it back. This is different from deleting — the files and deployments stay.</p>
+
+      <h2 class="docs-h2" id="d-collab">Deploy permissions
+        <a class="docs-anchor" href="#d-collab" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Only owners and editors can deploy. Viewers and commenters can see files and history but not publish. Rate limit: 10 deploys per hour per project.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         SHORT LINKS
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="shortlink">
+      <span class="docs-eyebrow">Shipping</span>
+      <h1 class="docs-h1">Short links</h1>
+      <p class="docs-lede">A custom URL on <code class="docs-code">folio.xo.je</code> that redirects to your live site. Auto-created. Fully customisable.</p>
+
+      <h2 class="docs-h2" id="sl-auto">Auto-creation
+        <a class="docs-anchor" href="#sl-auto" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">On first deploy, a short link is created from your project slug. Deploys after that repoint the existing key — same URL, new destination.</p>
+
+      <h2 class="docs-h2" id="sl-claim">Claiming a custom name
+        <a class="docs-anchor" href="#sl-claim" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ol class="docs-steps">
+        <li>Open <strong>Settings → Short link</strong> in the project dashboard.</li>
+        <li>Enter a name — 3-30 lowercase letters/digits, must start with a letter.</li>
+        <li>Tap <strong>Claim</strong>.</li>
+        <li>If taken, pick from 3 suggested variants or try another name.</li>
+      </ol>
+
+      <h2 class="docs-h2" id="sl-copy">Copying from the editor
+        <a class="docs-anchor" href="#sl-copy" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">The link icon in the editor header:</p>
+      <ul class="docs-ul">
+        <li><strong>Green tinted</strong> — a short link exists; click to copy.</li>
+        <li><strong>Grey</strong> — no short link yet; click to open the project page's short link settings.</li>
+      </ul>
+      <p class="docs-p">The copy button pulses green on success, then returns to normal.</p>
+
+      <h2 class="docs-h2" id="sl-release">Releasing a name
+        <a class="docs-anchor" href="#sl-release" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Settings → Short link → Release. Confirmation dialog first. After releasing, the short link 404s immediately. Another project can claim it.</p>
+
+      <div class="docs-callout warning">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="docs-callout-body">
+          <strong>Released links 404 immediately</strong>
+          <p style="margin:0">If the link is printed on a business card, don't release it. Change the destination instead by deploying a different project to it.</p>
+        </div>
+      </div>
+
+      <h2 class="docs-h2" id="sl-reserved">Reserved names
+        <a class="docs-anchor" href="#sl-reserved" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Blocked: <code class="docs-code">api</code>, <code class="docs-code">www</code>, <code class="docs-code">admin</code>, <code class="docs-code">login</code>, <code class="docs-code">register</code>, <code class="docs-code">settings</code>, <code class="docs-code">dashboard</code>, <code class="docs-code">help</code>, <code class="docs-code">docs</code>, and similar. Also any name starting with a digit or containing uppercase, spaces, or punctuation.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         VISIBILITY
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="visibility">
+      <span class="docs-eyebrow">Shipping</span>
+      <h1 class="docs-h1">Visibility</h1>
+      <p class="docs-lede">Five independent switches. Together they decide what the public sees.</p>
+
+      <h2 class="docs-h2" id="v-axes">The five axes
+        <a class="docs-anchor" href="#v-axes" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Axis</th><th>Public means</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Profile</strong></td><td>Project appears on your public profile page at <code class="docs-code">/{username}</code></td></tr>
+          <tr><td><strong>Live site</strong></td><td>Visitors can open the deployed site</td></tr>
+          <tr><td><strong>Code</strong></td><td>Visitors can browse the source files from the share page</td></tr>
+          <tr><td><strong>Languages</strong></td><td>Language breakdown (HTML 40%, CSS 30%…) is visible</td></tr>
+          <tr><td><strong>DB</strong></td><td>External clients can read your JSON database without auth</td></tr>
+        </tbody>
+      </table>
+      <p class="docs-p">Everything defaults to <strong>private</strong>. Flipping any axis to public makes that specific thing visible; nothing else changes.</p>
+
+      <h2 class="docs-h2" id="v-what">When is a project accessible?
+        <a class="docs-anchor" href="#v-what" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li><strong>Owner/editor</strong> — always, regardless of visibility.</li>
+        <li><strong>Collaborator (viewer/commenter)</strong> — if they've been invited to that project.</li>
+        <li><strong>Public visitor</strong> — only if the relevant axis is public.</li>
+      </ul>
+
+      <h2 class="docs-h2" id="v-revoke">Revoking access
+        <a class="docs-anchor" href="#v-revoke" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Toggle an axis back to private and it becomes inaccessible immediately on the next request. Cached responses may serve stale content for up to 60 seconds — no more.</p>
+
+      <div class="docs-callout danger">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="docs-callout-body">
+          <strong>Public DB means public DB</strong>
+          <p style="margin:0">Flipping the <strong>DB</strong> axis to public lets anyone read your JSON database. Not just your API — anyone with the project ID. Enable only if the data is genuinely public.</p>
+        </div>
+      </div>
+
+      <h2 class="docs-h2" id="v-collab">Collaborators
+        <a class="docs-anchor" href="#v-collab" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Owners invite collaborators by username from Settings. Four roles:</p>
+      <table class="docs-table">
+        <thead><tr><th>Role</th><th>Can do</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Viewer</strong></td><td>See files and versions</td></tr>
+          <tr><td><strong>Commenter</strong></td><td>Everything a viewer can, plus comments</td></tr>
+          <tr><td><strong>Editor</strong></td><td>Edit files, commit, deploy</td></tr>
+          <tr><td><strong>Owner</strong></td><td>Everything, plus delete the project</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         SECRETS
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="secrets">
+      <span class="docs-eyebrow">Backend</span>
+      <h1 class="docs-h1">Secrets</h1>
+      <p class="docs-lede">Encrypted environment variables per project. Available to your API. Never to the browser (unless you ask).</p>
+
+      <h2 class="docs-h2" id="s-create">Creating a secret
+        <a class="docs-anchor" href="#s-create" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ol class="docs-steps">
+        <li>Open the <strong>Secrets</strong> tab in the project dashboard.</li>
+        <li>Tap <strong>New</strong>.</li>
+        <li>Enter a key in <code class="docs-code">UPPER_SNAKE_CASE</code> — e.g. <code class="docs-code">OPENAI_API_KEY</code>.</li>
+        <li>Enter the value.</li>
+        <li>Choose visibility — <strong>private</strong> (default) or <strong>public</strong>.</li>
+        <li>Tap <strong>Create</strong>.</li>
+      </ol>
+
+      <h2 class="docs-h2" id="s-access">Accessing secrets
+        <a class="docs-anchor" href="#s-access" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">From <code class="docs-code">api/*.js</code>:</p>
+      <pre class="docs-pre"><code>const key = ENV.OPENAI_API_KEY;
+const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer " + key,
+  },
+  body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "user", content: "Hello" }] }),
+});
+return await response.json();</code></pre>
+
+      <h2 class="docs-h2" id="s-visibility">Private vs. public
+        <a class="docs-anchor" href="#s-visibility" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Visibility</th><th>Appears in</th><th>Use for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Private</strong></td><td><code class="docs-code">ENV</code> only (server)</td><td>API keys, database passwords, anything secret</td></tr>
+          <tr><td><strong>Public</strong></td><td><code class="docs-code">ENV</code> + <code class="docs-code">window.__SECRETS__</code> (when injection on)</td><td>Publishable keys, anon Supabase, Stripe publishable</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="s-injection">Frontend injection
+        <a class="docs-anchor" href="#s-injection" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Injection is an additional switch on the Secrets tab. When enabled, public secrets appear as <code class="docs-code">window.__SECRETS__</code> in every served HTML response. Anyone viewing source can read them.</p>
+      <p class="docs-p">Access from frontend JS:</p>
+      <pre class="docs-pre"><code>const stripe = window.__SECRETS__?.STRIPE_PUBLISHABLE_KEY;
+const supabase = window.__SECRETS__?.SUPABASE_ANON_KEY;</code></pre>
+
+      <div class="docs-callout danger">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="docs-callout-body">
+          <strong>Never mark a secret public by mistake</strong>
+          <p style="margin:0">Public + injected = readable by anyone. OpenAI keys, Stripe secret keys, service role keys, database passwords — all should stay <strong>private</strong>.</p>
+        </div>
+      </div>
+
+      <h2 class="docs-h2" id="s-limits">Limits
+        <a class="docs-anchor" href="#s-limits" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Limit</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Value size</td><td>16 KB</td></tr>
+          <tr><td>Total per project</td><td>512 KB</td></tr>
+          <tr><td>Count</td><td>50</td></tr>
+          <tr><td>Encryption</td><td>AES-256-GCM (when <code class="docs-code">FOLIO_SECRETS_KEY</code> is set server-side)</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="s-reserved">Reserved names
+        <a class="docs-anchor" href="#s-reserved" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Folio auto-injects these into <code class="docs-code">ENV</code>. You can't create secrets with these names:</p>
+      <ul class="docs-ul">
+        <li><code class="docs-code">PROJECT_ID</code>, <code class="docs-code">PROJECT_NAME</code>, <code class="docs-code">PROJECT_SLUG</code>, <code class="docs-code">PROJECT_URL</code></li>
+        <li><code class="docs-code">OWNER_USERNAME</code>, <code class="docs-code">OWNER_UID</code></li>
+        <li><code class="docs-code">DEPLOYMENT_ID</code>, <code class="docs-code">DEPLOYMENT_URL</code></li>
+        <li><code class="docs-code">FOLIO_BASE_URL</code>, <code class="docs-code">FOLIO_API_URL</code></li>
+        <li><code class="docs-code">API_ROUTE</code>, <code class="docs-code">REQUEST_ID</code>, <code class="docs-code">FOLIO_API_KEY</code></li>
+      </ul>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         JSON DATABASE
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="data">
+      <span class="docs-eyebrow">Backend</span>
+      <h1 class="docs-h1">JSON database</h1>
+      <p class="docs-lede">A 15 MB key/value store per project. Firebase-backed. Read and write it from your API or your editor.</p>
+
+      <h2 class="docs-h2" id="db-model">Data model
+        <a class="docs-anchor" href="#db-model" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">It's a JSON tree. No collections, no schema, no migrations — just nested objects and primitives. Arrays are stored as <code class="docs-code">{"0":…,"1":…}</code> because Firebase doesn't support them natively.</p>
+      <pre class="docs-pre"><code>{
+  "users": {
+    "u_abc": { "name": "Alice", "joined": 1717000000 }
+  },
+  "counters": { "visits": 42 },
+  "todos": {
+    "t1": { "text": "Buy milk", "done": false }
+  }
+}</code></pre>
+
+      <h2 class="docs-h2" id="db-read">Reading from your API
+        <a class="docs-anchor" href="#db-read" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <pre class="docs-pre"><code>const BASE = ENV.FOLIO_BASE_URL;
+const res = await fetch(BASE + "/api/host?action=db/get&pid=" + ENV.PROJECT_ID);
+const { data } = await res.json();
+
+const users = data.users || {};
+const counters = data.counters || {};</code></pre>
+      <p class="docs-p">This returns the whole tree. Read what you need, ignore the rest. The runtime intercepts this call — no network round trip.</p>
+
+      <h2 class="docs-h2" id="db-write">Writing
+        <a class="docs-anchor" href="#db-write" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Write one path at a time:</p>
+      <pre class="docs-pre"><code>await fetch(BASE + "/api/host?action=db/set", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: "todos/t1",
+    value: { text: "Buy milk", done: true },
+  }),
+});</code></pre>
+
+      <p class="docs-p">Write many paths atomically:</p>
+      <pre class="docs-pre"><code>await fetch(BASE + "/api/host?action=db/batch", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    updates: [
+      { key: "todos/t1/done", value: true },
+      { key: "counters/visits", value: 43 },
+    ],
+  }),
+});</code></pre>
+
+      <h2 class="docs-h2" id="db-delete">Deleting
+        <a class="docs-anchor" href="#db-delete" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Writing <code class="docs-code">null</code> deletes a path:</p>
+      <pre class="docs-pre"><code>await fetch(BASE + "/api/host?action=db/set", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: "todos/t1",
+    value: null,
+  }),
+});</code></pre>
+
+      <h2 class="docs-h2" id="db-increment">Atomic increment
+        <a class="docs-anchor" href="#db-increment" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <pre class="docs-pre"><code>await fetch(BASE + "/api/host?action=db/increment", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ pid: ENV.PROJECT_ID, key: "counters/visits", by: 1 }),
+});</code></pre>
+
+      <h2 class="docs-h2" id="db-cas">Compare-and-swap
+        <a class="docs-anchor" href="#db-cas" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Optimistic locking — only writes if the current value matches what you expected:</p>
+      <pre class="docs-pre"><code>const res = await fetch(BASE + "/api/host?action=db/cas", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    pid: ENV.PROJECT_ID,
+    key: "todos/t1",
+    expected: { text: "Buy milk", done: false },
+    value: { text: "Buy milk", done: true },
+  }),
+});
+if (res.status === 409) {
+  // Someone else edited first — read fresh and retry
+  const current = (await res.json()).current;
+}</code></pre>
+
+      <h2 class="docs-h2" id="db-editor">The Data tab
+        <a class="docs-anchor" href="#db-editor" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">The <strong>Data</strong> tab in the project dashboard is a visual editor for the JSON DB. It offers:</p>
+      <ul class="docs-ul">
+        <li><strong>Tree view</strong> — expand/collapse, edit values inline (double-click), copy paths.</li>
+        <li><strong>Raw view</strong> — edit the whole tree as JSON, with syntax highlighting.</li>
+        <li><strong>Schema view</strong> — optional metadata to describe fields.</li>
+        <li><strong>Auto-save</strong> — each change queues a write (debounced 800ms).</li>
+      </ul>
+
+      <div class="docs-callout info">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <div class="docs-callout-body">
+          <strong>Reads are free, writes are limited</strong>
+          <p style="margin:0">You can read the DB as often as you want. Writes are limited to 300 per minute per project. The Data tab batches rapid edits so you don't hit the limit.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         PRIVATE API
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="api">
+      <span class="docs-eyebrow">Backend</span>
+      <h1 class="docs-h1">Private API</h1>
+      <p class="docs-lede">Files under <code class="docs-code">api/</code> become server routes. Your code runs in an isolated Chromium sandbox and can call allowed external hosts.</p>
+
+      <h2 class="docs-h2" id="api-model">How it works
+        <a class="docs-anchor" href="#api-model" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li>Every <code class="docs-code">api/*.js</code> file becomes a POST route.</li>
+        <li>Your code runs inside a headless Chromium page.</li>
+        <li><code class="docs-code">ENV</code>, <code class="docs-code">REQ</code>, and <code class="docs-code">FILES</code> are available as globals.</li>
+        <li>Whatever the script returns is the response body.</li>
+        <li>The browser never sees your source code or secrets.</li>
+      </ul>
+
+      <h2 class="docs-h2" id="api-first">Your first route
+        <a class="docs-anchor" href="#api-first" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Create <code class="docs-code">api/hello.js</code>:</p>
+      <pre class="docs-pre"><code>return { message: "Hello from the server!" };</code></pre>
+      <p class="docs-p">Deploy. Then call it:</p>
+      <pre class="docs-pre"><code>const res = await fetch("/{username}/project/{slug}/api/hello", {
+  method: "POST",
+});
+const { message } = await res.json();
+// → { message: "Hello from the server!" }</code></pre>
+
+      <h2 class="docs-h2" id="api-req">The REQ object
+        <a class="docs-anchor" href="#api-req" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">REQ.method</code></td><td>string</td><td>HTTP method (usually POST)</td></tr>
+          <tr><td><code class="docs-code">REQ.headers</code></td><td>object</td><td>Forwarded headers (Content-Type, Authorization, User-Agent, etc.)</td></tr>
+          <tr><td><code class="docs-code">REQ.body</code></td><td>object</td><td>Parsed JSON request body</td></tr>
+          <tr><td><code class="docs-code">REQ.pid</code></td><td>string</td><td>Your project ID</td></tr>
+          <tr><td><code class="docs-code">REQ.route</code></td><td>string</td><td>The route name (e.g. <code class="docs-code">hello</code>)</td></tr>
+          <tr><td><code class="docs-code">REQ.deploymentId</code></td><td>string</td><td>Current deployment ID</td></tr>
+          <tr><td><code class="docs-code">REQ.startTime</code></td><td>number</td><td>Request start timestamp (ms)</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="api-return">Returning responses
+        <a class="docs-anchor" href="#api-return" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Return</th><th>Response</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">{ hello: "world" }</code></td><td>200, application/json</td></tr>
+          <tr><td><code class="docs-code">"Hello"</code></td><td>200, text/plain</td></tr>
+          <tr><td><code class="docs-code">{ __status: 404, error: "Not found" }</code></td><td>404, application/json</td></tr>
+          <tr><td><code class="docs-code">{ __contentType: "text/html", __body: "&lt;h1&gt;Hi&lt;/h1&gt;" }</code></td><td>200, text/html</td></tr>
+          <tr><td><code class="docs-code">throw new Error("boom")</code></td><td>500, error</td></tr>
+        </tbody>
+      </table>
+
+      <div class="docs-callout warning">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="docs-callout-body">
+          <strong>Always return something</strong>
+          <p style="margin:0">If your script falls through without returning, the response is the string <code class="docs-code">"null"</code>. Wrap in try/catch with a fallback return.</p>
+        </div>
+      </div>
+
+      <h2 class="docs-h2" id="api-system">_system.js
+        <a class="docs-anchor" href="#api-system" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Auto-created on first deploy. Provides 6 free routes:</p>
+      <table class="docs-table">
+        <thead><tr><th>Route</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">/api/health</code></td><td><code class="docs-code">{ status, pid, deployed, responseMs }</code></td></tr>
+          <tr><td><code class="docs-code">/api/whoami</code></td><td><code class="docs-code">{ pid, name, deployedAt, apiVersion }</code></td></tr>
+          <tr><td><code class="docs-code">/api/files</code></td><td><code class="docs-code">{ files, count, totalBytes }</code></td></tr>
+          <tr><td><code class="docs-code">/api/status</code></td><td>Richer health</td></tr>
+          <tr><td><code class="docs-code">/api/version</code></td><td><code class="docs-code">{ deploymentId, deployedAt, url }</code></td></tr>
+          <tr><td><code class="docs-code">/api/robots</code></td><td>robots.txt as text/plain</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="api-files">api/ file rules
+        <a class="docs-anchor" href="#api-files" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li>Flat folder — no subfolders inside <code class="docs-code">api/</code></li>
+        <li>Lowercase filenames, <code class="docs-code">.js</code> only</li>
+        <li>No <code class="docs-code">_</code> prefix except <code class="docs-code">_system.js</code></li>
+        <li>Reserved: <code class="docs-code">index.js</code>, <code class="docs-code">run.js</code>, <code class="docs-code">health.js</code>, <code class="docs-code">whoami.js</code>, <code class="docs-code">files.js</code>, <code class="docs-code">status.js</code>, <code class="docs-code">version.js</code>, <code class="docs-code">robots.js</code></li>
+        <li>Max 10 files, 50 KB each, 200 KB total</li>
+      </ul>
+
+      <h2 class="docs-h2" id="api-sandbox">Sandbox restrictions
+        <a class="docs-anchor" href="#api-sandbox" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Your script runs in Chromium at <code class="docs-code">about:blank</code> — a non-secure context. These are unavailable:</p>
+      <ul class="docs-ul">
+        <li><code class="docs-code">crypto.subtle</code> — use pure-JS SHA-256 instead</li>
+        <li><code class="docs-code">crypto.randomUUID</code> — use <code class="docs-code">crypto.getRandomValues</code></li>
+        <li>Relative fetch URLs — always build from <code class="docs-code">ENV.FOLIO_BASE_URL</code></li>
+        <li>ES module imports from local files</li>
+      </ul>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         EXTERNAL HOSTS
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="hosts">
+      <span class="docs-eyebrow">Backend</span>
+      <h1 class="docs-h1">External hosts</h1>
+      <p class="docs-lede">Your API can call external services. Which ones depends on how you reference them.</p>
+
+      <h2 class="docs-h2" id="h-tiers">Four tiers
+        <a class="docs-anchor" href="#h-tiers" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Tier</th><th>Examples</th><th>How it's allowed</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Built-in</strong></td>
+            <td><code class="docs-code">api.openai.com</code>, <code class="docs-code">api.stripe.com</code>, <code class="docs-code">api.supabase.co</code>, <code class="docs-code">api.github.com</code></td>
+            <td>Always allowed — no config</td>
+          </tr>
+          <tr>
+            <td><strong>Trusted images</strong></td>
+            <td><code class="docs-code">picsum.photos</code>, <code class="docs-code">images.unsplash.com</code>, <code class="docs-code">upload.wikimedia.org</code></td>
+            <td>Always allowed</td>
+          </tr>
+          <tr>
+            <td><strong>CDN imports</strong></td>
+            <td><code class="docs-code">cdn.jsdelivr.net</code>, <code class="docs-code">esm.sh</code>, <code class="docs-code">unpkg.com</code></td>
+            <td>Always allowed</td>
+          </tr>
+          <tr>
+            <td><strong>Per-project</strong></td>
+            <td>Any other host</td>
+            <td>Must be declared (see below)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="h-allow">Declaring a host
+        <a class="docs-anchor" href="#h-allow" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+
+      <h3 class="docs-h3" id="h-literal">Literal URL — auto-detected</h3>
+      <p class="docs-p">If your code contains <code class="docs-code">https://host.example/api</code> anywhere, deploy scans it and adds the host. No config needed:</p>
+      <pre class="docs-pre"><code>const res = await fetch("https://api.weather.com/v1/today");
+// "api.weather.com" is added automatically on deploy</code></pre>
+
+      <h3 class="docs-h3" id="h-comment">@allow comment — for dynamic hosts</h3>
+      <p class="docs-p">If the host is built from a variable, declare it explicitly:</p>
+      <pre class="docs-pre"><code>// @allow api.weather.com
+// @allow api.example.com
+
+const host = REQ.body.host || "api.weather.com";
+const res = await fetch("https://" + host + "/v1/today");</code></pre>
+
+      <h3 class="docs-h3" id="h-dashboard">Dashboard</h3>
+      <p class="docs-p">Add a host from <strong>Settings → API tab → Allowed hosts</strong>. The backend validates DNS + HTTPS before storing.</p>
+
+      <h2 class="docs-h2" id="h-blocked">What gets rejected
+        <a class="docs-anchor" href="#h-blocked" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li>IP addresses (10.0.0.1, 169.254.169.254)</li>
+        <li>Hosts resolving to private IPs</li>
+        <li><code class="docs-code">localhost</code></li>
+        <li><code class="docs-code">*.vercel.app</code> (Folio's own infrastructure)</li>
+        <li>Wildcards, ports, non-HTTPS</li>
+        <li>Hosts that don't respond to an HTTPS HEAD</li>
+      </ul>
+
+      <div class="docs-callout warning">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="docs-callout-body">
+          <strong>Fetch fails? Check the logs.</strong>
+          <p style="margin:0">If <code class="docs-code">fetch</code> returns <code class="docs-code">TypeError: Failed to fetch</code>, the host is blocked. Look for <code class="docs-code">run.host_blocked</code> in the API logs to see which host.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         OFFLINE & SYNC
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="offline">
+      <span class="docs-eyebrow">Operations</span>
+      <h1 class="docs-h1">Offline &amp; sync</h1>
+      <p class="docs-lede">Folio works offline. Here's exactly what works and what doesn't.</p>
+
+      <h2 class="docs-h2" id="o-works">What works offline
+        <a class="docs-anchor" href="#o-works" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li>Open any cached project</li>
+        <li>View files</li>
+        <li>Edit files</li>
+        <li>Save files</li>
+        <li>Commit versions (queued)</li>
+        <li>Search across files</li>
+        <li>Preview</li>
+        <li>Read your notes</li>
+        <li>View analytics (last cached)</li>
+      </ul>
+
+      <h2 class="docs-h2" id="o-requires">What needs internet
+        <a class="docs-anchor" href="#o-requires" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li>Deploy</li>
+        <li>Pulling files from server (first visit on a new device)</li>
+        <li>Creating a new server project</li>
+        <li>Claiming or releasing short links</li>
+        <li>Editing secrets or database</li>
+        <li>API calls from the browser</li>
+      </ul>
+
+      <h2 class="docs-h2" id="o-sync">How sync works
+        <a class="docs-anchor" href="#o-sync" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">The sync system has two layers:</p>
+      <ol class="docs-steps">
+        <li><strong>Files</strong> — saved to IndexedDB immediately. Synced to the server on save (if online), or queued (if offline).</li>
+        <li><strong>Commits</strong> — always saved to IndexedDB. Server sync is best-effort: queued when offline, retried up to 5 times.</li>
+      </ol>
+
+      <h2 class="docs-h2" id="o-queue">The sync queue
+        <a class="docs-anchor" href="#o-queue" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Offline changes live in a queue. Every 30 seconds, while online, the queue flushes:</p>
+      <ul class="docs-ul">
+        <li><strong>Successful</strong> → removed from the queue.</li>
+        <li><strong>Transient failure</strong> (network, server) → stays, retried up to 5 times.</li>
+        <li><strong>Permanent failure</strong> (400, 403, 404) → dropped with a warning.</li>
+      </ul>
+      <p class="docs-p">The sync badge on the notification bell shows the pending count. Zero means everything's on the server.</p>
+
+      <h2 class="docs-h2" id="o-conflict">Conflict handling
+        <a class="docs-anchor" href="#o-conflict" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Files use <strong>last-write-wins</strong>. If two people edit the same file, the last save wins. If you need safer concurrent editing, use the DB's compare-and-swap operation from the API — but files themselves don't have CAS.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         LOGS & ERRORS
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="logs">
+      <span class="docs-eyebrow">Operations</span>
+      <h1 class="docs-h1">Logs &amp; errors</h1>
+      <p class="docs-lede">Where to look when something goes wrong.</p>
+
+      <h2 class="docs-h2" id="l-api">API logs
+        <a class="docs-anchor" href="#l-api" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">The <strong>API</strong> tab in the project dashboard shows the last 50 API calls, filterable by route, status, and identity:</p>
+      <ul class="docs-ul">
+        <li><strong>route</strong> — which API file</li>
+        <li><strong>status</strong> — HTTP response code</li>
+        <li><strong>durationMs</strong> — total wall time</li>
+        <li><strong>via</strong> — <code class="docs-code">anon</code>, <code class="docs-code">session</code>, or <code class="docs-code">api-key</code></li>
+        <li><strong>fetchHosts</strong> — external hosts the script hit</li>
+        <li><strong>errorClass</strong> — timeout, rate_limit, network, etc.</li>
+      </ul>
+
+      <h2 class="docs-h2" id="l-events">Event log
+        <a class="docs-anchor" href="#l-events" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Every project action (deploy, commit, secret change, invite, DB write) is logged in <strong>Insights → Logs</strong>. Last 200 events kept.</p>
+
+      <h2 class="docs-h2" id="l-common">Common errors
+        <a class="docs-anchor" href="#l-common" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code class="docs-code">TypeError: Failed to fetch</code> in API</td>
+            <td>Blocked external host</td>
+            <td>Add <code class="docs-code">@allow host</code> or a literal URL, redeploy</td>
+          </tr>
+          <tr>
+            <td>API returns <code class="docs-code">"null"</code></td>
+            <td>Script returned undefined</td>
+            <td>Wrap in try/catch with a fallback return</td>
+          </tr>
+          <tr>
+            <td>504 timeout</td>
+            <td>API took too long</td>
+            <td>Batch DB calls, reduce fetches — 7s cap on user code</td>
+          </tr>
+          <tr>
+            <td><code class="docs-code">Failed to parse URL</code></td>
+            <td>Relative fetch inside sandbox</td>
+            <td>Use <code class="docs-code">ENV.FOLIO_BASE_URL + "/api/…"</code></td>
+          </tr>
+          <tr>
+            <td>Live URL returns 404</td>
+            <td>Never deployed, or offline</td>
+            <td>Deploy from the toolbar. Check <strong>Deploy → Current</strong> for state.</td>
+          </tr>
+          <tr>
+            <td>Files not appearing after sync</td>
+            <td>Local-only state</td>
+            <td>Check sync state badge. Should show <em>Synced</em>, not <em>Pull needed</em>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         LIMITS
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="limits">
+      <span class="docs-eyebrow">Operations</span>
+      <h1 class="docs-h1">Limits</h1>
+      <p class="docs-lede">Every limit in one place.</p>
+
+      <h2 class="docs-h2" id="li-files">Files
+        <a class="docs-anchor" href="#li-files" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li>Per file: 4 MB</li>
+        <li>Per project: 10 MB default (can be raised)</li>
+      </ul>
+
+      <h2 class="docs-h2" id="li-api">Private API
+        <a class="docs-anchor" href="#li-api" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li>10 files, 50 KB each, 200 KB total</li>
+        <li>20 <code class="docs-code">@allow</code> lines per file</li>
+        <li>50 unique hosts per project</li>
+        <li>7 seconds execution cap</li>
+        <li>1 MB max request body</li>
+        <li>5 MB max response</li>
+        <li>3 levels of recursion</li>
+      </ul>
+
+      <h2 class="docs-h2" id="li-rate">Rate limits
+        <a class="docs-anchor" href="#li-rate" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Action</th><th>Limit</th></tr></thead>
+        <tbody>
+          <tr><td>Deploy</td><td>10/hour per project</td></tr>
+          <tr><td>Redeploy</td><td>10/hour per project</td></tr>
+          <tr><td>DB writes</td><td>300/min per project</td></tr>
+          <tr><td>DB reads</td><td>600/min per project</td></tr>
+          <tr><td>Secret change</td><td>20/hour</td></tr>
+          <tr><td>Short link claim</td><td>15/min</td></tr>
+          <tr><td>API calls</td><td>500/hour, 2000/day per project</td></tr>
+          <tr><td>Per API route</td><td>100/hour</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="li-secrets">Secrets &amp; DB
+        <a class="docs-anchor" href="#li-secrets" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li>Secrets: 16 KB per value, 512 KB total, 50 max</li>
+        <li>DB: 15 MB per project, 2 MB per write</li>
+      </ul>
+
+      <h2 class="docs-h2" id="li-deploy">Deployments
+        <a class="docs-anchor" href="#li-deploy" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li>Last 5 kept automatically</li>
+        <li>Older deployments and their snapshots pruned</li>
+        <li>To keep a version permanently, commit it first</li>
+      </ul>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         SECURITY
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="security">
+      <span class="docs-eyebrow">Operations</span>
+      <h1 class="docs-h1">Security</h1>
+      <p class="docs-lede">What Folio protects, and what's on you.</p>
+
+      <h2 class="docs-h2" id="sec-protected">What Folio handles
+        <a class="docs-anchor" href="#sec-protected" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li><strong>Passwords</strong> — scrypt-hashed with random salt (N=16384, r=8, p=1). Never stored in plaintext.</li>
+        <li><strong>Sessions</strong> — JWT with 30-day expiry, signed with server-side secret.</li>
+        <li><strong>Secrets</strong> — AES-256-GCM encryption (when <code class="docs-code">FOLIO_SECRETS_KEY</code> is set).</li>
+        <li><strong>Secrets isolation</strong> — private secrets never enter the browser. Public secrets are opt-in and clearly marked.</li>
+        <li><strong>CORS</strong> — allowlist-driven. Only origins in <code class="docs-code">domains.json</code> can call the API.</li>
+        <li><strong>Rate limiting</strong> — every sensitive action has a per-project or per-IP limit.</li>
+        <li><strong>Sandbox</strong> — API scripts run in Chromium, not on your server.</li>
+      </ul>
+
+      <h2 class="docs-h2" id="sec-yours">What's your responsibility
+        <a class="docs-anchor" href="#sec-yours" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li><strong>Don't hardcode secrets in files.</strong> Use the Secrets tab.</li>
+        <li><strong>Don't mark secrets public unless they're publishable.</strong> Publishable = safe to appear in browser source.</li>
+        <li><strong>Validate input in your API.</strong> The runtime doesn't validate <code class="docs-code">REQ.body</code>.</li>
+        <li><strong>Sanitize before returning HTML</strong> if you're using <code class="docs-code">__contentType: "text/html"</code>. Folio doesn't escape for you.</li>
+        <li><strong>Use HTTPS for external hosts.</strong> Non-HTTPS hosts are rejected at deploy.</li>
+        <li><strong>Keep dependencies current.</strong> If you import from a CDN, pin versions explicitly.</li>
+      </ul>
+
+      <h2 class="docs-h2" id="sec-api-key">API keys
+        <a class="docs-anchor" href="#sec-api-key" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Generate an API key from <strong>Settings → API key</strong> to call Folio's API from outside the browser. The key is shown once. It's also stored as <code class="docs-code">ENV.FOLIO_API_KEY</code> in your project secrets for use inside <code class="docs-code">api/*.js</code>.</p>
+
+      <div class="docs-callout danger">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="docs-callout-body">
+          <strong>Treat API keys like passwords</strong>
+          <p style="margin:0">Anyone with your API key can act as your project. If it leaks, regenerate it immediately from Settings.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         URLS REFERENCE
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="urls">
+      <span class="docs-eyebrow">Reference</span>
+      <h1 class="docs-h1">URLs</h1>
+      <p class="docs-lede">Every URL Folio uses, and what it's for.</p>
+
+      <h2 class="docs-h2" id="u-domains">The three domains
+        <a class="docs-anchor" href="#u-domains" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Domain</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">foliostudios.vercel.app</code></td><td>Editor, dashboard, API, share pages, auth</td></tr>
+          <tr><td><code class="docs-code">foliosites.vercel.app</code></td><td>Published sites</td></tr>
+          <tr><td><code class="docs-code">folio.xo.je</code></td><td>Short links</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="u-editor">Editor URLs
+        <a class="docs-anchor" href="#u-editor" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>URL</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">/{pid}</code></td><td>Editor with project loaded</td></tr>
+          <tr><td><code class="docs-code">/projects</code></td><td>Project list</td></tr>
+          <tr><td><code class="docs-code">/project?pid={pid}</code></td><td>Project dashboard</td></tr>
+          <tr><td><code class="docs-code">/profile</code></td><td>Your profile editor</td></tr>
+          <tr><td><code class="docs-code">/{username}</code></td><td>Public profile page</td></tr>
+          <tr><td><code class="docs-code">/{username}/{slug}</code></td><td>Project share page</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="u-live">Live site URLs
+        <a class="docs-anchor" href="#u-live" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>URL</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">foliosites.vercel.app/{username}/project/{slug}</code></td><td>Current deployment</td></tr>
+          <tr><td><code class="docs-code">…?from={deploymentId}</code></td><td>Specific deployment preview (editor only)</td></tr>
+          <tr><td><code class="docs-code">…/api/{route}</code></td><td>Private API endpoint</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="u-api">Direct API URL
+        <a class="docs-anchor" href="#u-api" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Alternative to the friendly API URL. Uses pid instead of username/slug — no lookup, faster first call:</p>
+      <pre class="docs-pre"><code>POST foliostudios.vercel.app/api/{pid}/{route}</code></pre>
+
+      <h2 class="docs-h2" id="u-short">Short links
+        <a class="docs-anchor" href="#u-short" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p"><code class="docs-code">folio.xo.je/{key}</code> — redirects to the live site. Hit tracking happens on the resolution endpoint.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         GLOSSARY
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="glossary">
+      <span class="docs-eyebrow">Reference</span>
+      <h1 class="docs-h1">Glossary</h1>
+      <p class="docs-lede">Terms used throughout Folio.</p>
+
+      <table class="docs-table">
+        <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>pid</strong></td><td>Project ID — <code class="docs-code">p_…</code>. Immutable. Used everywhere in the API.</td></tr>
+          <tr><td><strong>slug</strong></td><td>URL-safe project name. Derived from name, can change.</td></tr>
+          <tr><td><strong>deployment</strong></td><td>One publish of one snapshot. Has a URL and a state.</td></tr>
+          <tr><td><strong>version</strong></td><td>Full snapshot of all files at a point in time.</td></tr>
+          <tr><td><strong>commit</strong></td><td>A manual version. Unlimited retention.</td></tr>
+          <tr><td><strong>secret</strong></td><td>Encrypted key/value. Available as <code class="docs-code">ENV.NAME</code>.</td></tr>
+          <tr><td><strong>api route</strong></td><td>A file under <code class="docs-code">api/</code> that becomes a POST endpoint.</td></tr>
+          <tr><td><strong>short link</strong></td><td>A <code class="docs-code">folio.xo.je/{key}</code> URL that redirects to your live site.</td></tr>
+          <tr><td><strong>share page</strong></td><td>The public-facing page at <code class="docs-code">/username/slug</code> that shows project info.</td></tr>
+          <tr><td><strong>allowed host</strong></td><td>An external domain your API is allowed to fetch from.</td></tr>
+          <tr><td><strong>sandbox</strong></td><td>The isolated Chromium instance that runs your API scripts.</td></tr>
+          <tr><td><strong>schema</strong></td><td>Optional metadata describing fields in the JSON DB. Not enforced.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="g-finish">You're done
+        <a class="docs-anchor" href="#g-finish" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">That's the whole system. If something's unclear, the fastest way to learn is to open the editor, deploy an empty project, and watch what happens. Every action produces a visible result somewhere — a log entry, a version, a URL.</p>
+
+      <div class="docs-callout success">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        <div class="docs-callout-body">
+          <strong>Ready to build?</strong>
+          <p style="margin:0">Open the <a href="/">editor</a>, create a project, and ship something.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Prev / next pager -->
+    <nav class="docs-pager" id="docsPager" aria-label="Documentation navigation">
+      <a id="pagerPrev" href="#overview">
+        <span class="pager-label">← Previous</span>
+        <span class="pager-title" id="pagerPrevTitle">Overview</span>
+      </a>
+      <a id="pagerNext" href="#quickstart" class="next">
+        <span class="pager-label">Next →</span>
+        <span class="pager-title" id="pagerNextTitle">Quickstart</span>
+      </a>
+    </nav>
+
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SEARCH OVERLAY
+     ═══════════════════════════════════════════════════════════ -->
+<div class="docs-search" id="searchOverlay" role="dialog" aria-modal="true" aria-label="Search documentation">
+  <div class="docs-search-panel">
+    <div class="docs-search-input-wrap">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="docs-search-input" id="searchInput" type="text" placeholder="Search docs…" autocomplete="off" spellcheck="false">
+      <span class="docs-search-esc" id="searchEsc" role="button" tabindex="0">esc</span>
+    </div>
+    <div class="docs-search-results" id="searchResults">
+      <div class="docs-search-empty">Type to search across every section.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // SECTION ORDER — used for pager + search indexing
+  // ═══════════════════════════════════════════════════════════
+  const SECTIONS = [
+    { id: 'overview', title: 'Overview', group: 'Getting started' },
+    { id: 'quickstart', title: 'Quickstart', group: 'Getting started' },
+    { id: 'concepts', title: 'Core concepts', group: 'Getting started' },
+    { id: 'editor', title: 'The editor', group: 'Getting started' },
+    { id: 'files', title: 'Files & assets', group: 'Building' },
+    { id: 'preview', title: 'Preview', group: 'Building' },
+    { id: 'commit', title: 'Versions & commits', group: 'Building' },
+    { id: 'deploy', title: 'Deploying', group: 'Shipping' },
+    { id: 'shortlink', title: 'Short links', group: 'Shipping' },
+    { id: 'visibility', title: 'Visibility', group: 'Shipping' },
+    { id: 'secrets', title: 'Secrets', group: 'Backend' },
+    { id: 'data', title: 'JSON database', group: 'Backend' },
+    { id: 'api', title: 'Private API', group: 'Backend' },
+    { id: 'hosts', title: 'External hosts', group: 'Backend' },
+    { id: 'offline', title: 'Offline & sync', group: 'Operations' },
+    { id: 'logs', title: 'Logs & errors', group: 'Operations' },
+    { id: 'limits', title: 'Limits', group: 'Operations' },
+    { id: 'security', title: 'Security', group: 'Operations' },
+    { id: 'urls', title: 'URLs', group: 'Reference' },
+    { id: 'glossary', title: 'Glossary', group: 'Reference' },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const mainEl = $('docsMain');
+  const sidebarEl = $('docsSidebar');
+  const sidebarToggle = $('sidebarToggle');
+  const sidebarBackdrop = $('sidebarBackdrop');
+  const searchTrigger = $('searchTrigger');
+  const searchOverlay = $('searchOverlay');
+  const searchInput = $('searchInput');
+  const searchEsc = $('searchEsc');
+  const searchResults = $('searchResults');
+  const pagerPrev = $('pagerPrev');
+  const pagerNext = $('pagerNext');
+  const pagerPrevTitle = $('pagerPrevTitle');
+  const pagerNextTitle = $('pagerNextTitle');
+
+  // ═══════════════════════════════════════════════════════════
+  // SIDEBAR — mobile open/close
+  // ═══════════════════════════════════════════════════════════
+  function openSidebar() {
+    sidebarEl.classList.add('open');
+    sidebarBackdrop.classList.add('open');
+  }
+  function closeSidebar() {
+    sidebarEl.classList.remove('open');
+    sidebarBackdrop.classList.remove('open');
+  }
+  sidebarToggle?.addEventListener('click', () => {
+    if (sidebarEl.classList.contains('open')) closeSidebar();
+    else openSidebar();
+  });
+  sidebarBackdrop?.addEventListener('click', closeSidebar);
+  sidebarEl?.addEventListener('click', (e) => {
+    if (e.target.tagName === 'A' && window.innerWidth <= 960) closeSidebar();
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // SCROLL SPY — highlight current section in sidebar
+  // ═══════════════════════════════════════════════════════════
+  const sectionEls = SECTIONS.map(s => document.getElementById(s.id)).filter(Boolean);
+  const sidebarLinks = new Map();
+  sidebarEl.querySelectorAll('a[href^="#"]').forEach(a => {
+    const id = a.getAttribute('href').slice(1);
+    sidebarLinks.set(id, a);
+  });
+
+  let currentSectionId = null;
+
+  function setActive(id) {
+    if (currentSectionId === id) return;
+    currentSectionId = id;
+    sidebarLinks.forEach((link, linkId) => {
+      link.classList.toggle('active', linkId === id);
+    });
+    updatePager(id);
+  }
+
+  function updatePager(id) {
+    const idx = SECTIONS.findIndex(s => s.id === id);
+    if (idx < 0) return;
+    const prev = idx > 0 ? SECTIONS[idx - 1] : null;
+    const next = idx < SECTIONS.length - 1 ? SECTIONS[idx + 1] : null;
+    if (prev) {
+      pagerPrev.href = '#' + prev.id;
+      pagerPrevTitle.textContent = prev.title;
+      pagerPrev.style.visibility = 'visible';
+    } else {
+      pagerPrev.style.visibility = 'hidden';
+    }
+    if (next) {
+      pagerNext.href = '#' + next.id;
+      pagerNextTitle.textContent = next.title;
+      pagerNext.style.visibility = 'visible';
+    } else {
+      pagerNext.style.visibility = 'hidden';
+    }
+  }
+
+  function updateActiveFromScroll() {
+    if (!sectionEls.length) return;
+    const headerOffset = 100;
+    let activeId = sectionEls[0].id;
+    for (const el of sectionEls) {
+      const rect = el.getBoundingClientRect();
+      if (rect.top - headerOffset <= 0) {
+        activeId = el.id;
+      } else {
+        break;
+      }
+    }
+    setActive(activeId);
+  }
+
+  let scrollRaf = null;
+  function onScroll() {
+    if (scrollRaf) return;
+    scrollRaf = requestAnimationFrame(() => {
+      scrollRaf = null;
+      updateActiveFromScroll();
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll, { passive: true });
+  updateActiveFromScroll();
+
+  // Hash updates the section immediately
+  window.addEventListener('hashchange', () => {
+    const id = location.hash.slice(1);
+    if (id) setActive(id);
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // SEARCH
+  // ═══════════════════════════════════════════════════════════
+  let searchIndex = null;
+
+  function buildSearchIndex() {
+    if (searchIndex) return searchIndex;
+    const idx = [];
+    for (const s of SECTIONS) {
+      const el = document.getElementById(s.id);
+      if (!el) continue;
+      const text = el.innerText.replace(/\s+/g, ' ').trim();
+      idx.push({
+        id: s.id,
+        title: s.title,
+        group: s.group,
+        text: text.toLowerCase(),
+        original: text,
+      });
+    }
+    searchIndex = idx;
+    return idx;
+  }
+
+  function highlight(text, query) {
+    if (!query) return escapeHtml(text);
+    const lower = text.toLowerCase();
+    const q = query.toLowerCase();
+    const idx = lower.indexOf(q);
+    if (idx < 0) return escapeHtml(text);
+    const start = Math.max(0, idx - 40);
+    const end = Math.min(text.length, idx + q.length + 60);
+    const snippet = (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '');
+    const before = escapeHtml(snippet.slice(0, snippet.toLowerCase().indexOf(q) + (start > 0 ? 1 : 0)));
+    const match = escapeHtml(snippet.substr(snippet.toLowerCase().indexOf(q), q.length));
+    const after = escapeHtml(snippet.slice(snippet.toLowerCase().indexOf(q) + q.length));
+    return before + '<mark>' + match + '</mark>' + after;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function performSearch(query) {
+    if (!query || query.length < 2) {
+      searchResults.innerHTML = '<div class="docs-search-empty">Type to search across every section.</div>';
+      return;
+    }
+    const idx = buildSearchIndex();
+    const q = query.toLowerCase();
+    const matches = [];
+    for (const entry of idx) {
+      const titleMatch = entry.title.toLowerCase().includes(q);
+      const textMatch = entry.text.includes(q);
+      if (!titleMatch && !textMatch) continue;
+      const score = (titleMatch ? 100 : 0) + (entry.text.split(q).length - 1);
+      matches.push({ ...entry, score });
+    }
+    matches.sort((a, b) => b.score - a.score);
+    if (!matches.length) {
+      searchResults.innerHTML = '<div class="docs-search-empty">No results for &quot;' + escapeHtml(query) + '&quot;</div>';
+      return;
+    }
+    searchResults.innerHTML = matches.slice(0, 15).map(m => {
+      const snippet = m.original.length > 120
+        ? m.original.slice(0, 120) + '…'
+        : m.original;
+      return '<a class="docs-search-result" href="#' + m.id + '" data-search-goto="' + m.id + '">' +
+        '<div class="result-section">' + escapeHtml(m.group) + '</div>' +
+        '<div class="result-title">' + escapeHtml(m.title) + '</div>' +
+        '<div class="result-snippet">' + highlight(m.original.slice(0, 200), query) + '</div>' +
+      '</a>';
+    }).join('');
+
+    searchResults.querySelectorAll('[data-search-goto]').forEach(link => {
+      link.addEventListener('click', () => {
+        closeSearch();
+      });
+    });
+  }
+
+  function openSearch() {
+    searchOverlay.classList.add('open');
+    searchInput.value = '';
+    searchInput.focus();
+    searchResults.innerHTML = '<div class="docs-search-empty">Type to search across every section.</div>';
+  }
+  function closeSearch() {
+    searchOverlay.classList.remove('open');
+  }
+
+  searchTrigger?.addEventListener('click', openSearch);
+  searchEsc?.addEventListener('click', closeSearch);
+  searchEsc?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeSearch(); }
+  });
+  searchInput?.addEventListener('input', (e) => performSearch(e.target.value.trim()));
+  searchOverlay?.addEventListener('click', (e) => {
+    if (e.target === searchOverlay) closeSearch();
+  });
+
+  // Keyboard: "/" opens search, Esc closes, arrow keys navigate results
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && !searchOverlay.classList.contains('open')) {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      e.preventDefault();
+      openSearch();
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (searchOverlay.classList.contains('open')) { closeSearch(); return; }
+      if (sidebarEl.classList.contains('open')) { closeSidebar(); return; }
+    }
+    if (searchOverlay.classList.contains('open')) {
+      const results = searchResults.querySelectorAll('.docs-search-result');
+      if (!results.length) return;
+      const focused = searchResults.querySelector('.docs-search-result.focused');
+      let idx = focused ? Array.from(results).indexOf(focused) : -1;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        idx = (idx + 1) % results.length;
+        results.forEach(r => r.classList.remove('focused'));
+        results[idx].classList.add('focused');
+        results[idx].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        idx = idx <= 0 ? results.length - 1 : idx - 1;
+        results.forEach(r => r.classList.remove('focused'));
+        results[idx].classList.add('focused');
+        results[idx].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter' && idx >= 0) {
+        e.preventDefault();
+        results[idx].click();
+      }
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // ANCHOR COPY — click the # on a heading, copy the URL
+  // ═══════════════════════════════════════════════════════════
+  document.querySelectorAll('.docs-anchor').forEach(a => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      const href = a.getAttribute('href');
+      if (!href) return;
+      const url = location.origin + location.pathname + href;
+      try {
+        navigator.clipboard.writeText(url).catch(() => {});
+        a.style.color = 'var(--theme-success)';
+        setTimeout(() => { a.style.color = ''; }, 1000);
+      } catch {}
+      history.replaceState(null, '', href);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // SCROLL TO HASH ON LOAD
+  // ═══════════════════════════════════════════════════════════
+  if (location.hash) {
+    const id = location.hash.slice(1);
+    const el = document.getElementById(id);
+    if (el) {
+      setTimeout(() => {
+        el.scrollIntoView({ behavior: 'auto', block: 'start' });
+        setActive(id);
+      }, 60);
+    }
+  } else {
+    setActive('overview');
+  }
+})();
+</script>
+
+</body>
+</html>
