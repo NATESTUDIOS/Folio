@@ -120,9 +120,6 @@
           <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
       </div>
-      <button class="header-btn icon" id="btnShortlink" type="button" aria-label="Short link" title="Short link">
-        <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-      </button>
       <button class="header-btn icon" id="btnHelp" type="button" aria-label="Help" title="Help">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       </button>
@@ -1296,47 +1293,7 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
     return S.shortlink;
   }
 
-  function updateShortlinkButton() {
-    const btn = $('btnShortlink');
-    if (!btn) return;
-    const info = S.shortlink;
-    const hasLink = !!(info && info.hasShortlink && info.key);
-    btn.classList.toggle('shortlink-live', hasLink);
-    if (hasLink) {
-      btn.title = `${SHORT_URL.replace(/^https?:\/\//, '')}/${info.key}`;
-      btn.setAttribute('aria-label', 'Copy short link');
-    } else {
-      btn.title = 'No short link — open project to claim';
-      btn.setAttribute('aria-label', 'Short link — open project');
-    }
-  }
-
-  async function copyShortlink() {
-    const btn = $('btnShortlink');
-    const info = S.shortlink || await loadShortlinkInfo();
-    updateShortlinkButton();
-    if (info && info.hasShortlink && info.key) {
-      const url = `${SHORT_URL}/${info.key}`;
-      if (copyToClipboard(url)) {
-        if (btn) {
-          btn.classList.add('copied');
-          setTimeout(() => btn.classList.remove('copied'), 1400);
-        }
-        toast('Short link copied', 'success', 1400);
-      } else {
-        toast('Copy failed', 'error');
-      }
-      return;
-    }
-    openShortlinkClaim();
-  }
-
-  function openShortlinkClaim() {
-    if (!S.currentProject) { toast('Open a project first', 'warning'); return; }
-    if (S.isGuest) { toast('Sign in to claim a short link', 'warning'); return; }
-    window.open('/project?pid=' + encodeURIComponent(S.currentProject.pid) + '#/settings', '_blank', 'noopener');
-  }
-
+  
   // ═══════════════════════════════════════════════════════════
   // SYNC HELPERS
   // ═══════════════════════════════════════════════════════════
@@ -2192,23 +2149,111 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
     shareCard.appendChild(shareBody);
     container.appendChild(shareCard);
 
-    (async () => {
-      const info = await loadShortlinkInfo();
-      shareBody.innerHTML = '';
-      if (info && info.hasShortlink && info.key) {
-        const url = `${SHORT_URL}/${info.key}`;
-        const display = buildUrlDisplay(url, 'short');
-        if (display) shareBody.appendChild(display);
-        shareBody.appendChild(el('div', { class: 'field-hint', style: 'font-size:10px;margin-top:4px;' },
-          info.detail?.clicks != null ? `${info.detail.clicks} click${info.detail.clicks === 1 ? '' : 's'}` : 'Short link active'
-        ));
-      } else if (S.isGuest) {
-        shareBody.appendChild(el('div', { class: 'field-hint', style: 'font-size:10.5px;' }, 'Sign in to claim a short link.'));
+(async () => {
+  const info = await loadShortlinkInfo();
+  shareBody.innerHTML = '';
+
+  if (info && info.hasShortlink && info.key) {
+    const url = `${SHORT_URL}/${info.key}`;
+    const displayKey = info.key;
+    const clickCount = info.detail?.clicks;
+
+    const row = el('div', {
+      class: 'shortlink-row',
+      role: 'button',
+      tabindex: '0',
+      title: 'Click to copy',
+    });
+
+    const doCopy = async () => {
+      try { navigator.vibrate?.(6); } catch {}
+      const ok = await copyToClipboard(url);
+      if (ok) {
+        toast('Short link copied', 'success', 1200);
+        row.style.background = 'var(--theme-primary-soft)';
+        setTimeout(() => { row.style.background = ''; }, 400);
       } else {
-        shareBody.appendChild(el('div', { class: 'field-hint', style: 'font-size:10.5px;margin-bottom:6px;' }, 'No short link yet.'));
-        shareBody.appendChild(el('button', { class: 'btn btn-sm btn-secondary btn-block', type: 'button', onclick: openShortlinkClaim }, icon('link', 10), ' Claim in project page'));
+        toast('Copy failed', 'error', 2000);
       }
-    })();
+    };
+    row.addEventListener('click', doCopy);
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doCopy(); }
+    });
+
+    row.appendChild(el('div', { class: 'shortlink-row-icon' }, icon('link', 13)));
+
+    const content = el('div', { class: 'shortlink-row-content' });
+    content.appendChild(el('div', { class: 'shortlink-row-key' }, displayKey));
+    content.appendChild(el('div', { class: 'shortlink-row-sub' },
+      clickCount != null
+        ? `${clickCount} click${clickCount === 1 ? '' : 's'}`
+        : SHORT_URL.replace(/^https?:\/\//, '')
+    ));
+    row.appendChild(content);
+
+    const actions = el('div', { class: 'shortlink-row-actions' });
+    actions.appendChild(el('button', {
+      class: 'btn btn-ghost btn-icon',
+      type: 'button',
+      'aria-label': 'Copy', title: 'Copy',
+      onclick: async (e) => {
+        e.stopPropagation();
+        const ok = await copyToClipboard(url);
+        if (ok) toast('Copied', 'success', 1200);
+        else toast('Copy failed', 'error', 2000);
+      },
+    }, icon('copy', 11)));
+    actions.appendChild(el('a', {
+      class: 'btn btn-ghost btn-icon',
+      href: url, target: '_blank', rel: 'noopener',
+      'aria-label': 'Open', title: 'Open',
+      onclick: (e) => e.stopPropagation(),
+    }, icon('external', 11)));
+    row.appendChild(actions);
+
+    shareBody.appendChild(row);
+
+    if (S.isOwner && S.currentProject) {
+      shareBody.appendChild(el('button', {
+        class: 'btn btn-ghost btn-sm btn-block',
+        type: 'button',
+        style: 'justify-content:flex-start;font-size:10px;color:var(--theme-text-tertiary);padding-left:6px;',
+        onclick: () => window.open('/project?pid=' + encodeURIComponent(S.currentProject.pid) + '#/settings', '_blank', 'noopener'),
+      }, icon('settings', 9), ' Manage short link'));
+    }
+  } else if (S.isGuest) {
+    const row = el('div', { class: 'shortlink-row locked' });
+    row.appendChild(el('div', { class: 'shortlink-row-icon' }, icon('lock', 13)));
+    const content = el('div', { class: 'shortlink-row-content' });
+    content.appendChild(el('div', { class: 'shortlink-row-key', style: 'font-size:11px;' }, 'Not claimed'));
+    content.appendChild(el('div', { class: 'shortlink-row-sub' }, 'Sign in to claim'));
+    row.appendChild(content);
+    shareBody.appendChild(row);
+  } else {
+    const row = el('div', {
+      class: 'shortlink-row empty',
+      role: 'button',
+      tabindex: '0',
+      title: 'Open project settings',
+    });
+    const goToSettings = () => {
+      if (!S.currentProject) return;
+      window.open('/project?pid=' + encodeURIComponent(S.currentProject.pid) + '#/settings', '_blank', 'noopener');
+    };
+    row.addEventListener('click', goToSettings);
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToSettings(); }
+    });
+    row.appendChild(el('div', { class: 'shortlink-row-icon' }, icon('link', 13)));
+    const content = el('div', { class: 'shortlink-row-content' });
+    content.appendChild(el('div', { class: 'shortlink-row-key', style: 'font-size:11px;' }, 'Claim a short link'));
+    content.appendChild(el('div', { class: 'shortlink-row-sub' }, 'Opens project settings'));
+    row.appendChild(content);
+    row.appendChild(el('div', { class: 'shortlink-row-chevron' }, icon('chevron-right', 12)));
+    shareBody.appendChild(row);
+  }
+})();
 
     // Preview card
     const previewCard = el('div', { class: 'preview-card' });
@@ -3388,273 +3433,305 @@ function autoFillMeta(metaSection, project, existingMeta) {
   // ═══════════════════════════════════════════════════════════
 
   function wireUI() {
-    $('menuBtn')?.addEventListener('click', () => openSidebar());
-    $('saveBtn')?.addEventListener('click', () => workspace.saveActiveFile());
-    $('setupHeaderBtn')?.addEventListener('click', openSetupDialog);
-    $('railSetup')?.addEventListener('click', openSetupDialog);
-    $('railProjects')?.addEventListener('click', openProjectsSheet);
-    $('openProjectsBtn')?.addEventListener('click', openProjectsSheet);
-    $('syncBannerBtn')?.addEventListener('click', () => pullFromServerInEditor());
-    $('btnShortlink')?.addEventListener('click', copyShortlink);
-    $('btnHelp')?.addEventListener('click', openHelpSheet);
-    $('helpSheetClose')?.addEventListener('click', closeHelpSheet);
-    document.addEventListener('click', (e) => {
-  const sheet = $('helpSheet');
-  if (!sheet || sheet.hidden) return;
-  if (sheet.contains(e.target)) return;
-  if (e.target.closest('#btnHelp')) return;
-  closeHelpSheet();
-}, true);
-    $('helpSheetBackdrop')?.addEventListener('click', closeHelpSheet);
-    $('deployResultClose')?.addEventListener('click', hideDeployResult);
+  $('menuBtn')?.addEventListener('click', () => openSidebar());
+  $('saveBtn')?.addEventListener('click', () => workspace.saveActiveFile());
+  $('setupHeaderBtn')?.addEventListener('click', openSetupDialog);
+  $('railSetup')?.addEventListener('click', openSetupDialog);
+  $('railProjects')?.addEventListener('click', openProjectsSheet);
+  $('openProjectsBtn')?.addEventListener('click', openProjectsSheet);
+  $('syncBannerBtn')?.addEventListener('click', () => pullFromServerInEditor());
 
-    window.addEventListener('popstate', () => {
-      const urlPid = getPidFromUrl();
-      if (urlPid && urlPid !== S.currentProject?.pid) openProjectById(urlPid, { showLoader: true });
-    });
+  $('btnHelp')?.addEventListener('click', openHelpSheet);
+  $('helpSheetClose')?.addEventListener('click', closeHelpSheet);
+  $('helpSheetBackdrop')?.addEventListener('click', closeHelpSheet);
+  document.addEventListener('click', (e) => {
+    const sheet = $('helpSheet');
+    if (!sheet || sheet.hidden) return;
+    if (sheet.contains(e.target)) return;
+    if (e.target.closest('#btnHelp')) return;
+    closeHelpSheet();
+  }, true);
+  $('deployResultClose')?.addEventListener('click', hideDeployResult);
 
-    $('previewMain')?.addEventListener('click', launchPreview);
-    $('previewCaret')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const existing = document.querySelector('.menu-popover');
-      if (existing) { existing.remove(); return; }
-      const popover = el('div', { class: 'menu-popover' });
-      const hasShort = !!(S.shortlink && S.shortlink.hasShortlink);
-      popover.appendChild(el('button', { class: 'menu-row', type: 'button', onclick: () => { popover.remove(); copyShortlink(); } },
-        icon('link', 12), 'Copy short link', hasShort ? null : el('span', { style: 'margin-left:auto;opacity:0.5;font-size:9px;text-transform:uppercase;' }, 'None')
+  window.addEventListener('popstate', () => {
+    const urlPid = getPidFromUrl();
+    if (urlPid && urlPid !== S.currentProject?.pid) openProjectById(urlPid, { showLoader: true });
+  });
+
+  $('previewMain')?.addEventListener('click', launchPreview);
+  $('previewCaret')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const existing = document.querySelector('.menu-popover');
+    if (existing) { existing.remove(); return; }
+    const popover = el('div', { class: 'menu-popover' });
+    for (const mode of [{ id: 'fullscreen', label: 'Fullscreen', icon: 'expand' }, { id: 'tab', label: 'New tab', icon: 'external' }, { id: 'mini', label: 'Mini panel', icon: 'expand' }]) {
+      popover.appendChild(el('button', { class: 'menu-row', type: 'button', onclick: () => { S.previewMode = mode.id; try { localStorage.setItem(STORAGE.previewMode, mode.id); } catch {} popover.remove(); launchPreview(); } },
+        icon(mode.icon, 12), mode.label, S.previewMode === mode.id ? el('span', { class: 'check' }, '✓') : null
       ));
-      for (const mode of [{ id: 'fullscreen', label: 'Fullscreen', icon: 'expand' }, { id: 'tab', label: 'New tab', icon: 'external' }, { id: 'mini', label: 'Mini panel', icon: 'expand' }]) {
-        popover.appendChild(el('button', { class: 'menu-row', type: 'button', onclick: () => { S.previewMode = mode.id; try { localStorage.setItem(STORAGE.previewMode, mode.id); } catch {} popover.remove(); launchPreview(); } },
-          icon(mode.icon, 12), mode.label, S.previewMode === mode.id ? el('span', { class: 'check' }, '✓') : null
-        ));
-      }
-      $('previewBtn').appendChild(popover);
-      setTimeout(() => { document.addEventListener('click', function handler() { popover.remove(); document.removeEventListener('click', handler); }, { once: true }); }, 50);
-    });
+    }
+    $('previewBtn').appendChild(popover);
+    setTimeout(() => { document.addEventListener('click', function handler() { popover.remove(); document.removeEventListener('click', handler); }, { once: true }); }, 50);
+  });
 
-    $('sidebarClose')?.addEventListener('click', closeSidebar);
-    $('sidebarBackdrop')?.addEventListener('click', closeSidebar);
-    $('emptyNewProject')?.addEventListener('click', createNewProject);
-    $('emptyOpenProject')?.addEventListener('click', openProjectsSheet);
-    $('sheetClose')?.addEventListener('click', closeSheet);
-    $('backdrop')?.addEventListener('click', () => {
+  $('sidebarClose')?.addEventListener('click', closeSidebar);
+  $('sidebarBackdrop')?.addEventListener('click', closeSidebar);
+  $('emptyNewProject')?.addEventListener('click', createNewProject);
+  $('emptyOpenProject')?.addEventListener('click', openProjectsSheet);
+  $('sheetClose')?.addEventListener('click', closeSheet);
+  $('backdrop')?.addEventListener('click', () => {
+    if ($('confirmDialog').classList.contains('open')) { resolveConfirm(false); return; }
+    if (sheetOpen) closeSheet();
+  });
+  $('confirmOk')?.addEventListener('click', () => resolveConfirm(true));
+  $('confirmCancel')?.addEventListener('click', () => resolveConfirm(false));
+
+  $('tbSave')?.addEventListener('click', () => workspace.saveActiveFile());
+  $('tbUndo')?.addEventListener('click', () => cm.view ? cm.undo() : toast('Open a file first', 'info'));
+  $('tbRedo')?.addEventListener('click', () => cm.view ? cm.redo() : toast('Open a file first', 'info'));
+  $('tbSearch')?.addEventListener('click', () => cm.view ? cm.openSearch() : openSidebar('search'));
+  $('tbFormat')?.addEventListener('click', () => cm.formatCurrent());
+  $('tbMore')?.addEventListener('click', () => { $('toolbarRow2').classList.toggle('visible'); });
+  $('tbCtrl')?.addEventListener('click', () => setCtrlLatch(!S.ctrlLatch));
+  $('tbNewFile')?.addEventListener('click', () => createFilePrompt());
+
+  $('tbCopy')?.addEventListener('click', async () => {
+    if (!cm.view) { toast('Open a file first', 'info'); return; }
+    const text = cm.getSelection();
+    if (!text) { toast('Select text first', 'info'); return; }
+    const ok = await copyToClipboard(text);
+    if (ok) toast('Copied', 'success', 1500);
+    else toast("Couldn't copy", 'error');
+  });
+  $('tbCut')?.addEventListener('click', async () => {
+    if (!cm.view) { toast('Open a file first', 'info'); return; }
+    const text = cm.getSelection();
+    if (!text) { toast('Select text first', 'info'); return; }
+    const ok = await copyToClipboard(text);
+    if (ok) { cm.replaceSelection(''); workspace.markDirty(); toast('Cut', 'success', 1500); }
+    else toast("Couldn't cut", 'error');
+  });
+  $('tbPaste')?.addEventListener('click', async () => {
+    if (!cm.view) { toast('Open a file first', 'info'); return; }
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) { toast('Clipboard empty', 'info'); return; }
+      cm.replaceSelection(text);
+      workspace.markDirty();
+      toast('Pasted', 'success', 1500);
+    } catch { toast('Clipboard access denied', 'error'); }
+  });
+  $('tbSelect')?.addEventListener('click', () => { if (!cm.view) { toast('Open a file first', 'info'); return; } cm.selectAll(); });
+  $('tbSymbols')?.addEventListener('click', () => {
+    if (!cm.view && !S.activeFile) { toast('Open a file to insert symbols', 'info'); return; }
+    if (!cm.view && S.activeFile && isImageFile(S.activeFile)) { toast('Cannot insert symbols into an image', 'info'); return; }
+    openSymbolsSheet();
+  });
+  $('tbCommit')?.addEventListener('click', () => openCommitDialog());
+  $('tbPreview')?.addEventListener('click', launchPreview);
+  $('tbHost')?.addEventListener('click', () => { if (!requireOnline($('tbHost'))) return; hostProject(); });
+  $('tbFoldAll')?.addEventListener('click', () => cm.view ? cm.foldAll() : toast('Open a file first', 'info'));
+  $('tbUnfoldAll')?.addEventListener('click', () => cm.view ? cm.unfoldAll() : toast('Open a file first', 'info'));
+  $('symbolsClose')?.addEventListener('click', closeSymbolsSheet);
+  $('previewFullClose')?.addEventListener('click', () => $('previewFullscreen').classList.remove('visible'));
+  $('previewFullRefresh')?.addEventListener('click', () => openFullscreenPreview());
+  $('previewMiniClose')?.addEventListener('click', () => $('previewMini').classList.remove('visible'));
+  $('previewMiniRefresh')?.addEventListener('click', () => openMiniPreview());
+  $('previewMiniFull')?.addEventListener('click', () => { $('previewMini').classList.remove('visible'); openFullscreenPreview(); });
+  $('previewFileSelector')?.addEventListener('change', (e) => { openFullscreenPreview(e.target.value); });
+  $('previewMiniSelector')?.addEventListener('change', (e) => { openMiniPreview(e.target.value); });
+  $('guestBannerClose')?.addEventListener('click', () => { $('guestBanner').classList.remove('visible'); try { localStorage.setItem(STORAGE.guestBannerDismissed, 'true'); } catch {} });
+
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-copy-text]');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const text = btn.getAttribute('data-copy-text');
+    if (!text) return;
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      btn.classList.add('copied');
+      toast('Copied', 'success', 1200);
+      setTimeout(() => btn.classList.remove('copied'), 1400);
+    } else {
+      toast('Copy failed', 'error', 2000);
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    const key = (e.key || '').toLowerCase();
+    if (S.ctrlLatch && !mod && !e.altKey) {
+      let handled = true;
+      if (key === 'a' && cm.view) cm.selectAll();
+      else if (key === 's') { e.preventDefault(); workspace.saveActiveFile(); }
+      else if (key === 'z' && cm.view) { e.preventDefault(); cm.undo(); }
+      else if (key === 'y' && cm.view) { e.preventDefault(); cm.redo(); }
+      else if (key === 'f' && cm.view) { e.preventDefault(); cm.openSearch(); }
+      else if (key === 'c' && cm.view) {
+        const sel = cm.getSelection();
+        if (sel) copyToClipboard(sel).catch(() => {});
+      }
+      else if (key === 'v' && cm.view) {
+        navigator.clipboard.readText().then(t => { if (t) { cm.replaceSelection(t); workspace.markDirty(); } }).catch(() => {});
+      }
+      else if (key === 'x' && cm.view) {
+        const sel = cm.getSelection();
+        if (sel) {
+          copyToClipboard(sel).then(ok => {
+            if (ok) { cm.replaceSelection(''); workspace.markDirty(); }
+          }).catch(() => {});
+        }
+      }
+      else if (key === 'escape') handled = true;
+      else handled = false;
+      if (handled) { e.preventDefault(); setCtrlLatch(false); return; }
+    }
+    if (mod && key === 's') { e.preventDefault(); e.shiftKey ? workspace.saveAll() : workspace.saveActiveFile(); return; }
+    if (mod && key === 'f') { e.preventDefault(); cm.view ? cm.openSearch() : openSidebar('search'); return; }
+    if (mod && key === 'b') { e.preventDefault(); S.sidebarOpen ? closeSidebar() : openSidebar(); return; }
+    if (e.key === 'Escape') {
+      if ($('previewFullscreen').classList.contains('visible')) { $('previewFullscreen').classList.remove('visible'); return; }
+      if (!$('helpSheet').hidden) { closeHelpSheet(); return; }
+      if (S.symbolsOpen) { closeSymbolsSheet(); return; }
       if ($('confirmDialog').classList.contains('open')) { resolveConfirm(false); return; }
-      if (sheetOpen) closeSheet();
-    });
-    $('confirmOk')?.addEventListener('click', () => resolveConfirm(true));
-    $('confirmCancel')?.addEventListener('click', () => resolveConfirm(false));
+      if (sheetOpen) { closeSheet(); return; }
+      if (S.sidebarOpen && window.innerWidth < 1024) { closeSidebar(); return; }
+      if (S.ctrlLatch) { setCtrlLatch(false); return; }
+    }
+  });
 
-    $('tbSave')?.addEventListener('click', () => workspace.saveActiveFile());
-    $('tbUndo')?.addEventListener('click', () => cm.view ? cm.undo() : toast('Open a file first', 'info'));
-    $('tbRedo')?.addEventListener('click', () => cm.view ? cm.redo() : toast('Open a file first', 'info'));
-    $('tbSearch')?.addEventListener('click', () => cm.view ? cm.openSearch() : openSidebar('search'));
-    $('tbFormat')?.addEventListener('click', () => cm.formatCurrent());
-    $('tbMore')?.addEventListener('click', () => { $('toolbarRow2').classList.toggle('visible'); });
-    $('tbCtrl')?.addEventListener('click', () => setCtrlLatch(!S.ctrlLatch));
-    $('tbNewFile')?.addEventListener('click', () => createFilePrompt());
-    $('tbCopy')?.addEventListener('click', async () => {
-      if (!cm.view) { toast('Open a file first', 'info'); return; }
-      const text = cm.getSelection();
-      if (!text) { toast('Select text first', 'info'); return; }
-      try { await navigator.clipboard.writeText(text); toast('Copied', 'success', 1500); } catch { toast("Couldn't copy", 'error'); }
-    });
-    $('tbCut')?.addEventListener('click', async () => {
-      if (!cm.view) { toast('Open a file first', 'info'); return; }
-      const text = cm.getSelection();
-      if (!text) { toast('Select text first', 'info'); return; }
-      try { await navigator.clipboard.writeText(text); cm.replaceSelection(''); workspace.markDirty(); toast('Cut', 'success', 1500); } catch { toast("Couldn't cut", 'error'); }
-    });
-    $('tbPaste')?.addEventListener('click', async () => {
-      if (!cm.view) { toast('Open a file first', 'info'); return; }
-      try { const text = await navigator.clipboard.readText(); if (!text) { toast('Clipboard empty', 'info'); return; } cm.replaceSelection(text); workspace.markDirty(); toast('Pasted', 'success', 1500); } catch { toast('Clipboard access denied', 'error'); }
-    });
-    $('tbSelect')?.addEventListener('click', () => { if (!cm.view) { toast('Open a file first', 'info'); return; } cm.selectAll(); });
-    $('tbSymbols')?.addEventListener('click', () => {
-      if (!cm.view && !S.activeFile) { toast('Open a file to insert symbols', 'info'); return; }
-      if (!cm.view && S.activeFile && isImageFile(S.activeFile)) { toast('Cannot insert symbols into an image', 'info'); return; }
-      openSymbolsSheet();
-    });
-    $('tbCommit')?.addEventListener('click', () => openCommitDialog());
-    $('tbPreview')?.addEventListener('click', launchPreview);
-    $('tbHost')?.addEventListener('click', () => { if (!requireOnline($('tbHost'))) return; hostProject(); });
-    $('tbFoldAll')?.addEventListener('click', () => cm.view ? cm.foldAll() : toast('Open a file first', 'info'));
-    $('tbUnfoldAll')?.addEventListener('click', () => cm.view ? cm.unfoldAll() : toast('Open a file first', 'info'));
-    $('symbolsClose')?.addEventListener('click', closeSymbolsSheet);
-    $('previewFullClose')?.addEventListener('click', () => $('previewFullscreen').classList.remove('visible'));
-    $('previewFullRefresh')?.addEventListener('click', () => openFullscreenPreview());
-    $('previewMiniClose')?.addEventListener('click', () => $('previewMini').classList.remove('visible'));
-    $('previewMiniRefresh')?.addEventListener('click', () => openMiniPreview());
-    $('previewMiniFull')?.addEventListener('click', () => { $('previewMini').classList.remove('visible'); openFullscreenPreview(); });
-    $('previewFileSelector')?.addEventListener('change', (e) => { openFullscreenPreview(e.target.value); });
-    $('previewMiniSelector')?.addEventListener('change', (e) => { openMiniPreview(e.target.value); });
-    $('guestBannerClose')?.addEventListener('click', () => { $('guestBanner').classList.remove('visible'); try { localStorage.setItem(STORAGE.guestBannerDismissed, 'true'); } catch {} });
+  window.addEventListener('beforeunload', (e) => {
+    if (S.dirtyFiles.size > 0) { e.preventDefault(); e.returnValue = ''; return ''; }
+  });
+  window.addEventListener('pagehide', () => { if (S.activeFile && S.dirtyFiles.has(S.activeFile)) workspace.saveActiveFile({ silent: true }); });
 
-    document.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-copy-text]');
-      if (!btn) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const text = btn.getAttribute('data-copy-text');
-      if (!text) return;
-      if (copyToClipboard(text)) { btn.classList.add('copied'); toast('Copied', 'success', 1200); setTimeout(() => btn.classList.remove('copied'), 1400); }
-      else toast('Copy failed', 'error');
-    });
+  const updateOnline = () => {
+    S.online = navigator.onLine;
+    updateOfflineUI();
+    if (!S.online) {
+      if (S.syncState !== 'needs-pull') setSyncState('offline');
+      if (S.syncState === 'needs-pull') showSyncBanner(S.serverFileCount);
+    } else {
+      if (S.syncState === 'offline') setSyncState('synced');
+      if (S.syncState === 'needs-pull') showSyncBanner(S.serverFileCount);
+      flushCommitQueue().catch(() => {});
+      toast('Back online', 'success', 1800);
+      if (S.currentProject) renderSidebar();
+    }
+  };
+  window.addEventListener('online', updateOnline);
+  window.addEventListener('offline', updateOnline);
+  updateOnline();
 
-    document.addEventListener('keydown', (e) => {
-      const mod = e.metaKey || e.ctrlKey;
-      const key = (e.key || '').toLowerCase();
-      if (S.ctrlLatch && !mod && !e.altKey) {
-        let handled = true;
-        if (key === 'a' && cm.view) cm.selectAll();
-        else if (key === 's') { e.preventDefault(); workspace.saveActiveFile(); }
-        else if (key === 'z' && cm.view) { e.preventDefault(); cm.undo(); }
-        else if (key === 'y' && cm.view) { e.preventDefault(); cm.redo(); }
-        else if (key === 'f' && cm.view) { e.preventDefault(); cm.openSearch(); }
-        else if (key === 'c' && cm.view) { const sel = cm.getSelection(); if (sel) navigator.clipboard.writeText(sel).catch(() => {}); }
-        else if (key === 'v' && cm.view) { navigator.clipboard.readText().then(t => { if (t) { cm.replaceSelection(t); workspace.markDirty(); } }).catch(() => {}); }
-        else if (key === 'x' && cm.view) { const sel = cm.getSelection(); if (sel) { navigator.clipboard.writeText(sel).catch(() => {}); cm.replaceSelection(''); workspace.markDirty(); } }
-        else if (key === 'escape') handled = true;
-        else handled = false;
-        if (handled) { e.preventDefault(); setCtrlLatch(false); return; }
-      }
-      if (mod && key === 's') { e.preventDefault(); e.shiftKey ? workspace.saveAll() : workspace.saveActiveFile(); return; }
-      if (mod && key === 'f') { e.preventDefault(); cm.view ? cm.openSearch() : openSidebar('search'); return; }
-      if (mod && key === 'b') { e.preventDefault(); S.sidebarOpen ? closeSidebar() : openSidebar(); return; }
-      if (e.key === 'Escape') {
-        if ($('previewFullscreen').classList.contains('visible')) { $('previewFullscreen').classList.remove('visible'); return; }
-        if (!$('helpSheet').hidden) { closeHelpSheet(); return; }
-        if (S.symbolsOpen) { closeSymbolsSheet(); return; }
-        if ($('confirmDialog').classList.contains('open')) { resolveConfirm(false); return; }
-        if (sheetOpen) { closeSheet(); return; }
-        if (S.sidebarOpen && window.innerWidth < 1024) { closeSidebar(); return; }
-        if (S.ctrlLatch) { setCtrlLatch(false); return; }
-      }
-    });
+  window.addEventListener('resize', () => {
+    if (window.innerWidth >= 1024) $('sidebarBackdrop')?.classList.remove('open');
+    else if (S.sidebarOpen) $('sidebarBackdrop')?.classList.add('open');
+    if (S.symbolsOpen) shiftEditorForSymbols(true);
+  });
 
-    window.addEventListener('beforeunload', (e) => {
-      if (S.dirtyFiles.size > 0) { e.preventDefault(); e.returnValue = ''; return ''; }
-    });
-    window.addEventListener('pagehide', () => { if (S.activeFile && S.dirtyFiles.has(S.activeFile)) workspace.saveActiveFile({ silent: true }); });
-
-    const updateOnline = () => {
-      S.online = navigator.onLine;
-      updateOfflineUI();
-      if (!S.online) {
-        if (S.syncState !== 'needs-pull') setSyncState('offline');
-        if (S.syncState === 'needs-pull') showSyncBanner(S.serverFileCount);
-      } else {
-        if (S.syncState === 'offline') setSyncState('synced');
-        if (S.syncState === 'needs-pull') showSyncBanner(S.serverFileCount);
-        flushCommitQueue().catch(() => {});
-        if (S.currentProject && !S.isGuest) loadShortlinkInfo().then(() => updateShortlinkButton()).catch(() => {});
-        toast('Back online', 'success', 1800);
-        if (S.currentProject) renderSidebar();
-      }
-    };
-    window.addEventListener('online', updateOnline);
-    window.addEventListener('offline', updateOnline);
-    updateOnline();
-
-    window.addEventListener('resize', () => {
-      if (window.innerWidth >= 1024) $('sidebarBackdrop')?.classList.remove('open');
-      else if (S.sidebarOpen) $('sidebarBackdrop')?.classList.add('open');
-      if (S.symbolsOpen) shiftEditorForSymbols(true);
-    });
-
-    setupPreviewConsole();
-    wireDeployGuard();
-  }
+  setupPreviewConsole();
+  wireDeployGuard();
+}
 
   // ═══════════════════════════════════════════════════════════
   // BOOT
   // ═══════════════════════════════════════════════════════════
 
   async function boot() {
-    wireThemeSync();
-    wireThemeMediaQuery();
-    readSession();
-    applyGuestState();
+  wireThemeSync();
+  wireThemeMediaQuery();
+  readSession();
+  applyGuestState();
 
-    if (handleNewProjectImageReturn()) {
-      // Handled
-    } else {
-      const bootParams = new URLSearchParams(location.search);
-      const generatedSlot = bootParams.get('generated');
-      const generatedUrl = bootParams.get('url');
-      if (generatedSlot) {
-        const cleanUrl = new URL(location.href);
-        cleanUrl.searchParams.delete('generated');
-        cleanUrl.searchParams.delete('url');
-        try { history.replaceState(null, '', cleanUrl.toString()); } catch {}
-        setTimeout(async () => {
-          toast(`Image updated — ${generatedSlot}`, 'success', 3000);
-          let attempts = 0;
-          const refresh = async () => {
-            if (!S.currentProject) { if (attempts < 5) { attempts++; setTimeout(refresh, 400); return; } console.warn('[Handoff] Project never loaded'); return; }
-            try {
-              const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
-              if (res.ok && res.data?.success && res.data.project) {
-                const fresh = normalizeServerProject(res.data.project);
-                S.currentProject = { ...S.currentProject, ...fresh };
-                const local = await db.getProject(S.currentProject.pid);
-                if (local) await db.putProject({ ...local, iconUrl: fresh.iconUrl || generatedUrl || local.iconUrl || null, name: fresh.name, updatedAt: fresh.updatedAt });
-                updateBreadcrumb(); renderSidebar();
-              }
-            } catch {}
-          };
-          refresh();
-        }, 500);
-      }
-    }
-
-    loadPrefs();
-    try { S.previewMode = localStorage.getItem(STORAGE.previewMode) || 'fullscreen'; } catch {}
-
-    try { await openDB(); } catch (err) { console.error('[Boot] DB failed:', err); toast('Storage initialization failed', 'error'); return; }
-    try { await navigator.storage?.persist?.(); } catch {}
-
-    wireUI();
-    if (window.innerWidth >= 1024) openSidebar('files');
-
-    try { S.projects = await db.listProjects(); } catch (err) { console.error('[Boot] projects load:', err); }
-
-    try {
-      const urlPid = getPidFromUrl();
-      let project = null;
-      if (urlPid) project = await loadProjectFromUrl(urlPid);
-      if (!project) { project = await workspace.loadLastProject(); if (project) setPidInUrl(project.pid); }
-      if (!project) $('editorEmpty')?.classList.remove('hidden');
-      renderEmptyRecent();
-    } catch (err) { console.error('[Boot] load failed:', err); $('editorEmpty')?.classList.remove('hidden'); renderEmptyRecent(); }
-
-    if (S.session) {
-      apiFetch(API_AUTH + '?action=me').then(res => {
-        if (res.status === 401) { try { localStorage.removeItem(STORAGE.session); localStorage.removeItem(STORAGE.user); } catch {} S.session = null; S.isGuest = true; applyGuestState(); toast('Session expired — you are now a guest', 'warning', 4000); }
-      }).catch(() => {});
-    }
-
-    setTimeout(() => {
-      try {
-        const raw = localStorage.getItem(STORAGE.pendingInsert);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && parsed.content && (Date.now() - (parsed.at || 0)) < 60000) { if (cm.view) { cm.insertText(parsed.content); toast('Content inserted', 'success'); } }
-          localStorage.removeItem(STORAGE.pendingInsert);
-        }
-      } catch {}
-    }, 800);
-
-    flushCommitQueue().catch(() => {});
-    window.addEventListener('online', () => flushCommitQueue().catch(() => {}));
-
-    if (!S.isGuest && S.online) {
-      import('/js/create-project.js').then(mod => {
-        if (typeof mod.promoteQueuedLocalProjects === 'function') {
-          mod.promoteQueuedLocalProjects().then(result => { if (result && result.promoted > 0) renderEmptyRecent().catch(() => {}); }).catch(() => {});
-        }
-      }).catch(() => {});
+  if (handleNewProjectImageReturn()) {
+    // Handled
+  } else {
+    const bootParams = new URLSearchParams(location.search);
+    const generatedSlot = bootParams.get('generated');
+    const generatedUrl = bootParams.get('url');
+    if (generatedSlot) {
+      const cleanUrl = new URL(location.href);
+      cleanUrl.searchParams.delete('generated');
+      cleanUrl.searchParams.delete('url');
+      try { history.replaceState(null, '', cleanUrl.toString()); } catch {}
+      setTimeout(async () => {
+        toast(`Image updated — ${generatedSlot}`, 'success', 3000);
+        let attempts = 0;
+        const refresh = async () => {
+          if (!S.currentProject) { if (attempts < 5) { attempts++; setTimeout(refresh, 400); return; } console.warn('[Handoff] Project never loaded'); return; }
+          try {
+            const res = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(S.currentProject.pid));
+            if (res.ok && res.data?.success && res.data.project) {
+              const fresh = normalizeServerProject(res.data.project);
+              S.currentProject = { ...S.currentProject, ...fresh };
+              const local = await db.getProject(S.currentProject.pid);
+              if (local) await db.putProject({ ...local, iconUrl: fresh.iconUrl || generatedUrl || local.iconUrl || null, name: fresh.name, updatedAt: fresh.updatedAt });
+              updateBreadcrumb(); renderSidebar();
+            }
+          } catch {}
+        };
+        refresh();
+      }, 500);
     }
   }
+
+  loadPrefs();
+  try { S.previewMode = localStorage.getItem(STORAGE.previewMode) || 'fullscreen'; } catch {}
+
+  try { await openDB(); } catch (err) { console.error('[Boot] DB failed:', err); toast('Storage initialization failed', 'error'); return; }
+  try { await navigator.storage?.persist?.(); } catch {}
+
+  wireUI();
+  if (window.innerWidth >= 1024) openSidebar('files');
+
+  try { S.projects = await db.listProjects(); } catch (err) { console.error('[Boot] projects load:', err); }
+
+  try {
+    const urlPid = getPidFromUrl();
+    let project = null;
+    if (urlPid) project = await loadProjectFromUrl(urlPid);
+    if (!project) { project = await workspace.loadLastProject(); if (project) setPidInUrl(project.pid); }
+    if (!project) $('editorEmpty')?.classList.remove('hidden');
+    renderEmptyRecent();
+  } catch (err) { console.error('[Boot] load failed:', err); $('editorEmpty')?.classList.remove('hidden'); renderEmptyRecent(); }
+
+  if (S.session) {
+    apiFetch(API_AUTH + '?action=me').then(res => {
+      if (res.status === 401) {
+        try { localStorage.removeItem(STORAGE.session); localStorage.removeItem(STORAGE.user); } catch {}
+        S.session = null; S.isGuest = true; applyGuestState();
+        toast('Session expired — you are now a guest', 'warning', 4000);
+      }
+    }).catch(() => {});
+  }
+
+  setTimeout(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE.pendingInsert);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.content && (Date.now() - (parsed.at || 0)) < 60000) {
+          if (cm.view) { cm.insertText(parsed.content); toast('Content inserted', 'success'); }
+        }
+        localStorage.removeItem(STORAGE.pendingInsert);
+      }
+    } catch {}
+  }, 800);
+
+  flushCommitQueue().catch(() => {});
+  window.addEventListener('online', () => flushCommitQueue().catch(() => {}));
+
+  if (!S.isGuest && S.online) {
+    import('/js/create-project.js').then(mod => {
+      if (typeof mod.promoteQueuedLocalProjects === 'function') {
+        mod.promoteQueuedLocalProjects().then(result => {
+          if (result && result.promoted > 0) renderEmptyRecent().catch(() => {});
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+  }
+}
 
   function wireThemeSync() {
     window.addEventListener('storage', function (e) {
