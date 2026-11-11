@@ -531,17 +531,77 @@ function countAllowHosts(source) {
   return matches ? matches.length : 0;
 }
 function noteAccentColor(color) { return NOTE_COLORS[color] || NOTE_COLORS.amber; }
-function copyToClipboard(text) {
-  try { if (navigator.clipboard?.writeText) { navigator.clipboard.writeText(text).catch(() => {}); return true; } } catch {}
+  
+// ═══════════════════════════════════════════════════════════
+// CLIPBOARD — async, honest, works on HTTP and HTTPS
+// ═══════════════════════════════════════════════════════════
+
+async function copyToClipboard(text) {
+  if (!text) return false;
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); return true; } catch {}
+  }
   try {
     const ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    const ok = document.execCommand('copy');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    ta.style.left = '-9999px';
+    ta.style.opacity = '1';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
     document.body.removeChild(ta);
     return ok;
   } catch { return false; }
 }
+
+// ═══════════════════════════════════════════════════════════
+// COPY HELPERS — every caller goes through these
+// ═══════════════════════════════════════════════════════════
+
+async function copyWithToast(text, successMsg = 'Copied') {
+  const ok = await copyToClipboard(text);
+  if (ok) toast(successMsg, 'success', 1200);
+  else toast('Copy failed', 'error', 2000);
+  return ok;
+}
+
+function flashCopied(el) {
+  if (!el) return;
+  el.classList.add('copied');
+  setTimeout(() => el.classList.remove('copied'), 1400);
+}
+
+async function copyFromButton(btn) {
+  if (!btn) return false;
+  const text = btn.getAttribute('data-copy-text');
+  if (!text) return false;
+  const ok = await copyToClipboard(text);
+  if (ok) {
+    flashCopied(btn);
+    toast('Copied', 'success', 1200);
+  } else {
+    toast('Copy failed', 'error', 2000);
+  }
+  return ok;
+}
+
+// ═══════════════════════════════════════════════════════════
+// GLOBAL DELEGATION — every [data-copy-text] button is covered
+// ═══════════════════════════════════════════════════════════
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-copy-text]');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  await copyFromButton(btn);
+});
 
 function trackPending() { S._pendingCount++; updateGlobalLoader(); }
 function untrackPending() { S._pendingCount = Math.max(0, S._pendingCount - 1); updateGlobalLoader(); }
@@ -2689,7 +2749,12 @@ async function renderSettingsPanel(panel) {
   $('btnInviteCollab')?.addEventListener('click', openInviteModal);
   document.querySelectorAll('[data-remove-collab]').forEach(btn => btn.addEventListener('click', () => confirmRemoveCollab(btn.dataset.removeCollab)));
   $('btnGenApiKey')?.addEventListener('click', generateApiKey);
-  const copyPid = () => { if (copyToClipboard(pid)) toast('Project ID copied', 'success', 1400); else toast('Copy failed', 'error'); };
+  const copyPid = async () => {
+  const ok = await copyToClipboard(pid);
+  if (ok) toast('Project ID copied', 'success', 1400);
+  else toast('Copy failed', 'error', 2000);
+};
+  
   $('btnCopyPidHeader')?.addEventListener('click', copyPid);
   $('pidDisplay')?.addEventListener('click', () => { if (!matchMedia('(pointer: coarse)').matches) copyPid(); });
   $('btnClearVersions')?.addEventListener('click', confirmClearVersions);
@@ -2754,7 +2819,11 @@ async function generateApiKey() {
       if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
       const key = res.data.key;
       openModal(`<div class="modal-title">API key</div><div class="modal-desc">Copy now. Won't be shown again.</div><input class="input mono" value="${escapeAttr(key)}" readonly style="margin-bottom:10px;"><div class="modal-actions"><button class="btn btn-primary" id="copyApiKeyBtn">${svg('copy', 12, 2.2)} Copy</button></div>`);
-      $('copyApiKeyBtn').addEventListener('click', () => { if (copyToClipboard(key)) toast('Copied', 'success', 1000); });
+$('copyApiKeyBtn').addEventListener('click', async () => {
+  const ok = await copyToClipboard(key);
+  if (ok) toast('Copied', 'success', 1000);
+  else toast('Copy failed', 'error', 2000);
+});
       S.project.hasApiKey = true; renderPanel();
     } catch (err) { hideLoading(); toast(err.message || 'Failed', 'error'); }
   });
@@ -3546,52 +3615,87 @@ await fetch("/alice/project/notes/api/notes", {
   // WIRE GLOBAL
   // ═══════════════════════════════════════════════════════════
   function wireGlobal() {
-    $('modalOverlay').addEventListener('click', (e) => { if (e.target === $('modalOverlay')) closeModal(); });
-    document.addEventListener('click', (e) => { if (e.target.matches('[data-modal-close]')) closeModal(); });
-    $('docsClose')?.addEventListener('click', closeDocsOverlay);
-    $('docsCopySection')?.addEventListener('click', () => copyAllDocs(false));
-    $('docsCopyAll')?.addEventListener('click', () => copyAllDocs(true));
-    $('btnDeploy')?.addEventListener('click', () => { if (S.project?.deployment?.url) window.open(S.project.deployment.url, '_blank', 'noopener'); else deployNow(); });
-    $('btnBell')?.addEventListener('click', () => window.open('/notifications', '_blank', 'noopener'));
-    $('btnMore')?.addEventListener('click', openMoreMenu);
-    $('headerIdentity')?.addEventListener('click', openEditProjectModal);
-    $('emptyProjectRetry')?.addEventListener('click', () => location.reload());
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        if (!$('docsOverlay').hidden) { closeDocsOverlay(); return; }
-        if ($('modalOverlay').classList.contains('active')) { closeModal(); return; }
-      }
-      if (!e.target.closest || !e.target.closest('#topTabsBar')) return;
-      const idx = S.tabs.findIndex(t => t.id === S.activeTab);
-      if (e.key === 'ArrowRight') { e.preventDefault(); switchTab(S.tabs[Math.min(idx + 1, S.tabs.length - 1)].id); }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); switchTab(S.tabs[Math.max(idx - 1, 0)].id); }
-    });
-    // Deploy/upload in-flight unload guard
-    window.addEventListener('beforeunload', (e) => {
-      if (S._deployInFlight || S._uploadInFlight) {
-        e.preventDefault(); e.returnValue = 'A deploy or upload is still running. Leave anyway?'; return e.returnValue;
-      }
-    });
-    // Online/offline
-    const updateOnline = () => {
-      S.online = navigator.onLine;
-      updateOfflineUI();
-      updateModeBanner();
-      if (S.online) {
-        flushSyncQueue().catch(() => {});
-        toast('Back online', 'success', 1800);
-        if (['overview','deploy','insights','data','settings','api'].includes(S.activeTab)) renderPanel();
-      } else {
-        toast('Offline — changes will sync when you reconnect', 'warning', 3000);
-      }
-    };
-    window.addEventListener('online', updateOnline);
-    window.addEventListener('offline', updateOnline);
-    updateOnline();
-    if (S.bellTimer) clearInterval(S.bellTimer);
-    S.bellTimer = setInterval(() => { if (document.visibilityState === 'visible' && S.online) loadNotificationStats(); }, 60000);
-    startSyncFlushLoop();
-  }
+  // ── Modal / overlay close ───────────────────────────────
+  $('modalOverlay').addEventListener('click', (e) => { if (e.target === $('modalOverlay')) closeModal(); });
+  document.addEventListener('click', (e) => { if (e.target.matches('[data-modal-close]')) closeModal(); });
+
+  // ── Docs overlay ────────────────────────────────────────
+  $('docsClose')?.addEventListener('click', closeDocsOverlay);
+  $('docsCopySection')?.addEventListener('click', () => copyAllDocs(false));
+  $('docsCopyAll')?.addEventListener('click', () => copyAllDocs(true));
+
+  // ── Header buttons ──────────────────────────────────────
+  $('btnDeploy')?.addEventListener('click', () => { if (S.project?.deployment?.url) window.open(S.project.deployment.url, '_blank', 'noopener'); else deployNow(); });
+  $('btnBell')?.addEventListener('click', () => window.open('/notifications', '_blank', 'noopener'));
+  $('btnMore')?.addEventListener('click', openMoreMenu);
+  $('headerIdentity')?.addEventListener('click', openEditProjectModal);
+  $('emptyProjectRetry')?.addEventListener('click', () => location.reload());
+
+  // ── Keyboard shortcuts ──────────────────────────────────
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (!$('docsOverlay').hidden) { closeDocsOverlay(); return; }
+      if ($('modalOverlay').classList.contains('active')) { closeModal(); return; }
+    }
+    if (!e.target.closest || !e.target.closest('#topTabsBar')) return;
+    const idx = S.tabs.findIndex(t => t.id === S.activeTab);
+    if (e.key === 'ArrowRight') { e.preventDefault(); switchTab(S.tabs[Math.min(idx + 1, S.tabs.length - 1)].id); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); switchTab(S.tabs[Math.max(idx - 1, 0)].id); }
+  });
+
+  // ── Copy delegation — handles every [data-copy-text] button ─
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-copy-text]');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const text = btn.getAttribute('data-copy-text');
+    if (!text) return;
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      btn.classList.add('copied');
+      toast('Copied', 'success', 1200);
+      setTimeout(() => btn.classList.remove('copied'), 1400);
+    } else {
+      toast('Copy failed', 'error', 2000);
+    }
+  });
+
+  // ── Deploy / upload in-flight unload guard ──────────────
+  window.addEventListener('beforeunload', (e) => {
+    if (S._deployInFlight || S._uploadInFlight) {
+      e.preventDefault();
+      e.returnValue = 'A deploy or upload is still running. Leave anyway?';
+      return e.returnValue;
+    }
+  });
+
+  // ── Online / offline transitions ────────────────────────
+  const updateOnline = () => {
+    S.online = navigator.onLine;
+    updateOfflineUI();
+    updateModeBanner();
+    if (S.online) {
+      flushSyncQueue().catch(() => {});
+      toast('Back online', 'success', 1800);
+      if (['overview','deploy','insights','data','settings','api'].includes(S.activeTab)) renderPanel();
+    } else {
+      toast('Offline — changes will sync when you reconnect', 'warning', 3000);
+    }
+  };
+  window.addEventListener('online', updateOnline);
+  window.addEventListener('offline', updateOnline);
+  updateOnline();
+
+  // ── Notification poll ───────────────────────────────────
+  if (S.bellTimer) clearInterval(S.bellTimer);
+  S.bellTimer = setInterval(() => {
+    if (document.visibilityState === 'visible' && S.online) loadNotificationStats();
+  }, 60000);
+
+  // ── Sync queue flush loop ───────────────────────────────
+  startSyncFlushLoop();
+}
 
   // ═══════════════════════════════════════════════════════════
   // BOOT
