@@ -520,7 +520,9 @@
 <script type="module">
 "use strict";
 import { initCreateProject, createNewProject, handleNewProjectImageReturn } from '/js/create-project.js';
-import { initPreview, openPreview, closePreview, setPreviewProject, isPreviewOpen } from '/js/preview.js';
+import { initPreview, openPreview, closePreview, isPreviewOpen } from '/js/preview.js';
+
+
 
 (function () {
   'use strict';
@@ -659,6 +661,11 @@ import { initPreview, openPreview, closePreview, setPreviewProject, isPreviewOpe
     return new Date(ts).toLocaleDateString();
   }
 
+
+
+
+
+  
   function fileIconName(path) {
     const ext = (path.split('.').pop() || '').toLowerCase();
     if (['html','htm','css','scss','less','js','mjs','cjs','jsx','ts','tsx'].includes(ext)) return 'file-code';
@@ -2111,13 +2118,14 @@ import { initPreview, openPreview, closePreview, setPreviewProject, isPreviewOpe
       if (isSystemFile(file.path)) continue;
       const isActive = file.path === S.activeFile;
       const fileRow = el('div', { class: `tree-node${isActive ? ' active' : ''}`, style: `--depth:${depth}`, onclick: () => { workspace.openFile(file.path); if (window.innerWidth < 1024) closeSidebar(); } },
-        el('span', { class: 'icon' }, icon(fileIconName(file.path), 12)),
-        el('span', { class: 'name' }, file.name),
-        el('div', { class: 'actions' },
-          el('button', { class: 'act', type: 'button', title: 'Rename', onclick: (e) => { e.stopPropagation(); renameFile(file.path); } }, icon('edit', 10)),
-          el('button', { class: 'act danger', type: 'button', title: 'Delete', onclick: (e) => { e.stopPropagation(); deleteFile(file.path); } }, icon('trash', 10))
-        )
-      );
+  el('span', { class: 'icon' }, icon(fileIconName(file.path), 12)),
+  el('span', { class: 'name' }, file.name),
+  el('div', { class: 'actions' },
+    el('button', { class: 'act', type: 'button', title: 'Revert to last commit', onclick: (e) => { e.stopPropagation(); import('/js/preview.js').then(m => m.revertFile(file.path)); } }, icon('refresh', 10)),
+    el('button', { class: 'act', type: 'button', title: 'Rename', onclick: (e) => { e.stopPropagation(); renameFile(file.path); } }, icon('edit', 10)),
+    el('button', { class: 'act danger', type: 'button', title: 'Delete', onclick: (e) => { e.stopPropagation(); deleteFile(file.path); } }, icon('trash', 10))
+  )
+);
       container.appendChild(fileRow);
     }
   }
@@ -2996,14 +3004,16 @@ function autoFillMeta(metaSection, project, existingMeta) {
     const list = el('div');
     for (let i = 0; i < versions.length; i++) {
       const v = versions[i]; const prev = versions[i + 1]; const isDeploy = v.kind === 'deploy';
+      
       list.appendChild(el('div', { class: `version-item${isDeploy ? ' version-deploy' : ''}` },
-        el('div', { class: 'msg' }, isDeploy ? el('span', { class: 'deploy-pill' }, 'Deploy') : null, v.message),
-        el('div', { class: 'meta' }, el('span', {}, relativeTime(v.createdAt)), el('span', {}, `${Object.keys(v.files || {}).length} files`)),
-        el('div', { class: 'acts' },
-          el('button', { class: 'btn btn-secondary btn-sm', type: 'button', onclick: () => restoreVersion(v.vid) }, 'Restore'),
-          !isDeploy ? el('button', { class: 'btn btn-ghost btn-sm btn-icon', type: 'button', style: 'color:var(--theme-danger)', onclick: () => deleteVersionConfirm(v.vid) }, icon('trash', 10)) : null
-        )
-      ));
+  el('div', { class: 'msg' }, isDeploy ? el('span', { class: 'deploy-pill' }, 'Deploy') : null, v.message),
+  el('div', { class: 'meta' }, el('span', {}, relativeTime(v.createdAt)), el('span', {}, `${Object.keys(v.files || {}).length} files`)),
+  el('div', { class: 'acts' },
+    S.isEditor && S.online && !isDeploy ? el('button', { class: 'btn btn-primary btn-sm', type: 'button', title: 'Deploy this version', onclick: () => import('/js/preview.js').then(m => m.deployVersion(v.vid)) }, icon('rocket', 10), ' Deploy') : null,
+    el('button', { class: 'btn btn-secondary btn-sm', type: 'button', onclick: () => restoreVersion(v.vid) }, 'Restore'),
+    !isDeploy ? el('button', { class: 'btn btn-ghost btn-sm btn-icon', type: 'button', style: 'color:var(--theme-danger)', onclick: () => deleteVersionConfirm(v.vid) }, icon('trash', 10)) : null
+  )
+));
     }
     container.appendChild(list);
   }
@@ -3823,13 +3833,63 @@ if (e.key === 'Escape') {
     });
   }
 
-  function wireThemeMediaQuery() {
+    function wireThemeMediaQuery() {
     if (!window.matchMedia) return;
     var mq = window.matchMedia('(prefers-color-scheme: light)');
     var handler = function () {
       try { var pref = localStorage.getItem('folio.theme') || 'dark'; if (pref !== 'auto' && pref !== 'system') return; var resolved = mq.matches ? 'light' : 'dark'; if (resolved === 'light') document.documentElement.setAttribute('data-theme', 'light'); else document.documentElement.removeAttribute('data-theme'); } catch {}
     };
     if (mq.addEventListener) mq.addEventListener('change', handler); else if (mq.addListener) mq.addListener(handler);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // PREVIEW BRIDGE — expose editor context to preview.js
+  // ═══════════════════════════════════════════════════════════
+  window.__folio = {
+    api: {
+      S,
+      apiFetch,
+      db,
+      cm,
+      workspace,
+      toast,
+      confirm,
+      promptSheet,
+      openSheet,
+      closeSheet,
+      openProjectById,
+      createNewProject,
+      renderSidebar,
+      refreshInfoIfOpen,
+    },
+    eval: async (code) => {
+      try {
+        const result = await (0, eval)("(async () => { " + code + "\n })()");
+        return { ok: true, text: serializeEditorValue(result) };
+      } catch (err) {
+        return { ok: false, text: (err?.name ? err.name + ": " : "") + (err?.message || String(err)) };
+      }
+    },
+  };
+
+  function serializeEditorValue(v) {
+    if (v === undefined) return "undefined";
+    if (v === null) return "null";
+    if (typeof v === "string") return `"${v}"`;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (typeof v === "function") return "ƒ " + (v.name || "anonymous");
+    try {
+      const json = JSON.stringify(v, (k, val) => {
+        if (typeof val === "function") return "[Function " + (val.name || "") + "]";
+        if (typeof val === "symbol") return String(val);
+        if (val instanceof Element) return "<" + val.tagName.toLowerCase() + ">";
+        return val;
+      }, 2);
+      if (json === undefined) return String(v);
+      return json.length > 5000 ? json.slice(0, 5000) + "\n… (truncated)" : json;
+    } catch {
+      return String(v);
+    }
   }
 
   initCreateProject({
@@ -3853,8 +3913,6 @@ initPreview({
 });
 
 boot().catch(err => { console.error('[Boot] Fatal:', err); toast('Startup error: ' + (err.message || 'unknown'), 'error', 8000); });
-
-  
 
 })();
 </script>
