@@ -7,6 +7,28 @@ import {
   getClientIp, hashIp, sanitizeFirebasePath,
 } from "../utils/users.js";
 
+// Every other API (host, run, auth, notify) loads its CORS allowlist from
+// public/assets/domains.json via a local setCorsHeaders() helper.
+//
+// analytics.js is the exception. It receives tracking beacons from
+// DEPLOYED USER PROJECTS, which live on foliosites.vercel.app (and, in
+// the future, on users' own custom domains). There is no fixed set of
+// origins we can enumerate — every project is potentially a different
+// origin, and users can point a CNAME at foliosites.vercel.app at any
+// time.
+//
+// Restricting this file to domains.json would break tracker calls from
+// every project that doesn't happen to live on one of our three
+// domains. So: Access-Control-Allow-Origin: * stays.
+//
+// Abuse protection lives elsewhere:
+//   - Per-IP rate limit (60/min) on the `hit` action
+//   - Per-project hourly limit (10 000/h) on `hitByProject`
+//   - Bot UA detection + sampled bot counter
+//   - projectId existence check before any write
+//
+// That's the right tradeoff. Don't change this to a strict allowlist
+// without first re-testing every live project.
 // =========================================================================
 // RATE LIMITS (per-API, Final Rule #16)
 // =========================================================================

@@ -11,6 +11,11 @@
 //  ⚠  BASE_URL is defined ONCE at the top of this file.
 //  ⚠  Change it there when you move to a custom domain.
 //  ⚠  Do not hardcode "foliostudios.vercel.app" anywhere else.
+//
+//  ⚠  THREE URLS, THREE JOBS:
+//      BASE_URL          — the editor (dashboard, API, share pages, auth)
+//      PUBLIC_SITE_BASE  — the published web (canonical, live-site links, assets)
+//      SHORT_URL         — the short-link domain (display only)
 // ═══════════════════════════════════════════════════════════════════
 
 import fs from "node:fs";
@@ -44,10 +49,11 @@ import {
   createProjectRecord,
   deleteProjectRecord,
   verifySession,
+  migrateProjectSlugsOnUsernameChange,
 } from "../utils/users.js";
 
 // =========================================================================
-// BASE URL — the only place it's defined
+// BASE URLS — the only place they're defined
 // =========================================================================
 
 const BASE_URL =
@@ -55,6 +61,64 @@ const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ||
   "https://foliostudios.vercel.app";
 
+const PUBLIC_SITE_BASE =
+  process.env.PUBLIC_SITE_BASE ||
+  BASE_URL;
+
+const SHORT_URL =
+  (process.env.SHORT_URL || "https://folio.xo.je").replace(/\/+$/, "");
+// =========================================================================
+// CORS — origins loaded from public/assets/domains.json
+// =========================================================================
+
+let _corsOrigins = null;
+
+function loadCorsOrigins() {
+  if (_corsOrigins) return _corsOrigins;
+  const envOverride = process.env.CORS_ORIGINS;
+  if (envOverride) {
+    _corsOrigins = new Set(
+      envOverride.split(",").map((s) => s.trim()).filter(Boolean),
+    );
+    return _corsOrigins;
+  }
+  try {
+    const p = path.join(process.cwd(), "public", "assets", "domains.json");
+    const raw = fs.readFileSync(p, "utf8");
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed?.origins) ? parsed.origins : [];
+    _corsOrigins = new Set(list.map((s) => String(s).trim()).filter(Boolean));
+  } catch (err) {
+    log("host.cors.load_failed", { message: err.message });
+    // Fallback: the three known origins. Never block on a missing file.
+    _corsOrigins = new Set([
+      BASE_URL,
+      PUBLIC_SITE_BASE,
+      SHORT_URL,
+    ].filter(Boolean));
+  }
+  return _corsOrigins;
+}
+
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin || "";
+  const allowed = loadCorsOrigins();
+  if (origin && allowed.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  } else {
+    // No ACAO → browser blocks the response. This is the correct
+    // behavior for unlisted origins.
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Project-Key, X-API-Key",
+  );
+  res.setHeader("Access-Control-Max-Age", "600");
+}
 const API_NAME = "host";
 
 // =========================================================================
@@ -802,13 +866,14 @@ function avatarHtmlFor(profile, { size = 40, username = "" } = {}) {
   return `<span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.28)}px;background:linear-gradient(135deg,#F59E0B,#f97316);color:#0a0c10;font-weight:800;font-size:${Math.round(size * 0.38)}px;">${escapeHtml(initials)}</span>`;
 }
 
-function projectIconHtmlFor(project) {
+function projectIconHtmlFor(project, size = 48) {
   const url = project?.iconUrl;
+  const radius = Math.round(size * 0.25);
   if (url) {
-    return `<img src="${escapeHtml(url)}" alt="" width="56" height="56" style="object-fit:cover;border-radius:14px;display:block;">`;
+    return `<img src="${escapeHtml(url)}" alt="" width="${size}" height="${size}" style="object-fit:cover;border-radius:${radius}px;display:block;">`;
   }
   const initials = initialsOf(project?.name || project?.slug || "?");
-  return `<span style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#F59E0B,#f97316);color:#0a0c10;font-weight:800;font-size:20px;">${escapeHtml(initials)}</span>`;
+  return `<span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:${radius}px;background:linear-gradient(135deg,#F59E0B,#f97316);color:#0a0c10;font-weight:800;font-size:${Math.round(size * 0.38)}px;">${escapeHtml(initials)}</span>`;
 }
 
 function inlineSvg(name, size = 16) {
@@ -997,6 +1062,7 @@ function isValidRoutePath(p) {
   if (p.length > MAX_FILE_PATH_LENGTH) return false;
   if (/[\x00-\x1F\x7F]/.test(p)) return false;
   if (/%2e%2e/i.test(p) || /\.\.\//.test(p) || /\/\.\./.test(p)) return false;
+  if (/(^|\/)\.\.?(\/|$)/.test(p)) return false;
   return true;
 }
 
@@ -1040,6 +1106,32 @@ async function findProjectBySlug(username, slug) {
   return found;
 }
 
+// Fast path: read projectSlugs/{username}/{slug} → pid, confirm cached project.
+// Falls back to the scan if the index misses. Self-heals the index on hit.
+async function resolveBySlugIndex(username, slug) {
+  try {
+    const idxSnap = await db.ref(`projectSlugs/${username}/${slug}`).once("value");
+    if (idxSnap.exists()) {
+      const pid = idxSnap.val();
+      if (typeof pid === "string" && pid.startsWith("p_")) {
+        const project = await getProjectCached(pid);
+        if (project && project.slug === slug) {
+          return { pid, project };
+        }
+        // Stale index entry — fall through to scan
+      }
+    }
+  } catch {}
+
+  const found = await findProjectBySlug(username, slug);
+  if (found) {
+    // Self-heal
+    db.ref(`projectSlugs/${username}/${slug}`).set(found.pid).catch(() => {});
+    return { pid: found.pid, project: found.project };
+  }
+  return null;
+}
+
 async function findProjectByUidAndSlug(uid, slug) {
   const user = await getUser(uid);
   if (!user) return null;
@@ -1071,6 +1163,10 @@ async function getProjectOwnerUsername(pid, project) {
   }
 }
 
+// ── URL builders ────────────────────────────────────────────────────
+// BASE_URL          → editor domain. Share page, dashboard, API.
+// PUBLIC_SITE_BASE  → published domain. Canonical, live links, assets.
+
 function buildProjectCleanUrl(username, project, pid = null) {
   if (!username) return null;
   const slug = project?.slug || "";
@@ -1080,10 +1176,44 @@ function buildProjectCleanUrl(username, project, pid = null) {
   return `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(fallbackPid)}&path=index.html`;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  URL DISPLAY — copyable URL component for templates
+// ═══════════════════════════════════════════════════════════════════
+//
+// Renders a compact, copyable URL box. Strips the protocol from the
+// visible text so it reads like a human URL. The `data-copy-text`
+// attribute carries the full HTTPS URL for the client-side copy handler.
+//
+// Usage:
+//   renderUrlDisplay("https://foliosites.vercel.app/x/y", { label: "Live" })
+//   → <span class="url-display">...</span>
+
+function renderUrlDisplay(url, { label = null } = {}) {
+  if (!url || typeof url !== "string") return "";
+  let host, path;
+  try {
+    const u = new URL(url);
+    host = u.host;
+    path = u.pathname + (u.search || "") + (u.hash || "");
+    // Show trailing slash only for root — cleaner for project URLs
+    if (path === "/") path = "";
+  } catch {
+    return "";
+  }
+  const escaped = escapeHtml(url);
+  return `<span class="url-display">
+    ${label ? `<span class="url-host">${escapeHtml(label)}</span>` : ""}
+    <a href="${escaped}" target="_blank" rel="noopener" title="${escaped}">${escapeHtml(host)}<span class="url-path">${escapeHtml(path)}</span></a>
+    <button class="url-copy" type="button" data-copy-text="${escaped}" aria-label="Copy URL" title="Copy URL">
+      ${inlineSvg("copy", 10)}
+    </button>
+  </span>`;
+}
+
 function buildLiveSiteUrl(username, project) {
   const slug = project?.slug || "";
   if (!username || !slug) return null;
-  return `${BASE_URL}/${username}/project/${encodeURIComponent(slug)}`;
+  return `${PUBLIC_SITE_BASE}/${username}/project/${encodeURIComponent(slug)}`;
 }
 
 function buildLiveSiteUrlForPath(username, project, relPath) {
@@ -2251,22 +2381,12 @@ async function handleDeploy(req, res, reqId) {
     : `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
   const serveUrl = `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
 
-  // ═════════════════════════════════════════════════════════════════
-  // ✅ NEW: Write the slug index for the friendly API URL
-  // ═════════════════════════════════════════════════════════════════
-  // Populates projectSlugs/{username}/{slug} = pid so that
-  // api/run.js can resolve /{username}/project/{slug}/api/{route}
-  // without falling back to the slower scan.
-  //
-  // Also removes stale entries when the slug or username changed
-  // since the last deploy (defensive — normally handleProjectsUpdate
-  // already cleans these up, but this catches any drift).
+  // ── Write slug index (for the friendly API URL) ──────────────────
   if (ownerUsername && project.slug) {
     try {
       await db.ref(`projectSlugs/${ownerUsername}/${project.slug}`).set(pid);
 
       // Remove stale slug entries for this pid under this user
-      // (in case the slug changed without the index being cleaned up)
       const userSlugsSnap = await db.ref(`projectSlugs/${ownerUsername}`).once("value");
       if (userSlugsSnap.exists()) {
         const updates = {};
@@ -2280,7 +2400,6 @@ async function handleDeploy(req, res, reqId) {
         }
       }
     } catch (err) {
-      // Non-fatal — the runtime resolver self-heals on the first call
       log("host.deploy.slug_index_failed", { pid, message: err.message });
     }
   }
@@ -2333,19 +2452,64 @@ async function handleDeploy(req, res, reqId) {
       });
     }
   } catch {}
+// ── Create or repoint the short link ──────────────────────────
+// Never fails the deploy — just logs on error.
+let shortKey = null;
+let shortUrl = null;
+try {
+  const publicUrl = ownerUsername && project.slug
+    ? buildLiveSiteUrl(ownerUsername, project)
+    : null;
 
+  if (publicUrl) {
+    const shortRes = await fetch(
+      `${PUBLIC_SITE_BASE}/api/shortlink?action=create`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.ADMIN_API_KEY || "",
+        },
+        body: JSON.stringify({
+          pid,
+          url: publicUrl,
+          imageUrl: project.thumbnail?.url || null,
+          name: project.name || "",
+        }),
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+    if (shortRes.ok) {
+      const data = await shortRes.json().catch(() => ({}));
+      if (data.success && data.key && data.shortUrl) {
+        shortKey = data.key;
+        shortUrl = data.shortUrl;
+        await db.ref(`projects/${pid}/shortKey`).set(shortKey).catch(() => {});
+        await db.ref(`projects/${pid}/shortUrl`).set(shortUrl).catch(() => {});
+        invalidateProject(pid);
+      }
+    } else {
+      log("host.deploy.shortlink_create_failed", { pid, status: shortRes.status });
+    }
+  }
+} catch (err) {
+  log("host.deploy.shortlink_create_error", { pid, message: err.message });
+}
   return res.status(202).json({
-    success: true,
-    deploymentId,
-    url: cleanUrl,
-    serveUrl,
-    versionId: resolvedVid,
-    filesWritten: totalWritten,
-    filesSkipped: regularWrite.skipped.length + apiWrite.skipped.length,
-    apiFileCount: apiAnalysis.totalFiles + 1, // +1 for _system.js
-    apiRejected: apiAnalysis.rejected,
-    allowedHosts: allowResult.hosts || [],
-  });
+  success: true,
+  deploymentId,
+  url: cleanUrl,
+  serveUrl,
+  publicUrl: ownerUsername && project.slug ? buildLiveSiteUrl(ownerUsername, project) : null,
+  shortKey,
+  shortUrl,
+  versionId: resolvedVid,
+  filesWritten: totalWritten,
+  filesSkipped: regularWrite.skipped.length + apiWrite.skipped.length,
+  apiFileCount: apiAnalysis.totalFiles + 1, // +1 for _system.js
+  apiRejected: apiAnalysis.rejected,
+  allowedHosts: allowResult.hosts || [],
+});
 }
 
 async function handleRedeploy(req, res, reqId) {
@@ -2421,18 +2585,20 @@ async function handleDeploymentHistory(req, res, reqId) {
     }),
   );
 
+  // Dashboard preview base — stays on the editor (BASE_URL) because
+  // ?from= now requires editor session.
   const ownerUsername =
     project?.ownerUsername ||
     (project ? await getProjectOwnerUsername(pid, project) : null);
-  const cleanBase =
+  const previewBase =
     ownerUsername && project?.slug
       ? `${BASE_URL}/${encodeURIComponent(ownerUsername)}/project/${encodeURIComponent(project.slug)}`
       : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}`;
 
   for (const d of slice) {
     if (!d.hasSnapshot) { d.previewUrl = null; continue; }
-    const sep = cleanBase.includes("?") ? "&" : "?";
-    d.previewUrl = `${cleanBase}${sep}from=${encodeURIComponent(d.id)}`;
+    const sep = previewBase.includes("?") ? "&" : "?";
+    d.previewUrl = `${previewBase}${sep}from=${encodeURIComponent(d.id)}`;
   }
 
   const currentId = currentSnap.exists() ? currentSnap.val() : null;
@@ -2545,10 +2711,12 @@ function rewriteRelativeUrls(html, ctx) {
   const baseDir = currentPath.includes("/") ? currentPath.slice(0, currentPath.lastIndexOf("/") + 1) : "";
   const buildUrl = (target) => {
     const rel = target.startsWith("/") ? target.slice(1) : baseDir + target;
+    // Assets rewrite to the published origin (PUBLIC_SITE_BASE), so the
+    // editor domain never leaks into served HTML.
     const cleanBase =
       username && slug
-        ? `${BASE_URL}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/`
-        : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=`;
+        ? `${PUBLIC_SITE_BASE}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/`
+        : `${PUBLIC_SITE_BASE}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=`;
     const encoded = rel.split("/").map(encodeURIComponent).join("/");
     const params = new URLSearchParams();
     if (cacheKey) params.set("v", cacheKey);
@@ -2570,8 +2738,8 @@ function rewriteCssUrls(css, ctx) {
     const rel = ref.startsWith("/") ? ref.slice(1) : baseDir + ref;
     const cleanBase =
       username && slug
-        ? `${BASE_URL}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/`
-        : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=`;
+        ? `${PUBLIC_SITE_BASE}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/`
+        : `${PUBLIC_SITE_BASE}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=`;
     const encoded = rel.split("/").map(encodeURIComponent).join("/");
     const params = new URLSearchParams();
     if (cacheKey) params.set("v", cacheKey);
@@ -2688,9 +2856,10 @@ async function renderFolderListing(res, {
 
   const buildHref = (rel) => {
     const relPath = folderPath ? `${folderPath}/${rel}` : rel;
+    // Folder listing is a published-web surface — links use PUBLIC_SITE_BASE
     const base = username && slug
-      ? `${BASE_URL}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/${relPath.split("/").map(encodeURIComponent).join("/")}`
-      : `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=${encodeURIComponent(relPath)}`;
+      ? `${PUBLIC_SITE_BASE}/${encodeURIComponent(username)}/project/${encodeURIComponent(slug)}/${relPath.split("/").map(encodeURIComponent).join("/")}`
+      : `${PUBLIC_SITE_BASE}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=${encodeURIComponent(relPath)}`;
     const params = new URLSearchParams();
     if (cacheKey) params.set("v", cacheKey);
     if (fromId) params.set("from", fromId);
@@ -2737,22 +2906,33 @@ async function handleServe(req, res, reqId) {
     return sendText(404, "Not found");
   }
 
+  // ── Rate limit BEFORE any DB lookup ────────────────────────────
+  // Prevents an attacker from burning findProjectBySlug reads by
+  // hammering random usernames — the limit kicks in first.
+  if (!(await enforceRate(req, res, "serve", ipKey(req)))) return;
+
   let username = String(req.query?.username || "").trim().toLowerCase();
   let projectSlug = String(req.query?.project || "").trim();
   let pid = String(req.query?.pid || "").trim();
+
+  // Origin the user actually arrived on (foliosites vs foliostudios).
+  // Redirects must stay on the same origin, or the user gets bounced
+  // from the published domain into the editor.
+  const requestOrigin =
+    req.headers.host ? `https://${req.headers.host}` : PUBLIC_SITE_BASE;
 
   if (username) {
     try {
       const prev = await db.ref(`previousUsernames/${username}`).once("value");
       if (prev.exists() && prev.val() && prev.val() !== username) {
         const target = `/` + prev.val() + `/project/` + encodeURIComponent(projectSlug);
-        return res.redirect(301, `${BASE_URL}${target}`);
+        return res.redirect(301, `${requestOrigin}${target}`);
       }
     } catch {}
   }
 
   if (username && projectSlug) {
-    const found = await findProjectBySlug(username, projectSlug);
+    const found = await resolveBySlugIndex(username, projectSlug);
     if (found) {
       if (found.pid !== pid) pid = found.pid;
     } else if (pid) {
@@ -2761,7 +2941,7 @@ async function handleServe(req, res, reqId) {
         if (ps.exists()) {
           const map = ps.val() || {};
           if (map[projectSlug]) {
-            return res.redirect(301, `${BASE_URL}/${username}/project/${map[projectSlug]}`);
+            return res.redirect(301, `${requestOrigin}/${username}/project/${map[projectSlug]}`);
           }
         }
       } catch {}
@@ -2777,7 +2957,7 @@ async function handleServe(req, res, reqId) {
   if (!pid && !username) return sendText(400, "Missing pid or username/project");
 
   if (!pid && username && projectSlug) {
-    const found = await findProjectBySlug(username, projectSlug);
+    const found = await resolveBySlugIndex(username, projectSlug);
     if (!found) {
       return sendHtmlPage(res, {
         title: "Project not found", heading: "Project not found",
@@ -2787,8 +2967,6 @@ async function handleServe(req, res, reqId) {
     }
     pid = found.pid;
   }
-
-  if (!(await enforceRate(req, res, "serve", ipKey(req)))) return;
 
   const project = await getProjectCached(pid);
   if (!project) {
@@ -2808,7 +2986,7 @@ async function handleServe(req, res, reqId) {
       username || project.ownerUsername ||
       (await getProjectOwnerUsername(pid, project)) || "";
     if (ownerUsername && project.slug && project.visibility?.profile === "public") {
-      return res.redirect(301, `${BASE_URL}/${ownerUsername}/${project.slug}`);
+      return res.redirect(301, `${requestOrigin}/${ownerUsername}/${project.slug}`);
     }
     return sendHtmlPage(res, {
       title: "Not found", heading: "This site is not live",
@@ -2817,9 +2995,26 @@ async function handleServe(req, res, reqId) {
     });
   }
 
+  // ── OFFLINE check ───────────────────────────────────────────────
+  if (project.deployment?.state === "OFFLINE" && !canAccessPrivate) {
+    return sendHtmlPage(res, {
+      title: "Offline", heading: "This site is offline",
+      message: "The owner has taken this project offline.",
+      icon: "alert", status: 404,
+    });
+  }
+
+  // ── ?from= gating — historical deployments are editor-only ──────
   const fromId = String(req.query?.from || "").trim();
   let contentMap = null;
   if (fromId) {
+    if (!canAccessPrivate) {
+      return sendHtmlPage(res, {
+        title: "Not found", heading: "Not found",
+        message: "This deployment preview requires editor access.",
+        icon: "lock", status: 404,
+      });
+    }
     const dSnap = await db.ref(`projects/${pid}/deployments/${fromId}`).once("value");
     if (!dSnap.exists()) {
       return sendHtmlPage(res, {
@@ -2844,21 +3039,16 @@ async function handleServe(req, res, reqId) {
         icon: "alert", status: 404,
       });
     }
-    contentMap = snapshotToFiles(vSnap.val()?.files);
+    // Strip api/* from historical content maps — defense in depth.
+    const raw = snapshotToFiles(vSnap.val()?.files);
+    contentMap = {};
+    for (const [p, c] of Object.entries(raw)) {
+      if (p.startsWith("api/")) continue;
+      contentMap[p] = c;
+    }
   }
 
-  // ── Normalize path ──────────────────────────────────────────
-  // Vercel passes `path` in several shapes depending on how the
-  // rewrite captured the URL:
-  //
-  //   /user/project                    → path is undefined
-  //   /user/project/                   → path is "" or "/" or undefined
-  //   /user/project/index.html         → path is "index.html"
-  //   /user/project/css/app.css        → path is "css/app.css"
-  //   /user/project/view               → path is "view"
-  //
-  // All forms are normalized to a leading-slash-free, trailing-slash-
-  // free string. Empty means "serve index.html".
+  // ── Normalize path ──────────────────────────────────────────────
   let wantPath = String(req.query?.path || "").trim();
   wantPath = wantPath.replace(/^\/+/, "").replace(/\/+$/, "");
   if (!wantPath) {
@@ -2957,23 +3147,23 @@ async function handleServe(req, res, reqId) {
     });
 
     // ── Inject public secrets (only from live deployment) ───────
-if (!fromId) {
-  try {
-    const publicSecrets = await projectSecrets.readPublicSecrets(pid);
-    const pidJson = JSON.stringify(pid);
-    const secretsJson = (publicSecrets && Object.keys(publicSecrets).length > 0)
-      ? `window.__SECRETS__=Object.freeze(${JSON.stringify(publicSecrets).replace(/</g, "\\u003c")});`
-      : "";
-    const script = `<script>${secretsJson}window.__DN_PID__=${pidJson};</script>`;
-    if (/<\/head>/i.test(html)) {
-      html = html.replace(/<\/head>/i, script + "\n</head>");
-    } else {
-      html = script + html;
+    if (!fromId) {
+      try {
+        const publicSecrets = await projectSecrets.readPublicSecrets(pid);
+        const pidJson = JSON.stringify(pid);
+        const secretsJson = (publicSecrets && Object.keys(publicSecrets).length > 0)
+          ? `window.__SECRETS__=Object.freeze(${JSON.stringify(publicSecrets).replace(/</g, "\\u003c")});`
+          : "";
+        const script = `<script>${secretsJson}window.__DN_PID__=${pidJson};</script>`;
+        if (/<\/head>/i.test(html)) {
+          html = html.replace(/<\/head>/i, script + "\n</head>");
+        } else {
+          html = script + html;
+        }
+      } catch (err) {
+        log("host.serve.secrets_inject_failed", { pid, message: err.message });
+      }
     }
-  } catch (err) {
-    log("host.serve.secrets_inject_failed", { pid, message: err.message });
-  }
-}
 
     res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
     return res.status(200).send(html);
@@ -3017,6 +3207,62 @@ if (!fromId) {
 }
 
 // =========================================================================
+// SHORTLINK INFO — read-only view for the dashboard
+// =========================================================================
+//
+// Returns the current short key (if any) plus metadata from the
+// shortlink API (clicks, createdAt, etc). Owners get `canManage: true`
+// and can claim/release from the UI. Non-owners see read-only info.
+
+async function handleShortlinkInfo(req, res, reqId) {
+  const pid = String(req.query?.pid || "").trim();
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+
+  const access = await requireProjectRole(req, res, pid, "viewer");
+  if (!access) return;
+
+  const project = await getProjectCached(pid);
+  if (!project) return res.status(404).json({ success: false, error: "Project not found" });
+
+  const shortKey = project.shortKey || null;
+  let detail = null;
+
+  // Fetch click/metadata from the shortlink API (best-effort)
+  if (shortKey) {
+    try {
+      const upstream = await fetch(
+        `${PUBLIC_SITE_BASE}/api/shortlink?action=info&key=${encodeURIComponent(shortKey)}`,
+        { signal: AbortSignal.timeout(3000) },
+      );
+      if (upstream.ok) {
+        const json = await upstream.json().catch(() => ({}));
+        if (json?.success && json.data) {
+          detail = {
+            clicks: typeof json.data.clicks === "number" ? json.data.clicks : 0,
+            createdAt: json.data.createdAt || null,
+            lastAccessed: json.data.lastAccessed || null,
+            url: json.data.url || null,
+          };
+        }
+      }
+    } catch (err) {
+      log("host.shortlink_info.upstream_failed", { pid, message: err.message });
+    }
+  }
+
+  return res.status(200).json({
+    success: true,
+    pid,
+    hasShortlink: !!shortKey,
+    key: shortKey,
+    shortUrl: shortKey ? `${SHORT_URL}/${shortKey}` : null,
+    displayUrl: shortKey ? `${SHORT_URL.replace(/^https?:\/\//, "")}/${shortKey}` : null,
+    domain: SHORT_URL.replace(/^https?:\/\//, ""),
+    canManage: access.role === "owner",
+    detail,
+  });
+}
+// =========================================================================
 // API SYSTEM DEFAULT + API ROUTES
 // =========================================================================
 
@@ -3052,22 +3298,20 @@ async function handleApiRoutes(req, res, reqId) {
     ? filesSnap.val()
     : { files: [], count: 0, totalBytes: 0 };
 
-  // ✅ Build both URL styles
   const ownerUsername = project
     ? (project.ownerUsername || (await getProjectOwnerUsername(pid, project)))
     : null;
   const slug = project?.slug || null;
 
-  // Friendly URL — requires both username and slug
+  // Friendly URL — served on PUBLIC_SITE_BASE (the published domain)
   const friendlyBaseUrl =
     ownerUsername && slug
-      ? `${BASE_URL}/${encodeURIComponent(ownerUsername)}/project/${encodeURIComponent(slug)}/api`
+      ? `${PUBLIC_SITE_BASE}/${encodeURIComponent(ownerUsername)}/project/${encodeURIComponent(slug)}/api`
       : null;
 
-  // Direct URL — always works, no lookup needed
+  // Direct URL — served on BASE_URL (the editor domain)
   const directBaseUrl = `${BASE_URL}/api/${encodeURIComponent(pid)}`;
 
-  // Preferred URL for display in the dashboard
   const primaryBaseUrl = friendlyBaseUrl || directBaseUrl;
 
   return res.status(200).json({
@@ -3075,9 +3319,9 @@ async function handleApiRoutes(req, res, reqId) {
     system: routes.system || [],
     user: routes.user || [],
     maxFiles: MAX_API_FILES,
-    baseUrl: primaryBaseUrl,           // ← what the dashboard shows by default
-    friendlyBaseUrl,                    // ← null if username/slug unavailable
-    directBaseUrl,                      // ← always present
+    baseUrl: primaryBaseUrl,
+    friendlyBaseUrl,
+    directBaseUrl,
     ownerUsername: ownerUsername || null,
     slug: slug || null,
     pid,
@@ -3097,23 +3341,21 @@ async function handleApiRoutes(req, res, reqId) {
     },
   });
 }
+
 async function handleApiLogs(req, res, reqId) {
   const pid = String(req.query?.pid || "").trim();
   if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
 
   if (!(await enforceRate(req, res, "apiLogs", `pid_${pid}`))) return;
 
-  // Require at least editor access — logs may include error messages
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
-  // ── Pagination params ────────────────────────────────────────
   const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 20, 1), 50);
   const offset = Math.max(parseInt(req.query?.offset, 10) || 0, 0);
 
-  // ── Filters ──────────────────────────────────────────────────
   const routeFilter = String(req.query?.route || "").trim().toLowerCase();
-  const statusFilter = String(req.query?.status || "").trim(); // "error" | "ok" | exact code
+  const statusFilter = String(req.query?.status || "").trim();
   const viaFilter = String(req.query?.via || "").trim().toLowerCase();
   const sinceTs = parseInt(req.query?.since, 10) || 0;
 
@@ -3132,7 +3374,6 @@ async function handleApiLogs(req, res, reqId) {
     });
   }
 
-  // ── Collect all entries ──────────────────────────────────────
   const all = [];
   snap.forEach((child) => {
     const v = child.val() || {};
@@ -3146,11 +3387,10 @@ async function handleApiLogs(req, res, reqId) {
       errorName: v.errorName || null,
       errorMessage: v.errorMessage || null,
       via: v.via || "anon",
-      // ── NEW: richer error context ──────────────────────────
       ok: !v.errorName && v.status >= 200 && v.status < 400,
       errorClass: classifyApiError(v),
       requestId: v.requestId || null,
-      stage: v.stage || null,              // last run.timing stage if failed
+      stage: v.stage || null,
       bytesIn: v.bytesIn || null,
       bytesOut: v.bytesOut || null,
       fetchHosts: Array.isArray(v.fetchHosts) ? v.fetchHosts : [],
@@ -3160,7 +3400,6 @@ async function handleApiLogs(req, res, reqId) {
     });
   });
 
-  // ── Apply filters ────────────────────────────────────────────
   let filtered = all;
 
   if (routeFilter) {
@@ -3185,13 +3424,11 @@ async function handleApiLogs(req, res, reqId) {
     }
   }
 
-  // ── Sort newest-first ────────────────────────────────────────
   filtered.sort((a, b) => b.ts - a.ts);
 
   const total = filtered.length;
   const slice = filtered.slice(offset, offset + limit);
 
-  // ── Error summary (helps the UI show a breakdown) ────────────
   const errorSummary = {};
   for (const e of filtered) {
     if (e.ok) continue;
@@ -3207,7 +3444,7 @@ async function handleApiLogs(req, res, reqId) {
     offset,
     limit,
     hasMore: offset + limit < total,
-    max: 50, // ring-buffer cap
+    max: 50,
     filters: {
       route: routeFilter || null,
       status: statusFilter || null,
@@ -3221,6 +3458,27 @@ async function handleApiLogs(req, res, reqId) {
     },
   });
 }
+
+function classifyApiError(entry) {
+  if (!entry) return null;
+  const name = entry.errorName || "";
+  const msg = entry.errorMessage || "";
+  const status = Number(entry.status) || 0;
+
+  if (status === 504 || /timeout/i.test(name + msg)) return "timeout";
+  if (status === 429) return "rate_limit";
+  if (status === 413) return "payload_too_large";
+  if (status === 508) return "recursion_limit";
+  if (/SyntaxError/i.test(name)) return "syntax_error";
+  if (/TypeError/i.test(name)) return "type_error";
+  if (/ReferenceError/i.test(name)) return "reference_error";
+  if (/blockedbyclient|blocked/i.test(msg)) return "blocked_host";
+  if (/^net::|ERR_/i.test(msg)) return "network";
+  if (status >= 500) return "server_error";
+  if (status >= 400) return "client_error";
+  return null;
+}
+
 // =========================================================================
 // ALLOWED HOSTS — dashboard-added hosts
 // =========================================================================
@@ -3246,7 +3504,6 @@ async function handleHostsAdd(req, res, reqId) {
     return res.status(400).json({ success: false, error: "Cannot allow Folio's own infrastructure" });
   }
 
-  // Validate DNS + HTTPS unless it's a known-safe host
   if (!KNOWN_SAFE_HOSTS.has(h) && !BUILTIN_ALLOWED_HOSTS.has(h)) {
     const validation = await validateAllowHost(h);
     if (!validation.ok) {
@@ -3254,7 +3511,6 @@ async function handleHostsAdd(req, res, reqId) {
     }
   }
 
-  // Check the project hasn't hit the host limit
   const existingSnap = await db.ref(`projects/${pid}/allowedHosts`).once("value");
   const existing = existingSnap.exists() ? existingSnap.val() : {};
   if (!existing[h] && Object.keys(existing).length >= MAX_UNIQUE_ALLOW_HOSTS) {
@@ -3274,26 +3530,7 @@ async function handleHostsAdd(req, res, reqId) {
 
   return res.status(200).json({ success: true, host: h });
 }
-// ── Classify an API error for the dashboard ────────────────────
-function classifyApiError(entry) {
-  if (!entry) return null;
-  const name = entry.errorName || "";
-  const msg = entry.errorMessage || "";
-  const status = Number(entry.status) || 0;
 
-  if (status === 504 || /timeout/i.test(name + msg)) return "timeout";
-  if (status === 429) return "rate_limit";
-  if (status === 413) return "payload_too_large";
-  if (status === 508) return "recursion_limit";
-  if (/SyntaxError/i.test(name)) return "syntax_error";
-  if (/TypeError/i.test(name)) return "type_error";
-  if (/ReferenceError/i.test(name)) return "reference_error";
-  if (/blockedbyclient|blocked/i.test(msg)) return "blocked_host";
-  if (/^net::|ERR_/i.test(msg)) return "network";
-  if (status >= 500) return "server_error";
-  if (status >= 400) return "client_error";
-  return null;
-}
 // =========================================================================
 // PROJECTS CRUD
 // =========================================================================
@@ -3358,10 +3595,16 @@ async function handleProjectsGet(req, res, reqId) {
   } catch {}
 
   const { apiKeyHash, ...safe } = p;
-  return res.status(200).json({
-    success: true,
-    project: { pid, ...safe, fileCount, myRole: access.role },
-  });
+return res.status(200).json({
+  success: true,
+  project: {
+    pid,
+    ...safe,
+    fileCount,
+    myRole: access.role,
+    hasApiKey: !!apiKeyHash,
+  },
+});
 }
 
 async function handleProjectsCreate(req, res, reqId) {
@@ -3394,8 +3637,6 @@ async function handleProjectsCreate(req, res, reqId) {
     if (ownerUsername) {
       await db.ref(`projects/${project.pid}/ownerUsername`).set(ownerUsername).catch(() => {});
 
-      // ✅ NEW: populate slug index for the friendly API URL
-      //    /{username}/project/{slug}/api/{route}
       if (project.slug) {
         await db.ref(`projectSlugs/${ownerUsername}/${project.slug}`)
           .set(project.pid)
@@ -3489,8 +3730,7 @@ async function handleProjectsUpdate(req, res, reqId) {
           }
           if (Object.keys(updates).length) await db.ref().update(updates).catch(() => {});
 
-          // ✅ NEW: update slug index for the friendly API URL
-          //    Remove the old entry, add the new one.
+          // Update slug index for the friendly API URL
           try {
             const ownerUsername = await getProjectOwnerUsername(pid, existing);
             if (ownerUsername) {
@@ -3509,6 +3749,29 @@ async function handleProjectsUpdate(req, res, reqId) {
         }
       } catch {}
     }
+  }
+
+  // ── Username rename safety net ──────────────────────────────────
+  // If the owner changed their username since the last project save,
+  // migrate projectSlugs/{oldUsername}/* to {newUsername}/*. The
+  // primary migration runs in auth.js handleChangeUsername; this is
+  // a defensive catch for any drift.
+  try {
+    const ownerUsername = await getProjectOwnerUsername(pid, existing);
+    if (
+      ownerUsername &&
+      existing.ownerUsername &&
+      ownerUsername !== existing.ownerUsername &&
+      existing.slug
+    ) {
+      const updates = {};
+      updates[`projectSlugs/${existing.ownerUsername}/${existing.slug}`] = null;
+      updates[`projectSlugs/${ownerUsername}/${existing.slug}`] = pid;
+      await db.ref().update(updates);
+      patch.ownerUsername = ownerUsername;
+    }
+  } catch (err) {
+    log("host.projects_update.username_migration_failed", { pid, message: err.message });
   }
 
   patch.updatedAt = Date.now();
@@ -3591,9 +3854,7 @@ async function handleProjectsDelete(req, res, reqId) {
     projectName = nameSnap.exists() ? nameSnap.val() : "";
   } catch {}
 
-  // ✅ NEW: clean up slug index entries before delete
-  //    Removes projectSlugs/{username}/{slug} = pid so the friendly
-  //    API URL resolver doesn't return a stale pid after deletion.
+  // Clean up slug index entries before delete
   try {
     const ownerSnap = await db.ref(`projects/${pid}`).once("value");
     const ownerId = ownerSnap.val()?.ownerId;
@@ -3629,7 +3890,29 @@ async function handleProjectsDelete(req, res, reqId) {
   } catch (err) {
     log("host.projects_delete.secrets_cleanup_failed", { pid, message: err.message });
   }
-
+// ── Release the short link ────────────────────────────────────
+// Admin call — shortlink API tolerates a missing pid on the record
+// (project may already be gone by the time we get here).
+try {
+  const keySnap = await db.ref(`projects/${pid}/shortKey`).once("value");
+  const shortKey = keySnap.exists() ? keySnap.val() : null;
+  if (shortKey) {
+    await fetch(
+      `${PUBLIC_SITE_BASE}/api/shortlink?action=release&key=${encodeURIComponent(shortKey)}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.ADMIN_API_KEY || "",
+        },
+        body: JSON.stringify({ pid }),
+        signal: AbortSignal.timeout(3000),
+      },
+    ).catch(() => {});
+  }
+} catch (err) {
+  log("host.projects_delete.shortlink_release_failed", { pid, message: err.message });
+}
   try {
     await deleteProjectRecord(pid, access.uid);
     invalidateProject(pid);
@@ -4072,7 +4355,6 @@ async function handleFileList(req, res, reqId) {
     filesSnap.forEach((child) => {
       const v = child.val() || {};
       const p = v.path || child.key.replace(/__/g, "/");
-      // Never expose api/* files through the file list
       if (p.startsWith("api/")) return;
       if (enforceFileList) {
         const safePath = sanitizeFirebasePath(p.replace(/\//g, "__"));
@@ -4104,7 +4386,6 @@ async function handleFileGet(req, res, reqId) {
   if (!isValidFilePath(filePath)) return res.status(400).json({ success: false, error: "Invalid path" });
   if (!(await enforceRate(req, res, "fileGet", `pid_${pid}`))) return;
 
-  // Never serve api/* files
   if (filePath.startsWith("api/")) {
     return res.status(404).json({ success: false, error: "File not found" });
   }
@@ -4154,7 +4435,6 @@ async function handleFileDelete(req, res, reqId) {
   const access = await requireProjectRole(req, res, pid, "editor");
   if (!access) return;
 
-  // Route to the correct tree
   const isApi = filePath.startsWith("api/");
   const tree = isApi ? "api-files" : "files";
   const rel = isApi ? filePath.slice(4) : filePath;
@@ -4311,7 +4591,6 @@ async function handleProjectHydrate(req, res, reqId) {
     filesSnap.forEach((child) => {
       const v = child.val() || {};
       const p = v.path || child.key.replace(/__/g, "/");
-      // Never hydrate api/* files
       if (p.startsWith("api/")) return;
       if (v.path && typeof v.content === "string") files[v.path] = v.content;
     });
@@ -4370,6 +4649,11 @@ async function handleProjectCopy(req, res, reqId) {
     const ownerUsername = user.profile?.username;
     if (ownerUsername) {
       await db.ref(`projects/${newProject.pid}/ownerUsername`).set(ownerUsername).catch(() => {});
+      if (newProject.slug) {
+        await db.ref(`projectSlugs/${ownerUsername}/${newProject.slug}`)
+          .set(newProject.pid)
+          .catch(() => {});
+      }
     }
   } catch (err) {
     log("host.project_copy.create_failed", { reqId, uid: user.uid, message: err.message });
@@ -4386,7 +4670,6 @@ async function handleProjectCopy(req, res, reqId) {
       const p = v.path;
       const content = v.content || "";
       if (!p) return;
-      // Never copy api/* files
       if (p.startsWith("api/")) return;
       if (!canFullCopy) {
         const safePath = sanitizeFirebasePath(p.replace(/\//g, "__"));
@@ -4950,7 +5233,6 @@ async function handleApiKeyGenerate(req, res, reqId) {
   await db.ref(`projects/${pid}`).update({ apiKeyHash: hash, apiKeyCreatedAt: Date.now() });
   invalidateProject(pid);
 
-  // Store as FOLIO_API_KEY secret (private, internal-write to bypass reserved check)
   let storedInEnv = false;
   try {
     await projectSecrets.setSecret(
@@ -5077,6 +5359,130 @@ async function lookupInviteByToken(token) {
     return { key: tokenHash, invite };
   }
   return null;
+}
+// =========================================================================
+// SHORTLINK CLAIM — proxies to the shortlink API
+// =========================================================================
+//
+// The dashboard posts { pid, baseName, strategy, confirmed }.
+// We derive the destination URL from the project record (never trust
+// the client's URL) and forward to the shortlink API. If the API
+// returns 409 with suggestions, the client renders the collision picker.
+
+async function handleShortlinkClaim(req, res, reqId) {
+  const { pid, baseName, strategy, confirmed } = req.body || {};
+
+  if (!pid || !baseName || !strategy) {
+    return res.status(400).json({ success: false, error: "Missing pid, baseName, or strategy" });
+  }
+  if (!["custom", "userproj"].includes(strategy)) {
+    return res.status(400).json({ success: false, error: "Invalid strategy" });
+  }
+
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  const project = await getProjectCached(pid);
+  if (!project) return res.status(404).json({ success: false, error: "Project not found" });
+
+  const ownerUsername = await getProjectOwnerUsername(pid, project);
+  if (!ownerUsername || !project.slug) {
+    return res.status(400).json({
+      success: false,
+      error: "Deploy the project first — the short link needs a live URL",
+    });
+  }
+
+  const targetUrl = buildLiveSiteUrl(ownerUsername, project);
+
+  try {
+    const upstream = await fetch(`${PUBLIC_SITE_BASE}/api/shortlink?action=claim`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ADMIN_API_KEY || "",
+      },
+      body: JSON.stringify({
+        pid,
+        url: targetUrl,
+        imageUrl: project.thumbnail?.url || null,
+        name: project.name || "",
+        baseName,
+        strategy,
+        confirmed: !!confirmed,
+      }),
+      signal: AbortSignal.timeout(6000),
+    });
+
+    const data = await upstream.json().catch(() => ({}));
+
+    if (upstream.status === 409 && Array.isArray(data.suggestions)) {
+      return res.status(409).json(data);
+    }
+    if (!upstream.ok || !data.success) {
+      return res.status(upstream.status || 500).json(data);
+    }
+
+    await db.ref(`projects/${pid}/shortKey`).set(data.key).catch(() => {});
+    await db.ref(`projects/${pid}/shortUrl`).set(data.shortUrl).catch(() => {});
+    invalidateProject(pid);
+
+    return res.status(200).json(data);
+  } catch (err) {
+    log("host.shortlink_claim.error", { pid, message: err.message });
+    return res.status(502).json({ success: false, error: "Shortlink service unreachable" });
+  }
+}
+// =========================================================================
+// SHORTLINK RELEASE — frees a key from the shortlink API
+// =========================================================================
+
+async function handleShortlinkRelease(req, res, reqId) {
+  const pid = String(req.body?.pid || req.query?.pid || "").trim();
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  const project = await getProjectCached(pid);
+  if (!project) return res.status(404).json({ success: false, error: "Project not found" });
+
+  const shortKey = project.shortKey || null;
+  if (!shortKey) {
+    return res.status(200).json({ success: true, released: false, reason: "no_key" });
+  }
+
+  try {
+    const upstream = await fetch(
+      `${PUBLIC_SITE_BASE}/api/shortlink?action=release&key=${encodeURIComponent(shortKey)}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.ADMIN_API_KEY || "",
+        },
+        body: JSON.stringify({ pid }),
+        signal: AbortSignal.timeout(4000),
+      },
+    );
+
+    if (!upstream.ok) {
+      const data = await upstream.json().catch(() => ({}));
+      return res.status(upstream.status || 502).json({
+        success: false,
+        error: data.error || "Release failed",
+      });
+    }
+
+    await db.ref(`projects/${pid}/shortKey`).remove().catch(() => {});
+    await db.ref(`projects/${pid}/shortUrl`).remove().catch(() => {});
+    invalidateProject(pid);
+
+    return res.status(200).json({ success: true, released: true, key: shortKey });
+  } catch (err) {
+    log("host.shortlink_release.error", { pid, message: err.message });
+    return res.status(502).json({ success: false, error: "Shortlink service unreachable" });
+  }
 }
 
 async function handleInviteCreate(req, res, reqId) {
@@ -5322,9 +5728,9 @@ async function handleShare(req, res, reqId) {
       if (owner) found = { pid: pidParam, project: p, owner };
     }
   } else if (username && slug) {
-    const bySlug = await findProjectBySlug(username, slug);
+    const bySlug = await resolveBySlugIndex(username, slug);
     if (bySlug) {
-      const owner = bySlug.owner || (await getUserByUsername(username));
+      const owner = await getUserByUsername(username);
       if (owner) found = { ...bySlug, owner };
     }
   }
@@ -5384,7 +5790,8 @@ async function handleShare(req, res, reqId) {
     const hasLiveDeployment = project.deployment?.state === "READY" && !!project.slug;
     const ownerUsername = owner.profile?.username || username || project.ownerUsername || "";
     if (liveSitePublic && hasLiveDeployment && ownerUsername) {
-      return res.redirect(302, `${BASE_URL}/${encodeURIComponent(ownerUsername)}/project/${encodeURIComponent(project.slug)}`);
+      // Redirect to the published live site — PUBLIC_SITE_BASE.
+      return res.redirect(302, buildLiveSiteUrl(ownerUsername, project));
     }
     return sendHtmlPage(res, {
       title: "Private project", heading: "This project page is private",
@@ -5400,6 +5807,7 @@ async function handleShare(req, res, reqId) {
 
   const ownerUsername = owner.profile?.username || username || project.ownerUsername || "";
 
+  // Share page URL stays on the editor domain (that's where the page lives).
   const detailsUrl = ownerUsername && project.slug
     ? buildProjectCleanUrl(ownerUsername, project, pid)
     : `${BASE_URL}/p/${pid}`;
@@ -5410,7 +5818,13 @@ async function handleShare(req, res, reqId) {
     : null;
 
   const canCopy = isProfilePublic && isSignedIn && !viewerIsOwner;
-
+// URL display components for the template
+const liveUrlDisplay = liveUrl
+  ? renderUrlDisplay(liveUrl, { label: "Live" })
+  : "";
+const shortUrlDisplay = project.shortKey
+  ? renderUrlDisplay(`${SHORT_URL}/${project.shortKey}`, { label: "Short" })
+  : "";
   const resolvedMeta = await resolveProjectMeta(pid, project);
   const ogImageUrl = resolvedMeta.ogImage || null;
 
@@ -5443,13 +5857,13 @@ async function handleShare(req, res, reqId) {
     ? `<button class="btn secondary" data-action="view-code" type="button">${inlineSvg("code", 14)} View code</button>`
     : "";
 
-  const projectIconHtml = projectIconHtmlFor(project);
-  const ownerAvatarHtml = avatarHtmlFor(owner.profile, { size: 32, username: ownerUsername });
+  const projectIconHtml = projectIconHtmlFor(project, 48);
+  const ownerAvatarHtml = avatarHtmlFor(owner.profile, { size: 22, username: ownerUsername });
   const updatedAgo = formatTimeAgo(project.updatedAt);
   const createdLabel = formatDate(project.createdAt);
 
   const ownerAvatarUrl = owner.profile?.avatarUrl || null;
-  const ownerProfileUrl = ownerUsername ? `/${ownerUsername}` : `${BASE_URL}`;
+  const ownerProfileUrl = ownerUsername ? `${BASE_URL}/${ownerUsername}` : `${BASE_URL}`;
   const ownerDisplayName = owner.profile?.displayName || ownerUsername || "Anonymous";
 
   const contributors = await getVisibleContributors(pid, project, { viewerUid });
@@ -5490,6 +5904,7 @@ async function handleShare(req, res, reqId) {
     ogImageTemplate: project.ogImage?.template || null,
     ogImageGeneratedAt: project.ogImage?.generatedAt || null,
     baseUrl: BASE_URL,
+    publicSiteBase: PUBLIC_SITE_BASE,
     editorUrl: viewerIsOwner ? `${BASE_URL}/project?pid=${pid}` : null,
   };
   const projectScript = `<script>window.__PROJECT__ = ${JSON.stringify(payload).replace(/</g, "\\u003c")};</script>`;
@@ -5500,6 +5915,8 @@ async function handleShare(req, res, reqId) {
   const projectPreviewHtml = projectThumbnailUrl
     ? `<div class="project-hero"><img class="project-hero-image" src="${escapeHtml(projectThumbnailUrl)}" alt="${escapeHtml(project.name || "")} preview" loading="lazy" /></div>`
     : "";
+  // Boolean flag for the template's `.hero-block` layout class
+const hasPreview = !!projectPreviewHtml;
 
   const ogPreviewHtml = viewerIsOwner && ogImageUrl
     ? `<div class="og-preview-panel"><div class="og-preview-head"><span class="og-preview-label">Share preview</span><span class="og-preview-badge">${escapeHtml(project.ogImage?.template || "auto")}</span></div><img class="og-preview-image" src="${escapeHtml(ogImageUrl)}" alt="OG preview" loading="lazy" /></div>`
@@ -5531,7 +5948,10 @@ async function handleShare(req, res, reqId) {
       LIVE_BUTTON_HTML: { raw: liveButtonHtml },
       CODE_BUTTON_HTML: { raw: codeButtonHtml },
       LIVE_BADGE_HTML: { raw: liveBadge },
-      OG_TITLE: project.metaTags?.title || project.name || project.slug || "",
+LIVE_URL_DISPLAY: { raw: liveUrlDisplay },
+PROJECT_SHORT_URL_DISPLAY: { raw: shortUrlDisplay },
+PROJECT_HAS_PREVIEW: hasPreview ? "true" : "false",
+OG_TITLE: project.metaTags?.title || project.name || project.slug || "",
       OG_DESCRIPTION: resolvedMeta.description || "",
       OG_IMAGE_META: { raw: ogImageMeta },
       TWITTER_IMAGE_META: { raw: twitterImageMeta },
@@ -5637,53 +6057,27 @@ async function handleProfilePublic(req, res, reqId) {
       if (t?.exists() && isValidOgUrl(t.val())) thumbnailUrl = t.val();
     } catch {}
 
+    // Profile card URL — the project share page lives on BASE_URL.
     const url = p.slug ? `${BASE_URL}/${username}/${p.slug}` : `${BASE_URL}/p/${pid}`;
+    // Live-site button — PUBLIC_SITE_BASE.
     const hasLiveDeployment = p.deployment?.state === "READY" && !!p.slug;
     const liveUrl = p.visibility?.liveSite === "public" && hasLiveDeployment
-      ? `${BASE_URL}/${username}/project/${p.slug}`
+      ? buildLiveSiteUrl(username, p)
       : null;
 
     projectList.push({
-      pid, slug: p.slug || "", name: p.name || "Untitled",
-      description: p.description || "",
-      iconUrl: p.iconUrl || null, thumbnailUrl,
-      languages: p.visibility?.languages !== "private" ? p.languages?.breakdown || {} : {},
-      updatedAt: p.updatedAt || null,
-      url, liveUrl,
-      deploymentUrl: p.deployment?.url || null,
-      viewCount: typeof p.viewCount === "number" ? p.viewCount : 0,
-    });
+  pid, slug: p.slug || "", name: p.name || "Untitled",
+  description: p.description || "",
+  iconUrl: p.iconUrl || null, thumbnailUrl,
+  languages: p.visibility?.languages !== "private" ? p.languages?.breakdown || {} : {},
+  updatedAt: p.updatedAt || null,
+  url, liveUrl,
+  liveUrlDisplay: liveUrl ? renderUrlDisplay(liveUrl, { label: "live" }) : "",
+  deploymentUrl: p.deployment?.url || null,
+  viewCount: typeof p.viewCount === "number" ? p.viewCount : 0,
+});
   }
   projectList.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
-  const grid = projectList.length > 0
-    ? projectList.map((pr) => {
-        const iconHtml = pr.iconUrl
-          ? `<img src="${escapeHtml(pr.iconUrl)}" alt="" style="width:44px;height:44px;border-radius:11px;object-fit:cover;display:block;">`
-          : `<span style="display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:11px;background:linear-gradient(135deg,#F59E0B,#f97316);color:#0a0c10;font-weight:800;font-size:15px;">${escapeHtml(initialsOf(pr.name))}</span>`;
-        const thumbHtml = pr.thumbnailUrl
-          ? `<div class="project-card-thumb" style="background-image:url('${escapeHtml(pr.thumbnailUrl)}')"></div>`
-          : `<div class="project-icon">${iconHtml}</div>`;
-        const langBadges = Object.entries(pr.languages).slice(0, 3)
-          .map(([n, v]) => `<span class="lang-badge"><span class="lang-dot"></span>${escapeHtml(n)} ${v}%</span>`)
-          .join("");
-        return `
-          <a class="project-card" href="${escapeHtml(pr.url)}">
-            ${thumbHtml}
-            <div class="project-card-body">
-              <h3 class="project-name">${escapeHtml(pr.name)}</h3>
-              ${pr.description ? `<p class="project-desc">${escapeHtml(pr.description)}</p>` : ""}
-              ${langBadges ? `<div class="card-badges">${langBadges}</div>` : ""}
-              <span class="project-time">${formatTimeAgo(pr.updatedAt)}</span>
-            </div>
-          </a>`;
-      }).join("")
-    : `<div class="empty-state">
-        <div class="empty-icon">${inlineSvg("folder", 22)}</div>
-        <h3>No public projects yet</h3>
-        <p>${isOwner ? "Publish a project to see it here." : `When @${escapeHtml(username)} publishes a project, it will appear here.`}</p>
-        ${isOwner ? `<a class="btn primary" href="${BASE_URL}/projects">${inlineSvg("folder", 14)} Manage projects</a>` : ""}
-      </div>`;
 
   const ownerControls = isOwner
     ? `<div class="owner-controls">
@@ -5693,8 +6087,10 @@ async function handleProfilePublic(req, res, reqId) {
     : "";
 
   const avatarHtml = avatarHtmlFor(user.profile, { size: 96, username });
-  const bioBlock = user.profile?.bio ? `<p class="profile-bio">${escapeHtml(user.profile.bio)}</p>` : "";
-  const linksEntries = Object.entries(user.profile?.links || {});
+  // Emit plain text 
+const bioBlock = user.profile?.bio ? escapeHtml(user.profile.bio) : "";
+  const linksEntries = Object.entries(user.profile?.links || {})
+    .filter(([, v]) => typeof v === "string" && /^https?:\/\//.test(v));
   const linksBlock = linksEntries.length
     ? `<div class="profile-links">${linksEntries
         .map(([k, v]) => `<a class="profile-link" href="${escapeHtml(v)}" target="_blank" rel="noopener">${escapeHtml(k)}</a>`)
@@ -5728,6 +6124,7 @@ async function handleProfilePublic(req, res, reqId) {
     ogImageGeneratedAt: user.profile?.ogImage?.generatedAt || null,
     palette: user.profile?.ogImage?.palette || null,
     baseUrl: BASE_URL,
+    publicSiteBase: PUBLIC_SITE_BASE,
     projects: projectList,
     links: user.profile?.links || {},
   };
@@ -5746,7 +6143,7 @@ async function handleProfilePublic(req, res, reqId) {
       BIO_BLOCK: { raw: bioBlock },
       LINKS_BLOCK: { raw: linksBlock },
       OWNER_CONTROLS: { raw: ownerControls },
-      PROJECT_GRID: { raw: grid },
+      PROJECT_GRID: { raw: "" },
       PROJECT_COUNT: String(projectList.length),
       JOINED_AT: formatDate(user.createdAt, { withDay: true }),
       VIEWER_IS_OWNER: String(isOwner),
@@ -5801,6 +6198,41 @@ async function handleView(req, res, reqId) {
   const visitorHash = crypto.createHash("sha256").update(`${ip}|${ua}|${today}`).digest("hex").slice(0, 12);
   await db.ref(`analytics/${user.uid}/profile/views/${today}/${visitorHash}`).set({ ts: Date.now() });
   return res.status(200).json({ success: true });
+}
+
+// =========================================================================
+// VERIFY SESSION — for api/run.js sandbox scripts
+// =========================================================================
+//
+// User scripts receive REQ.headers.authorization but have no way to
+// validate a JWT (JWT_SECRET must not be exposed to the sandbox). This
+// action gives them a safe way to check the token, and returns the uid
+// and username so scripts can gate their own endpoints.
+//
+// Called internally by api/run.js's request interceptor for
+// /api/host?action=verify-session — never leaves the sandbox.
+
+async function handleVerifySession(req, res, reqId) {
+  const auth = req.headers.authorization || "";
+  if (!auth.startsWith("Bearer ")) {
+    return res.status(200).json({ valid: false });
+  }
+  const decoded = verifySession(auth.slice(7).trim());
+  if (!decoded?.uid) {
+    return res.status(200).json({ valid: false });
+  }
+  const user = await getUser(decoded.uid);
+  if (!user) {
+    return res.status(200).json({ valid: false });
+  }
+  if (user.mode === "banned") {
+    return res.status(200).json({ valid: false, reason: "banned" });
+  }
+  return res.status(200).json({
+    valid: true,
+    uid: decoded.uid,
+    username: user.profile?.username || null,
+  });
 }
 
 async function handleLogs(req, res, reqId) {
@@ -5887,10 +6319,7 @@ async function handleClientError(req, res, reqId) {
 export default async function handler(req, res) {
   const reqId = newReqId();
   res.setHeader("X-Request-Id", reqId);
-  res.setHeader("Access-Control-Allow-Origin", BASE_URL);
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Project-Key");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+  setCorsHeaders(req, res);
   if (req.method === "OPTIONS") return res.status(204).end();
 
   const action = String(req.query?.action || req.body?.action || "").trim();
@@ -5990,9 +6419,9 @@ export default async function handler(req, res) {
     if (method === "GET" && action === "api-routes")
       return await handleApiRoutes(req, res, reqId);
     if (method === "GET" && action === "api-logs")
-  return await handleApiLogs(req, res, reqId);
+      return await handleApiLogs(req, res, reqId);
     if (method === "POST" && action === "hosts/add")
-  return await handleHostsAdd(req, res, reqId);
+      return await handleHostsAdd(req, res, reqId);
 
     if (method === "POST" && action === "apikey/generate")
       return await handleApiKeyGenerate(req, res, reqId);
@@ -6000,6 +6429,10 @@ export default async function handler(req, res) {
       return await handleVisibility(req, res, reqId);
     if (method === "POST" && action === "file-visibility")
       return await handleFileVisibility(req, res, reqId);
+    if (method === "POST" && action === "shortlink/claim")
+  return await handleShortlinkClaim(req, res, reqId);
+if (method === "DELETE" && action === "shortlink/release")
+  return await handleShortlinkRelease(req, res, reqId);
     if (method === "POST" && action === "invite/create")
       return await handleInviteCreate(req, res, reqId);
     if (method === "GET" && action === "invite/list")
@@ -6020,6 +6453,10 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "view")
       return await handleView(req, res, reqId);
 
+    if (method === "GET" && action === "verify-session")
+      return await handleVerifySession(req, res, reqId);
+if (method === "GET" && action === "shortlink/info")
+  return await handleShortlinkInfo(req, res, reqId);
     if (method === "GET" && action === "logs")
       return await handleLogs(req, res, reqId);
 
@@ -6057,4 +6494,6 @@ export {
   injectMetaIntoHtml,
   getProjectCached,
   BASE_URL,
+  PUBLIC_SITE_BASE,
+  SHORT_URL,
 };

@@ -12,59 +12,33 @@
 //       → Vercel rewrite → /api/run?pid=…&route=…
 //       → runtime uses pid directly (no lookup)
 //
-//  Both produce the same invocation. The direct URL is faster
-//  (no slug resolution); the friendly URL is what users document.
-//
 //  ⚠  AUTH MODEL
 //  The runtime does NOT require authentication. The user's script
-//  decides what needs a token — e.g. notes.js handles register,
-//  login, and public-get without a session, and calls requireAuth()
-//  internally for the rest. Gating at the runtime level would block
-//  public endpoints.
+//  decides what needs a token. Use /api/host?action=verify-session
+//  inside the sandbox to validate REQ.headers.authorization.
 //
 //  ⚠  SANDBOX ORIGIN
 //  The user script runs inside a real HTTPS origin on Folio's own
 //  domain: ${BASE_URL}/__sandbox. The request interceptor serves
 //  the sandbox HTML for that URL, so no network call is ever made.
-//  The origin matters because about:blank is not a secure context —
-//  crypto.subtle, localStorage, navigator.clipboard, relative fetch,
-//  and every other secure-context API are unavailable there. On a
-//  real HTTPS origin they all work.
 //
 //  ⚠  CHROMIUM MIN
-//  We use @sparticuz/chromium-min (not @sparticuz/chromium). The
-//  full package relies on runtime environment detection to decide
-//  whether to extract its shared-library archive — that detection
-//  fails on Vercel Node 20+/24, leaving Chromium without libnspr4.so
-//  and libnss3.so. The -min variant downloads a pack from a URL you
-//  provide, so it never tries to detect the environment.
+//  We use @sparticuz/chromium-min (not @sparticuz/chromium).
+//  See CHROMIUM_PACK_URL below.
 //
 //  ⚠  LD_LIBRARY_PATH
-//  Do NOT override process.env.LD_LIBRARY_PATH manually. The
-//  chromium-min package sets it to point at the extracted libraries
-//  (e.g. /tmp/al2023/lib), where libnspr4.so and libnss3.so live.
-//  Overwriting it with path.dirname(executablePath) (/tmp) breaks
-//  the browser launch because the libs aren't actually there.
+//  Do NOT override process.env.LD_LIBRARY_PATH manually. chromium-min
+//  sets it to /tmp/al2023/lib where the shared libs live.
 //
 //  ⚠  SYSTEM vs USER ROUTES
-//  System routes (health, whoami, files, status, version, robots)
-//  are all served by a single file: _system.js. It branches
-//  internally on REQ.route. loadRouteFile handles the fallback.
-//
-//  ⚠  LATENCY NOTE
-//  On Vercel free tier, every invocation launches Chromium fresh
-//  (~1.5–2s cold start). Serverless functions cannot keep processes
-//  alive between calls on free tier. Expect ~2s per /api/* call.
-//
-//  ⚠  STAGE TIMING LOGS
-//  Every major stage emits log("run.timing", { reqId, stage, elapsed }).
-//  When a function times out at 30s, the last stage tag in the Vercel
-//  logs tells you exactly which step consumed the budget.
+//  System routes (health, whoami, files, status, version, robots) are
+//  served by _system.js. User routes are api/{route}.js.
 // ═══════════════════════════════════════════════════════════════════
 
 import fs from "node:fs";
 import crypto from "node:crypto";
 import net from "node:net";
+import path from "node:path";
 import { db } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import {
@@ -89,6 +63,10 @@ const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ||
   "https://foliostudios.vercel.app";
 
+const PUBLIC_SITE_BASE =
+  process.env.PUBLIC_SITE_BASE ||
+  BASE_URL;
+
 const USER_CODE_TIMEOUT_MS = 7000;
 const PAGE_SETUP_TIMEOUT_MS = 5000;
 const CHROMIUM_LAUNCH_TIMEOUT_MS = 15000;
@@ -97,14 +75,10 @@ const MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const MAX_RECURSION_DEPTH = 3;
 
-// Chromium pack URL — @sparticuz/chromium-min downloads and extracts
-// this tarball on first use. Version must match the minor line of the
-// installed package (@sparticuz/chromium-min@^141.0.0).
+// Chromium pack URL — @sparticuz/chromium-min downloads this on first use.
 const CHROMIUM_PACK_URL =
   "https://github.com/Sparticuz/chromium/releases/download/v141.0.0/chromium-v141.0.0-pack.x64.tar";
 
-// API hosts that are safe for any script to reach, no declaration
-// or validation needed. Keep this list short and curated.
 const BUILTIN_ALLOWED_HOSTS = new Set([
   "api.openai.com",
   "api.groq.com",
@@ -118,8 +92,6 @@ const BUILTIN_ALLOWED_HOSTS = new Set([
   "gist.githubusercontent.com",
 ]);
 
-// Image hosts — trusted, always allowed. These are the reason
-// "image search failed" doesn't happen on every new provider.
 const TRUSTED_IMAGE_HOSTS = new Set([
   "picsum.photos",
   "fastly.picsum.photos",
@@ -150,18 +122,64 @@ const RATE_LIMITS = {
   perProjectPerRouteHour: { max: 100, window: 60 * 60 * 1000 },
 };
 
-const SLUG_CACHE_TTL = 60 * 1000; // 60 seconds
+const SLUG_CACHE_TTL = 60 * 1000;
 const SLUG_CACHE_MAX = 500;
+
+// =========================================================================
+// CORS — origins loaded from public/assets/domains.json
+// =========================================================================
+
+let _corsOrigins = null;
+
+function loadCorsOrigins() {
+  if (_corsOrigins) return _corsOrigins;
+  const envOverride = process.env.CORS_ORIGINS;
+  if (envOverride) {
+    _corsOrigins = new Set(
+      envOverride.split(",").map((s) => s.trim()).filter(Boolean),
+    );
+    return _corsOrigins;
+  }
+  try {
+    const p = path.join(process.cwd(), "public", "assets", "domains.json");
+    const raw = fs.readFileSync(p, "utf8");
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed?.origins) ? parsed.origins : [];
+    _corsOrigins = new Set(list.map((s) => String(s).trim()).filter(Boolean));
+  } catch (err) {
+    log("run.cors.load_failed", { message: err.message });
+    _corsOrigins = new Set([
+      BASE_URL,
+      PUBLIC_SITE_BASE,
+    ].filter(Boolean));
+  }
+  return _corsOrigins;
+}
+
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin || "";
+  const allowed = loadCorsOrigins();
+  if (origin && allowed.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  } else {
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Project-Key, X-Recursion-Depth, X-Caller-Route",
+  );
+  res.setHeader("Access-Control-Max-Age", "600");
+}
 
 // =========================================================================
 // API LOGS — per-project ring buffer (max 50 entries)
 // =========================================================================
-//
-// Recorded only for user routes (`api/*.js`). System routes
-// (health, whoami, files, status, version, robots) are skipped.
-//
-// Stored at apiLogs/{pid}/{entryId}. Pruned to 50 by timestamp on
-// every write. Read via the `host` action `?action=api-logs`.
 
 const API_LOGS_MAX = 50;
 
@@ -177,7 +195,6 @@ async function recordApiLog(pid, entry) {
       errorName: entry.errorName ? String(entry.errorName).slice(0, 100) : null,
       errorMessage: entry.errorMessage ? String(entry.errorMessage).slice(0, 500) : null,
       via: entry.via || "anon",
-      // ── new context fields ────────────────────────────────
       requestId: entry.requestId ? String(entry.requestId).slice(0, 60) : null,
       stage: entry.stage ? String(entry.stage).slice(0, 60) : null,
       bytesIn: Number.isFinite(entry.bytesIn) ? Math.max(0, entry.bytesIn) : null,
@@ -216,10 +233,6 @@ async function recordApiLog(pid, entry) {
 // =========================================================================
 // STAGE TIMING HELPER
 // =========================================================================
-//
-// Emits a log line with the elapsed time since the request started.
-// Call at every stage boundary. When the function hits maxDuration,
-// the last logged stage is the one that hung.
 
 let _lastStage = null;
 
@@ -266,7 +279,6 @@ async function resolveProjectBySlug(username, slug) {
   const cached = slugCacheGet(username, slug);
   if (cached) return cached;
 
-  // Fast path: slug index
   try {
     const idxSnap = await db
       .ref(`projectSlugs/${username}/${slug}`)
@@ -282,7 +294,6 @@ async function resolveProjectBySlug(username, slug) {
     log("run.slug_index_lookup_failed", { username, slug, message: err.message });
   }
 
-  // Fallback: scan this user's projects
   try {
     const userSnap = await db.ref(`usernames/${username}`).once("value");
     if (!userSnap.exists()) return null;
@@ -303,7 +314,6 @@ async function resolveProjectBySlug(username, slug) {
     });
 
     if (foundPid) {
-      // Self-heal the index
       db.ref(`projectSlugs/${username}/${slug}`)
         .set(foundPid)
         .catch(() => {});
@@ -375,14 +385,6 @@ async function enforceRate(sessionId, pid, route) {
 // =========================================================================
 // AUTH
 // =========================================================================
-//
-// authenticate() returns the caller when a valid session or project key
-// is present, or null when there isn't one. It's used to attribute rate
-// limits and log entries — NOT to gate execution.
-//
-// The user's script decides what requires auth. For example, notes.js
-// exposes register/login/public-get without a session, and calls its
-// own requireAuth() for the rest.
 
 async function authenticate(req, pid) {
   const apiKey = req.headers["x-project-key"];
@@ -421,20 +423,9 @@ async function authenticate(req, pid) {
 const ALLOW_LINE_RE = /^\s*\/\/\s*@allow\s+(\S+)\s*$/gm;
 const ALLOW_HOST_LINE_RE = /^\s*\/\/\s*@allow-host\s+(\S+)\s*$/gm;
 
-// -------------------------------------------------------------------
-// extractAllowHosts — detects every external host the script references
-// -------------------------------------------------------------------
-// Scans for:
-//   1. Explicit @allow / @allow-host comments
-//   2. Literal https://host/... URLs anywhere in the source
-//
-// Templates with ${...} are NOT resolved — those hosts must be
-// declared explicitly or added via the dashboard.
-// -------------------------------------------------------------------
 function extractAllowHosts(source) {
   const hosts = new Set();
 
-  // 1. Explicit @allow / @allow-host comments
   for (const re of [ALLOW_LINE_RE, ALLOW_HOST_LINE_RE]) {
     re.lastIndex = 0;
     let m;
@@ -444,14 +435,6 @@ function extractAllowHosts(source) {
     }
   }
 
-  // 2. Literal https://host/... URLs in the source
-  //    Matches: fetch("https://api.example.com/x"),
-  //             import ... from "https://cdn.jsdelivr.net/...",
-  //             fetch("https://picsum.photos/v2/list"),
-  //             const u = "https://foo.com/x"
-  //
-  //    Skips: fetch("/api/host?...")     ← relative, no hostname
-  //           fetch(`https://${h}/x`)    ← template, unresolved
   const URLLIKE = /https:\/\/([a-z0-9][a-z0-9.-]*\.[a-z]{2,})(?=[\/:'"`\s])/gi;
   let m;
   while ((m = URLLIKE.exec(source)) !== null) {
@@ -462,23 +445,17 @@ function extractAllowHosts(source) {
   return [...hosts].filter(h => !isSkippableHost(h));
 }
 
-// -------------------------------------------------------------------
-// normalizeHost — lowercase, strip protocol/path/port, validate shape
-// -------------------------------------------------------------------
 function normalizeHost(host) {
   if (!host || typeof host !== "string") return null;
   let h = host.toLowerCase().trim();
-  h = h.replace(/^https?:\/\//, "");      // strip protocol if present
-  h = h.split("/")[0].split(":")[0];      // strip path/port
+  h = h.replace(/^https?:\/\//, "");
+  h = h.split("/")[0].split(":")[0];
   if (!h) return null;
   if (h.length > 253) return null;
   if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(h)) return null;
   return h;
 }
 
-// -------------------------------------------------------------------
-// isSkippableHost — hosts that never need to be in the manifest
-// -------------------------------------------------------------------
 function isSkippableHost(h) {
   if (FOLIO_INTERNAL_HOSTS.has(h)) return true;
   if (h.endsWith(".vercel.app")) return true;
@@ -501,7 +478,7 @@ function isSkippableHost(h) {
 
 function buildProjectUrl(ownerUsername, slug, pid) {
   if (ownerUsername && slug) {
-    return `${BASE_URL}/${encodeURIComponent(ownerUsername)}/project/${encodeURIComponent(slug)}`;
+    return `${PUBLIC_SITE_BASE}/${encodeURIComponent(ownerUsername)}/project/${encodeURIComponent(slug)}`;
   }
   return `${BASE_URL}/api/host?action=serve&pid=${encodeURIComponent(pid)}&path=index.html`;
 }
@@ -559,40 +536,20 @@ async function loadChromiumModules() {
 async function launchBrowser(reqId, startTime) {
   stageLog(reqId, "chromium_modules_loading", startTime);
 
-  // ── 1. Load the module pair ────────────────────────────────────
   const { chromium, puppeteer } = await loadChromiumModules();
 
   stageLog(reqId, "chromium_modules_loaded", startTime);
 
-  // ── 2. Extract Chromium via the pack URL ───────────────────────
-  // @sparticuz/chromium-min downloads the pack from the URL you pass
-  // in and extracts it to /tmp. It does not run environment detection
-  // — the pack is downloaded unconditionally, so libnspr4.so and
-  // libnss3.so are always extracted to /tmp/al2023/lib/ (the pack's
-  // layout). The package then sets process.env.LD_LIBRARY_PATH to
-  // that directory so the loader finds them when Chromium spawns.
   const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
 
   stageLog(reqId, "chromium_extracted", startTime, { executablePath });
 
-  // ── 3. Do NOT override LD_LIBRARY_PATH ─────────────────────────
-  // chromium-min already set process.env.LD_LIBRARY_PATH to point at
-  // /tmp/al2023/lib, where the shared libraries live. Overwriting it
-  // with path.dirname(executablePath) (which is /tmp) makes the
-  // dynamic linker look in the wrong directory, and Chromium dies
-  // with "libnspr4.so: cannot open shared object file".
-
-  // ── 4. Ensure the profile directory exists ─────────────────────
-  // Chromium writes its user profile here. On Vercel only /tmp is
-  // writable. mkdir is idempotent and cheap; safer than assuming
-  // the directory already exists.
   try {
     fs.mkdirSync("/tmp/.chromium/profile", { recursive: true });
   } catch {}
 
   stageLog(reqId, "chromium_launch_started", startTime);
 
-  // ── 5. Launch ──────────────────────────────────────────────────
   const browser = await puppeteer.launch({
     args: [
       ...chromium.args,
@@ -629,7 +586,8 @@ async function closeBrowserQuietly(browser) {
 }
 
 // =========================================================================
-// INTERNAL DB HANDLER
+// INTERNAL HOST HANDLER — serves /api/host?action=db/* and verify-session
+// inside the sandbox without a real network round-trip.
 // =========================================================================
 
 async function handleInternalDbRequest(pid, url, req) {
@@ -720,6 +678,131 @@ async function handleInternalDbRequest(pid, url, req) {
       };
     }
 
+    // ── NEW: db/cas ───────────────────────────────────────────────
+    if (action === "db/cas") {
+      const body = typeof req.body === "object" ? req.body : {};
+      const { key, expected, value } = body;
+      if (!("expected" in body)) {
+        return {
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ success: false, error: "Missing expected field" }),
+        };
+      }
+      const result = await projectDb.dbCas(pid, key, expected, value);
+      if (!result.applied) {
+        return {
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: false,
+            error: "Value changed — CAS conflict",
+            expected,
+            current: result.current,
+          }),
+        };
+      }
+      return {
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, path: result.path, applied: true }),
+      };
+    }
+
+    // ── NEW: db/schema ────────────────────────────────────────────
+    if (action === "db/schema") {
+      const body = typeof req.body === "object" ? req.body : {};
+      const schema = body.schema;
+      if (!schema || typeof schema !== "object") {
+        return {
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ success: false, error: "Missing schema" }),
+        };
+      }
+      await projectDb.dbSchemaSet(pid, schema);
+      return {
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true }),
+      };
+    }
+
+    // ── NEW: db/snapshots (list) ──────────────────────────────────
+    if (action === "db/snapshots") {
+      const result = await projectDb.dbSnapshotList(pid);
+      return {
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, ...result }),
+      };
+    }
+
+    // ── NEW: db/restore-snapshot ──────────────────────────────────
+    if (action === "db/restore-snapshot") {
+      const body = typeof req.body === "object" ? req.body : {};
+      const ts = body.ts;
+      if (!ts) {
+        return {
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ success: false, error: "Missing ts" }),
+        };
+      }
+      const result = await projectDb.dbSnapshotRestore(pid, ts);
+      return {
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, ...result }),
+      };
+    }
+
+    // ── NEW: verify-session ───────────────────────────────────────
+    // Lets sandbox scripts validate REQ.headers.authorization without
+    // exposing JWT_SECRET. Mirrors host.js handleVerifySession.
+    if (action === "verify-session") {
+      const auth = req.headers?.authorization || "";
+      if (!auth.startsWith("Bearer ")) {
+        return {
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ valid: false }),
+        };
+      }
+      const decoded = verifySession(auth.slice(7).trim());
+      if (!decoded?.uid) {
+        return {
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ valid: false }),
+        };
+      }
+      const user = await getUser(decoded.uid);
+      if (!user) {
+        return {
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ valid: false }),
+        };
+      }
+      if (user.mode === "banned") {
+        return {
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ valid: false, reason: "banned" }),
+        };
+      }
+      return {
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          valid: true,
+          uid: decoded.uid,
+          username: user.profile?.username || null,
+        }),
+      };
+    }
+
     if (action === "db/list") {
       const path = url.searchParams.get("path") || "";
       const result = await projectDb.dbList(pid, path, {
@@ -743,9 +826,9 @@ async function handleInternalDbRequest(pid, url, req) {
   } catch (err) {
     log("run.internal_db_failed", { pid, action, message: err.message });
     return {
-      status: 500,
+      status: err.status || 500,
       contentType: "application/json",
-      body: JSON.stringify({ success: false, error: "Database operation failed" }),
+      body: JSON.stringify({ success: false, error: err.message || "Database operation failed" }),
     };
   }
 }
@@ -797,11 +880,6 @@ ${userCode}
       body = result;
     }
 
-    // FIX: serialized must ALWAYS be a string. JSON.stringify(undefined)
-    // returns undefined (not a string), which crashes the Node-side
-    // Buffer.byteLength(responseBody) call downstream. Coerce every
-    // possible outcome — undefined, null, circular refs, symbols,
-    // functions — into a valid string.
     let serialized;
     if (typeof body === "string") {
       serialized = body;
@@ -845,11 +923,6 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId, startTime
   const page = await browser.newPage();
   stageLog(reqId, "new_page_done", startTime);
 
-  // The sandbox is served from Folio's real HTTPS origin, not about:blank.
-  // The interceptor (below) responds to this URL with `html` — no network
-  // call is ever made. The real origin matters because about:blank is not
-  // a secure context, and crypto.subtle / localStorage / relative fetch
-  // / navigator.clipboard etc. are unavailable there.
   const SANDBOX_URL = `${BASE_URL}/__sandbox`;
 
   const fetchHosts = new Set();
@@ -859,10 +932,6 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId, startTime
 
     page.on("request", async (request) => {
       try {
-        // ── Serve the sandbox HTML for the top-level navigation ──
-        // This must be the first check. If it falls through, the
-        // FOLIO_INTERNAL_HOSTS branch below will abort() the
-        // navigation and page.goto() will throw ERR_ABORTED.
         if (request.url() === SANDBOX_URL) {
           return await request.respond({
             status: 200,
@@ -883,29 +952,36 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId, startTime
         }
 
         if (FOLIO_INTERNAL_HOSTS.has(host)) {
-          if (
-            urlObj.pathname === "/api/host" &&
-            urlObj.searchParams.get("action")?.startsWith("db/")
-          ) {
-            try {
-              let reqBody = {};
+          // Internal routes handled inline — no network round-trip.
+          //   /api/host?action=db/*              → database ops
+          //   /api/host?action=verify-session    → JWT validation
+          if (urlObj.pathname === "/api/host") {
+            const act = urlObj.searchParams.get("action") || "";
+            if (act.startsWith("db/") || act === "verify-session") {
               try {
-                const postData = request.postData();
-                if (postData) reqBody = JSON.parse(postData);
-              } catch {}
-              const result = await handleInternalDbRequest(
-                pid,
-                urlObj,
-                { body: reqBody, method: request.method() },
-              );
-              return await request.respond({
-                status: result.status,
-                contentType: result.contentType,
-                body: result.body,
-              });
-            } catch (err) {
-              log("run.internal_db_route_failed", { reqId, pid, message: err.message });
-              return await request.abort("failed");
+                let reqBody = {};
+                try {
+                  const postData = request.postData();
+                  if (postData) reqBody = JSON.parse(postData);
+                } catch {}
+                const result = await handleInternalDbRequest(
+                  pid,
+                  urlObj,
+                  {
+                    body: reqBody,
+                    method: request.method(),
+                    headers: request.headers(),
+                  },
+                );
+                return await request.respond({
+                  status: result.status,
+                  contentType: result.contentType,
+                  body: result.body,
+                });
+              } catch (err) {
+                log("run.internal_host_route_failed", { reqId, pid, act, message: err.message });
+                return await request.abort("failed");
+              }
             }
           }
           return await request.abort("blockedbyclient");
@@ -915,39 +991,32 @@ async function runInPage(browser, { html, allowedHostsSet, pid, reqId, startTime
           return await request.abort("blockedbyclient");
         }
 
-// Trusted image hosts are always allowed — no declaration needed.
-// They're read-only CDNs, safe for any script to use.
-if (TRUSTED_IMAGE_HOSTS.has(host)) {
-  fetchHosts.add(host);
-  return await request.continue();
-}
+        if (TRUSTED_IMAGE_HOSTS.has(host)) {
+          fetchHosts.add(host);
+          return await request.continue();
+        }
 
-if (
-  BUILTIN_ALLOWED_HOSTS.has(host) ||
-  ALLOWED_IMPORT_HOSTS.has(host) ||
-  allowedHostsSet.has(host)
-) {
-  fetchHosts.add(host);
-  return await request.continue();
-}
+        if (
+          BUILTIN_ALLOWED_HOSTS.has(host) ||
+          ALLOWED_IMPORT_HOSTS.has(host) ||
+          allowedHostsSet.has(host)
+        ) {
+          fetchHosts.add(host);
+          return await request.continue();
+        }
 
-// Blocked — log the exact host so the user can see what
-// needs to be added.
-log("run.host_blocked", { reqId, host, pid });
-try {
-  logProjectEvent(pid, null, "api", "host_blocked", { host, route: null }).catch(() => {});
-} catch {}
+        log("run.host_blocked", { reqId, host, pid });
+        try {
+          logProjectEvent(pid, null, "api", "host_blocked", { host, route: null }).catch(() => {});
+        } catch {}
 
-return await request.abort("blockedbyclient");
+        return await request.abort("blockedbyclient");
       } catch (err) {
         log("run.request_intercept_error", { reqId, message: err.message });
         try { await request.abort("failed"); } catch {}
       }
     });
 
-    // Navigate to the sandbox URL. The interceptor above serves the
-    // HTML from memory, so this is a synchronous in-memory operation
-    // from the network's perspective — no round-trip to Vercel.
     stageLog(reqId, "goto_started", startTime);
 
     await page.goto(SANDBOX_URL, {
@@ -1010,17 +1079,6 @@ async function loadInvocationContext(pid, route) {
 }
 
 async function loadRouteFile(pid, route, isSystemRoute) {
-  // System routes (health, whoami, files, status, version, robots) are
-  // all served by the single file _system.js, which branches internally
-  // on REQ.route. Try both storage keys the deploy pipeline has used:
-  //
-  //   api-files/{pid}/_system.js       ← canonical (writer-actual form)
-  //   api-files/{pid}/api___system.js  ← legacy   (reader-expected form)
-  //
-  // User routes (notes, etc.) try the two storage conventions:
-  //
-  //   api-files/{pid}/api__notes.js  ← canonical
-  //   api-files/{pid}/notes.js       ← legacy
   const candidates = [];
 
   if (isSystemRoute) {
@@ -1061,12 +1119,7 @@ export default async function handler(req, res) {
   });
 
   res.setHeader("X-Request-Id", reqId);
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Project-Key, X-Recursion-Depth, X-Caller-Route",
-  );
+  setCorsHeaders(req, res);
 
   if (req.method === "OPTIONS") return res.status(204).end();
 
@@ -1077,8 +1130,6 @@ export default async function handler(req, res) {
   let route = String(req.query?.route || "").trim();
 
   // ── Fallback: parse URL directly for /api/{pid}/{route} ─────────
-  // (Needed when the rewrite isn't applied, e.g. local dev, or
-  //  direct calls without query params.)
   if (!pid && !username) {
     const urlPath = String(req.url || "").split("?")[0];
     const parts = urlPath.replace(/^\/api\/?/, "").split("/").filter(Boolean);
@@ -1121,17 +1172,11 @@ export default async function handler(req, res) {
   }
 
   // ── Auth ───────────────────────────────────────────────────────
-  // Do NOT require authentication. The user's script decides what
-  // needs a token. We still resolve the caller (when present) so
-  // rate limits and logs are attributed correctly.
   const actor = await authenticate(req, pid).catch(() => null);
 
   stageLog(reqId, "auth_done", startTime, { via: actor?.via || "anon" });
 
   // ── Rate limit ─────────────────────────────────────────────────
-  // Authenticated callers rate-limit per uid/key; anonymous callers
-  // rate-limit per IP. This preserves abuse protection for public
-  // endpoints like register/login/public-get.
   const sessionId = actor?.sessionId || `anon_${hashIp(getClientIp(req))}`;
   const rate = await enforceRate(sessionId, pid, route).catch(() => ({
     allowed: false,
@@ -1158,8 +1203,26 @@ export default async function handler(req, res) {
   if (!ctx) {
     return res.status(404).json({ success: false, error: "Project not found" });
   }
+
+  // ── Route-not-found with self-heal fallback ────────────────────
   if (!ctx.isSystemRoute && !ctx.isUserRoute) {
-    return res.status(404).json({ success: false, error: "Route not found", route });
+    // Manifest may be stale (deploy wrote it best-effort). Check
+    // the file tree directly before giving up.
+    const fileSnap1 = await db.ref(`api-files/${pid}/api__${route}.js`).once("value");
+    const fileSnap2 = fileSnap1.exists()
+      ? fileSnap1
+      : await db.ref(`api-files/${pid}/${route}.js`).once("value");
+    if (!fileSnap2.exists()) {
+      return res.status(404).json({ success: false, error: "Route not found", route });
+    }
+    // Self-heal the manifest in the background
+    db.ref(`projects/${pid}/apiRoutes/user`).transaction((cur) => {
+      const arr = Array.isArray(cur) ? cur : [];
+      if (!arr.includes(route)) arr.push(route);
+      return arr;
+    }).catch(() => {});
+    ctx.isUserRoute = true;
+    stageLog(reqId, "route_self_healed", startTime, { route });
   }
 
   // ── Load route file ────────────────────────────────────────────
@@ -1224,19 +1287,31 @@ export default async function handler(req, res) {
 
   // ── Build REQ object ───────────────────────────────────────────
   //
-  // IMPORTANT: the `authorization` header is forwarded so that user
-  // scripts (like notes.js) can validate their own bearer tokens
-  // via REQ.headers.authorization. Without this, any authenticated
-  // user script action returns 401 because the token never reaches
-  // the script.
+  // Curated header allowlist — enough for auth, content negotiation,
+  // and referrer-based logic, without leaking cookies or internal
+  // proxy headers into the sandbox.
+  const FORWARDED_HEADERS = [
+    "content-type",
+    "user-agent",
+    "authorization",
+    "accept",
+    "accept-language",
+    "referer",
+    "origin",
+    "x-request-id",
+  ];
+  const forwarded = {};
+  for (const h of FORWARDED_HEADERS) {
+    if (req.headers[h]) forwarded[h] = req.headers[h];
+  }
+  if (req.headers["x-forwarded-for"]) {
+    forwarded["x-forwarded-for"] = hashIp(req.headers["x-forwarded-for"]);
+  }
+
   const reqObj = {
     route,
     method: req.method,
-    headers: {
-      "content-type": req.headers["content-type"] || "",
-      "user-agent": (req.headers["user-agent"] || "").slice(0, 200),
-      "authorization": req.headers["authorization"] || "",
-    },
+    headers: forwarded,
     body: typeof req.body === "object" && req.body !== null ? req.body : {},
     query: req.query || {},
     pid,
@@ -1348,7 +1423,6 @@ export default async function handler(req, res) {
       message: runResult.errorMessage,
     });
 
-    // Record to the per-project API logs (user routes only)
     if (ctx.isUserRoute && !ctx.isSystemRoute) {
       recordApiLog(pid, {
         route,
@@ -1358,7 +1432,6 @@ export default async function handler(req, res) {
         errorName: runResult.errorName || "Error",
         errorMessage: runResult.errorMessage || null,
         via: actor?.via || "anon",
-        // ── richer error context ──────────────────────────────
         requestId: reqId,
         stage: _lastStage,
         bytesIn: bodyBytes,
@@ -1374,14 +1447,8 @@ export default async function handler(req, res) {
   }
 
   // ── Response ───────────────────────────────────────────────────
-    // ── Response ───────────────────────────────────────────────────
   const { result } = runResult;
 
-  // FIX: responseBody must ALWAYS be a string. Previous code did
-  //   typeof result.body === "string" ? result.body : JSON.stringify(result.body)
-  // which returned `undefined` when result.body was undefined
-  // (JSON.stringify(undefined) === undefined), causing
-  // Buffer.byteLength(undefined) to throw a TypeError.
   let responseBody;
   if (typeof result?.body === "string") {
     responseBody = result.body;
@@ -1396,9 +1463,6 @@ export default async function handler(req, res) {
     }
   }
 
-  // Defense in depth: if responseBody is still somehow not a string,
-  // coerce it now. This should never fire given the block above, but
-  // it guarantees Buffer.byteLength can't throw.
   if (typeof responseBody !== "string") responseBody = String(responseBody);
 
   const responseBytes = Buffer.byteLength(responseBody, "utf8");
@@ -1432,7 +1496,6 @@ export default async function handler(req, res) {
     via: actor?.via || "anon",
   });
 
-  // Record to the per-project API logs (user routes only)
   if (ctx.isUserRoute && !ctx.isSystemRoute) {
     recordApiLog(pid, {
       route,
@@ -1442,9 +1505,8 @@ export default async function handler(req, res) {
       errorName: null,
       errorMessage: null,
       via: actor?.via || "anon",
-      // ── richer success context ────────────────────────────
       requestId: reqId,
-      stage: _lastStage,          // will be "completed"
+      stage: _lastStage,
       bytesIn: bodyBytes,
       bytesOut: responseBytes,
       fetchHosts: runResult.fetchHosts || [],
@@ -1473,4 +1535,4 @@ export const config = {
   maxDuration: 30,
 };
 
-export { BASE_URL };
+export { BASE_URL, PUBLIC_SITE_BASE };

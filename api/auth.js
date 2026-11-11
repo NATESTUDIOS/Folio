@@ -1,5 +1,7 @@
 // api/auth.js
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { db } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import {
@@ -12,6 +14,7 @@ import {
   releaseEmail, releaseUsername,
   getClientIp, hashIp, sanitizeFirebasePath,
   logUserEvent,
+  migrateProjectSlugsOnUsernameChange,
 } from "../utils/users.js";
 
 // =========================================================================
@@ -22,8 +25,59 @@ const API_NAME = "auth";
 
 const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
 
+const PUBLIC_SITE_BASE = process.env.PUBLIC_SITE_BASE || BASE_URL;
+
 const LOGIN_MAX_FAILURES = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
+
+// =========================================================================
+// CORS — origins loaded from public/assets/domains.json
+// =========================================================================
+
+let _corsOrigins = null;
+
+function loadCorsOrigins() {
+  if (_corsOrigins) return _corsOrigins;
+  const envOverride = process.env.CORS_ORIGINS;
+  if (envOverride) {
+    _corsOrigins = new Set(
+      envOverride.split(",").map((s) => s.trim()).filter(Boolean),
+    );
+    return _corsOrigins;
+  }
+  try {
+    const p = path.join(process.cwd(), "public", "assets", "domains.json");
+    const raw = fs.readFileSync(p, "utf8");
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed?.origins) ? parsed.origins : [];
+    _corsOrigins = new Set(list.map((s) => String(s).trim()).filter(Boolean));
+  } catch (err) {
+    log("auth.cors.load_failed", { message: err.message });
+    _corsOrigins = new Set([
+      BASE_URL,
+      PUBLIC_SITE_BASE,
+    ].filter(Boolean));
+  }
+  return _corsOrigins;
+}
+
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin || "";
+  const allowed = loadCorsOrigins();
+  if (origin && allowed.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  } else {
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Project-Key, X-API-Key",
+  );
+  res.setHeader("Access-Control-Max-Age", "600");
+}
 
 // =========================================================================
 // RATE LIMITS
@@ -143,8 +197,6 @@ async function createUserRecord({
   return record;
 }
 
-// 🆕 Bridge call with retry — was previously fire-and-forget, which was
-// killed by Vercel before the fetch completed. Now awaited by callers.
 async function callNotifyBridge(action, uid, extra = {}, retries = 1) {
   try {
     const res = await fetch(`${BASE_URL}/api/notify?action=${action}`, {
@@ -171,8 +223,6 @@ async function callNotifyBridge(action, uid, extra = {}, retries = 1) {
   }
 }
 
-// 🆕 User-facing notification creation. Always awaited — Vercel terminates
-// pending fetches after res.json() so fire-and-forget would silently fail.
 async function callNotify(type, uid, payload) {
   if (!uid) return;
   try {
@@ -200,9 +250,6 @@ function isValidHttpsUrl(url) {
   }
 }
 
-// 🆕 Helper for display in notification bodies — hashed prefix of caller IP
-// so the user can spot "same device" vs "somewhere else" without leaking the
-// full IP into the notification history.
 function ipShort(req) {
   return hashIp(getClientIp(req)).slice(0, 8);
 }
@@ -294,7 +341,6 @@ async function handleRegister(req, res, reqId) {
     return res.status(500).json({ success: false, error: "Registration failed" });
   }
 
-  // 🆕 Bridge — awaited now (was fire-and-forget)
   try {
     await callNotifyBridge("auth_signup", uid, { username: assigned.username });
   } catch {}
@@ -307,7 +353,6 @@ async function handleRegister(req, res, reqId) {
     hasAvatar: !!cleanAvatarUrl,
   });
 
-  // 🆕 A1 — Welcome notification
   try {
     await callNotify("system", uid, {
       title: `Welcome to Folio, ${assigned.username}!`,
@@ -382,7 +427,6 @@ async function handleLogin(req, res, reqId) {
     const lockedUntil = newCount >= LOGIN_MAX_FAILURES ? now + LOGIN_LOCK_MS : 0;
     await attemptsRef.set({ count: newCount, lastAttempt: now, lockedUntil });
 
-    // 🆕 A3 — Wrong password ×3 (owner still has 2 more before lockout)
     if (newCount === 3) {
       try {
         await callNotify("security", found.uid, {
@@ -400,7 +444,6 @@ async function handleLogin(req, res, reqId) {
       } catch {}
     }
 
-    // 🆕 A4 — Lockout triggered
     if (lockedUntil) {
       try {
         await callNotify("security", found.uid, {
@@ -450,7 +493,6 @@ async function handleLogout(req, res, reqId) {
   if (!user) return;
   if (!(await enforceRate(req, res, "logout", `uid_${user.uid}`))) return;
 
-  // 🆕 Bridge — awaited now (was fire-and-forget)
   try {
     await callNotifyBridge("auth_logout", user.uid);
   } catch {}
@@ -499,7 +541,6 @@ async function handleChangePassword(req, res, reqId) {
   await db.ref(`users/${user.uid}/updatedAt`).set(Date.now());
   await logUserEvent(user.uid, "auth", "password.changed", {});
 
-  // 🆕 A2 — Password changed (self-notify for security audit)
   try {
     await callNotify("security", user.uid, {
       title: "Password changed",
@@ -557,7 +598,6 @@ async function handleChangeEmail(req, res, reqId) {
 
   await logUserEvent(user.uid, "auth", "email.changed", {});
 
-  // 🆕 A6 — Email changed (self-notify for security audit)
   try {
     await callNotify("security", user.uid, {
       title: "Email address changed",
@@ -567,7 +607,7 @@ async function handleChangeEmail(req, res, reqId) {
       extra: {
         kind: "email_changed",
         newEmailLower: newLower,
-        oldEmailLower: oldLower, // for future email-notification flow
+        oldEmailLower: oldLower,
         ipHash: ipShort(req),
       },
       dedupeKey: `email_changed_${user.uid}`,
@@ -612,9 +652,23 @@ async function handleChangeUsername(req, res, reqId) {
     return res.status(500).json({ success: false, error: "Username change failed" });
   }
 
+  // ── Migrate projectSlugs/{oldUsername}/* → {newUsername}/* ──────
+  // Without this, the old username keeps resolving to this user's
+  // projects forever, and whoever claims the old username inherits
+  // those routings.
+  if (oldName && newName && oldName !== newName) {
+    try {
+      await migrateProjectSlugsOnUsernameChange(user.uid, oldName, newName);
+    } catch (err) {
+      log("auth.change_username.slug_migration_failed", {
+        reqId, uid: user.uid, from: oldName, to: newName, message: err.message,
+      });
+      // Non-fatal — host.js handleProjectsUpdate has a drift catch.
+    }
+  }
+
   await logUserEvent(user.uid, "auth", "username.changed", { from: oldName, to: newName });
 
-  // 🆕 A7 — Username changed (informational)
   try {
     await callNotify("system", user.uid, {
       title: "Username changed",
@@ -821,10 +875,7 @@ export default async function handler(req, res) {
   const reqId = newReqId();
   res.setHeader("X-Request-Id", reqId);
 
-  res.setHeader("Access-Control-Allow-Origin", BASE_URL);
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+  setCorsHeaders(req, res);
   if (req.method === "OPTIONS") return res.status(204).end();
 
   const action = String(req.query?.action || req.body?.action || "").trim();

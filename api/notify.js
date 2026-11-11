@@ -1,5 +1,7 @@
 // api/notify.js
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { db, messaging } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import {
@@ -11,9 +13,7 @@ import {
 // DELIVERY MODEL
 // =========================================================================
 // FCM-only. No Web Push, no VAPID keys on the backend.
-// Broadcasts use an FCM topic ("folio-general") that every device is
-// subscribed to server-side inside handleSubscribe(). No frontend change
-// required.
+// Broadcasts use an FCM topic ("folio-general").
 
 // =========================================================================
 // CONSTANTS
@@ -21,8 +21,9 @@ import {
 
 const API_NAME = "notify";
 
-// 🆕 Added "security" so host.js rate-limit / api-key alerts and auth.js
-// security events are accepted.
+const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
+const PUBLIC_SITE_BASE = process.env.PUBLIC_SITE_BASE || BASE_URL;
+
 const NOTIFICATION_TYPES = ["system", "analytics", "db", "storage", "project", "invite", "security"];
 const NOTIFICATION_PRIORITIES = ["normal", "high", "urgent"];
 const ACTION_TYPES = ["navigate", "modal", "external", "deep_link"];
@@ -33,11 +34,8 @@ const SETTINGS_PATH = "folio/NotificationSettings";
 const HISTORY_PATH = "folio/NotificationHistory";
 const DEDUPE_PATH = "folio/NotifyDedupe";
 
-// FCM topic every device is subscribed to at subscribe() time.
-// Used for broadcast announcements (maintenance, new features, etc.).
 const GENERAL_TOPIC = "folio-general";
 
-// Android notification channel — must exist in your mobile app config.
 const ANDROID_CHANNEL_ID = process.env.FCM_ANDROID_CHANNEL || "folio_default";
 const ANDROID_ICON = process.env.FCM_ANDROID_ICON || "ic_notification";
 const ANDROID_COLOR = process.env.FCM_ANDROID_COLOR || "#F59E0B";
@@ -48,7 +46,6 @@ const SEND_CONCURRENCY = 5;
 const MAX_TOKENS_PER_USER = 10;
 const BROADCAST_HISTORY_BATCH = 500;
 
-// Per-type dedupe TTLs (milliseconds). 0 = no dedupe.
 const DEDUPE_TTL_MS = {
   storage: 6 * 60 * 60 * 1000,
   security: 60 * 60 * 1000,
@@ -58,6 +55,55 @@ const DEDUPE_TTL_MS = {
   invite: 0,
   system: 0,
 };
+
+// =========================================================================
+// CORS — origins loaded from public/assets/domains.json
+// =========================================================================
+
+let _corsOrigins = null;
+
+function loadCorsOrigins() {
+  if (_corsOrigins) return _corsOrigins;
+  const envOverride = process.env.CORS_ORIGINS;
+  if (envOverride) {
+    _corsOrigins = new Set(
+      envOverride.split(",").map((s) => s.trim()).filter(Boolean),
+    );
+    return _corsOrigins;
+  }
+  try {
+    const p = path.join(process.cwd(), "public", "assets", "domains.json");
+    const raw = fs.readFileSync(p, "utf8");
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed?.origins) ? parsed.origins : [];
+    _corsOrigins = new Set(list.map((s) => String(s).trim()).filter(Boolean));
+  } catch (err) {
+    log("notify.cors.load_failed", { message: err.message });
+    _corsOrigins = new Set([
+      BASE_URL,
+      PUBLIC_SITE_BASE,
+    ].filter(Boolean));
+  }
+  return _corsOrigins;
+}
+
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin || "";
+  const allowed = loadCorsOrigins();
+  if (origin && allowed.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  } else {
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Project-Key, X-API-Key",
+  );
+  res.setHeader("Access-Control-Max-Age", "600");
+}
 
 // =========================================================================
 // RATE LIMITS
@@ -74,7 +120,7 @@ const RATE_LIMITS = {
   list:           { max: 120,  window: 60 * 60 * 1000 },
   stats:          { max: 120,  window: 60 * 60 * 1000 },
   getSettings:    { max: 120,  window: 60 * 60 * 1000 },
-  create:         { max: 50,   window: 60 * 60 * 1000 }, // per target uid
+  create:         { max: 50,   window: 60 * 60 * 1000 },
   authBridge:     { max: 200,  window: 60 * 60 * 1000 },
   config:         { max: 120,  window: 60 * 60 * 1000 },
   broadcast:      { max: 20,   window: 60 * 60 * 1000 },
@@ -201,9 +247,6 @@ function getCacheStats() {
 // HELPERS
 // =========================================================================
 
-// 🆕 securityAlerts added. Defaults to true so existing users see no
-// behavior change. Security notifications always deliver regardless of
-// this toggle (see ALWAYS_DELIVER_TYPES below).
 const DEFAULT_SETTINGS = {
   pushEnabled: true,
   systemAlerts: true,
@@ -212,7 +255,7 @@ const DEFAULT_SETTINGS = {
   storageAlerts: true,
   projectAlerts: true,
   inviteAlerts: true,
-  securityAlerts: true,   // 🆕
+  securityAlerts: true,
   quietHours: { enabled: false, start: "22:00", end: "07:00" },
 };
 
@@ -223,13 +266,9 @@ const TYPE_TO_SETTING = {
   storage: "storageAlerts",
   project: "projectAlerts",
   invite: "inviteAlerts",
-  security: "securityAlerts",  // 🆕 dedicated toggle
+  security: "securityAlerts",
 };
 
-// 🆕 Security notifications bypass the per-category toggle entirely.
-// They still respect pushEnabled (transport-level), but the user cannot
-// silence a password change / new device login just by disabling a category.
-// This matches industry standard (GitHub, Google, Stripe, etc.).
 const ALWAYS_DELIVER_TYPES = new Set(["security"]);
 
 function generateNotificationId() {
@@ -795,9 +834,6 @@ async function sendNotificationWithPush(userId, data, { dedupeKey, dedupeTtlMs }
   const settings = await getUserSettings(userId);
   const settingKey = TYPE_TO_SETTING[data.type] || "systemAlerts";
 
-  // 🆕 Security type always delivers if pushEnabled is on — the user cannot
-  // silence it via the category toggle. This ensures password changes, new
-  // device logins, and account lockouts are never silently dropped.
   const isAlwaysDeliver = ALWAYS_DELIVER_TYPES.has(data.type);
   const pushOn = settings.pushEnabled && (isAlwaysDeliver || settings[settingKey]);
 
@@ -1212,7 +1248,7 @@ async function handleUpdateSettings(req, res, reqId) {
   const allowedKeys = [
     "pushEnabled", "systemAlerts", "analyticsAlerts", "dbAlerts",
     "storageAlerts", "projectAlerts", "inviteAlerts",
-    "securityAlerts",  // 🆕
+    "securityAlerts",
     "quietHours",
   ];
   const patch = {};
@@ -1380,7 +1416,7 @@ async function handleHealth(req, res, reqId) {
     topic: GENERAL_TOPIC,
     types: NOTIFICATION_TYPES,
     settings: Object.keys(DEFAULT_SETTINGS),
-    alwaysDeliverTypes: [...ALWAYS_DELIVER_TYPES],  // 🆕
+    alwaysDeliverTypes: [...ALWAYS_DELIVER_TYPES],
     cache: getCacheStats(),
     fcm: !!messaging,
     androidChannel: ANDROID_CHANNEL_ID,
@@ -1392,21 +1428,11 @@ async function handleHealth(req, res, reqId) {
 // ROUTER
 // =========================================================================
 
-const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
-
 export default async function handler(req, res) {
   const reqId = newReqId();
   res.setHeader("X-Request-Id", reqId);
 
-  const origin = req.headers.origin;
-  if (!origin || origin === BASE_URL) {
-    res.setHeader("Access-Control-Allow-Origin", origin || BASE_URL);
-  } else {
-    res.setHeader("Access-Control-Allow-Origin", BASE_URL);
-  }
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+  setCorsHeaders(req, res);
   if (req.method === "OPTIONS") return res.status(204).end();
 
   const action = String(req.query?.action || req.body?.action || "").trim();

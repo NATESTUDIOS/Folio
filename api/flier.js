@@ -13,7 +13,8 @@
 //    • Static dns/promises import
 //    • All existing endpoints/caches/rate limits preserved
 // ═══════════════════════════════════════════════════════════════════
-
+import fs from "node:fs";
+import path from "node:path";
 import { Resvg } from "@resvg/resvg-js";
 import * as cheerio from "cheerio";
 import crypto from "crypto";
@@ -61,18 +62,12 @@ function initFont() {
 // ═══════════════════════════════════════════════════════════════════
 
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
+const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
+const PUBLIC_SITE_BASE = process.env.PUBLIC_SITE_BASE || BASE_URL;
 const IMAGE_UPLOAD_API =
   process.env.IMAGE_UPLOAD_API ||
   "https://kx-services.vercel.app/api/tools/imageupload";
 
-const ALLOWED_DOMAINS = [
-  "folios",
-  "foliostudios.vercel.app",
-  "folio.vercel.app",
-  "folios.app",
-  "folio.app",
-];
-const LOCAL_PATTERN = /^localhost:\d+$|^127\.0\.0\.1:\d+$/;
 
 const SIZES = {
   "1080x1080": { w: 1080, h: 1080 },
@@ -993,31 +988,66 @@ function layoutStack(blocks, opts) {
 //  CORS + AUTH
 // ═══════════════════════════════════════════════════════════════════
 
-function isOriginAllowed(origin, req) {
-  const auth = req.headers.authorization;
-  const key = req.headers["x-api-key"];
-  if (auth?.startsWith("Bearer ") && auth.slice(7) === ADMIN_API_KEY) return true;
-  if (key && key === ADMIN_API_KEY) return true;
-  if (!origin) return false;
+// =========================================================================
+// CORS — origins loaded from public/assets/domains.json
+// =========================================================================
+
+let _corsOrigins = null;
+
+function loadCorsOrigins() {
+  if (_corsOrigins) return _corsOrigins;
+  const envOverride = process.env.CORS_ORIGINS;
+  if (envOverride) {
+    _corsOrigins = new Set(
+      envOverride.split(",").map((s) => s.trim()).filter(Boolean),
+    );
+    return _corsOrigins;
+  }
   try {
-    const u = new URL(origin);
-    const h = u.hostname.toLowerCase();
-    if (ALLOWED_DOMAINS.some((d) => h === d || h.endsWith("." + d))) return true;
-    if (h === "localhost" || h === "127.0.0.1") return true;
-    if (LOCAL_PATTERN.test(u.host.toLowerCase())) return true;
-    return false;
-  } catch { return false; }
+    const p = path.join(process.cwd(), "public", "assets", "domains.json");
+    const raw = fs.readFileSync(p, "utf8");
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed?.origins) ? parsed.origins : [];
+    _corsOrigins = new Set(list.map((s) => String(s).trim()).filter(Boolean));
+  } catch (err) {
+    log("flier.cors.load_failed", { message: err.message });
+    _corsOrigins = new Set([
+      BASE_URL,
+      PUBLIC_SITE_BASE,
+    ].filter(Boolean));
+  }
+  return _corsOrigins;
 }
 
-function applyCors(req, res) {
-  const origin = req.headers.origin;
-  if (!origin) return true;
-  if (!isOriginAllowed(origin, req)) return false;
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin || "";
+  const allowed = loadCorsOrigins();
+
+  // Server-to-server (no Origin) + admin key → allow
+  if (!origin) {
+    const auth = req.headers.authorization || "";
+    const key = req.headers["x-api-key"] || "";
+    if (key === ADMIN_API_KEY || auth === `Bearer ${ADMIN_API_KEY}`) {
+      return true;
+    }
+    // No origin, no admin — reject
+    return false;
+  }
+
+  // Browser request — must be in the allowlist
+  if (!allowed.has(origin)) {
+    return false;
+  }
+
   res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
-  res.setHeader("Access-Control-Max-Age", "86400");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-API-Key, X-Project-Key",
+  );
+  res.setHeader("Access-Control-Max-Age", "600");
   return true;
 }
 
@@ -3028,14 +3058,15 @@ export default async function handler(req, res) {
   const t0 = Date.now();
   res.setHeader("X-Request-Id", reqId);
 
-  if (req.method === "OPTIONS") {
-    if (!applyCors(req, res)) return res.status(403).json({ error: "Origin not allowed" });
-    return res.status(200).end();
-  }
-  if (!applyCors(req, res)) {
-    log("cors.reject", { reqId, origin: req.headers.origin });
-    return res.status(403).json({ error: "Origin not allowed" });
-  }
+if (req.method === "OPTIONS") {
+  const ok = setCorsHeaders(req, res);
+  if (!ok) return res.status(403).json({ error: "Origin not allowed" });
+  return res.status(200).end();
+}
+if (!setCorsHeaders(req, res)) {
+  log("cors.reject", { reqId, origin: req.headers.origin });
+  return res.status(403).json({ error: "Origin not allowed" });
+}
 
   const action = String(req.query?.action || req.body?.action || "").trim();
   const identity = tryVerifyJwt(req);

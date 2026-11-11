@@ -2,15 +2,6 @@
 // Deployed on the secondary Vercel project (foliosites.vercel.app).
 //
 // ═══════════════════════════════════════════════════════════════════
-//  SUPPORTED DOMAINS (short links live on these)
-// ═══════════════════════════════════════════════════════════════════
-//   folio.xo.je              (primary — free domain)
-//   foliosites.vercel.app    (fallback — secondary Vercel project)
-//   foliostudios.vercel.app  (fallback — main app)
-//
-//  Configure SHORT_DOMAIN to change which one shortUrlFor() returns.
-//
-// ═══════════════════════════════════════════════════════════════════
 //  ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════
 //   GET    ?key=X                → resolve (public)
@@ -29,7 +20,9 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import crypto from "node:crypto";
-import { db, messaging } from "../utils/firebase.js";
+import fs from "node:fs";
+import path from "node:path";
+import { db, serverTimestamp } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
 import {
   verifySession,
@@ -51,6 +44,7 @@ const SHORT_URL =
   (process.env.SHORT_URL || "https://folio.xo.je").replace(/\/+$/, "");
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "";
 const BASE_URL = process.env.BASE_URL || "https://foliostudios.vercel.app";
+const PUBLIC_SITE_BASE = process.env.PUBLIC_SITE_BASE || BASE_URL;
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN || "";
 const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID || "";
 
@@ -65,8 +59,60 @@ const MAX_NUMBERED_ATTEMPTS = 99;
 const SUPPORTED_DOMAINS = new Set([
   "folio.xo.je",
   "foliosites.vercel.app",
+  "foliosites.vercel.app",
   "foliostudios.vercel.app",
+  "https://folio-git-development-natestudios-projects.vercel.app",
 ]);
+
+// =========================================================================
+// CORS — origins loaded from public/assets/domains.json
+// =========================================================================
+
+let _corsOrigins = null;
+
+function loadCorsOrigins() {
+  if (_corsOrigins) return _corsOrigins;
+  const envOverride = process.env.CORS_ORIGINS;
+  if (envOverride) {
+    _corsOrigins = new Set(
+      envOverride.split(",").map((s) => s.trim()).filter(Boolean),
+    );
+    return _corsOrigins;
+  }
+  try {
+    const p = path.join(process.cwd(), "public", "assets", "domains.json");
+    const raw = fs.readFileSync(p, "utf8");
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed?.origins) ? parsed.origins : [];
+    _corsOrigins = new Set(list.map((s) => String(s).trim()).filter(Boolean));
+  } catch (err) {
+    log("shortlink.cors.load_failed", { message: err.message });
+    _corsOrigins = new Set([
+      BASE_URL,
+      PUBLIC_SITE_BASE,
+      SHORT_URL,
+    ].filter(Boolean));
+  }
+  return _corsOrigins;
+}
+
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin || "";
+  const allowed = loadCorsOrigins();
+  if (origin && allowed.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  } else {
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, x-api-key, Authorization",
+  );
+  res.setHeader("Access-Control-Max-Age", "600");
+}
 
 // =========================================================================
 // RESERVED
@@ -79,21 +125,21 @@ const RESERVED_EXACT = new Set([
   "terms", "privacy", "folio", "foliosites", "xo",
 ]);
 
-const RESERVED_PREFIXES = ["api", "s", "admin", "static", "assets", "www"];
+// NOTE: prefix blocks were removed. On a *different origin*
+// (folio.xo.je), a short key like "spring" or "sasha" is completely
+// harmless. Blocking prefixes at the short domain:
+//   1. Rejects ~7% of English words starting with "s"
+//   2. Rejects "adminpanel", "staticsite", "assetmanager" — all valid
+//   3. Doesn't protect any real route (the short domain has none)
+// Reserved keys still block the *exact* names that matter.
 
 function isReserved(key) {
-  if (RESERVED_EXACT.has(key)) return true;
-  for (const p of RESERVED_PREFIXES) if (key.startsWith(p)) return true;
-  return false;
+  return RESERVED_EXACT.has(key);
 }
 
 // =========================================================================
 // RATE LIMITS
 // =========================================================================
-//
-// In-memory per Vercel function instance. For a small app this is fine
-// — hostile traffic is distributed across instances, each enforces its
-// own ceiling. For strict global limits, back this with Firebase.
 
 const RATE_LIMITS = {
   resolve: { max: 600, window: 60_000 },
@@ -147,7 +193,6 @@ function setRateHeaders(res, rl) {
   if (rl.resetAt) res.setHeader("X-RateLimit-Reset", new Date(rl.resetAt).toISOString());
 }
 
-// Periodic sweep — keeps the Map bounded
 if (typeof setInterval === "function") {
   const t = setInterval(() => {
     const now = Date.now();
@@ -160,44 +205,17 @@ if (typeof setInterval === "function") {
 }
 
 // =========================================================================
-// CORS
-// =========================================================================
-
-const ALLOWED_ORIGINS = new Set([
-  "https://folio.xo.je",
-  "https://foliosites.vercel.app",
-  "https://foliostudios.vercel.app",
-]);
-
-function setCors(req, res) {
-  const origin = req.headers.origin || "";
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    ALLOWED_ORIGINS.has(origin) ? origin : "https://folio.xo.je"
-  );
-  res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, x-api-key, Authorization"
-  );
-}
-
-// =========================================================================
 // CACHES
 // =========================================================================
 
-// Hot cache: key → record. LRU, 60s, 1000 entries per instance.
 const HOT = new Map();
 const HOT_TTL = 60_000;
 const HOT_MAX = 1000;
 
-// Negative cache: key → timestamp. 30s, 1000 entries.
 const NEG = new Map();
 const NEG_TTL = 30_000;
 const NEG_MAX = 1000;
 
-// Click batch: key → { count, timer }. Flushed every 5s.
 const CLICK_BATCH = new Map();
 const CLICK_FLUSH_MS = 5000;
 
@@ -208,7 +226,6 @@ function hotGet(key) {
     HOT.delete(key);
     return null;
   }
-  // LRU promote
   HOT.delete(key);
   HOT.set(key, e);
   return e.record;
@@ -255,7 +272,7 @@ function trackClick(key, reqId) {
       CLICK_BATCH.delete(key);
       if (batch && batch.count > 0) {
         const updates = {};
-        updates[`links/${key}/c`] = admin.database.ServerValue.increment(batch.count);
+        updates[`links/${key}/c`] = serverTimestamp.increment(batch.count);
         updates[`links/${key}/l`] = Date.now();
         db.ref().update(updates).catch(err => {
           log("shortlink.click_flush_failed", { reqId, key, message: err.message });
@@ -431,7 +448,7 @@ async function authorizeProject(req, res, pid) {
 }
 
 // =========================================================================
-// NOTIFICATIONS (via notify API, same pattern as host.js)
+// NOTIFICATIONS
 // =========================================================================
 
 async function callNotify(type, uid, payload) {
@@ -469,6 +486,15 @@ async function notifyKeyEvent({
 // =========================================================================
 // HANDLER: GET ?key=X — resolve (hot path)
 // =========================================================================
+//
+// NOTE: trackClick is called by the beacon, not here. See handleHit.
+// The ad page (folio.xo.je/index.html) POSTs ?action=hit before
+// redirecting, and that path is the authoritative click counter.
+// trackClick inside handleResolve would:
+//   - double-count on hot-cache hits (beacon + resolve)
+//   - zero-count on edge-cache hits (function never runs)
+//   - zero-count when the flush timer dies before firing
+// So: server-side tracking is deliberately removed from this handler.
 
 async function handleResolve(req, res, reqId) {
   const key = String(req.query.key || "").trim();
@@ -477,10 +503,8 @@ async function handleResolve(req, res, reqId) {
     return res.status(400).json({ success: false, error: "Invalid key format" });
   }
 
-  // Hot cache
   const cached = hotGet(key);
   if (cached) {
-    trackClick(key, reqId);
     res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
     log("shortlink.resolve.hit", { reqId, key, source: "hot" });
     return res.status(200).json({
@@ -490,14 +514,12 @@ async function handleResolve(req, res, reqId) {
     });
   }
 
-  // Negative cache
   if (negGet(key)) {
     res.setHeader("Cache-Control", "public, max-age=5, s-maxage=10");
     log("shortlink.resolve.miss", { reqId, key, source: "negative" });
     return res.status(404).json({ success: false, error: "Link not found" });
   }
 
-  // Firebase
   try {
     const snap = await db.ref(`links/${key}`).once("value");
     if (!snap.exists()) {
@@ -509,7 +531,6 @@ async function handleResolve(req, res, reqId) {
 
     const record = snap.val();
     hotSet(key, record);
-    trackClick(key, reqId);
 
     res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
     log("shortlink.resolve.hit", { reqId, key, source: "firebase" });
@@ -522,6 +543,47 @@ async function handleResolve(req, res, reqId) {
     log("shortlink.resolve.error", { reqId, key, message: err.message });
     return res.status(503).json({ success: false, error: "Temporarily unavailable" });
   }
+}
+
+// =========================================================================
+// HANDLER: POST ?action=hit — click beacon from ad page
+// =========================================================================
+//
+// The ad page fires this before `window.location.replace(target)` via
+// `navigator.sendBeacon` (or `fetch(..., { keepalive: true })`). This
+// is the authoritative click counter — no server-side counting in
+// handleResolve, because edge caching skips the function entirely on
+// cache hits.
+//
+// Rate-limited per IP. If the limit trips, we still return 204 so the
+// browser doesn't block navigation. Losing a few clicks on a flood is
+// fine; blocking real users is not.
+
+async function handleHit(req, res, reqId) {
+  let key = "";
+  try {
+    const body = typeof req.body === "object" && req.body ? req.body : {};
+    key = String(body.key || "").trim();
+  } catch {}
+
+  if (!KEY_RE.test(key)) {
+    return res.status(204).end();
+  }
+
+  const rl = checkRateLimit(`hit_${hashIp(getClientIp(req))}`, "resolve");
+  setRateHeaders(res, rl);
+  if (!rl.allowed) {
+    // Don't 429 — beacon on the way to navigation should never block.
+    return res.status(204).end();
+  }
+
+  try {
+    trackClick(key, reqId);
+  } catch (err) {
+    log("shortlink.hit.track_failed", { reqId, key, message: err.message });
+  }
+
+  return res.status(204).end();
 }
 
 // =========================================================================
@@ -555,7 +617,7 @@ async function handleInfo(req, res, reqId) {
 async function handleDomains(req, res, reqId) {
   return res.status(200).json({
     success: true,
-    primary: SHORT_DOMAIN,
+    primary: SHORT_URL,
     domains: [...SUPPORTED_DOMAINS],
   });
 }
@@ -577,9 +639,10 @@ async function handleCreate(req, res, reqId) {
     return res.status(authResult.status).json({ success: false, error: authResult.error });
   }
 
-  const rateId = authResult.via === "admin"
-    ? `admin_${hashIp(getClientIp(req))}`
-    : `uid_${authResult.uid}`;
+  // Rate-limit per pid, not per admin IP. Every deploy uses
+  // ADMIN_API_KEY, so bucketing by IP would throttle the entire platform
+  // through a single shared serverless IP bucket.
+  const rateId = authResult.via === "admin" ? `pid_${pid}` : `uid_${authResult.uid}`;
   const rl = checkRateLimit(rateId, "create");
   setRateHeaders(res, rl);
 
@@ -589,7 +652,6 @@ async function handleCreate(req, res, reqId) {
     return res.status(404).json({ success: false, error: "Project not found" });
   }
 
-  // Existing key → repoint
   const idxSnap = await db.ref(`linksByPid/${pid}`).once("value");
   if (idxSnap.exists()) {
     const key = idxSnap.val();
@@ -615,7 +677,6 @@ async function handleCreate(req, res, reqId) {
     });
   }
 
-  // Cold create
   const slugSnap = await db.ref(`projects/${pid}/slug`).once("value");
   const slug = slugSnap.exists() ? slugSnap.val() : "";
   let base = buildBaseKey(slug || name || "project");
@@ -705,9 +766,7 @@ async function handleClaim(req, res, reqId) {
     return res.status(authResult.status).json({ success: false, error: authResult.error });
   }
 
-  const rateId = authResult.via === "admin"
-    ? `admin_${hashIp(getClientIp(req))}`
-    : `uid_${authResult.uid}`;
+  const rateId = authResult.via === "admin" ? `pid_${pid}` : `uid_${authResult.uid}`;
   const rl = checkRateLimit(rateId, "claim");
   setRateHeaders(res, rl);
 
@@ -717,7 +776,6 @@ async function handleClaim(req, res, reqId) {
     return res.status(404).json({ success: false, error: "Project not found" });
   }
 
-  // Validate base
   let base;
   if (strategy === "custom") {
     const cleaned = String(baseName).toLowerCase().trim();
@@ -764,7 +822,6 @@ async function handleClaim(req, res, reqId) {
 
   const startNumber = rl.allowed && !confirmed ? 1 : 2;
 
-  // Step 1: try bare (only first attempt, not confirmed, not rate-limited)
   if (!confirmed && rl.allowed) {
     const bareSnap = await db.ref(`links/${base}`).once("value");
     if (!bareSnap.exists()) {
@@ -797,12 +854,10 @@ async function handleClaim(req, res, reqId) {
     }
   }
 
-  // Step 2: bare taken → return 409 with suggestions
   if (!confirmed && rl.allowed) {
     const suggestions = await findNextAvailable(base, 3, pid);
     log("shortlink.claim.conflict", { reqId, pid, base, suggestions });
 
-    // Notify the user that their requested name was taken
     await notifyKeyEvent({
       uid: ownerUid,
       title: "Short link name taken",
@@ -822,7 +877,6 @@ async function handleClaim(req, res, reqId) {
     });
   }
 
-  // Step 3: confirmed or rate-limited → claim numbered
   const key = await claimFirstAvailableFrom(base, makeRecord, pid, startNumber);
 
   if (!key) {
@@ -890,7 +944,6 @@ async function handleEdit(req, res, reqId) {
     return res.status(authResult.status).json({ success: false, error: authResult.error });
   }
 
-  // Validate new name
   const clean = String(newName).toLowerCase().trim();
   if (!KEY_RE.test(clean)) {
     return res.status(400).json({
@@ -902,7 +955,6 @@ async function handleEdit(req, res, reqId) {
     return res.status(400).json({ success: false, error: "This key is reserved" });
   }
 
-  // Current key
   const idxSnap = await db.ref(`linksByPid/${pid}`).once("value");
   const currentKey = idxSnap.exists() ? idxSnap.val() : null;
 
@@ -913,7 +965,6 @@ async function handleEdit(req, res, reqId) {
     });
   }
 
-  // ── Unchanged-name guard (BEFORE rate limit) ──
   if (clean === currentKey) {
     log("shortlink.edit.unchanged", { reqId, pid, key: clean });
     return res.status(200).json({
@@ -925,14 +976,10 @@ async function handleEdit(req, res, reqId) {
     });
   }
 
-  // Rate limit (only for real renames)
-  const rateId = authResult.via === "admin"
-    ? `admin_${hashIp(getClientIp(req))}`
-    : `uid_${authResult.uid}`;
+  const rateId = authResult.via === "admin" ? `pid_${pid}` : `uid_${authResult.uid}`;
   const rl = checkRateLimit(rateId, "edit");
   setRateHeaders(res, rl);
 
-  // Fetch current record to preserve URL, clicks, createdAt
   const curSnap = await db.ref(`links/${currentKey}`).once("value");
   if (!curSnap.exists()) {
     return res.status(404).json({ success: false, error: "Current link record missing" });
@@ -955,7 +1002,6 @@ async function handleEdit(req, res, reqId) {
 
   const startNumber = rl.allowed && !confirmed ? 1 : 2;
 
-  // Step 1: try bare
   if (!confirmed && rl.allowed) {
     const bareSnap = await db.ref(`links/${clean}`).once("value");
     if (!bareSnap.exists()) {
@@ -997,7 +1043,6 @@ async function handleEdit(req, res, reqId) {
     }
   }
 
-  // Step 2: bare taken → 409 with suggestions
   if (!confirmed && rl.allowed) {
     const suggestions = await findNextAvailable(clean, 3, pid);
     log("shortlink.edit.conflict", { reqId, pid, from: currentKey, base: clean, suggestions });
@@ -1022,7 +1067,6 @@ async function handleEdit(req, res, reqId) {
     });
   }
 
-  // Step 3: confirmed or rate-limited
   const newKey = await claimFirstAvailableFrom(clean, makeRecord, pid, startNumber);
 
   if (!newKey) {
@@ -1074,10 +1118,6 @@ async function handleEdit(req, res, reqId) {
 // =========================================================================
 // HANDLER: POST ?action=transfer (move a key to a different project)
 // =========================================================================
-//
-// A key belongs to exactly one project. Transfer moves a key from one
-// pid to another, keeping the same key + URL mapping. Used when a user
-// rebuilds a project and wants to preserve the short link.
 
 async function handleTransfer(req, res, reqId) {
   const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
@@ -1087,13 +1127,11 @@ async function handleTransfer(req, res, reqId) {
     return res.status(400).json({ success: false, error: "Missing or invalid pids" });
   }
 
-  // Must own the destination project (and via admin, both)
   const authResult = await authorizeProject(req, res, toPid);
   if (!authResult.ok) {
     return res.status(authResult.status).json({ success: false, error: authResult.error });
   }
 
-  // Transfer is admin-only — users can't move keys between projects
   if (authResult.via !== "admin") {
     return res.status(403).json({
       success: false,
@@ -1101,7 +1139,7 @@ async function handleTransfer(req, res, reqId) {
     });
   }
 
-  const rl = checkRateLimit(`admin_${hashIp(getClientIp(req))}`, "transfer");
+  const rl = checkRateLimit(`transfer_${hashIp(getClientIp(req))}`, "transfer");
   setRateHeaders(res, rl);
   if (!rl.allowed) {
     return res.status(429).json({ success: false, error: "Rate limit exceeded", retryAfter: rl.retryAfter });
@@ -1153,60 +1191,82 @@ async function handleTransfer(req, res, reqId) {
 // =========================================================================
 // HANDLER: DELETE ?action=release
 // =========================================================================
+//
+// Reads pid from body. Tolerates pid-missing-with-admin-key for cleanup
+// calls from host.js handleProjectsDelete, where the project record may
+// already be gone by the time we get here.
 
 async function handleRelease(req, res, reqId) {
   const key = String(req.query.key || "").trim();
   const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
-  const pid = body.pid;
+  const pid = String(body.pid || "").trim();
 
-  if (!KEY_RE.test(key) || !pid) {
-    return res.status(400).json({ success: false, error: "Missing or invalid key/pid" });
+  if (!KEY_RE.test(key)) {
+    return res.status(400).json({ success: false, error: "Missing or invalid key" });
   }
 
-  const authResult = await authorizeProject(req, res, pid);
-  if (!authResult.ok) {
-    return res.status(authResult.status).json({ success: false, error: authResult.error });
+  const admin = await isAdmin(req);
+
+  // If not admin, pid must be provided and validated via authorizeProject
+  if (!admin) {
+    if (!pid) {
+      return res.status(400).json({ success: false, error: "Missing pid" });
+    }
+    const authResult = await authorizeProject(req, res, pid);
+    if (!authResult.ok) {
+      return res.status(authResult.status).json({ success: false, error: authResult.error });
+    }
   }
 
-  const rateId = authResult.via === "admin"
-    ? `admin_${hashIp(getClientIp(req))}`
-    : `uid_${authResult.uid}`;
-  if (!checkRateLimit(rateId, "release").allowed) {
-    return res.status(429).json({ success: false, error: "Rate limit exceeded", retryAfter: 60 });
+  const rateId = admin ? `admin_${hashIp(getClientIp(req))}` : `uid_${pid}`;
+  const rl = checkRateLimit(rateId, "release");
+  setRateHeaders(res, rl);
+  if (!rl.allowed) {
+    return res.status(429).json({ success: false, error: "Rate limit exceeded", retryAfter: rl.retryAfter });
   }
 
   const snap = await db.ref(`links/${key}`).once("value");
   if (!snap.exists()) {
-    return res.status(404).json({ success: false, error: "Key not found" });
+    // Idempotent — releasing an already-gone key is not an error.
+    return res.status(200).json({ success: true, key, released: false, reason: "not_found" });
   }
-  if (snap.val().p !== pid) {
+
+  const recordPid = snap.val().p;
+  if (!admin && pid && recordPid !== pid) {
     return res.status(403).json({ success: false, error: "Not your key" });
   }
 
   const ownerUid = snap.val().o || null;
+  const targetPid = admin ? (recordPid || pid) : pid;
 
-  await releaseKey(key, pid);
+  await releaseKey(key, targetPid);
 
-  const updates = {};
-  updates[`linksByPid/${pid}`] = null;
-  updates[`projects/${pid}/shortKey`] = null;
-  await db.ref().update(updates).catch(() => {});
+  if (targetPid) {
+    const updates = {};
+    updates[`linksByPid/${targetPid}`] = null;
+    updates[`projects/${targetPid}/shortKey`] = null;
+    await db.ref().update(updates).catch(() => {});
+  }
 
   await invalidateKey(key, reqId);
 
-  await logProjectEvent(pid, ownerUid, "shortlink", "shortlink.released", { key });
+  if (targetPid) {
+    await logProjectEvent(targetPid, ownerUid, "shortlink", "shortlink.released", { key }).catch(() => {});
+  }
 
-  await notifyKeyEvent({
-    uid: ownerUid,
-    title: "Short link released",
-    body: `${shortUrlFor(key)} is no longer connected to your project.`,
-    link: `${BASE_URL}/project?pid=${pid}`,
-    extra: { pid, key },
-    dedupeKey: `shortlink_release_${pid}_${key}`,
-    dedupeTtlMs: 60 * 1000,
-  });
+  if (ownerUid) {
+    await notifyKeyEvent({
+      uid: ownerUid,
+      title: "Short link released",
+      body: `${shortUrlFor(key)} is no longer connected to your project.`,
+      link: targetPid ? `${BASE_URL}/project?pid=${targetPid}` : `${BASE_URL}/projects`,
+      extra: { pid: targetPid, key },
+      dedupeKey: `shortlink_release_${targetPid || key}_${key}`,
+      dedupeTtlMs: 60 * 1000,
+    });
+  }
 
-  log("shortlink.release", { reqId, pid, key, released: true });
+  log("shortlink.release", { reqId, pid: targetPid, key, released: true, via: admin ? "admin" : "session" });
   return res.status(200).json({ success: true, key, released: true });
 }
 
@@ -1259,7 +1319,7 @@ export default async function handler(req, res) {
   const startTime = Date.now();
   res.setHeader("X-Request-Id", reqId);
 
-  setCors(req, res);
+  setCorsHeaders(req, res);
   if (req.method === "OPTIONS") return res.status(204).end();
 
   const action = String(req.query.action || "").trim();
@@ -1293,6 +1353,11 @@ export default async function handler(req, res) {
 
     if (method === "GET" && action === "domains") {
       return await handleDomains(req, res, reqId);
+    }
+
+    // ── Click beacon ──
+    if (method === "POST" && action === "hit") {
+      return await handleHit(req, res, reqId);
     }
 
     // ── Writes ──
