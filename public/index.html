@@ -325,7 +325,7 @@
   <iframe id="previewFullFrame" sandbox="allow-scripts allow-forms allow-modals"></iframe>
   <div class="preview-console" id="previewConsole"></div>
 </div>
-
+<div id="previewRoot"></div>
 <div class="symbols-sheet" id="symbolsSheet">
   <div class="symbols-sheet-inner">
     <div class="symbols-sheet-header">
@@ -520,6 +520,7 @@
 <script type="module">
 "use strict";
 import { initCreateProject, createNewProject, handleNewProjectImageReturn } from '/js/create-project.js';
+import { initPreview, openPreview, closePreview, setPreviewProject, isPreviewOpen } from '/js/preview.js';
 
 (function () {
   'use strict';
@@ -3155,13 +3156,18 @@ function autoFillMeta(metaSection, project, existingMeta) {
   // ═══════════════════════════════════════════════════════════
 
   async function launchPreview() {
-    if (!S.currentProject) { toast('No project', 'warning'); return; }
-    const isHtmlActive = S.activeFile && /\.html?$/i.test(S.activeFile);
-    const fileToPreview = isHtmlActive ? S.activeFile : null;
-    if (S.previewMode === 'fullscreen') openFullscreenPreview(fileToPreview);
-    else if (S.previewMode === 'tab') openTabPreview(fileToPreview);
-    else if (S.previewMode === 'mini') openMiniPreview(fileToPreview);
+  if (!S.currentProject) { toast('No project', 'warning'); return; }
+  const isHtmlActive = S.activeFile && /\.html?$/i.test(S.activeFile);
+  const fileToPreview = isHtmlActive ? S.activeFile : null;
+
+  if (S.previewMode === 'dev') {
+    await openDevPreview(fileToPreview);
+    return;
   }
+  if (S.previewMode === 'fullscreen') openFullscreenPreview(fileToPreview);
+  else if (S.previewMode === 'tab') openTabPreview(fileToPreview);
+  else if (S.previewMode === 'mini') openMiniPreview(fileToPreview);
+}
 
   async function buildPreviewHtml(fileToPreview = null) {
     if (!S.currentProject) return null;
@@ -3172,28 +3178,72 @@ function autoFillMeta(metaSection, project, existingMeta) {
     const fileMapLower = {};
     for (const f of files) { if (f.path === NOTES_PATH) continue; fileMapLower[f.path.toLowerCase()] = f.content; }
     let html = htmlFile.content;
-    html = html.replace(/<link([^>]*)href=["']([^"']+\.css)["']([^>]*)>/gi, (match, before, href, after) => { const key = href.replace(/^\.\//, '').replace(/^\//, '').toLowerCase(); if (fileMapLower[key] != null) return TAG_STYLE_OPEN + '\n' + fileMapLower[key] + '\n' + TAG_STYLE_CLOSE; return match; });
+    html = html.replace(/<link([^>]*)href=["']([^"']+\.css)["']([^>]*)>/gi, (match, before, href, after) => { const key = href.replace(/^\.\//, '').replace(/^\//, '').toLowerCase(); if (fileMapLower[key] != null) return TAG_STYLE_OPEN + '\n/*# sourceURL=/' + href.replace(/\//g, '_') + ' */\n' + fileMapLower[key] + '\n' + TAG_STYLE_CLOSE; return match; });
+    
     html = html.replace(/<img([^>]*)src=["']([^"']+)["']([^>]*)>/gi, (match, before, src, after) => { if (src.startsWith('data:') || /^https?:\/\//i.test(src)) return match; const key = src.replace(/^\.\//, '').replace(/^\//, '').toLowerCase(); const content = fileMapLower[key]; if (content && content.startsWith('data:')) return `<img${before}src="${content}"${after}>`; return match; });
     const bridge = TAG_SCRIPT_OPEN + '\n(function(){var o={log:console.log,warn:console.warn,error:console.error};["log","warn","error"].forEach(function(l){console[l]=function(){try{window.parent.postMessage({__folio:"console",level:l,args:Array.prototype.slice.call(arguments).map(String)},"*");}catch(e){}return o[l].apply(console,arguments);};});})();\n' + TAG_SCRIPT_CLOSE;
     html = html.replace(/<head[^>]*>/i, (m) => m + bridge);
     try { const meta = (await db.getProjectMeta(S.currentProject.pid)).meta || {}; if (Object.keys(meta).length > 0) html = injectMetaIntoHtml(html, meta); } catch {}
     return html;
   }
+let _currentDevPreviewFile = null;
 
-  async function openFullscreenPreview(fileToPreview = null) {
-    const html = await buildPreviewHtml(fileToPreview);
-    if (!html) { toast('No HTML file found. Create index.html or import one.', 'warning', 4000); return; }
-    $('previewFullFrame').srcdoc = html; $('previewConsole').innerHTML = '';
-    const options = await getPreviewFileOptions();
-    const selector = $('previewFileSelector');
-    if (selector) {
-      selector.innerHTML = '';
-      const active = fileToPreview || 'index.html';
-      for (const path of options) { const opt = document.createElement('option'); opt.value = path; opt.textContent = path; if (path === active) opt.selected = true; selector.appendChild(opt); }
-      selector.style.display = options.length > 1 ? 'inline-block' : 'none';
-    }
-    $('previewFullscreen').classList.add('visible');
+async function openDevPreview(fileToPreview = null) {
+  if (!S.currentProject) { toast('No project', 'warning'); return; }
+
+  const html = await buildPreviewHtml(fileToPreview);
+  if (!html) {
+    toast('No HTML file found. Create index.html or import one.', 'warning', 4000);
+    return;
   }
+  _currentDevPreviewFile = fileToPreview;
+
+  const files = await db.listFiles(S.currentProject.pid);
+  const loaded = [];
+  const skipped = [];
+  for (const f of files) {
+    if (isSystemFile(f.path)) continue;
+    if (/^api\//i.test(f.path) && /\.js$/i.test(f.path)) {
+      skipped.push({ path: f.path, skippedReason: 'server-only' });
+      continue;
+    }
+    const kind = getFileKind(f.path);
+    if (kind === 'binary' || kind === 'font' || kind === 'pdf' || kind === 'video' || kind === 'audio') {
+      skipped.push({ path: f.path, skippedReason: 'unsupported type' });
+      continue;
+    }
+    if (estimateBytes(f.content) > MAX_FILE_BYTES) {
+      skipped.push({ path: f.path, skippedReason: 'exceeds ' + formatBytes(MAX_FILE_BYTES) });
+      continue;
+    }
+    loaded.push({ path: f.path, size: estimateBytes(f.content) });
+  }
+
+  const fileOptions = loaded.filter(f => /\.html?$/i.test(f.path)).map(f => f.path);
+
+  openPreview({
+    html,
+    files: [...loaded, ...skipped],
+    projectName: S.currentProject.name,
+    pid: S.currentProject.pid,
+    activeFile: fileToPreview,
+    fileOptions,
+  });
+}
+  async function openFullscreenPreview(fileToPreview = null) {
+  const html = await buildPreviewHtml(fileToPreview);
+  if (!html) { toast('No HTML file found. Create index.html or import one.', 'warning', 4000); return; }
+  $('previewFullFrame').srcdoc = html; $('previewConsole').innerHTML = '';
+  const options = await getPreviewFileOptions();
+  const selector = $('previewFileSelector');
+  if (selector) {
+    selector.innerHTML = '';
+    const active = fileToPreview || 'index.html';
+    for (const path of options) { const opt = document.createElement('option'); opt.value = path; opt.textContent = path; if (path === active) opt.selected = true; selector.appendChild(opt); }
+    selector.style.display = options.length > 1 ? 'inline-block' : 'none';
+  }
+  $('previewFullscreen').classList.add('visible');
+}
 
   async function openMiniPreview(fileToPreview = null) {
     const html = await buildPreviewHtml(fileToPreview);
@@ -3458,19 +3508,44 @@ if (res.data.shortKey) {
   });
 
   $('previewMain')?.addEventListener('click', launchPreview);
-  $('previewCaret')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const existing = document.querySelector('.menu-popover');
-    if (existing) { existing.remove(); return; }
-    const popover = el('div', { class: 'menu-popover' });
-    for (const mode of [{ id: 'fullscreen', label: 'Fullscreen', icon: 'expand' }, { id: 'tab', label: 'New tab', icon: 'external' }, { id: 'mini', label: 'Mini panel', icon: 'expand' }]) {
-      popover.appendChild(el('button', { class: 'menu-row', type: 'button', onclick: () => { S.previewMode = mode.id; try { localStorage.setItem(STORAGE.previewMode, mode.id); } catch {} popover.remove(); launchPreview(); } },
-        icon(mode.icon, 12), mode.label, S.previewMode === mode.id ? el('span', { class: 'check' }, '✓') : null
-      ));
-    }
-    $('previewBtn').appendChild(popover);
-    setTimeout(() => { document.addEventListener('click', function handler() { popover.remove(); document.removeEventListener('click', handler); }, { once: true }); }, 50);
-  });
+$('previewCaret')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const existing = document.querySelector('.menu-popover');
+  if (existing) { existing.remove(); return; }
+  const popover = el('div', { class: 'menu-popover' });
+
+  const standardModes = [
+    { id: 'fullscreen', label: 'Fullscreen', icon: 'expand' },
+    { id: 'tab', label: 'New tab', icon: 'external' },
+    { id: 'mini', label: 'Mini panel', icon: 'expand' },
+  ];
+  for (const mode of standardModes) {
+    popover.appendChild(el('button', { class: 'menu-row', type: 'button', onclick: () => {
+      S.previewMode = mode.id;
+      try { localStorage.setItem(STORAGE.previewMode, mode.id); } catch {}
+      popover.remove();
+      launchPreview();
+    } },
+      icon(mode.icon, 12), mode.label,
+      S.previewMode === mode.id ? el('span', { class: 'check' }, '✓') : null
+    ));
+  }
+
+  popover.appendChild(el('div', { class: 'menu-divider' }));
+
+  popover.appendChild(el('button', { class: 'menu-row', type: 'button', onclick: () => {
+    S.previewMode = 'dev';
+    try { localStorage.setItem(STORAGE.previewMode, 'dev'); } catch {}
+    popover.remove();
+    launchPreview();
+  } },
+    icon('terminal', 12), 'Dev preview',
+    S.previewMode === 'dev' ? el('span', { class: 'check' }, '✓') : null
+  ));
+
+  $('previewBtn').appendChild(popover);
+  setTimeout(() => { document.addEventListener('click', function handler() { popover.remove(); document.removeEventListener('click', handler); }, { once: true }); }, 50);
+});
 
   $('sidebarClose')?.addEventListener('click', closeSidebar);
   $('sidebarBackdrop')?.addEventListener('click', closeSidebar);
@@ -3589,15 +3664,16 @@ if (res.data.shortKey) {
     if (mod && key === 's') { e.preventDefault(); e.shiftKey ? workspace.saveAll() : workspace.saveActiveFile(); return; }
     if (mod && key === 'f') { e.preventDefault(); cm.view ? cm.openSearch() : openSidebar('search'); return; }
     if (mod && key === 'b') { e.preventDefault(); S.sidebarOpen ? closeSidebar() : openSidebar(); return; }
-    if (e.key === 'Escape') {
-      if ($('previewFullscreen').classList.contains('visible')) { $('previewFullscreen').classList.remove('visible'); return; }
-      if (!$('helpSheet').hidden) { closeHelpSheet(); return; }
-      if (S.symbolsOpen) { closeSymbolsSheet(); return; }
-      if ($('confirmDialog').classList.contains('open')) { resolveConfirm(false); return; }
-      if (sheetOpen) { closeSheet(); return; }
-      if (S.sidebarOpen && window.innerWidth < 1024) { closeSidebar(); return; }
-      if (S.ctrlLatch) { setCtrlLatch(false); return; }
-    }
+if (e.key === 'Escape') {
+  if (isPreviewOpen()) { closePreview(); return; }
+  if ($('previewFullscreen').classList.contains('visible')) { $('previewFullscreen').classList.remove('visible'); return; }
+  if (!$('helpSheet').hidden) { closeHelpSheet(); return; }
+  if (S.symbolsOpen) { closeSymbolsSheet(); return; }
+  if ($('confirmDialog').classList.contains('open')) { resolveConfirm(false); return; }
+  if (sheetOpen) { closeSheet(); return; }
+  if (S.sidebarOpen && window.innerWidth < 1024) { closeSidebar(); return; }
+  if (S.ctrlLatch) { setCtrlLatch(false); return; }
+}
   });
 
   window.addEventListener('beforeunload', (e) => {
@@ -3763,7 +3839,22 @@ if (res.data.shortKey) {
   getUsername: () => S.user?.profile?.username || null, getSession: () => S.session,
 });
 
-  boot().catch(err => { console.error('[Boot] Fatal:', err); toast('Startup error: ' + (err.message || 'unknown'), 'error', 8000); });
+initPreview({
+  rootEl: $('previewRoot'),
+  onOpenFile: (path, line) => {
+    closePreview();
+    workspace.openFile(path).then(() => {
+      if (line) setTimeout(() => cm.goToLine(line), 200);
+    });
+  },
+  onClose: () => closePreview(),
+  onRefresh: () => openDevPreview(_currentDevPreviewFile),
+  onToast: (msg, type) => toast(msg, type),
+});
+
+boot().catch(err => { console.error('[Boot] Fatal:', err); toast('Startup error: ' + (err.message || 'unknown'), 'error', 8000); });
+
+  
 
 })();
 </script>
