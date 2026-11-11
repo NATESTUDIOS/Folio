@@ -25,6 +25,7 @@ import net from "node:net";
 import dns from "node:dns/promises";
 import { db } from "../utils/firebase.js";
 import { log, newReqId } from "../utils/log.js";
+import shortlinkHandler from "./shortlink.js";
 import * as projectDb from "../utils/projectdb.js";
 import * as projectSecrets from "../utils/projectsecret.js";
 import {
@@ -67,6 +68,89 @@ const PUBLIC_SITE_BASE =
 
 const SHORT_URL =
   (process.env.SHORT_URL || "https://folio.xo.je").replace(/\/+$/, "");
+
+// ═══════════════════════════════════════════════════════════════════
+//  SHORTLINK — in-process call shim
+// ═══════════════════════════════════════════════════════════════════
+//
+// host.js and shortlink.js live in the same api/ folder. Instead of
+// making a network round-trip through PUBLIC_SITE_BASE (which leaves
+// the process and comes back), we call shortlink.js's default handler
+// directly with a minimal req/res shim.
+//
+// shortlink.js only touches these req/res members, so this shim is
+// complete for our usage:
+//   req.method, req.query, req.body, req.headers, req.url
+//   res.status(), res.json(), res.send(), res.end(), res.setHeader()
+//
+// Auth: every call passes x-api-key: ADMIN_API_KEY so shortlink.js's
+// authorizeProject() takes the admin path. That matches what the
+// previous fetch() version sent.
+//
+// Returns { status: number, data: any }.
+
+async function callShortlink({ method = "GET", action, query = {}, body = {}, headers = {} } = {}) {
+  return new Promise((resolve) => {
+    const req = {
+      method,
+      query: { ...(action ? { action } : {}), ...query },
+      body,
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": process.env.ADMIN_API_KEY || "",
+        ...headers,
+      },
+      url: "/api/shortlink",
+    };
+
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    const res = {
+      statusCode: 200,
+      headers: {},
+      setHeader(k, v) {
+        this.headers[k.toLowerCase()] = v;
+      },
+      getHeader(k) {
+        return this.headers[k.toLowerCase()];
+      },
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(obj) {
+        settle({ status: this.statusCode, data: obj });
+      },
+      send(payload) {
+        if (typeof payload === "string") {
+          try {
+            settle({ status: this.statusCode, data: JSON.parse(payload) });
+          } catch {
+            settle({ status: this.statusCode, data: payload });
+          }
+        } else {
+          settle({ status: this.statusCode, data: payload });
+        }
+      },
+      end() {
+        settle({ status: this.statusCode, data: null });
+      },
+    };
+
+    Promise.resolve(shortlinkHandler(req, res)).catch((err) => {
+      log("host.shortlink_call.error", { action, message: err.message });
+      settle({
+        status: 500,
+        data: { success: false, error: err.message || "Shortlink handler failed" },
+      });
+    });
+  });
+}
 // =========================================================================
 // CORS — origins loaded from public/assets/domains.json
 // =========================================================================
@@ -2376,10 +2460,11 @@ async function handleDeploy(req, res, reqId) {
 
   // ── Resolve owner username ───────────────────────────────────────
   const ownerUsername = await getProjectOwnerUsername(pid, project);
-  const cleanUrl = ownerUsername
-    ? buildProjectCleanUrl(ownerUsername, project, pid)
-    : `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
   const serveUrl = `${BASE_URL}/api/host?action=serve&pid=${pid}&path=index.html`;
+const publicUrl = ownerUsername && project.slug
+  ? buildLiveSiteUrl(ownerUsername, project)
+  : null;
+const cleanUrl = publicUrl || serveUrl;
 
   // ── Write slug index (for the friendly API URL) ──────────────────
   if (ownerUsername && project.slug) {
@@ -2462,34 +2547,29 @@ try {
     : null;
 
   if (publicUrl) {
-    const shortRes = await fetch(
-      `${PUBLIC_SITE_BASE}/api/shortlink?action=create`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": process.env.ADMIN_API_KEY || "",
-        },
-        body: JSON.stringify({
-          pid,
-          url: publicUrl,
-          imageUrl: project.thumbnail?.url || null,
-          name: project.name || "",
-        }),
-        signal: AbortSignal.timeout(5000),
+    const result = await callShortlink({
+      method: "POST",
+      action: "create",
+      body: {
+        pid,
+        url: publicUrl,
+        imageUrl: project.thumbnail?.url || null,
+        name: project.name || "",
       },
-    );
-    if (shortRes.ok) {
-      const data = await shortRes.json().catch(() => ({}));
-      if (data.success && data.key && data.shortUrl) {
-        shortKey = data.key;
-        shortUrl = data.shortUrl;
-        await db.ref(`projects/${pid}/shortKey`).set(shortKey).catch(() => {});
-        await db.ref(`projects/${pid}/shortUrl`).set(shortUrl).catch(() => {});
-        invalidateProject(pid);
-      }
+    });
+
+    if (result.status === 200 && result.data?.success && result.data.key && result.data.shortUrl) {
+      shortKey = result.data.key;
+      shortUrl = result.data.shortUrl;
+      await db.ref(`projects/${pid}/shortKey`).set(shortKey).catch(() => {});
+      await db.ref(`projects/${pid}/shortUrl`).set(shortUrl).catch(() => {});
+      invalidateProject(pid);
     } else {
-      log("host.deploy.shortlink_create_failed", { pid, status: shortRes.status });
+      log("host.deploy.shortlink_create_failed", {
+        pid,
+        status: result.status,
+        error: result.data?.error || null,
+      });
     }
   }
 } catch (err) {
@@ -3227,23 +3307,22 @@ async function handleShortlinkInfo(req, res, reqId) {
   const shortKey = project.shortKey || null;
   let detail = null;
 
-  // Fetch click/metadata from the shortlink API (best-effort)
+  // Read click/metadata from the shortlink module (best-effort)
   if (shortKey) {
     try {
-      const upstream = await fetch(
-        `${PUBLIC_SITE_BASE}/api/shortlink?action=info&key=${encodeURIComponent(shortKey)}`,
-        { signal: AbortSignal.timeout(3000) },
-      );
-      if (upstream.ok) {
-        const json = await upstream.json().catch(() => ({}));
-        if (json?.success && json.data) {
-          detail = {
-            clicks: typeof json.data.clicks === "number" ? json.data.clicks : 0,
-            createdAt: json.data.createdAt || null,
-            lastAccessed: json.data.lastAccessed || null,
-            url: json.data.url || null,
-          };
-        }
+      const result = await callShortlink({
+        method: "GET",
+        action: "info",
+        query: { key: shortKey },
+      });
+      if (result.status === 200 && result.data?.success && result.data.data) {
+        const d = result.data.data;
+        detail = {
+          clicks: typeof d.clicks === "number" ? d.clicks : 0,
+          createdAt: d.createdAt || null,
+          lastAccessed: d.lastAccessed || null,
+          url: d.url || null,
+        };
       }
     } catch (err) {
       log("host.shortlink_info.upstream_failed", { pid, message: err.message });
@@ -3897,18 +3976,12 @@ try {
   const keySnap = await db.ref(`projects/${pid}/shortKey`).once("value");
   const shortKey = keySnap.exists() ? keySnap.val() : null;
   if (shortKey) {
-    await fetch(
-      `${PUBLIC_SITE_BASE}/api/shortlink?action=release&key=${encodeURIComponent(shortKey)}`,
-      {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": process.env.ADMIN_API_KEY || "",
-        },
-        body: JSON.stringify({ pid }),
-        signal: AbortSignal.timeout(3000),
-      },
-    ).catch(() => {});
+    await callShortlink({
+      method: "DELETE",
+      action: "release",
+      query: { key: shortKey },
+      body: { pid },
+    }).catch(() => {});
   }
 } catch (err) {
   log("host.projects_delete.shortlink_release_failed", { pid, message: err.message });
@@ -5396,13 +5469,10 @@ async function handleShortlinkClaim(req, res, reqId) {
   const targetUrl = buildLiveSiteUrl(ownerUsername, project);
 
   try {
-    const upstream = await fetch(`${PUBLIC_SITE_BASE}/api/shortlink?action=claim`, {
+    const result = await callShortlink({
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ADMIN_API_KEY || "",
-      },
-      body: JSON.stringify({
+      action: "claim",
+      body: {
         pid,
         url: targetUrl,
         imageUrl: project.thumbnail?.url || null,
@@ -5410,17 +5480,16 @@ async function handleShortlinkClaim(req, res, reqId) {
         baseName,
         strategy,
         confirmed: !!confirmed,
-      }),
-      signal: AbortSignal.timeout(6000),
+      },
     });
 
-    const data = await upstream.json().catch(() => ({}));
+    const data = result.data || {};
 
-    if (upstream.status === 409 && Array.isArray(data.suggestions)) {
+    if (result.status === 409 && Array.isArray(data.suggestions)) {
       return res.status(409).json(data);
     }
-    if (!upstream.ok || !data.success) {
-      return res.status(upstream.status || 500).json(data);
+    if (result.status !== 200 || !data.success) {
+      return res.status(result.status || 500).json(data);
     }
 
     await db.ref(`projects/${pid}/shortKey`).set(data.key).catch(() => {});
@@ -5453,22 +5522,16 @@ async function handleShortlinkRelease(req, res, reqId) {
   }
 
   try {
-    const upstream = await fetch(
-      `${PUBLIC_SITE_BASE}/api/shortlink?action=release&key=${encodeURIComponent(shortKey)}`,
-      {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": process.env.ADMIN_API_KEY || "",
-        },
-        body: JSON.stringify({ pid }),
-        signal: AbortSignal.timeout(4000),
-      },
-    );
+    const result = await callShortlink({
+      method: "DELETE",
+      action: "release",
+      query: { key: shortKey },
+      body: { pid },
+    });
 
-    if (!upstream.ok) {
-      const data = await upstream.json().catch(() => ({}));
-      return res.status(upstream.status || 502).json({
+    if (result.status !== 200) {
+      const data = result.data || {};
+      return res.status(result.status || 502).json({
         success: false,
         error: data.error || "Release failed",
       });
