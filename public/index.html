@@ -1711,7 +1711,7 @@ import { initCreateProject, createNewProject, handleNewProjectImageReturn } from
       S.shortlink = null;
       updateBreadcrumb(); updateTabs(); updateDirtyDot(); renderSidebar();
       loadDeploymentHistoryFor(project.pid).then(() => refreshInfoIfOpen());
-      if (!S.isGuest && S.online) { loadShortlinkInfo().then(() => updateShortlinkButton()).catch(() => {}); } else { updateShortlinkButton(); }
+      if (!S.isGuest && S.online) loadShortlinkInfo().catch(() => {});
       let files = [];
       try { files = await db.listFiles(project.pid); } catch (err) { console.error('[Workspace] listFiles failed:', err); showEmpty('Failed to load files'); return; }
       const realFiles = files.filter(f => !isSystemFile(f.path));
@@ -3326,12 +3326,11 @@ function autoFillMeta(metaSection, project, existingMeta) {
         if (local) await db.putProject({ ...local, deployment: S.currentProject.deployment, updatedAt: Date.now() });
       }
 
-      if (res.data.shortKey) {
-        S.currentProject.shortKey = res.data.shortKey;
-        S.currentProject.shortUrl = res.data.shortUrl;
-        S.shortlink = { pid: S.currentProject.pid, hasShortlink: true, key: res.data.shortKey, shortUrl: res.data.shortUrl, _at: Date.now() };
-        updateShortlinkButton();
-      }
+if (res.data.shortKey) {
+  S.currentProject.shortKey = res.data.shortKey;
+  S.currentProject.shortUrl = res.data.shortUrl;
+  S.shortlink = { pid: S.currentProject.pid, hasShortlink: true, key: res.data.shortKey, shortUrl: res.data.shortUrl, _at: Date.now() };
+}
 
       markSynced(S.currentProject.pid);
       const live = await pollDeployStatus(S.currentProject.pid);
