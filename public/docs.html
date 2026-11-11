@@ -1,4 +1,1076 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+
+<!--
+  STYLE BRIEF — Folio /docs
+  ──────────────────────────────────────────────────────────
+  Theme:      Documentation for a mobile-first code editor
+              with real deployment.
+  Feelings:   calm · credible · decisive
+  Concept:    "One continuous reference" — a single scroll,
+              sections flow, never fade. Matches a docs
+              system's nature.
+  Palette:    base #0a0c10 (brand), primary #F59E0B (brand),
+              surfaces #151922 / #0f1218, text #e8ecf1.
+  Display:    Inter (product-UI font — the exception allowed
+              by the skill when demoing the product's own UI).
+  Mono:       JetBrains Mono (matches the product).
+  Background: shifting gradient (base) + live grain (texture).
+              Two layers. Never flat.
+  Signature:  A single amber vertical rule that draws down
+              once on first load, 900ms, then settles.
+              Used once. Never again.
+  Motion:     Scroll-driven TOC highlight. Anchor smooth-scroll
+              via scroll-behavior. Reduced-motion disables.
+  Special:    The vertical rule draw-in on first paint.
+  ──────────────────────────────────────────────────────────
+-->
+
+<title>Docs — Folio</title>
+<meta name="description" content="Full documentation for Folio — the mobile-first code editor with real deployment, offline support, and a private API runtime.">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#0a0c10">
+
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   RESET + TOKENS
+   ═══════════════════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:0.01ms!important;animation-iteration-count:1!important;transition-duration:0.01ms!important}
+}
+
+:root{
+  color-scheme:dark light;
+  --theme-primary:#F59E0B;
+  --theme-primary-hover:#fbbf24;
+  --theme-primary-glow:rgba(245,158,11,0.40);
+  --theme-primary-soft:rgba(245,158,11,0.14);
+  --theme-bg:#0a0c10;
+  --theme-surface:#0f1218;
+  --theme-surface-card:rgba(21,25,34,0.72);
+  --theme-surface-card-solid:#151922;
+  --theme-surface-elevated:#1a1f2a;
+  --theme-text:#e8ecf1;
+  --theme-text-secondary:rgba(232,236,241,0.72);
+  --theme-text-tertiary:rgba(232,236,241,0.44);
+  --theme-glass-bg:rgba(255,255,255,0.05);
+  --theme-glass-border:rgba(255,255,255,0.09);
+  --theme-card-border:rgba(255,255,255,0.08);
+  --theme-divider:rgba(255,255,255,0.08);
+  --theme-success:#10B981;
+  --theme-success-soft:rgba(16,185,129,0.14);
+  --theme-danger:#EF4444;
+  --theme-danger-soft:rgba(239,68,68,0.12);
+  --theme-warning:#D97706;
+  --theme-warning-soft:rgba(217,119,6,0.14);
+  --theme-info:#3B82F6;
+  --theme-info-soft:rgba(59,130,246,0.14);
+
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+  --safe-left:env(safe-area-inset-left,0px);
+  --safe-right:env(safe-area-inset-right,0px);
+
+  --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono','SF Mono',Consolas,Monaco,monospace;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --r-sm:10px;--r-md:14px;--r-lg:18px;--r-xl:24px;
+
+  --sidebar-w:280px;
+  --header-h:60px;
+  --content-max:760px;
+}
+[data-theme="light"]{
+  --theme-primary:#D97706;
+  --theme-primary-hover:#B45309;
+  --theme-primary-glow:rgba(217,119,6,0.28);
+  --theme-primary-soft:rgba(217,119,6,0.10);
+  --theme-bg:#f7f8fa;
+  --theme-surface:#ffffff;
+  --theme-surface-card:rgba(255,255,255,0.85);
+  --theme-surface-card-solid:#ffffff;
+  --theme-surface-elevated:#ffffff;
+  --theme-text:#121316;
+  --theme-text-secondary:rgba(18,19,22,0.72);
+  --theme-text-tertiary:rgba(18,19,22,0.48);
+  --theme-glass-bg:rgba(0,0,0,0.03);
+  --theme-glass-border:rgba(0,0,0,0.08);
+  --theme-card-border:rgba(0,0,0,0.07);
+  --theme-divider:rgba(0,0,0,0.06);
+  --theme-success:#059669;
+  --theme-success-soft:rgba(5,150,105,0.12);
+  --theme-danger:#DC2626;
+  --theme-danger-soft:rgba(220,38,38,0.10);
+  --theme-warning:#B45309;
+  --theme-warning-soft:rgba(180,83,9,0.10);
+}
+
+html,body{
+  background:var(--theme-bg);
+  color:var(--theme-text);
+  font-family:var(--font);
+  font-size:15px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  overflow-x:hidden;
+}
+body{
+  background-image:
+    radial-gradient(circle at 50% -10%, rgba(245,158,11,0.10) 0%, transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(249,115,22,0.05) 0%, transparent 50%);
+  background-attachment:fixed;
+  min-height:100vh;
+}
+
+a{color:var(--theme-primary);text-decoration:none;transition:color 0.15s}
+a:hover{color:var(--theme-primary-hover)}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;touch-action:manipulation}
+img,svg{display:block;max-width:100%}
+:focus-visible{outline:2px solid var(--theme-primary);outline-offset:3px;border-radius:4px}
+
+/* ═══════════════════════════════════════════════════════════
+   LIVE GRAIN — background layer #2
+   Deterministic noise, pre-generated. Never Math.random().
+   ═══════════════════════════════════════════════════════════ */
+.grain{
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:1;
+  opacity:0.035;
+  mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size:200px 200px;
+}
+[data-theme="light"] .grain{opacity:0.055}
+
+/* ═══════════════════════════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════════════════════════ */
+.docs-header{
+  position:fixed;
+  top:0;left:0;right:0;
+  height:calc(var(--header-h) + var(--safe-top));
+  padding-top:var(--safe-top);
+  z-index:40;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding-left:calc(16px + var(--safe-left));
+  padding-right:calc(16px + var(--safe-right));
+  background:color-mix(in srgb, var(--theme-bg) 85%, transparent);
+  backdrop-filter:blur(14px) saturate(180%);
+  -webkit-backdrop-filter:blur(14px) saturate(180%);
+  border-bottom:1px solid var(--theme-glass-border);
+}
+.docs-header-left{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.docs-brand{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  color:var(--theme-text);
+  font-weight:800;
+  font-size:14px;
+  letter-spacing:-0.3px;
+  flex-shrink:0;
+}
+.docs-brand-mark{
+  width:28px;height:28px;
+  border-radius:8px;
+  overflow:hidden;
+  background:var(--theme-surface-elevated);
+  border:1px solid var(--theme-glass-border);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--theme-primary);
+}
+.docs-brand-mark img{width:100%;height:100%;object-fit:cover}
+.docs-brand-mark svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.docs-brand-sep{color:var(--theme-text-tertiary);font-weight:400}
+.docs-brand-section{color:var(--theme-text-secondary);font-weight:600}
+@media (max-width:600px){ .docs-brand-section{display:none} }
+
+.docs-header-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.docs-search-trigger{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 12px 6px 10px;
+  background:var(--theme-glass-bg);
+  border:1px solid var(--theme-card-border);
+  border-radius:8px;
+  color:var(--theme-text-tertiary);
+  font-size:12px;
+  font-weight:500;
+  transition:all 0.15s var(--ease);
+  min-width:200px;
+}
+.docs-search-trigger:hover{background:var(--theme-surface-elevated);color:var(--theme-text);border-color:var(--theme-primary-glow)}
+.docs-search-trigger svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2}
+.docs-search-trigger kbd{
+  margin-left:auto;
+  padding:1px 5px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:600;
+  background:var(--theme-divider);
+  border-radius:3px;
+  color:var(--theme-text-tertiary);
+}
+@media (max-width:720px){
+  .docs-search-trigger{min-width:0;padding:6px 8px}
+  .docs-search-trigger span{display:none}
+  .docs-search-trigger kbd{display:none}
+}
+
+.docs-icon-btn{
+  width:32px;height:32px;
+  border-radius:8px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--theme-text-secondary);
+  transition:all 0.15s var(--ease);
+}
+.docs-icon-btn:hover{background:var(--theme-glass-bg);color:var(--theme-text)}
+.docs-icon-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+
+.docs-sidebar-toggle{display:none}
+@media (max-width:960px){ .docs-sidebar-toggle{display:inline-flex} }
+
+/* ═══════════════════════════════════════════════════════════
+   LAYOUT — sidebar + content
+   ═══════════════════════════════════════════════════════════ */
+.docs-layout{
+  display:grid;
+  grid-template-columns:var(--sidebar-w) minmax(0,1fr);
+  padding-top:calc(var(--header-h) + var(--safe-top));
+  min-height:100vh;
+}
+@media (max-width:960px){
+  .docs-layout{grid-template-columns:minmax(0,1fr)}
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SIDEBAR
+   ═══════════════════════════════════════════════════════════ */
+.docs-sidebar{
+  position:sticky;
+  top:calc(var(--header-h) + var(--safe-top));
+  height:calc(100vh - var(--header-h) - var(--safe-top));
+  overflow-y:auto;
+  padding:24px 12px 40px calc(16px + var(--safe-left));
+  background:transparent;
+  border-right:1px solid var(--theme-glass-border);
+  scrollbar-width:thin;
+  z-index:20;
+}
+.docs-sidebar::-webkit-scrollbar{width:5px}
+.docs-sidebar::-webkit-scrollbar-thumb{background:var(--theme-divider);border-radius:3px}
+
+/* The signature amber rule — draws down once on first load. */
+.docs-sidebar-rule{
+  position:absolute;
+  top:24px;
+  left:calc(6px + var(--safe-left));
+  width:2px;
+  height:0;
+  background:linear-gradient(180deg, var(--theme-primary) 0%, var(--theme-primary-glow) 100%);
+  border-radius:2px;
+  box-shadow:0 0 12px var(--theme-primary-glow);
+  animation:rule-draw 900ms 200ms var(--ease) forwards;
+}
+@keyframes rule-draw{ to{ height:calc(100% - 60px) } }
+@media (prefers-reduced-motion:reduce){ .docs-sidebar-rule{ animation:none; height:calc(100% - 60px) } }
+
+.docs-sidebar-group{margin-bottom:22px}
+.docs-sidebar-group-title{
+  font-size:10px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:0.6px;
+  color:var(--theme-text-tertiary);
+  padding:0 12px 8px;
+  margin-bottom:2px;
+}
+.docs-sidebar a{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 12px;
+  margin-bottom:1px;
+  border-radius:7px;
+  color:var(--theme-text-secondary);
+  font-size:12.5px;
+  font-weight:500;
+  line-height:1.4;
+  transition:all 0.15s var(--ease);
+  position:relative;
+}
+.docs-sidebar a:hover{
+  background:var(--theme-glass-bg);
+  color:var(--theme-text);
+}
+.docs-sidebar a.active{
+  background:var(--theme-primary-soft);
+  color:var(--theme-primary);
+  font-weight:600;
+}
+.docs-sidebar a.active::before{
+  content:'';
+  position:absolute;
+  left:0;
+  top:50%;
+  transform:translateY(-50%);
+  width:2px;
+  height:60%;
+  border-radius:0 2px 2px 0;
+  background:var(--theme-primary);
+}
+
+@media (max-width:960px){
+  .docs-sidebar{
+    position:fixed;
+    top:calc(var(--header-h) + var(--safe-top));
+    left:0;
+    bottom:0;
+    width:min(88vw,320px);
+    background:var(--theme-surface-card-solid);
+    transform:translateX(-100%);
+    transition:transform 0.28s var(--ease);
+    border-right:1px solid var(--theme-glass-border);
+    box-shadow:6px 0 40px rgba(0,0,0,0.35);
+    padding-top:20px;
+    padding-bottom:calc(40px + var(--safe-bottom));
+  }
+  .docs-sidebar.open{transform:translateX(0)}
+  .docs-sidebar-rule{display:none}
+}
+.docs-sidebar-backdrop{
+  display:none;
+  position:fixed;
+  inset:0;
+  top:calc(var(--header-h) + var(--safe-top));
+  background:rgba(10,12,16,0.55);
+  backdrop-filter:blur(2px);
+  -webkit-backdrop-filter:blur(2px);
+  z-index:19;
+}
+.docs-sidebar-backdrop.open{display:block}
+@media (min-width:961px){ .docs-sidebar-backdrop{display:none!important} }
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN CONTENT
+   ═══════════════════════════════════════════════════════════ */
+.docs-main{
+  min-width:0;
+  padding:36px calc(24px + var(--safe-right)) calc(80px + var(--safe-bottom)) calc(32px + var(--safe-left));
+  max-width:calc(var(--content-max) + 64px);
+  margin:0 auto;
+  width:100%;
+}
+@media (min-width:1200px){
+  .docs-main{padding-left:60px;padding-right:60px}
+}
+@media (max-width:960px){
+  .docs-main{padding:24px calc(20px + var(--safe-right)) calc(60px + var(--safe-bottom)) calc(20px + var(--safe-left))}
+}
+
+.docs-section{
+  scroll-margin-top:calc(var(--header-h) + var(--safe-top) + 20px);
+  margin-bottom:56px;
+}
+.docs-section:first-child{margin-top:0}
+
+.docs-eyebrow{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.8px;
+  color:var(--theme-primary);
+  padding:3px 8px;
+  background:var(--theme-primary-soft);
+  border-radius:4px;
+  margin-bottom:12px;
+}
+
+.docs-h1{
+  font-size:clamp(26px,4vw,34px);
+  font-weight:900;
+  letter-spacing:-0.6px;
+  line-height:1.15;
+  color:var(--theme-text);
+  margin-bottom:10px;
+}
+.docs-h2{
+  font-size:clamp(20px,2.6vw,24px);
+  font-weight:800;
+  letter-spacing:-0.4px;
+  line-height:1.25;
+  color:var(--theme-text);
+  margin:40px 0 14px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--theme-divider);
+}
+.docs-h3{
+  font-size:16px;
+  font-weight:800;
+  letter-spacing:-0.2px;
+  color:var(--theme-text);
+  margin:24px 0 8px;
+}
+.docs-h4{
+  font-size:14px;
+  font-weight:700;
+  color:var(--theme-text);
+  margin:18px 0 6px;
+}
+
+.docs-lede{
+  font-size:clamp(15px,2vw,17px);
+  line-height:1.55;
+  color:var(--theme-text-secondary);
+  margin-bottom:24px;
+  max-width:640px;
+}
+
+.docs-p{
+  font-size:14.5px;
+  line-height:1.7;
+  color:var(--theme-text-secondary);
+  margin-bottom:14px;
+  max-width:660px;
+}
+.docs-p strong{color:var(--theme-text);font-weight:700}
+.docs-p em{color:var(--theme-text);font-style:italic}
+
+.docs-ul,.docs-ol{
+  margin:0 0 16px;
+  padding-left:22px;
+  color:var(--theme-text-secondary);
+  font-size:14px;
+  line-height:1.7;
+  max-width:660px;
+}
+.docs-ul li,.docs-ol li{margin-bottom:6px}
+.docs-ul li::marker{color:var(--theme-primary)}
+.docs-ol li::marker{color:var(--theme-primary);font-weight:700}
+.docs-ul li strong,.docs-ol li strong{color:var(--theme-text);font-weight:700}
+
+.docs-code{
+  font-family:var(--font-mono);
+  font-size:0.86em;
+  padding:1px 6px;
+  background:var(--theme-glass-bg);
+  border:1px solid var(--theme-card-border);
+  border-radius:4px;
+  color:var(--theme-text);
+  white-space:nowrap;
+}
+
+.docs-pre{
+  position:relative;
+  background:var(--theme-surface-card-solid);
+  border:1px solid var(--theme-card-border);
+  border-radius:10px;
+  padding:16px 18px;
+  overflow-x:auto;
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  line-height:1.65;
+  color:var(--theme-text-secondary);
+  margin:0 0 18px;
+  max-width:100%;
+}
+.docs-pre code{font-family:inherit;font-size:inherit;background:none;padding:0;border:none;color:inherit;white-space:pre}
+
+.docs-callout{
+  display:flex;
+  gap:12px;
+  padding:14px 16px;
+  border-radius:10px;
+  background:var(--theme-glass-bg);
+  border:1px solid var(--theme-card-border);
+  margin:0 0 18px;
+  font-size:13.5px;
+  line-height:1.6;
+  color:var(--theme-text-secondary);
+}
+.docs-callout svg{
+  width:18px;height:18px;flex-shrink:0;margin-top:2px;
+  stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;
+}
+.docs-callout-body{flex:1;min-width:0}
+.docs-callout-body strong{color:var(--theme-text);font-weight:700;display:block;margin-bottom:3px;font-size:13px}
+.docs-callout.info{background:var(--theme-info-soft);border-color:rgba(59,130,246,0.28);color:var(--theme-info)}
+.docs-callout.warning{background:var(--theme-warning-soft);border-color:rgba(217,119,6,0.28);color:var(--theme-warning)}
+.docs-callout.danger{background:var(--theme-danger-soft);border-color:rgba(239,68,68,0.28);color:var(--theme-danger)}
+.docs-callout.success{background:var(--theme-success-soft);border-color:rgba(16,185,129,0.28);color:var(--theme-success)}
+.docs-callout .docs-code{background:rgba(0,0,0,0.15);border-color:rgba(255,255,255,0.12);color:inherit}
+
+.docs-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+  margin:0 0 18px;
+  background:var(--theme-glass-bg);
+  border:1px solid var(--theme-card-border);
+  border-radius:10px;
+  overflow:hidden;
+}
+.docs-table th,.docs-table td{
+  padding:10px 14px;
+  text-align:left;
+  border-bottom:1px solid var(--theme-divider);
+  vertical-align:top;
+  line-height:1.55;
+}
+.docs-table th{
+  font-size:10.5px;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+  color:var(--theme-text-tertiary);
+  background:var(--theme-surface-elevated);
+}
+.docs-table tr:last-child td{border-bottom:none}
+.docs-table td{color:var(--theme-text-secondary)}
+.docs-table td:first-child{color:var(--theme-text);font-weight:600}
+.docs-table .docs-code{white-space:normal;word-break:break-word}
+
+/* Section cards — used for feature grids */
+.docs-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:12px;
+  margin:0 0 20px;
+}
+.docs-card{
+  padding:16px;
+  background:var(--theme-glass-bg);
+  border:1px solid var(--theme-card-border);
+  border-radius:10px;
+  transition:all 0.15s var(--ease);
+}
+.docs-card:hover{border-color:var(--theme-primary-glow);background:var(--theme-surface-elevated)}
+.docs-card-icon{
+  width:32px;height:32px;
+  border-radius:8px;
+  background:var(--theme-primary-soft);
+  color:var(--theme-primary);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:10px;
+}
+.docs-card-icon svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.docs-card-title{font-size:13.5px;font-weight:800;color:var(--theme-text);margin-bottom:4px}
+.docs-card-desc{font-size:12px;color:var(--theme-text-secondary);line-height:1.55}
+
+/* Step list */
+.docs-steps{list-style:none;padding:0;margin:0 0 20px;counter-reset:step}
+.docs-steps li{
+  position:relative;
+  padding:14px 16px 14px 52px;
+  background:var(--theme-glass-bg);
+  border:1px solid var(--theme-card-border);
+  border-radius:10px;
+  margin-bottom:8px;
+  font-size:14px;
+  line-height:1.6;
+  color:var(--theme-text-secondary);
+  counter-increment:step;
+}
+.docs-steps li::before{
+  content:counter(step);
+  position:absolute;
+  left:14px;
+  top:14px;
+  width:26px;height:26px;
+  border-radius:50%;
+  background:var(--theme-primary);
+  color:#0a0c10;
+  font-weight:800;
+  font-size:12px;
+  display:flex;align-items:center;justify-content:center;
+  letter-spacing:-0.2px;
+}
+[data-theme="light"] .docs-steps li::before{color:#ffffff}
+.docs-steps li strong{color:var(--theme-text);font-weight:700;display:block;margin-bottom:2px}
+
+/* Anchor links (hover) */
+.docs-h2,.docs-h3{position:relative}
+.docs-anchor{
+  position:absolute;
+  left:-22px;
+  top:50%;
+  transform:translateY(-50%);
+  width:18px;height:18px;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;
+  color:var(--theme-text-tertiary);
+  transition:opacity 0.15s;
+}
+.docs-h2:hover .docs-anchor,.docs-h3:hover .docs-anchor{opacity:1}
+.docs-anchor:hover{color:var(--theme-primary)}
+.docs-anchor svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+@media (max-width:600px){ .docs-anchor{display:none} }
+
+/* Prev / next */
+.docs-pager{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-top:56px;
+  padding-top:32px;
+  border-top:1px solid var(--theme-divider);
+}
+@media (max-width:600px){ .docs-pager{grid-template-columns:1fr} }
+.docs-pager a{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  padding:14px 16px;
+  background:var(--theme-glass-bg);
+  border:1px solid var(--theme-card-border);
+  border-radius:10px;
+  color:var(--theme-text);
+  transition:all 0.15s var(--ease);
+}
+.docs-pager a:hover{border-color:var(--theme-primary-glow);background:var(--theme-surface-elevated)}
+.docs-pager .pager-label{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:var(--theme-text-tertiary)}
+.docs-pager .pager-title{font-size:13.5px;font-weight:700;color:var(--theme-text)}
+.docs-pager a.next{text-align:right}
+
+/* Search overlay */
+.docs-search{
+  position:fixed;
+  inset:0;
+  z-index:100;
+  background:rgba(10,12,16,0.7);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  display:none;
+  align-items:flex-start;
+  justify-content:center;
+  padding:calc(var(--header-h) + 40px + var(--safe-top)) 20px 20px;
+}
+.docs-search.open{display:flex}
+.docs-search-panel{
+  width:100%;
+  max-width:560px;
+  background:var(--theme-surface-card-solid);
+  border:1px solid var(--theme-glass-border);
+  border-radius:14px;
+  box-shadow:0 24px 60px rgba(0,0,0,0.5);
+  overflow:hidden;
+}
+.docs-search-input-wrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:14px 16px;
+  border-bottom:1px solid var(--theme-divider);
+}
+.docs-search-input-wrap svg{width:16px;height:16px;stroke:var(--theme-text-tertiary);fill:none;stroke-width:2.2;flex-shrink:0}
+.docs-search-input{
+  flex:1;
+  min-width:0;
+  background:transparent;
+  border:none;
+  outline:none;
+  color:var(--theme-text);
+  font-family:inherit;
+  font-size:15px;
+  font-weight:500;
+}
+.docs-search-input::placeholder{color:var(--theme-text-tertiary)}
+.docs-search-esc{
+  padding:2px 6px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:600;
+  background:var(--theme-divider);
+  border-radius:4px;
+  color:var(--theme-text-tertiary);
+  cursor:pointer;
+}
+.docs-search-esc:hover{color:var(--theme-text)}
+.docs-search-results{
+  max-height:min(60vh,420px);
+  overflow-y:auto;
+  padding:6px;
+}
+.docs-search-empty{
+  padding:32px 20px;
+  text-align:center;
+  color:var(--theme-text-tertiary);
+  font-size:13px;
+}
+.docs-search-result{
+  display:block;
+  padding:10px 12px;
+  border-radius:8px;
+  color:var(--theme-text-secondary);
+  font-size:13px;
+  transition:background 0.15s;
+  cursor:pointer;
+}
+.docs-search-result:hover,.docs-search-result.focused{background:var(--theme-glass-bg);color:var(--theme-text)}
+.docs-search-result .result-section{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--theme-primary);margin-bottom:2px}
+.docs-search-result .result-title{font-weight:600;color:var(--theme-text)}
+.docs-search-result .result-snippet{font-size:11.5px;color:var(--theme-text-tertiary);margin-top:2px;line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.docs-search-result mark{background:var(--theme-primary-soft);color:var(--theme-primary);padding:0 2px;border-radius:2px;font-weight:700}
+
+/* Mobile menu button adjustment */
+@media (max-width:960px){
+  .docs-main{scroll-margin-top:calc(var(--header-h) + var(--safe-top) + 12px)}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .docs-sidebar,.docs-sidebar a,.docs-card,.docs-pager a{transition:none}
+}
+</style>
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HEADER
+     ═══════════════════════════════════════════════════════════ -->
+<header class="docs-header">
+  <div class="docs-header-left">
+    <button class="docs-icon-btn docs-sidebar-toggle" id="sidebarToggle" type="button" aria-label="Toggle menu">
+      <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <a href="/" class="docs-brand">
+      <span class="docs-brand-mark">
+        <img src="/icons/icon-192.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><svg viewBox="0 0 24 24" style="display:none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </span>
+      <span>Folio</span>
+    </a>
+    <span class="docs-brand-sep">/</span>
+    <span class="docs-brand-section">Docs</span>
+  </div>
+  <div class="docs-header-right">
+    <button class="docs-search-trigger" id="searchTrigger" type="button" aria-label="Search docs">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Search docs…</span>
+      <kbd>/</kbd>
+    </button>
+    <a class="docs-icon-btn" href="/" aria-label="Open editor" title="Open editor">
+      <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    </a>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SIDEBAR BACKDROP
+     ═══════════════════════════════════════════════════════════ -->
+<div class="docs-sidebar-backdrop" id="sidebarBackdrop"></div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     LAYOUT
+     ═══════════════════════════════════════════════════════════ -->
+<div class="docs-layout">
+
+  <aside class="docs-sidebar" id="docsSidebar">
+    <div class="docs-sidebar-rule" aria-hidden="true"></div>
+
+    <div class="docs-sidebar-group">
+      <div class="docs-sidebar-group-title">Getting started</div>
+      <a href="#overview">Overview</a>
+      <a href="#quickstart">Quickstart</a>
+      <a href="#concepts">Core concepts</a>
+      <a href="#editor">The editor</a>
+    </div>
+
+    <div class="docs-sidebar-group">
+      <div class="docs-sidebar-group-title">Building</div>
+      <a href="#files">Files &amp; assets</a>
+      <a href="#preview">Preview</a>
+      <a href="#commit">Versions &amp; commits</a>
+    </div>
+
+    <div class="docs-sidebar-group">
+      <div class="docs-sidebar-group-title">Shipping</div>
+      <a href="#deploy">Deploying</a>
+      <a href="#shortlink">Short links</a>
+      <a href="#visibility">Visibility</a>
+    </div>
+
+    <div class="docs-sidebar-group">
+      <div class="docs-sidebar-group-title">Backend</div>
+      <a href="#secrets">Secrets</a>
+      <a href="#data">JSON database</a>
+      <a href="#api">Private API</a>
+      <a href="#hosts">External hosts</a>
+    </div>
+
+    <div class="docs-sidebar-group">
+      <div class="docs-sidebar-group-title">Operations</div>
+      <a href="#offline">Offline &amp; sync</a>
+      <a href="#logs">Logs &amp; errors</a>
+      <a href="#limits">Limits</a>
+      <a href="#security">Security</a>
+    </div>
+
+    <div class="docs-sidebar-group">
+      <div class="docs-sidebar-group-title">Reference</div>
+      <a href="#urls">URLs</a>
+      <a href="#glossary">Glossary</a>
+    </div>
+  </aside>
+
+  <main class="docs-main" id="docsMain">
+
     <!-- ═══════════════════════════════════════════════════════
+         OVERVIEW
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="overview">
+      <span class="docs-eyebrow">Getting started</span>
+      <h1 class="docs-h1">Overview</h1>
+      <p class="docs-lede">Folio is a mobile-first code editor that ships real sites. Write files in the browser, deploy to a live URL in one tap, and share it with a short link — no build step, no terminal, no laptop required.</p>
+
+      <div class="docs-grid">
+        <div class="docs-card">
+          <div class="docs-card-icon"><svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+          <div class="docs-card-title">Editor in the pocket</div>
+          <div class="docs-card-desc">CodeMirror 6 with syntax highlighting, formatting, and find &amp; replace — running entirely in the browser.</div>
+        </div>
+        <div class="docs-card">
+          <div class="docs-card-icon"><svg viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/></svg></div>
+          <div class="docs-card-title">Deploy in one tap</div>
+          <div class="docs-card-desc">Every deploy creates a version snapshot, a live URL, and a short link. Keep the last 5 to roll back.</div>
+        </div>
+        <div class="docs-card">
+          <div class="docs-card-icon"><svg viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></div>
+          <div class="docs-card-title">Offline-first</div>
+          <div class="docs-card-desc">Files live in IndexedDB. Write on the plane, commit when you land. Everything syncs when you reconnect.</div>
+        </div>
+        <div class="docs-card">
+          <div class="docs-card-icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <div class="docs-card-title">Private backend</div>
+          <div class="docs-card-desc">Write <code class="docs-code">api/*.js</code> files that run in an isolated sandbox. Call external APIs with your secrets — never exposed to the browser.</div>
+        </div>
+      </div>
+
+      <h2 class="docs-h2" id="what-you-get">What you get
+        <a class="docs-anchor" href="#what-you-get" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li><strong>A real editor.</strong> CodeMirror with syntax highlighting for HTML, CSS, JS, TS, JSON, Markdown, Python — plus format and find &amp; replace.</li>
+        <li><strong>Instant deploy.</strong> One button. Your project becomes a live URL and a short link.</li>
+        <li><strong>Version history.</strong> Every commit is a snapshot you can restore from.</li>
+        <li><strong>Private API runtime.</strong> <code class="docs-code">api/*.js</code> files run in a headless Chromium sandbox — talk to OpenAI, Stripe, or any allowed host without exposing keys.</li>
+        <li><strong>Secrets &amp; JSON DB.</strong> Encrypted per-project environment variables and a 15 MB key/value store.</li>
+        <li><strong>Offline by default.</strong> Write, save, and commit without internet. Deploy when you're back online.</li>
+        <li><strong>Short links.</strong> Claim <code class="docs-code">folio.xo.je/yourproject</code> and share it anywhere.</li>
+      </ul>
+
+      <div class="docs-callout info">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <div class="docs-callout-body">
+          <strong>Three URLs, three jobs</strong>
+          <p style="margin:0">Editor lives at <code class="docs-code">foliostudios.vercel.app</code>. Published sites at <code class="docs-code">foliosites.vercel.app</code>. Short links at <code class="docs-code">folio.xo.je</code>. See <a href="#urls">URLs</a> for the full map.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         QUICKSTART
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="quickstart">
+      <span class="docs-eyebrow">Getting started</span>
+      <h1 class="docs-h1">Quickstart</h1>
+      <p class="docs-lede">From zero to live URL in under two minutes. All you need is a browser.</p>
+
+      <h2 class="docs-h2" id="qs-account">1. Create an account
+        <a class="docs-anchor" href="#qs-account" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Sign up at <a href="/register">/register</a> with an email and username. You get a session valid for 30 days, stored locally in your browser. No email verification step — you're in immediately.</p>
+
+      <h2 class="docs-h2" id="qs-project">2. Create your first project
+        <a class="docs-anchor" href="#qs-project" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ol class="docs-steps">
+        <li><strong>Open the editor</strong> at <code class="docs-code">/</code>.</li>
+        <li><strong>Tap "New project."</strong> Give it a name and description.</li>
+        <li><strong>Add a file.</strong> Click <code class="docs-code">+</code> in the sidebar or use the toolbar's <strong>New</strong> button. Start with <code class="docs-code">index.html</code>.</li>
+        <li><strong>Save.</strong> The editor auto-saves 2 seconds after you stop typing. <code class="docs-code">Ctrl</code>+<code class="docs-code">S</code> saves immediately.</li>
+      </ol>
+
+      <h2 class="docs-h2" id="qs-deploy">3. Deploy
+        <a class="docs-anchor" href="#qs-deploy" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Click <strong>Host</strong> in the toolbar or the rocket icon in the Info sidebar. You'll see a progress card in the top-right corner with a stage and percentage. When it finishes:</p>
+      <ul class="docs-ul">
+        <li>A live URL appears in a result bar at the bottom of the screen: <code class="docs-code">foliosites.vercel.app/yourname/project/myproject</code>.</li>
+        <li>A short link is auto-created if you don't have one yet.</li>
+        <li>Both URLs are copyable with one tap.</li>
+      </ul>
+
+      <div class="docs-callout success">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        <div class="docs-callout-body">
+          <strong>You're live.</strong>
+          <p style="margin:0">The result bar stays until you dismiss it. Copy the live URL or short link and share.</p>
+        </div>
+      </div>
+
+      <h2 class="docs-h2" id="qs-shortlink">4. Claim a short link
+        <a class="docs-anchor" href="#qs-shortlink" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Short links are auto-created from your project slug on first deploy. To use a custom name:</p>
+      <ol class="docs-steps">
+        <li>Open your project dashboard at <code class="docs-code">/project?pid=…</code>.</li>
+        <li>Go to <strong>Settings → Short link</strong>.</li>
+        <li>Enter a name (lowercase, 3–30 characters, starts with a letter).</li>
+        <li>Tap <strong>Claim</strong>. If it's taken, pick from 3 suggestions.</li>
+      </ol>
+      <p class="docs-p">Once claimed, the link icon in the editor header copies it instantly. See <a href="#shortlink">Short links</a>.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         CORE CONCEPTS
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="concepts">
+      <span class="docs-eyebrow">Getting started</span>
+      <h1 class="docs-h1">Core concepts</h1>
+      <p class="docs-lede">Eight ideas cover 90% of Folio. Read this once and the rest is reference.</p>
+
+      <h2 class="docs-h2" id="c-project">Projects
+        <a class="docs-anchor" href="#c-project" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">A project is a container for files, versions, secrets, and a database. Every project has:</p>
+      <ul class="docs-ul">
+        <li>A <strong>pid</strong> — <code class="docs-code">p_…</code> — the immutable identifier used everywhere in the API.</li>
+        <li>A <strong>slug</strong> — a URL-safe name derived from the project name. Can change.</li>
+        <li>An <strong>owner</strong> — you — plus optional collaborators (viewer / commenter / editor).</li>
+      </ul>
+
+      <h2 class="docs-h2" id="c-files">Files
+        <a class="docs-anchor" href="#c-files" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Files are stored flat, in one tree per project. Paths can nest (<code class="docs-code">src/app.js</code>), but there's no real folder object — the tree is built from paths. Reserved paths:</p>
+      <ul class="docs-ul">
+        <li><code class="docs-code">api/*.js</code> — private API routes (executed, never served as files).</li>
+        <li><code class="docs-code">notes.json</code> — managed by the Notes tab, not a normal file.</li>
+        <li><code class="docs-code">.gitkeep</code> / <code class="docs-code">.keep</code> — placeholders, skipped on deploy.</li>
+      </ul>
+
+      <h2 class="docs-h2" id="c-versions">Versions
+        <a class="docs-anchor" href="#c-versions" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">A version is a full snapshot of every file at a point in time. Two kinds:</p>
+      <ul class="docs-ul">
+        <li><strong>Commits</strong> — manual, from the toolbar or sidebar. Unlimited. Restore or diff any of them.</li>
+        <li><strong>Deploy snapshots</strong> — auto-created on every deploy. Last 5 kept. Enable <code class="docs-code">?from=</code> preview URLs.</li>
+      </ul>
+
+      <h2 class="docs-h2" id="c-deployments">Deployments
+        <a class="docs-anchor" href="#c-deployments" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">A deployment is one publish of one snapshot. Each has a URL, a state (<code class="docs-code">READY</code> or <code class="docs-code">OFFLINE</code>), and a thumbnail. The current deployment is what visitors see at your live URL.</p>
+
+      <h2 class="docs-h2" id="c-secrets">Secrets
+        <a class="docs-anchor" href="#c-secrets" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Encrypted key/value pairs stored per project. Available as <code class="docs-code">ENV.NAME</code> inside <code class="docs-code">api/*.js</code>. Two visibility modes: <strong>private</strong> (server-only) and <strong>public</strong> (also injected as <code class="docs-code">window.__SECRETS__</code>).</p>
+
+      <h2 class="docs-h2" id="c-db">JSON database
+        <a class="docs-anchor" href="#c-db" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">A per-project key/value store backed by Firebase Realtime Database. 15 MB per project. Read and write from <code class="docs-code">api/*.js</code> with normal <code class="docs-code">fetch</code>. See <a href="#data">JSON database</a>.</p>
+
+      <h2 class="docs-h2" id="c-private-api">Private API
+        <a class="docs-anchor" href="#c-private-api" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Files under <code class="docs-code">api/</code> become server routes. Your code runs in a headless Chromium sandbox and can call allowed external hosts. The browser never sees your keys. See <a href="#api">Private API</a>.</p>
+
+      <h2 class="docs-h2" id="c-urls">URLs
+        <a class="docs-anchor" href="#c-urls" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Three URLs serve three different jobs:</p>
+      <table class="docs-table">
+        <thead><tr><th>Domain</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">foliostudios.vercel.app</code></td><td>The editor, dashboard, API, share pages, auth</td></tr>
+          <tr><td><code class="docs-code">foliosites.vercel.app</code></td><td>Published sites — what visitors see</td></tr>
+          <tr><td><code class="docs-code">folio.xo.je</code></td><td>Short links — what you share</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════
+         THE EDITOR
+         ═══════════════════════════════════════════════════════ -->
+    <section class="docs-section" id="editor">
+      <span class="docs-eyebrow">Getting started</span>
+      <h1 class="docs-h1">The editor</h1>
+      <p class="docs-lede">CodeMirror 6 with everything you'd expect from a desktop IDE, laid out for thumbs.</p>
+
+      <h2 class="docs-h2" id="e-layout">Layout
+        <a class="docs-anchor" href="#e-layout" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <ul class="docs-ul">
+        <li><strong>Left rail</strong> — navigation (desktop only).</li>
+        <li><strong>Sidebar</strong> — Files, Info, Search, Versions, Changes, Outline, Notes tabs. Slides in on mobile.</li>
+        <li><strong>Editor</strong> — the code pane with open-file tabs above.</li>
+        <li><strong>Toolbar</strong> — Save, Undo, Redo, Ctrl latch, Find, Format, More (desktop expands a second row).</li>
+      </ul>
+
+      <h2 class="docs-h2" id="e-shortcuts">Keyboard shortcuts
+        <a class="docs-anchor" href="#e-shortcuts" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <table class="docs-table">
+        <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><code class="docs-code">Ctrl</code>+<code class="docs-code">S</code></td><td>Save current file</td></tr>
+          <tr><td><code class="docs-code">Ctrl</code>+<code class="docs-code">Shift</code>+<code class="docs-code">S</code></td><td>Save all modified files</td></tr>
+          <tr><td><code class="docs-code">Ctrl</code>+<code class="docs-code">F</code></td><td>Find</td></tr>
+          <tr><td><code class="docs-code">Ctrl</code>+<code class="docs-code">B</code></td><td>Toggle sidebar</td></tr>
+          <tr><td><code class="docs-code">Ctrl</code> latch</td><td>One-shot modifier for A / S / Z / Y / F / C / V / X on mobile</td></tr>
+          <tr><td><code class="docs-code">Esc</code></td><td>Close overlays, cancel Ctrl latch</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="docs-h2" id="e-format">Formatting
+        <a class="docs-anchor" href="#e-format" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Click <strong>Format</strong> or run Prettier from the toolbar. Supports HTML, CSS, JavaScript, JSON, and Markdown. Invalid JSON shows a lint error instead of formatting.</p>
+
+      <div class="docs-callout info">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <div class="docs-callout-body">
+          <strong>Offline formatting</strong>
+          <p style="margin:0">Prettier is loaded from a CDN on first use. First-use requires internet. Once loaded it's cached.</p>
+        </div>
+      </div>
+
+      <h2 class="docs-h2" id="e-tabs">Open files &amp; tabs
+        <a class="docs-anchor" href="#e-tabs" aria-label="Anchor"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
+      </h2>
+      <p class="docs-p">Clicking a file from the sidebar opens a tab. The dot on a tab means unsaved changes. Closing a dirty tab prompts a discard confirmation. Auto-save fires 2 seconds after you stop typing, so tabs rarely stay dirty for long.</p>
+    </section>
+
+        <!-- ═══════════════════════════════════════════════════════
          FILES & ASSETS
          ═══════════════════════════════════════════════════════ -->
     <section class="docs-section" id="files">
