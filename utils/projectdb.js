@@ -21,6 +21,15 @@
 //    dbSchemaSet(pid, schema)                       → void
 //    dbCacheInvalidate(pid)                         → void
 //    setStorageWarningHandler(fn)                   → void
+//
+//  ⚠  NESTED WRITES (v2 fix — critical)
+//  dbWritePath and dbBatch MUST write via Firebase's `update()` with a
+//  FLAT path object, not a nested one. Firebase treats update() keys
+//  that contain "/" as nested paths and merges only the leaf, preserving
+//  siblings. Building a nested object `{ sessions: { <hash>: { lastActivityAt } } }`
+//  and passing it to update() REPLACES sessions.<hash> wholesale, wiping
+//  every other field. This was the source of the "session dies after
+//  first call" bug in production.
 // ═══════════════════════════════════════════════════════════════════
 
 import { db } from "./firebase.js";
@@ -211,11 +220,7 @@ export async function dbWritePath(pid, key, value) {
   }
 
   const safeParts = validateSegments(parts);
-
-  let nested = value === undefined ? null : value;
-  for (let i = safeParts.length - 1; i >= 0; i--) {
-    nested = { [safeParts[i]]: nested };
-  }
+  const path = safeParts.join("/");
 
   const serialized = JSON.stringify(value === undefined ? null : value);
   if (serialized.length > DB_MAX_SINGLE_WRITE_BYTES) {
@@ -226,14 +231,26 @@ export async function dbWritePath(pid, key, value) {
     throw err;
   }
 
-  await db.ref(`projectData/${pid}`).update(nested);
-  dbCacheApplyWrites(pid, { [safeParts.join("/")]: value === undefined ? null : value });
+  // ── FIX ──────────────────────────────────────────────────────────────
+  // Firebase's update() treats keys containing "/" as nested paths and
+  // MERGES only the leaf, preserving siblings.
+  //
+  // OLD (BROKEN): built a nested object { sessions: { <hash>: { lastActivityAt } } }
+  //               and passed it to update() — this REPLACED sessions.<hash>
+  //               wholesale, wiping uid, expiresAt, createdAt, userAgent.
+  //
+  // NEW (CORRECT): flat path key { "sessions/<hash>/lastActivityAt": ts }
+  //                update() merges only the leaf; siblings survive.
+  // ─────────────────────────────────────────────────────────────────────
+  const flatUpdate = { [path]: value === undefined ? null : value };
+  await db.ref(`projectData/${pid}`).update(flatUpdate);
+  dbCacheApplyWrites(pid, flatUpdate);
 
   const finalSize = await computeDbSize(pid);
   const space = buildSpace(finalSize);
   await maybeWarnStorage(pid, finalSize);
 
-  return { finalSize, space, bytes: serialized.length, path: safeParts.join("/") };
+  return { finalSize, space, bytes: serialized.length, path };
 }
 
 export async function dbMerge(pid, data) {
@@ -350,6 +367,7 @@ export async function dbBatch(pid, updates) {
     throw err;
   }
 
+  // dbBatch already used flat path keys — this was correct. No change needed.
   await db.ref(`projectData/${pid}`).update(flat);
   dbCacheApplyWrites(pid, flat);
 
@@ -449,9 +467,31 @@ export async function dbList(pid, path, opts = {}) {
   if (endAt != null) ref = ref.endAt(endAt);
 
   const snap = await ref.limitToFirst(clampLimit).once("value");
+
+  // ── SHAPE FIX ─────────────────────────────────────────────────────
+  // Return flat records. Each item is the value stored at `path/<key>`,
+  // with `_key` appended so callers that need the DB key still have it.
+  //
+  // OLD shape: { key, value }            ← callers did `.value.name`
+  // NEW shape: { ...record, _key: key }  ← callers do `.name` directly
+  //
+  // This is the shape every api/*.js caller in Folio already expects
+  // (they read `p.projectId`, `u.uid`, `t.taskId`, etc. — not
+  // `p.value.projectId`). Prior to this fix, every caller was receiving
+  // `undefined` for every field on every list call, silently.
+  // ─────────────────────────────────────────────────────────────────
   const items = [];
   if (snap.exists()) {
-    snap.forEach((c) => items.push({ key: c.key, value: c.val() }));
+    snap.forEach((c) => {
+      const v = c.val();
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        items.push({ ...v, _key: c.key });
+      } else {
+        // Primitive or array under this key — wrap so callers always
+        // get an object with `_key` available.
+        items.push({ _key: c.key, value: v });
+      }
+    });
   }
 
   return {
