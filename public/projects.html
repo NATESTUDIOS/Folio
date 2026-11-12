@@ -274,12 +274,52 @@ svg { display: block; }
   .main-inner { padding: 20px 20px 0; gap: 14px; }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   HEADER — two-row layout
+   ═══════════════════════════════════════════════════════════ */
 .page-header {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
 }
+.page-header-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.page-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.page-header-tools::-webkit-scrollbar { display: none; }
+
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--theme-glass-bg);
+  border: 1px solid var(--theme-card-border);
+  border-radius: 999px;
+  color: var(--theme-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s var(--ease);
+}
+.tool-chip:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
+.tool-chip:active { transform: scale(0.97); }
+.tool-chip svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; flex-shrink: 0; }
+.tool-chip .label { font-size: 11px; }
+.tool-chip.filter-active { color: var(--theme-primary); border-color: var(--theme-primary); background: var(--theme-primary-soft); }
+.tool-chip .chev { width: 9px; height: 9px; opacity: 0.5; }
 
 .header-logo {
   display: none;
@@ -318,6 +358,7 @@ svg { display: block; }
   letter-spacing: -0.4px;
   color: var(--theme-text);
   margin: 0;
+  flex-shrink: 0;
 }
 @media (min-width: 640px) { .page-title { font-size: 20px; } }
 
@@ -328,27 +369,27 @@ svg { display: block; }
   padding: 2px 7px;
   background: var(--theme-glass-bg);
   border-radius: 6px;
+  flex-shrink: 0;
 }
 
-.header-spacer { flex: 1; }
+.header-spacer { flex: 1; min-width: 0; }
 
 .search-wrap {
   display: none;
   flex: 1;
-  max-width: 320px;
-  min-width: 180px;
+  max-width: 280px;
+  min-width: 140px;
   position: relative;
   align-items: center;
 }
-@media (min-width: 900px) {
-  .search-wrap { display: flex; }
-}
+@media (min-width: 900px) { .search-wrap { display: flex; } }
+
 .search-trigger {
   display: none;
+  flex-shrink: 0;
 }
-@media (max-width: 899px) {
-  .search-trigger { display: flex; }
-}
+@media (max-width: 899px) { .search-trigger { display: flex; } }
+
 .search-icon {
   position: absolute;
   left: 10px;
@@ -416,22 +457,23 @@ svg { display: block; }
   border-color: var(--theme-primary);
   background: var(--theme-primary-soft);
 }
-.icon-btn .filter-badge {
-  position: absolute;
-  top: -3px;
-  right: -3px;
-  min-width: 14px;
-  height: 14px;
-  border-radius: 7px;
+
+.filter-badge {
+  min-width: 15px;
+  height: 15px;
+  border-radius: 8px;
   background: var(--theme-primary);
   color: #0a0c10;
-  font-size: 8px;
+  font-size: 8.5px;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 3px;
+  padding: 0 4px;
+  margin-left: 2px;
+  flex-shrink: 0;
 }
+.filter-badge.hidden { display: none; }
 
 .btn-new {
   display: flex;
@@ -450,8 +492,7 @@ svg { display: block; }
 .btn-new svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.4; }
 .btn-new:hover { background: var(--theme-primary-hover); }
 .btn-new:active { transform: scale(0.97); }
-.btn-new .label { display: none; }
-@media (min-width: 640px) { .btn-new .label { display: inline; } }
+.btn-new .label { display: inline; }
 
 /* ═══════════════════════════════════════════════════════════
    STORAGE SUMMARY BAR
@@ -560,14 +601,6 @@ svg { display: block; }
   background: var(--theme-primary-soft);
   color: var(--theme-primary);
 }
-.tab-badge-notif {
-  padding: 0 5px;
-  border-radius: 4px;
-  background: var(--theme-danger);
-  color: #fff;
-  font-size: 8px;
-  font-weight: 800;
-}
 
 /* ═══════════════════════════════════════════════════════════
    ACTIVE FILTERS
@@ -662,6 +695,10 @@ svg { display: block; }
 }
 @media (max-width: 639px) {
   .project-card-row { padding: 9px; gap: 9px; }
+}
+
+.project-card.expanded .project-card-row {
+  cursor: pointer;
 }
 
 .project-icon {
@@ -1447,6 +1484,20 @@ svg { display: block; }
   border: 1px solid var(--theme-card-border);
   border-radius: 8px;
 }
+.stat-tile-btn {
+  cursor: pointer;
+  text-align: left;
+  border: 1px solid var(--theme-card-border);
+  transition: all 0.15s var(--ease);
+  font-family: inherit;
+  color: inherit;
+}
+.stat-tile-btn:hover {
+  border-color: var(--theme-primary-glow);
+  background: var(--theme-primary-soft);
+}
+.stat-tile-btn:active { transform: scale(0.98); }
+
 .stat-label {
   font-size: 9px;
   font-weight: 700;
@@ -1790,6 +1841,46 @@ svg { display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════════
+   SORT POPOVER
+   ═══════════════════════════════════════════════════════════ */
+.sort-popover {
+  position: absolute;
+  z-index: 850;
+  background: var(--theme-surface-card-solid);
+  border: 1px solid var(--theme-glass-border);
+  border-radius: 10px;
+  padding: 6px;
+  min-width: 180px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.sort-popover-title {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--theme-text-tertiary);
+  padding: 4px 8px 6px;
+}
+.sort-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+  text-align: left;
+  transition: all 0.12s var(--ease);
+}
+.sort-row:hover { background: var(--theme-glass-bg); color: var(--theme-text); }
+.sort-row.active { color: var(--theme-primary); }
+.sort-row svg { width: 10px; height: 10px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+/* ═══════════════════════════════════════════════════════════
    LOADING / TOAST
    ═══════════════════════════════════════════════════════════ */
 .loading-overlay {
@@ -2022,29 +2113,6 @@ svg { display: block; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SORT BUTTON
-   ═══════════════════════════════════════════════════════════ */
-.sort-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 10px;
-  background: var(--theme-glass-bg);
-  border: 1px solid var(--theme-card-border);
-  border-radius: 8px;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-  flex-shrink: 0;
-  transition: all 0.2s var(--ease);
-}
-.sort-btn:hover { color: var(--theme-text); border-color: var(--theme-primary-glow); }
-.sort-btn svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2.2; }
-.sort-btn .label { display: none; }
-@media (min-width: 640px) { .sort-btn .label { display: inline; } }
-
-/* ═══════════════════════════════════════════════════════════
    ICON PICKER
    ═══════════════════════════════════════════════════════════ */
 .icon-tabs {
@@ -2165,27 +2233,6 @@ svg { display: block; }
   .detail-action-btn .label { font-size: 9px; }
   .project-detail-thumb { aspect-ratio: 4 / 3; }
 }
-.project-card.expanded {
-  cursor: pointer;
-}
-.project-card.expanded .project-card-detail {
-  position: relative;
-}
-.project-card.expanded .project-card-detail::after {
-  content: 'Open project →';
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  font-size: 9.5px;
-  font-weight: 700;
-  color: var(--theme-primary);
-  opacity: 0;
-  transition: opacity 0.15s var(--ease);
-  pointer-events: none;
-}
-.project-card.expanded:hover .project-card-detail::after {
-  opacity: 0.7;
-}
 .project-icon-btn {
   border: 1px solid var(--theme-glass-border);
   cursor: pointer;
@@ -2239,48 +2286,50 @@ svg { display: block; }
     <div class="main-inner" id="mainInner">
 
       <header class="page-header">
-        <a class="header-logo" href="/">
-          <div class="header-logo-badge">
-            <img src="/icons/icon-192.png" alt="Folio">
+        <div class="page-header-row">
+          <a class="header-logo" href="/">
+            <div class="header-logo-badge">
+              <img src="/icons/icon-192.png" alt="Folio">
+            </div>
+          </a>
+          <h1 class="page-title">Projects</h1>
+          <span class="page-count" id="pageCount">—</span>
+          <div class="header-spacer"></div>
+          <div class="search-wrap">
+            <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input class="search-input" id="searchInput" type="text" placeholder="Search projects…" autocomplete="off" spellcheck="false">
+            <button class="search-clear" id="searchClear" type="button" aria-label="Clear search">
+              <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
-        </a>
-        <h1 class="page-title">Projects</h1>
-        <span class="page-count" id="pageCount">—</span>
-        <div class="header-spacer"></div>
-
-        <div class="search-wrap">
-          <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input class="search-input" id="searchInput" type="text" placeholder="Search projects…" autocomplete="off" spellcheck="false">
-          <button class="search-clear" id="searchClear" type="button" aria-label="Clear search">
-            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <button class="icon-btn search-trigger" id="searchTrigger" type="button" aria-label="Search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </button>
+          <button class="icon-btn" id="bellBtn" type="button" aria-label="Notifications" title="Notifications" style="display:none;">
+            <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span class="filter-badge hidden" id="bellBadge">0</span>
+          </button>
+          <button class="btn-new" id="newBtn" type="button">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span class="label">New</span>
           </button>
         </div>
-        <button class="icon-btn search-trigger" id="searchTrigger" type="button" aria-label="Search">
-          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </button>
-
-        <button class="icon-btn" id="bellBtn" type="button" aria-label="Notifications" title="Notifications" style="display:none;">
-          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          <span class="filter-badge hidden" id="bellBadge">0</span>
-        </button>
-
-        <button class="sort-btn" id="sortBtn" type="button">
-          <svg viewBox="0 0 24 24"><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="15" y2="18"/></svg>
-          <span class="label" id="sortLabel">Modified</span>
-        </button>
-
-        <button class="icon-btn" id="filterBtn" type="button" aria-label="Filters">
-          <svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-          <span class="filter-badge hidden" id="filterBadge">0</span>
-        </button>
-
-        <button class="btn-new" id="newBtn" type="button">
-          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span class="label">New</span>
-        </button>
+        <div class="page-header-tools">
+          <button class="tool-chip" id="sortBtn" type="button">
+            <svg viewBox="0 0 24 24"><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="21" y1="18" x2="15" y2="18"/></svg>
+            <span class="label" id="sortLabel">Modified</span>
+            <svg class="chev" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <button class="tool-chip" id="filterBtn" type="button">
+            <svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span class="label">Filters</span>
+            <span class="filter-badge hidden" id="filterBadge">0</span>
+          </button>
+        </div>
       </header>
 
       <div id="notifBannerMount"></div>
+      <div id="autoCleanMount"></div>
 
       <div class="offline-banner" id="offlineBanner">
         <svg viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/></svg>
@@ -2470,14 +2519,18 @@ svg { display: block; }
   const API_FLIER = API_BASE + '/flier';
   const API_NOTIFY = API_BASE + '/notify';
 
+  const PUBLIC_SITE_BASE = 'https://foliosites.vercel.app';
+
   const STORAGE = {
     session: 'folio.session',
     user: 'folio.user',
     theme: 'folio.theme',
     autoClean: 'folio.projects.autoClean',
     lastTab: 'folio.projects.lastTab',
+    lastTemplate: 'folio.projects.lastTemplate',
     recentSearches: 'folio.projects.recentSearches',
     pinned: 'folio.projects.pinned',
+    expanded: 'folio.projects.expanded',
   };
 
   const DB_NAME = 'folio';
@@ -2568,42 +2621,44 @@ svg { display: block; }
 
   const svg = (name, size = 14, sw = 2.2) =>
     `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${SVG[name] || ''}</svg>`;
-window.__folioIconFallback = function (img) {
-  if (!img || !img.parentElement) return;
-  const initials = img.dataset.fallbackInitials || '?';
-  const bg = img.dataset.fallbackBg || 'linear-gradient(135deg, #F59E0B, #f97316)';
-  const size = img.dataset.fallbackSize || '34';
-  const rounded = img.dataset.fallbackRounded || '8';
 
-  const span = document.createElement('span');
-  span.style.cssText = `display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${bg};color:#0a0c10;font-weight:800;border-radius:${rounded}px;font-size:${Math.round(Number(size) * 0.38)}px;`;
-  span.textContent = initials;
+  window.__folioIconFallback = function (img) {
+    if (!img || !img.parentElement) return;
+    const initials = img.dataset.fallbackInitials || '?';
+    const bg = img.dataset.fallbackBg || 'linear-gradient(135deg, #F59E0B, #f97316)';
+    const size = img.dataset.fallbackSize || '34';
+    const rounded = img.dataset.fallbackRounded || '8';
 
-  img.parentElement.replaceChild(span, img);
-};
+    const span = document.createElement('span');
+    span.style.cssText = `display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${bg};color:#0a0c10;font-weight:800;border-radius:${rounded}px;font-size:${Math.round(Number(size) * 0.38)}px;`;
+    span.textContent = initials;
 
-window.__folioHeroFallback = function (img) {
-  if (!img || !img.parentElement) return;
-  const initials = img.dataset.fallbackInitials || '?';
-  const bg = img.dataset.fallbackBg || 'linear-gradient(135deg, #F59E0B, #f97316)';
-  const name = img.dataset.fallbackName || 'Untitled';
+    img.parentElement.replaceChild(span, img);
+  };
 
-  const wrap = document.createElement('div');
-  wrap.style.cssText = `display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;height:100%;background:${bg};color:#0a0c10;`;
+  window.__folioHeroFallback = function (img) {
+    if (!img || !img.parentElement) return;
+    const initials = img.dataset.fallbackInitials || '?';
+    const bg = img.dataset.fallbackBg || 'linear-gradient(135deg, #F59E0B, #f97316)';
+    const name = img.dataset.fallbackName || 'Untitled';
 
-  const badge = document.createElement('div');
-  badge.style.cssText = 'width:64px;height:64px;border-radius:16px;background:rgba(10,12,16,0.15);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:24px;letter-spacing:-0.5px;';
-  badge.textContent = initials;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = `display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;height:100%;background:${bg};color:#0a0c10;`;
 
-  const label = document.createElement('div');
-  label.style.cssText = 'font-size:12px;font-weight:800;max-width:80%;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.85;';
-  label.textContent = name;
+    const badge = document.createElement('div');
+    badge.style.cssText = 'width:64px;height:64px;border-radius:16px;background:rgba(10,12,16,0.15);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:24px;letter-spacing:-0.5px;';
+    badge.textContent = initials;
 
-  wrap.appendChild(badge);
-  wrap.appendChild(label);
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:12px;font-weight:800;max-width:80%;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.85;';
+    label.textContent = name;
 
-  img.parentElement.replaceChild(wrap, img);
-};
+    wrap.appendChild(badge);
+    wrap.appendChild(label);
+
+    img.parentElement.replaceChild(wrap, img);
+  };
+
   // ═══════════════════════════════════════════════════════════
   // IDB
   // ═══════════════════════════════════════════════════════════
@@ -2688,7 +2743,6 @@ window.__folioHeroFallback = function (img) {
       const localUpdated = existing?.updatedAt || 0;
       const serverUpdated = p.updatedAt ? new Date(p.updatedAt).getTime() : 0;
       if (existing && localUpdated > serverUpdated) {
-        // Keep local record but merge in server-only fields (thumbnail, ogImage, languages)
         if (p.thumbnail || p.ogImage || p.languages) {
           await IDB.putProject({
             ...existing,
@@ -2727,7 +2781,7 @@ window.__folioHeroFallback = function (img) {
 
   const $ = id => document.getElementById(id);
   const escapeHTML = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const escapeAttr = s => String(s ?? '').replace(/"/g, '&quot;');
+  const escapeAttr = escapeHTML;
 
   // ═══════════════════════════════════════════════════════════
   // UTILITIES
@@ -2899,6 +2953,7 @@ window.__folioHeroFallback = function (img) {
     renderTabs();
     renderActiveFilters();
     applyFiltersAndRender();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   function goEditor(pid) { window.location.href = '/?pid=' + encodeURIComponent(pid); }
   function goDashboard(pid) { window.location.href = '/project?pid=' + encodeURIComponent(pid); }
@@ -2981,17 +3036,28 @@ window.__folioHeroFallback = function (img) {
 
     S.projects = local.map(lp => {
       const server = serverMap.get(lp.pid);
-      return {
-        ...(server || {}),
-        ...lp,
-        _serverData: server || null,
-        thumbnail: server?.thumbnail || lp.thumbnail || null,
-        ogImage: server?.ogImage || lp.ogImage || null,
-        languages: server?.languages || lp.languages || null,
-      };
+      const merged = { ...(server || {}), ...lp };
+      if (server) {
+        merged.deployment = server.deployment || lp.deployment || null;
+        merged.visibility = server.visibility || lp.visibility || null;
+        merged.myRole = server.myRole || lp.myRole;
+        merged.slug = server.slug || lp.slug;
+        merged.storageUsed = typeof server.storageUsed === 'number' ? server.storageUsed : (lp.storageUsed || 0);
+        merged.storageLimit = server.storageLimit || lp.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+        merged.ownerUsername = server.ownerUsername || lp.ownerUsername || null;
+        merged.viewCount = typeof server.viewCount === 'number' ? server.viewCount : (lp.viewCount || 0);
+        merged.thumbnail = server.thumbnail || lp.thumbnail || null;
+        merged.ogImage = server.ogImage || lp.ogImage || null;
+        merged.languages = server.languages || lp.languages || null;
+      }
+      return { ...merged, _serverData: server || null };
     });
 
-    if (S.user && S.user.settings && typeof S.user.settings.globalLimit === 'number') {
+    try {
+      const rawUser = localStorage.getItem(STORAGE.user);
+      if (rawUser) S.user = JSON.parse(rawUser);
+    } catch {}
+    if (S.user?.settings?.globalLimit) {
       S.storageLimit = S.user.settings.globalLimit;
     }
     if (navigator.storage && navigator.storage.estimate) {
@@ -3014,6 +3080,7 @@ window.__folioHeroFallback = function (img) {
 
     updateHeaderCount();
     renderStorageSummary();
+    renderAutoCleanBanner();
     applyFiltersAndRender();
   }
 
@@ -3024,6 +3091,7 @@ window.__folioHeroFallback = function (img) {
       while (queue.length) {
         const p = queue.shift();
         try {
+          await new Promise(r => setTimeout(r, 40 + Math.random() * 60));
           const res = await apiFetch(API_HOST + '?action=deployment/history&pid=' + encodeURIComponent(p.pid));
           if (res.ok && res.data?.success) {
             S.deploymentCache.set(p.pid, {
@@ -3034,7 +3102,7 @@ window.__folioHeroFallback = function (img) {
         } catch {}
       }
     }
-    for (let i = 0; i < 4; i++) workers.push(worker());
+    for (let i = 0; i < 3; i++) workers.push(worker());
     await Promise.all(workers);
   }
 
@@ -3053,19 +3121,32 @@ window.__folioHeroFallback = function (img) {
   }
 
   async function autoCleanExpired() {
+    if (sessionStorage.getItem('folio.autoClean.failed')) return;
     if (S.expiredDeployments.length === 0) return;
     const count = S.expiredDeployments.length;
     try {
-      for (const d of S.expiredDeployments) {
-        await apiFetch(API_HOST + '?action=deployment/delete', {
+      const toDelete = [...S.expiredDeployments];
+      const results = await Promise.allSettled(
+        toDelete.map(d => apiFetch(API_HOST + '?action=deployment/delete', {
           method: 'POST', body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
-        });
+        }))
+      );
+      const failed = results.filter(r => r.status === 'rejected' || !r.value?.ok).length;
+      if (failed > 0) {
+        toast(`${count - failed} of ${count} cleaned — ${failed} failed`, 'warning', 4000);
+        sessionStorage.setItem('folio.autoClean.failed', '1');
+      } else {
+        S.expiredDeployments = [];
+        toast(`Auto-cleaned ${count} expired deployment${count === 1 ? '' : 's'}`, 'success', 2600);
       }
-      S.expiredDeployments = [];
-      toast(`Auto-cleaned ${count} expired deployment${count === 1 ? '' : 's'}`, 'success', 2600);
       updateHeaderCount();
+      renderStorageSummary();
+      renderAutoCleanBanner();
       applyFiltersAndRender();
-    } catch {}
+    } catch (err) {
+      sessionStorage.setItem('folio.autoClean.failed', '1');
+      toast('Auto-clean failed — open Filters to retry', 'warning', 4000);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -3144,6 +3225,18 @@ window.__folioHeroFallback = function (img) {
     `;
   }
 
+  function renderAutoCleanBanner() {
+    const mount = $('autoCleanMount');
+    if (!mount) return;
+    if (S.expiredDeployments.length === 0 || !S.autoCleanEnabled) { mount.innerHTML = ''; return; }
+    mount.innerHTML = `
+      <div class="notif-banner" style="background:var(--theme-warning-soft);border-color:rgba(217,119,6,0.3);color:var(--theme-warning);">
+        ${svg('alertTriangle', 14, 2.2)}
+        <div class="nb-text"><strong>${S.expiredDeployments.length} expired deploy${S.expiredDeployments.length === 1 ? '' : 's'}</strong> will be cleaned automatically</div>
+      </div>
+    `;
+  }
+
   // ═══════════════════════════════════════════════════════════
   // RENDER TABS
   // ═══════════════════════════════════════════════════════════
@@ -3152,15 +3245,12 @@ window.__folioHeroFallback = function (img) {
 
   function renderTabs() {
     const tabsEl = $('tabsBar');
-    const inviteCount = (S.notifStats?.invite || 0);
     tabsEl.innerHTML = TABS.map(t => {
       const count = getCountForTab(t.id);
-      const showNotifBadge = t.id === 'shared' && inviteCount > 0;
       return `
         <button class="tab ${t.id === S.activeTab ? 'active' : ''}" data-tab="${escapeAttr(t.id)}" type="button">
           <span>${escapeHTML(t.label)}</span>
           <span class="tab-count">${count}</span>
-          ${showNotifBadge ? `<span class="tab-badge-notif">${inviteCount}</span>` : ''}
         </button>
       `;
     }).join('');
@@ -3340,7 +3430,13 @@ window.__folioHeroFallback = function (img) {
       bindEmptyStateActions();
       return;
     }
-    container.innerHTML = S.filtered.map(p => renderProjectCard(p)).join('');
+    const frag = document.createDocumentFragment();
+    for (const p of S.filtered) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = renderProjectCard(p).trim();
+      if (tmp.firstChild) frag.appendChild(tmp.firstChild);
+    }
+    container.replaceChildren(frag);
     bindProjectCardEvents();
   }
 
@@ -3386,7 +3482,8 @@ window.__folioHeroFallback = function (img) {
     }
     return `<div class="empty-state"><div class="empty-icon">${svg('search', 22, 2)}</div>
       <div class="empty-title">No projects match</div>
-      <div class="empty-actions"><button class="btn btn-secondary" data-empty-clear-filters>Clear filters</button></div></div>`;
+      <div class="empty-desc">${S.searchQuery ? `No results for "${escapeHTML(S.searchQuery)}"` : 'Try adjusting your filters.'}</div>
+      <div class="empty-actions"><button class="btn btn-secondary" data-empty-clear-filters>${S.searchQuery ? 'Clear search' : 'Clear filters'}</button></div></div>`;
   }
 
   function bindEmptyStateActions() {
@@ -3399,321 +3496,331 @@ window.__folioHeroFallback = function (img) {
   }
 
   function renderProjectCard(p) {
-  const isExpanded = S.expandedProjects.has(p.pid);
-  const isPinned = S.pinnedProjects.has(p.pid);
+    const isExpanded = S.expandedProjects.has(p.pid);
+    const isPinned = S.pinnedProjects.has(p.pid);
 
-  const roleBadge = p.myRole === 'owner'
-    ? '<span class="role-badge owner">Owner</span>'
-    : p.myRole === 'editor'
-      ? '<span class="role-badge editor">Editor</span>'
-      : p.myRole ? `<span class="role-badge">${escapeHTML(p.myRole)}</span>` : '';
+    const roleBadge = p.myRole === 'owner'
+      ? '<span class="role-badge owner">Owner</span>'
+      : p.myRole === 'editor'
+        ? '<span class="role-badge editor">Editor</span>'
+        : p.myRole ? `<span class="role-badge">${escapeHTML(p.myRole)}</span>` : '';
 
-  const deployState = p.deployment?.url
-    ? '<span class="live-badge live"><span class="dot"></span>Live</span>'
-    : p.deployment?.state === 'OFFLINE'
-      ? '<span class="live-badge offline"><span class="dot"></span>Offline</span>'
+    const deployState = p.deployment?.url
+      ? '<span class="live-badge live"><span class="dot"></span>Live</span>'
+      : p.deployment?.state === 'OFFLINE'
+        ? '<span class="live-badge offline"><span class="dot"></span>Offline</span>'
+        : '';
+
+    const lastDeployText = p.deployment?.deployedAt
+      ? `Deployed ${timeAgo(p.deployment.deployedAt)}`
+      : 'Never deployed';
+
+    const totalLines = p.languages?.totalLines || 0;
+    const storageUsed = getEstimatedStorage(p);
+    const storageLimit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+    const storagePct = Math.min(100, (storageUsed / storageLimit) * 100);
+    const storageWarn = storagePct > 70;
+    const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
+
+    const statsRow = `
+      <div class="project-stats-row">
+        <span class="project-stat-item ${storageWarn ? 'project-stat-warn' : ''}">
+          ${svg('database', 9, 2.2)}
+          ${formatBytes(storageUsed)}
+        </span>
+        ${totalLines > 0 ? `
+          <span class="project-stat-item">
+            ${svg('file', 9, 2.2)}
+            ${formatNumber(totalLines)} lines
+          </span>
+        ` : ''}
+        <span class="project-stat-item">
+          ${svg('eye', 9, 2.2)}
+          ${formatNumber(p.viewCount || 0)}
+        </span>
+        <span class="project-stat-item">
+          ${svg('clock', 9, 2.2)}
+          ${timeAgo(p.updatedAt)}
+        </span>
+        ${hasExpired ? `<span class="project-stat-item project-stat-warn">${svg('alertTriangle', 9, 2.4)} expired</span>` : ''}
+      </div>
+    `;
+
+    return `
+      <div class="project-card${isExpanded ? ' expanded' : ''}" data-pid="${escapeAttr(p.pid)}">
+        <div class="project-card-row">
+          <button class="project-icon project-icon-btn" type="button" data-card-icon="${escapeAttr(p.pid)}" aria-label="Open ${escapeAttr(p.name || 'project')}">
+            ${renderProjectIconWithFallback(p, { size: 34, rounded: 8 })}
+          </button>
+          <div class="project-header-info">
+            <div class="project-name-row">
+              ${isPinned ? `<span class="project-pin-icon">${svg('bookmark', 10, 2.4)}</span>` : ''}
+              <div class="project-name">${escapeHTML(p.name || 'Untitled project')}</div>
+            </div>
+            <div class="project-meta">
+              ${roleBadge}${deployState}
+              <span class="sep">·</span>
+              <span>${escapeHTML(lastDeployText)}</span>
+            </div>
+          </div>
+          <button class="project-expand-btn" data-card-menu="${escapeAttr(p.pid)}" type="button" aria-label="More options">
+            ${svg('more', 14, 2.4)}
+          </button>
+          <button class="project-expand-btn" data-card-expand="${escapeAttr(p.pid)}" type="button" aria-label="Expand details" aria-expanded="${isExpanded}">
+            ${svg('chevron-down', 14, 2.4)}
+          </button>
+        </div>
+        ${statsRow}
+        ${isExpanded ? renderExpandedDetail(p) : ''}
+      </div>
+    `;
+  }
+
+  function renderExpandedDetail(p) {
+    const langBreakdown = p.languages?.breakdown || {};
+    const langBadges = Object.keys(langBreakdown).length > 0
+      ? Object.entries(langBreakdown).slice(0, 4).map(([name, pct]) =>
+          `<span class="lang-badge"><span class="lang-dot"></span>${escapeHTML(name)} ${pct}%</span>`
+        ).join('')
       : '';
 
-  const lastDeployText = p.deployment?.deployedAt
-    ? `Deployed ${timeAgo(p.deployment.deployedAt)}`
-    : 'Never deployed';
+    const storageUsed = getEstimatedStorage(p);
+    const storageLimit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
+    const storagePct = Math.min(100, (storageUsed / storageLimit) * 100);
+    const storageCls = storagePct > 90 ? 'danger' : storagePct > 70 ? 'warn' : '';
 
-  const totalLines = p.languages?.totalLines || 0;
-  const storageUsed = getEstimatedStorage(p);
-  const storageLimit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
-  const storagePct = Math.min(100, (storageUsed / storageLimit) * 100);
-  const storageWarn = storagePct > 70;
-  const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
+    const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
 
-  const statsRow = `
-    <div class="project-stats-row">
-      <span class="project-stat-item ${storageWarn ? 'project-stat-warn' : ''}">
-        ${svg('database', 9, 2.2)}
-        ${formatBytes(storageUsed)}
-      </span>
-      ${totalLines > 0 ? `
-        <span class="project-stat-item">
-          ${svg('file', 9, 2.2)}
-          ${formatNumber(totalLines)} lines
-        </span>
-      ` : ''}
-      <span class="project-stat-item">
-        ${svg('eye', 9, 2.2)}
-        ${formatNumber(p.viewCount || 0)}
-      </span>
-      <span class="project-stat-item">
-        ${svg('clock', 9, 2.2)}
-        ${timeAgo(p.updatedAt)}
-      </span>
-      ${hasExpired ? `<span class="project-stat-item project-stat-warn">${svg('alertTriangle', 9, 2.4)} expired</span>` : ''}
-    </div>
-  `;
+    const lastDeployText = p.deployment?.deployedAt
+      ? `Deployed ${timeAgo(p.deployment.deployedAt)}`
+      : 'Never deployed';
 
-  return `
-    <div class="project-card${isExpanded ? ' expanded' : ''}" data-pid="${escapeAttr(p.pid)}">
-      <div class="project-card-row">
-        <button class="project-icon project-icon-btn" type="button" data-card-icon="${escapeAttr(p.pid)}" aria-label="Open ${escapeAttr(p.name || 'project')}">
-          ${renderProjectIconWithFallback(p, { size: 34, rounded: 8 })}
-        </button>
-        <div class="project-header-info">
-          <div class="project-name-row">
-            ${isPinned ? `<span class="project-pin-icon">${svg('bookmark', 10, 2.4)}</span>` : ''}
-            <div class="project-name">${escapeHTML(p.name || 'Untitled project')}</div>
-          </div>
-          <div class="project-meta">
-            ${roleBadge}${deployState}
-            <span class="sep">·</span>
-            <span>${escapeHTML(lastDeployText)}</span>
-          </div>
+    const deployCache = S.deploymentCache.get(p.pid);
+    const recentDeploys = (deployCache?.deployments || []).slice(0, 3);
+    const deployHistoryHTML = recentDeploys.length > 0 ? `
+      <div class="detail-deployments">
+        <div class="detail-deployments-label">
+          <span>Recent deployments</span>
+          <span class="count">${recentDeploys.length}</span>
         </div>
-        <button class="project-expand-btn" data-card-expand="${escapeAttr(p.pid)}" type="button" aria-label="Expand details" aria-expanded="${isExpanded}">
-          ${svg('chevron-down', 14, 2.4)}
-        </button>
-      </div>
-      ${statsRow}
-      ${isExpanded ? renderExpandedDetail(p) : ''}
-    </div>
-  `;
-}
-function renderExpandedDetail(p) {
-  const langBreakdown = p.languages?.breakdown || {};
-  const langBadges = Object.keys(langBreakdown).length > 0
-    ? Object.entries(langBreakdown).slice(0, 4).map(([name, pct]) =>
-        `<span class="lang-badge"><span class="lang-dot"></span>${escapeHTML(name)} ${pct}%</span>`
-      ).join('')
-    : '';
-
-  const storageUsed = getEstimatedStorage(p);
-  const storageLimit = p.storageLimit || DEFAULT_PROJECT_STORAGE_LIMIT;
-  const storagePct = Math.min(100, (storageUsed / storageLimit) * 100);
-  const storageCls = storagePct > 90 ? 'danger' : storagePct > 70 ? 'warn' : '';
-
-  const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
-
-  const lastDeployText = p.deployment?.deployedAt
-    ? `Deployed ${timeAgo(p.deployment.deployedAt)}`
-    : 'Never deployed';
-
-  const deployCache = S.deploymentCache.get(p.pid);
-  const recentDeploys = (deployCache?.deployments || []).slice(0, 3);
-  const deployHistoryHTML = recentDeploys.length > 0 ? `
-    <div class="detail-deployments">
-      <div class="detail-deployments-label">
-        <span>Recent deployments</span>
-        <span class="count">${recentDeploys.length}</span>
-      </div>
-      ${recentDeploys.map(d => {
-        const isCurrent = d.id === deployCache.currentId;
-        return `
-          <div class="deploy-row ${isCurrent ? 'current' : ''}">
-            <div class="deploy-thumb">
-              ${d.thumbnailUrl
-                ? `<img src="${escapeAttr(d.thumbnailUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">`
-                : svg('rocket', 12, 2.2)}
-            </div>
-            <div class="deploy-info">
-              <div class="deploy-time">${timeAgo(d.deployedAt)}</div>
-              <div class="deploy-meta">
-                ${isCurrent ? '<span class="current-pill">Current</span>' : `<span>${escapeHTML(d.state || 'READY')}</span>`}
+        ${recentDeploys.map(d => {
+          const isCurrent = d.id === deployCache.currentId;
+          return `
+            <div class="deploy-row ${isCurrent ? 'current' : ''}">
+              <div class="deploy-thumb">
+                ${d.thumbnailUrl
+                  ? `<img src="${escapeAttr(d.thumbnailUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+                  : svg('rocket', 12, 2.2)}
+              </div>
+              <div class="deploy-info">
+                <div class="deploy-time">${timeAgo(d.deployedAt)}</div>
+                <div class="deploy-meta">
+                  ${isCurrent ? '<span class="current-pill">Current</span>' : `<span>${escapeHTML(d.state || 'READY')}</span>`}
+                </div>
               </div>
             </div>
+          `;
+        }).join('')}
+      </div>
+    ` : '';
+
+    return `
+      <div class="project-card-detail">
+        ${p.description ? `<div class="detail-desc">${escapeHTML(p.description)}</div>` : `<div class="detail-desc empty">No description</div>`}
+
+        ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
+
+        <div class="detail-storage">
+          <div class="detail-storage-header">
+            <span>Storage</span>
+            <span>${formatBytes(storageUsed)} / ${formatBytes(storageLimit)}</span>
           </div>
-        `;
-      }).join('')}
-    </div>
-  ` : '';
-
-  return `
-    <div class="project-card-detail">
-      ${p.description ? `<div class="detail-desc">${escapeHTML(p.description)}</div>` : `<div class="detail-desc empty">No description</div>`}
-
-      ${langBadges ? `<div class="lang-badges">${langBadges}</div>` : ''}
-
-      <div class="detail-storage">
-        <div class="detail-storage-header">
-          <span>Storage</span>
-          <span>${formatBytes(storageUsed)} / ${formatBytes(storageLimit)}</span>
+          <div class="detail-storage-bar">
+            <div class="detail-storage-fill ${storageCls}" style="width:${storagePct}%"></div>
+          </div>
         </div>
-        <div class="detail-storage-bar">
-          <div class="detail-storage-fill ${storageCls}" style="width:${storagePct}%"></div>
+
+        ${hasExpired ? `
+          <div class="detail-warning">
+            ${svg('alertTriangle', 11, 2.4)}
+            <span>Some deployments are expired. Clean them to free space.</span>
+          </div>
+        ` : ''}
+
+        ${storagePct > 90 ? `
+          <div class="detail-warning danger">
+            ${svg('alert', 11, 2.4)}
+            <span>Storage nearly full — delete files to avoid issues.</span>
+          </div>
+        ` : ''}
+
+        ${deployHistoryHTML}
+
+        <div class="detail-meta-line">
+          ${escapeHTML(lastDeployText)}${p.slug ? ' · @' + escapeHTML(p.slug) : ' · ' + escapeHTML(p.pid.slice(-8))}
+        </div>
+
+        <div class="detail-actions">
+          <button class="detail-action-btn primary" data-card-action="editor" data-pid="${escapeAttr(p.pid)}" type="button">
+            ${svg('edit3', 16, 2.2)}
+            <span class="label">Editor</span>
+          </button>
+          <button class="detail-action-btn" data-card-action="view" data-pid="${escapeAttr(p.pid)}" type="button">
+            ${svg('dashboard', 16, 2.2)}
+            <span class="label">View</span>
+          </button>
+          <button class="detail-action-btn" data-card-action="regenerate" data-pid="${escapeAttr(p.pid)}" type="button">
+            ${svg('refresh', 16, 2.2)}
+            <span class="label">Refresh</span>
+          </button>
+          <button class="detail-action-btn danger" data-card-action="delete" data-pid="${escapeAttr(p.pid)}" type="button">
+            ${svg('trash', 16, 2.2)}
+            <span class="label">Delete</span>
+          </button>
         </div>
       </div>
-
-      ${hasExpired ? `
-        <div class="detail-warning">
-          ${svg('alertTriangle', 11, 2.4)}
-          <span>Some deployments are expired. Clean them to free space.</span>
-        </div>
-      ` : ''}
-
-      ${storagePct > 90 ? `
-        <div class="detail-warning danger">
-          ${svg('alert', 11, 2.4)}
-          <span>Storage nearly full — delete files to avoid issues.</span>
-        </div>
-      ` : ''}
-
-      ${deployHistoryHTML}
-
-      <div class="detail-meta-line">
-        ${escapeHTML(lastDeployText)}${p.slug ? ' · @' + escapeHTML(p.slug) : ' · ' + escapeHTML(p.pid.slice(-8))}
-      </div>
-
-      <div class="detail-actions">
-        <button class="detail-action-btn primary" data-card-action="editor" data-pid="${escapeAttr(p.pid)}" type="button">
-          ${svg('edit3', 16, 2.2)}
-          <span class="label">Editor</span>
-        </button>
-        <button class="detail-action-btn" data-card-action="view" data-pid="${escapeAttr(p.pid)}" type="button">
-          ${svg('dashboard', 16, 2.2)}
-          <span class="label">View</span>
-        </button>
-        <button class="detail-action-btn" data-card-action="regenerate" data-pid="${escapeAttr(p.pid)}" type="button">
-          ${svg('refresh', 16, 2.2)}
-          <span class="label">Refresh</span>
-        </button>
-        <button class="detail-action-btn danger" data-card-action="delete" data-pid="${escapeAttr(p.pid)}" type="button">
-          ${svg('trash', 16, 2.2)}
-          <span class="label">Delete</span>
-        </button>
-      </div>
-    </div>
-  `;
-}
-function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
-  const thumbUrl = p.thumbnail?.url || null;
-  const iconUrl = p.iconUrl || null;
-
-  const initials = escapeHTML(getInitials(p.name));
-  const bgColor = getAvatarColor(p.name);
-
-  // Data attributes for onerror handler to read
-  const initialsAttr = escapeAttr(initials);
-  const bgAttr = escapeAttr(bgColor);
-
-  // The fallback inline <span> — escaped so it survives being placed in an attribute
-  const fallbackSpan = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${bgColor};color:#0a0c10;font-weight:800;border-radius:${rounded}px;">${initials}</span>`;
-
-  // For the image source, prefer the thumbnail (small icon), then iconUrl
-  const imgSrc = thumbUrl || iconUrl;
-
-  if (!imgSrc) {
-    // No image at all — return the span directly
-    return `<span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:${rounded}px;background:${bgColor};color:#0a0c10;font-weight:800;font-size:${Math.round(size * 0.38)}px;">${initials}</span>`;
+    `;
   }
 
-  // Use DOM-safe attribute: data-fallback-html stores the escaped fallback,
-  // and a tiny global function swaps the img for the span on error.
-  return `<img
-    src="${escapeAttr(imgSrc)}"
-    alt=""
-    loading="lazy"
-    style="width:100%;height:100%;object-fit:cover;display:block;"
-    data-fallback-initials="${initialsAttr}"
-    data-fallback-bg="${bgAttr}"
-    data-fallback-size="${size}"
-    data-fallback-rounded="${rounded}"
-    onerror="window.__folioIconFallback && window.__folioIconFallback(this)"
-  >`;
-}
+  function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
+    const thumbUrl = p.thumbnail?.url || null;
+    const iconUrl = p.iconUrl || null;
+
+    const initials = escapeHTML(getInitials(p.name));
+    const bgColor = getAvatarColor(p.name);
+
+    const initialsAttr = escapeAttr(initials);
+    const bgAttr = escapeAttr(bgColor);
+
+    const imgSrc = thumbUrl || iconUrl;
+
+    if (!imgSrc) {
+      return `<span style="display:flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:${rounded}px;background:${bgColor};color:#0a0c10;font-weight:800;font-size:${Math.round(size * 0.38)}px;">${initials}</span>`;
+    }
+
+    return `<img
+      src="${escapeAttr(imgSrc)}"
+      alt=""
+      loading="lazy"
+      style="width:100%;height:100%;object-fit:cover;display:block;"
+      data-fallback-initials="${initialsAttr}"
+      data-fallback-bg="${bgAttr}"
+      data-fallback-size="${size}"
+      data-fallback-rounded="${rounded}"
+      onerror="window.__folioIconFallback && window.__folioIconFallback(this)"
+    >`;
+  }
+
+  function saveExpandedState() {
+    try { sessionStorage.setItem(STORAGE.expanded, JSON.stringify([...S.expandedProjects])); } catch {}
+  }
 
   function bindProjectCardEvents() {
-  // Chevron — toggles expand in place
-  document.querySelectorAll('[data-card-expand]').forEach(btn => {
-    if (btn._bound) return;
-    btn._bound = true;
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const pid = btn.dataset.cardExpand;
-      const card = btn.closest('.project-card');
-      if (!card) return;
-
-      const isCurrentlyExpanded = S.expandedProjects.has(pid);
-
-      if (isCurrentlyExpanded) {
-        S.expandedProjects.delete(pid);
-        card.classList.remove('expanded');
-        const detail = card.querySelector('.project-card-detail');
-        if (detail) detail.remove();
-        const chev = card.querySelector('.project-expand-btn');
-        if (chev) chev.setAttribute('aria-expanded', 'false');
-      } else {
-        S.expandedProjects.add(pid);
-        card.classList.add('expanded');
-        const p = S.filtered.find(x => x.pid === pid);
-        if (p) {
-          const html = renderExpandedDetail(p);
-          card.insertAdjacentHTML('beforeend', html);
-        }
-        const chev = card.querySelector('.project-expand-btn');
-        if (chev) chev.setAttribute('aria-expanded', 'true');
-      }
-    });
-  });
-
-  const container = $('projectsContainer');
-  if (!container) return;
-
-  // Action buttons — delegated once
-  if (!container._actionsBound) {
-    container._actionsBound = true;
-    container.addEventListener('click', async (e) => {
-      const actionBtn = e.target.closest('[data-card-action]');
-      if (!actionBtn) return;
-      e.stopPropagation();
-      const pid = actionBtn.dataset.pid;
-      const action = actionBtn.dataset.cardAction;
-      const p = S.projects.find(x => x.pid === pid);
-      if (!p) return;
-      if (action === 'editor') goEditor(pid);
-      else if (action === 'view') goDashboard(pid);
-      else if (action === 'regenerate') regeneratePreview(p);
-      else if (action === 'delete') openDeleteProjectModal(p);
-    });
-  }
-
-  // Icon + card body — delegated once
-  if (!container._bodyBound) {
-    container._bodyBound = true;
-    container.addEventListener('click', (e) => {
-      // Icon → open dashboard directly (no expand)
-      const iconBtn = e.target.closest('[data-card-icon]');
-      if (iconBtn) {
+    document.querySelectorAll('[data-card-menu]').forEach(btn => {
+      if (btn._bound) return;
+      btn._bound = true;
+      btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const pid = iconBtn.dataset.cardIcon;
-        if (pid) goDashboard(pid);
-        return;
-      }
-
-      // Ignore chevron, action buttons, links
-      if (e.target.closest('[data-card-expand]')) return;
-      if (e.target.closest('[data-card-action]')) return;
-      if (e.target.closest('a')) return;
-
-      const card = e.target.closest('.project-card');
-      if (!card) return;
-
-      const pid = card.dataset.pid;
-      if (!pid) return;
-
-      if (S.expandedProjects.has(pid)) {
-        // Expanded → open dashboard
-        goDashboard(pid);
-      } else {
-        // Collapsed → expand in place
-        S.expandedProjects.add(pid);
-        card.classList.add('expanded');
-        const p = S.filtered.find(x => x.pid === pid);
-        if (p) {
-          const html = renderExpandedDetail(p);
-          card.insertAdjacentHTML('beforeend', html);
-        }
-        const chev = card.querySelector('.project-expand-btn');
-        if (chev) chev.setAttribute('aria-expanded', 'true');
-      }
+        const pid = btn.dataset.cardMenu;
+        const p = S.projects.find(x => x.pid === pid);
+        if (p) openActionMenu(p);
+      });
     });
+
+    document.querySelectorAll('[data-card-expand]').forEach(btn => {
+      if (btn._bound) return;
+      btn._bound = true;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const pid = btn.dataset.cardExpand;
+        const card = btn.closest('.project-card');
+        if (!card) return;
+
+        const isCurrentlyExpanded = S.expandedProjects.has(pid);
+
+        if (isCurrentlyExpanded) {
+          S.expandedProjects.delete(pid);
+          saveExpandedState();
+          card.classList.remove('expanded');
+          const detail = card.querySelector('.project-card-detail');
+          if (detail) detail.remove();
+          const chev = card.querySelector('.project-expand-btn[data-card-expand]');
+          if (chev) chev.setAttribute('aria-expanded', 'false');
+        } else {
+          S.expandedProjects.add(pid);
+          saveExpandedState();
+          card.classList.add('expanded');
+          const p = S.filtered.find(x => x.pid === pid);
+          if (p) {
+            const html = renderExpandedDetail(p);
+            card.insertAdjacentHTML('beforeend', html);
+          }
+          const chev = card.querySelector('.project-expand-btn[data-card-expand]');
+          if (chev) chev.setAttribute('aria-expanded', 'true');
+        }
+      });
+    });
+
+    const container = $('projectsContainer');
+    if (!container) return;
+
+    if (!container._actionsBound) {
+      container._actionsBound = true;
+      container.addEventListener('click', async (e) => {
+        const actionBtn = e.target.closest('[data-card-action]');
+        if (!actionBtn) return;
+        e.stopPropagation();
+        const pid = actionBtn.dataset.pid;
+        const action = actionBtn.dataset.cardAction;
+        const p = S.projects.find(x => x.pid === pid);
+        if (!p) return;
+        if (action === 'editor') goEditor(pid);
+        else if (action === 'view') goDashboard(pid);
+        else if (action === 'regenerate') regeneratePreview(p);
+        else if (action === 'delete') openDeleteProjectModal(p);
+      });
+    }
+
+    if (!container._bodyBound) {
+      container._bodyBound = true;
+      container.addEventListener('click', (e) => {
+        const iconBtn = e.target.closest('[data-card-icon]');
+        if (iconBtn) {
+          e.stopPropagation();
+          const pid = iconBtn.dataset.cardIcon;
+          if (pid) goDashboard(pid);
+          return;
+        }
+
+        if (e.target.closest('[data-card-expand]')) return;
+        if (e.target.closest('[data-card-menu]')) return;
+        if (e.target.closest('[data-card-action]')) return;
+        if (e.target.closest('a')) return;
+
+        const card = e.target.closest('.project-card');
+        if (!card) return;
+
+        const pid = card.dataset.pid;
+        if (!pid) return;
+
+        if (S.expandedProjects.has(pid)) {
+          goDashboard(pid);
+        } else {
+          S.expandedProjects.add(pid);
+          saveExpandedState();
+          card.classList.add('expanded');
+          const p = S.filtered.find(x => x.pid === pid);
+          if (p) {
+            const html = renderExpandedDetail(p);
+            card.insertAdjacentHTML('beforeend', html);
+          }
+          const chev = card.querySelector('.project-expand-btn[data-card-expand]');
+          if (chev) chev.setAttribute('aria-expanded', 'true');
+        }
+      });
+    }
   }
-}
+
   // ═══════════════════════════════════════════════════════════
   // REGENERATE PREVIEW
   // ═══════════════════════════════════════════════════════════
@@ -3728,7 +3835,6 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
       });
       hideLoading();
       if (res.ok && res.data?.success) {
-        // Refresh the specific project
         const detailRes = await apiFetch(API_HOST + '?action=projects/get&pid=' + encodeURIComponent(p.pid));
         if (detailRes.ok && detailRes.data?.success && detailRes.data.project) {
           const fresh = detailRes.data.project;
@@ -3815,8 +3921,9 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
     const isArchived = !!p.archived;
     const hasExpired = S.expiredDeployments.some(d => d.pid === p.pid);
     const expiredCount = S.expiredDeployments.filter(d => d.pid === p.pid).length;
-    const shareUrl = p.visibility?.profile === 'public'
-      ? `${location.origin}/${S.user?.profile?.username || S.user?.username || ''}/${p.slug || ''}`
+    const ownerUsername = S.user?.profile?.username || S.user?.username || '';
+    const shareUrl = (p.visibility?.profile === 'public' && ownerUsername && p.slug)
+      ? `${PUBLIC_SITE_BASE}/${ownerUsername}/${p.slug}`
       : null;
     const thumbUrl = p.thumbnail?.url || null;
     const iconInner = thumbUrl ? '' : p.iconUrl
@@ -3825,6 +3932,9 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
     const iconStyle = thumbUrl
       ? `background-image:url('${escapeAttr(thumbUrl)}');background-size:cover;background-position:center top;`
       : p.iconUrl ? '' : `background:${getAvatarColor(p.name)};color:#0a0c10;`;
+
+    const canDownload = (p.myRole === 'owner' || p.myRole === 'editor' || p.visibility?.profile === 'public');
+    const canDuplicate = (p.myRole === 'owner' || p.myRole === 'editor');
 
     const sheet = $('actionSheet');
     sheet.innerHTML = `
@@ -3843,8 +3953,8 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
         ${shareUrl ? `<button class="action-item" data-action="share">${svg('share', 14, 2.2)}<span>Copy share link</span></button>` : ''}
         <div class="action-divider"></div>
         <button class="action-item" data-action="regenerate">${svg('refresh', 14, 2.2)}<span>Regenerate preview</span></button>
-        <button class="action-item" data-action="download">${svg('download', 14, 2.2)}<span>Download .folio</span></button>
-        <button class="action-item" data-action="duplicate">${svg('copy', 14, 2.2)}<span>Duplicate</span></button>
+        ${canDownload ? `<button class="action-item" data-action="download">${svg('download', 14, 2.2)}<span>Download .folio</span></button>` : ''}
+        ${canDuplicate ? `<button class="action-item" data-action="duplicate">${svg('copy', 14, 2.2)}<span>Duplicate</span></button>` : ''}
         <button class="action-item" data-action="pin">${svg('bookmark', 14, 2.2)}<span>${S.pinnedProjects.has(p.pid) ? 'Unpin' : 'Pin'}</span></button>
         ${isOwner ? `<button class="action-item" data-action="rename">${svg('edit', 14, 2.2)}<span>Rename</span></button>` : ''}
         <button class="action-item" data-action="archive">${svg(isArchived ? 'unlock' : 'archive', 14, 2.2)}<span>${isArchived ? 'Unarchive' : 'Archive'}</span></button>
@@ -3876,8 +3986,13 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
         else toast('Copy failed', 'error');
         break;
       case 'share': {
-        const shareUrl = `${location.origin}/${S.user?.profile?.username || S.user?.username || ''}/${p.slug || ''}`;
-        if (copyToClipboard(shareUrl)) toast('Link copied', 'success', 1200);
+        const ownerUsername = S.user?.profile?.username || S.user?.username || '';
+        if (!ownerUsername || !p.slug) {
+          toast('Share link unavailable — missing username or slug', 'warning');
+          break;
+        }
+        const shareUrl = `${PUBLIC_SITE_BASE}/${ownerUsername}/${p.slug}`;
+        if (copyToClipboard(shareUrl)) toast('Share link copied', 'success', 1200);
         else toast('Copy failed', 'error');
         break;
       }
@@ -3901,6 +4016,7 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
       showLoading('Preparing download', 'Building .folio backup…');
       const res = await fetch(`${API_HOST}?action=project/export&pid=${encodeURIComponent(p.pid)}&format=folio`, {
         headers: { Authorization: `Bearer ${S.session}` },
+        signal: AbortSignal.timeout(30000),
       });
       hideLoading();
       if (!res.ok) throw new Error('Download failed');
@@ -3993,18 +4109,27 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
       if (name === p.name) { closeModal(); return; }
       $('renameSubmit').disabled = true;
       try {
+        let serverSlug = p.slug;
         if (S.session && S.online && p._serverData) {
           const res = await apiFetch(API_HOST + '?action=projects/update', {
             method: 'POST', body: JSON.stringify({ pid: p.pid, name }),
           });
           if (!res.ok || !res.data?.success) throw new Error(res.data?.error || 'Failed');
+          if (res.data.project?.slug) serverSlug = res.data.project.slug;
         }
         p.name = name;
+        p.slug = serverSlug;
         p.updatedAt = Date.now();
         await IDB.putProject({
-          pid: p.pid, name, slug: p.slug || '', description: p.description || '',
-          createdAt: p.createdAt, updatedAt: Date.now(), iconUrl: p.iconUrl || null,
-          archived: p.archived || false, archivedAt: p.archivedAt || null,
+          pid: p.pid,
+          name,
+          slug: serverSlug,
+          description: p.description || '',
+          createdAt: p.createdAt,
+          updatedAt: Date.now(),
+          iconUrl: p.iconUrl || null,
+          archived: p.archived || false,
+          archivedAt: p.archivedAt || null,
         });
         closeModal();
         toast('Renamed', 'success');
@@ -4026,14 +4151,19 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
       async () => {
         showLoading('Cleaning', `Deleting ${expired.length}…`);
         try {
-          for (const d of expired) {
-            await apiFetch(API_HOST + '?action=deployment/delete', {
+          const toDelete = [...expired];
+          const results = await Promise.allSettled(
+            toDelete.map(d => apiFetch(API_HOST + '?action=deployment/delete', {
               method: 'POST', body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
-            });
-          }
+            }))
+          );
+          const failed = results.filter(r => r.status === 'rejected' || !r.value?.ok).length;
           S.expiredDeployments = S.expiredDeployments.filter(d => d.pid !== p.pid);
           hideLoading();
-          toast(`Cleaned ${expired.length}`, 'success');
+          if (failed > 0) toast(`${expired.length - failed} of ${expired.length} cleaned — ${failed} failed`, 'warning', 4000);
+          else toast(`Cleaned ${expired.length}`, 'success');
+          renderStorageSummary();
+          renderAutoCleanBanner();
           applyFiltersAndRender();
         } catch (err) { hideLoading(); toast(err.message || 'Failed', 'error'); }
       }
@@ -4062,6 +4192,9 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
       { id: 'todo', label: 'Todo' },
       { id: 'blog', label: 'Blog' },
     ];
+    let lastTemplate = 'blank';
+    try { lastTemplate = localStorage.getItem(STORAGE.lastTemplate) || 'blank'; } catch {}
+    if (!templates.some(t => t.id === lastTemplate)) lastTemplate = 'blank';
 
     const body = `
       <div class="modal-title">New project</div>
@@ -4077,8 +4210,8 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
       <div class="field">
         <label class="field-label">Template</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          ${templates.map((t, i) => `
-            <button class="filter-pill ${i === 0 ? 'active' : ''}" data-template="${t.id}" type="button">${escapeHTML(t.label)}</button>
+          ${templates.map((t) => `
+            <button class="filter-pill ${t.id === lastTemplate ? 'active' : ''}" data-template="${t.id}" type="button">${escapeHTML(t.label)}</button>
           `).join('')}
         </div>
       </div>
@@ -4089,13 +4222,14 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
     `;
     openModal(body);
 
-    let selectedTemplate = 'blank';
+    let selectedTemplate = lastTemplate;
 
     document.querySelectorAll('[data-template]').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('[data-template]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         selectedTemplate = btn.dataset.template;
+        try { localStorage.setItem(STORAGE.lastTemplate, selectedTemplate); } catch {}
       });
     });
 
@@ -4138,11 +4272,16 @@ function renderProjectIconWithFallback(p, { size = 34, rounded = 8 } = {}) {
 
       if (S.session && S.online) {
         try {
-          await apiFetch(API_HOST + '?action=project/sync-back', {
+          const syncRes = await apiFetch(API_HOST + '?action=project/sync-back', {
             method: 'POST',
             body: JSON.stringify({ pid, files: seedFiles }),
           });
-        } catch {}
+          if (!syncRes.ok || !syncRes.data?.success) {
+            toast('Project saved locally — server sync failed. Files will sync on next save.', 'warning', 6000);
+          }
+        } catch (err) {
+          toast('Project saved locally — server sync failed.', 'warning', 6000);
+        }
       }
 
       hideLoading();
@@ -4351,9 +4490,8 @@ article p { line-height: 1.7; font-size: 1.05rem; }
     setTimeout(() => {
       if ($('celebration').classList.contains('active')) {
         $('celebration').classList.remove('active');
-        goEditor(pid);
       }
-    }, 5000);
+    }, 8000);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -4380,7 +4518,8 @@ article p { line-height: 1.7; font-size: 1.05rem; }
     const body = $('filtersBody');
     const subtitle = $('filtersSubtitle');
     const tab = TABS.find(t => t.id === S.activeTab);
-    if (subtitle) subtitle.textContent = `${tab?.label || 'All'} · ${S.filtered.length} visible`;
+    const visibleCount = S.filtered.length || S.projects.length;
+    if (subtitle) subtitle.textContent = `${tab?.label || 'All'} · ${visibleCount} visible`;
 
     const stats = computeStats();
     const expiredCount = S.expiredDeployments.length;
@@ -4417,10 +4556,22 @@ article p { line-height: 1.7; font-size: 1.05rem; }
       <div class="filter-section">
         <div class="filter-label">Overview</div>
         <div class="stats-grid">
-          <div class="stat-tile"><div class="stat-label">Total</div><div class="stat-value">${S.projects.length}</div></div>
-          <div class="stat-tile"><div class="stat-label">Public</div><div class="stat-value">${stats.publicCount}</div></div>
-          <div class="stat-tile"><div class="stat-label">Deployed</div><div class="stat-value">${stats.deployedCount}</div></div>
-          <div class="stat-tile"><div class="stat-label">Expired</div><div class="stat-value ${expiredCount > 0 ? 'warn' : ''}">${expiredCount}</div></div>
+          <button class="stat-tile stat-tile-btn" data-stat-filter="all" type="button">
+            <div class="stat-label">Total</div>
+            <div class="stat-value">${S.projects.length}</div>
+          </button>
+          <button class="stat-tile stat-tile-btn" data-stat-filter="public" type="button">
+            <div class="stat-label">Public</div>
+            <div class="stat-value">${stats.publicCount}</div>
+          </button>
+          <button class="stat-tile stat-tile-btn" data-stat-filter="deployed" type="button">
+            <div class="stat-label">Deployed</div>
+            <div class="stat-value">${stats.deployedCount}</div>
+          </button>
+          <button class="stat-tile stat-tile-btn" data-stat-filter="expired" type="button">
+            <div class="stat-label">Expired</div>
+            <div class="stat-value ${expiredCount > 0 ? 'warn' : ''}">${expiredCount}</div>
+          </button>
         </div>
       </div>
       <div class="storage-block">
@@ -4458,7 +4609,11 @@ article p { line-height: 1.7; font-size: 1.05rem; }
         const f = btn.dataset.filter;
         if (S.activeFilters.has(f)) S.activeFilters.delete(f);
         else S.activeFilters.add(f);
-        renderFiltersBody();
+        btn.classList.toggle('active', S.activeFilters.has(f));
+        const visibleCount = S.filtered.length || S.projects.length;
+        const subtitle = $('filtersSubtitle');
+        const tab = TABS.find(t => t.id === S.activeTab);
+        if (subtitle) subtitle.textContent = `${tab?.label || 'All'} · ${visibleCount} visible`;
         renderActiveFilters();
         applyFiltersAndRender();
       });
@@ -4477,6 +4632,30 @@ article p { line-height: 1.7; font-size: 1.05rem; }
       toast(S.autoCleanEnabled ? 'Auto-clean on' : 'Auto-clean off', 'info', 1200);
     });
     $('btnCleanAll')?.addEventListener('click', cleanAllExpired);
+
+    body.querySelectorAll('[data-stat-filter]').forEach(tile => {
+      tile.addEventListener('click', () => {
+        const filter = tile.dataset.statFilter;
+        if (filter === 'all') {
+          S.activeFilters.clear();
+        } else if (filter === 'public') {
+          S.activeFilters.clear();
+          S.activeFilters.add('deployed');
+          switchTab('public');
+          closeFiltersOverlay();
+          return;
+        } else if (filter === 'deployed') {
+          S.activeFilters.clear();
+          S.activeFilters.add('deployed');
+        } else if (filter === 'expired') {
+          S.activeFilters.clear();
+          S.activeFilters.add('expired');
+        }
+        renderFiltersBody();
+        renderActiveFilters();
+        applyFiltersAndRender();
+      });
+    });
   }
 
   function computeStats() {
@@ -4495,15 +4674,18 @@ article p { line-height: 1.7; font-size: 1.05rem; }
     confirmModal(`Delete ${count} expired deployment${count === 1 ? '' : 's'}?`, 'Live URLs will stop working. Cannot be undone.', 'Delete all', true, async () => {
       showLoading('Cleaning', `Deleting ${count}…`);
       try {
-        for (const d of [...S.expiredDeployments]) {
-          await apiFetch(API_HOST + '?action=deployment/delete', {
+        const toDelete = [...S.expiredDeployments];
+        await Promise.allSettled(
+          toDelete.map(d => apiFetch(API_HOST + '?action=deployment/delete', {
             method: 'POST', body: JSON.stringify({ pid: d.pid, deploymentId: d.deploymentId }),
-          });
-        }
+          }))
+        );
         S.expiredDeployments = [];
         hideLoading();
         closeFiltersOverlay();
         toast(`Cleaned ${count}`, 'success');
+        renderStorageSummary();
+        renderAutoCleanBanner();
         applyFiltersAndRender();
       } catch (err) { hideLoading(); toast(err.message || 'Failed', 'error'); }
     });
@@ -4618,7 +4800,46 @@ article p { line-height: 1.7; font-size: 1.05rem; }
       }
     });
 
-    $('sortBtn').addEventListener('click', openFiltersOverlay);
+    $('sortBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const existing = document.querySelector('.sort-popover');
+      if (existing) { existing.remove(); return; }
+
+      const pop = document.createElement('div');
+      pop.className = 'sort-popover';
+      pop.innerHTML = `
+        <div class="sort-popover-title">Sort by</div>
+        ${SORTS.map(s => `
+          <button class="sort-row ${S.sortId === s.id ? 'active' : ''}" data-sort-id="${escapeAttr(s.id)}" type="button">
+            ${S.sortId === s.id ? svg('check', 10, 2.4) : '<span style="width:10px;"></span>'}
+            <span>${escapeHTML(s.label)}</span>
+          </button>
+        `).join('')}
+      `;
+      document.body.appendChild(pop);
+      const rect = $('sortBtn').getBoundingClientRect();
+      pop.style.top = (rect.bottom + 4 + window.scrollY) + 'px';
+      pop.style.left = Math.max(8, rect.left + window.scrollX) + 'px';
+
+      pop.querySelectorAll('[data-sort-id]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          S.sortId = btn.dataset.sortId;
+          pop.remove();
+          updateHeaderCount();
+          applyFiltersAndRender();
+        });
+      });
+
+      setTimeout(() => {
+        document.addEventListener('click', function handler(ev) {
+          if (!pop.contains(ev.target) && !ev.target.closest('#sortBtn')) {
+            pop.remove();
+            document.removeEventListener('click', handler);
+          }
+        });
+      }, 50);
+    });
+
     $('bellBtn')?.addEventListener('click', () => {
       window.open('/notifications', '_blank', 'noopener');
     });
@@ -4679,6 +4900,11 @@ article p { line-height: 1.7; font-size: 1.05rem; }
       toast('Storage failed', 'error');
       return;
     }
+
+    try {
+      const expanded = sessionStorage.getItem(STORAGE.expanded);
+      if (expanded) S.expandedProjects = new Set(JSON.parse(expanded));
+    } catch {}
 
     const hashTab = getHashTab();
     if (hashTab) S.activeTab = hashTab;
