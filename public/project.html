@@ -2882,11 +2882,19 @@ function renderShortlinkOwnerBody(shortlink) {
       <div class="field-hint" style="font-size:10px;">Lowercase letters + digits, 3-30 chars, starts with a letter.</div>
     `;
   }
+  const isInstant = !!(shortlink.instant || shortlink.detail?.instant);
   return `
     <div class="field-hint" style="margin-bottom:8px;">Your short link is active. Share it anywhere.</div>
     <div style="margin-bottom:8px;">${renderUrlDisplay(`${SHORT_URL}/${shortlink.key}`, { label: 'short' })}</div>
     ${shortlink.detail?.clicks != null ? `<div class="field-hint" style="font-size:10px;">${shortlink.detail.clicks} click${shortlink.detail.clicks === 1 ? '' : 's'}${shortlink.detail.createdAt ? ` · created ${timeAgo(shortlink.detail.createdAt)}` : ''}</div>` : ''}
-    <div style="display:flex;gap:6px;margin-top:10px;">
+    <div class="toggle-row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--theme-card-border);">
+      <div class="toggle-info">
+        <div class="toggle-title">Instant redirect</div>
+        <div class="toggle-desc">Skip the intro and send visitors straight to your site before the page paints.</div>
+      </div>
+      <button class="switch ${isInstant ? 'on' : ''}" id="btnShortlinkInstant" type="button" data-requires-online aria-pressed="${isInstant ? 'true' : 'false'}" aria-label="Instant redirect"></button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:12px;">
       <button class="btn btn-sm btn-secondary" id="btnChangeShortlink" data-requires-online>${svg('edit', 10, 2.2)} Change</button>
       <button class="btn btn-sm btn-ghost" id="btnReleaseShortlink" style="color:var(--theme-danger);" data-requires-online>${svg('trash', 10, 2.2)} Release</button>
     </div>
@@ -2928,6 +2936,12 @@ function wireShortlinkHandlers(panel) {
     });
   });
   $('btnReleaseShortlink')?.addEventListener('click', releaseShortlink);
+  $('btnShortlinkInstant')?.addEventListener('click', () => {
+    const btn = $('btnShortlinkInstant');
+    if (!btn || btn.disabled) return;
+    const next = !btn.classList.contains('on');
+    setShortlinkInstant(next, btn);
+  });
 }
 
 async function claimShortlink(baseName, confirmed = false) {
@@ -3004,6 +3018,45 @@ async function releaseShortlink() {
       } catch (err) { hideLoading(); toast(err.message || 'Release failed', 'error'); }
     }
   );
+}
+
+async function setShortlinkInstant(instant, btn) {
+  if (!S.online) { toast('Requires internet', 'warning'); return; }
+  if (!S.session) { toast('Sign in first', 'warning'); return; }
+  if (!S.shortlink?.hasShortlink && !S.project?.shortKey) {
+    toast('Claim a short link first', 'warning');
+    return;
+  }
+  const prev = btn ? btn.classList.contains('on') : !instant;
+  if (btn) {
+    btn.classList.toggle('on', instant);
+    btn.setAttribute('aria-pressed', instant ? 'true' : 'false');
+    btn.disabled = true;
+  }
+  try {
+    const res = await apiFetch(API_HOST + '?action=shortlink/prefs', {
+      method: 'POST',
+      body: JSON.stringify({ pid: S.pid, instant: !!instant }),
+    });
+    if (!res.ok || !res.data?.success) {
+      throw new Error(res.data?.error || 'Could not update preference');
+    }
+    if (S.shortlink) {
+      S.shortlink.instant = !!instant;
+      if (S.shortlink.detail) S.shortlink.detail.instant = !!instant;
+      S.shortlink._at = Date.now();
+    }
+    try { await IDB.setProjectMeta(S.pid, { cachedShortlink: S.shortlink }); } catch {}
+    toast(instant ? 'Instant redirect on' : 'Instant redirect off', 'success', 1600);
+  } catch (err) {
+    if (btn) {
+      btn.classList.toggle('on', prev);
+      btn.setAttribute('aria-pressed', prev ? 'true' : 'false');
+    }
+    toast(err.message || 'Update failed', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
   // ═══════════════════════════════════════════════════════════
