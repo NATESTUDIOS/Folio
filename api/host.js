@@ -3322,6 +3322,7 @@ async function handleShortlinkInfo(req, res, reqId) {
           createdAt: d.createdAt || null,
           lastAccessed: d.lastAccessed || null,
           url: d.url || null,
+          instant: !!d.instant,
         };
       }
     } catch (err) {
@@ -3338,6 +3339,7 @@ async function handleShortlinkInfo(req, res, reqId) {
     displayUrl: shortKey ? `${SHORT_URL.replace(/^https?:\/\//, "")}/${shortKey}` : null,
     domain: SHORT_URL.replace(/^https?:\/\//, ""),
     canManage: access.role === "owner",
+    instant: !!(detail && detail.instant),
     detail,
   });
 }
@@ -5548,6 +5550,43 @@ async function handleShortlinkRelease(req, res, reqId) {
   }
 }
 
+// =========================================================================
+// SHORTLINK PREFS — toggle instant redirect (and future prefs)
+// =========================================================================
+//
+// Body: { pid, instant: boolean }
+// Proxies to shortlink ?action=prefs. Owner-only.
+
+async function handleShortlinkPrefs(req, res, reqId) {
+  const { pid, instant } = req.body || {};
+  if (!pid) return res.status(400).json({ success: false, error: "Missing pid" });
+  if (typeof instant !== "boolean") {
+    return res.status(400).json({ success: false, error: "instant must be a boolean" });
+  }
+
+  const access = await requireProjectRole(req, res, pid, "owner");
+  if (!access) return;
+
+  try {
+    const result = await callShortlink({
+      method: "POST",
+      action: "prefs",
+      body: { pid, instant },
+    });
+
+    const data = result.data || {};
+    if (result.status !== 200 || !data.success) {
+      return res.status(result.status || 500).json(data);
+    }
+
+    invalidateProject(pid);
+    return res.status(200).json(data);
+  } catch (err) {
+    log("host.shortlink_prefs.error", { pid, message: err.message });
+    return res.status(502).json({ success: false, error: "Shortlink service unreachable" });
+  }
+}
+
 async function handleInviteCreate(req, res, reqId) {
   const { pid, username, role } = req.body || {};
   if (!pid || !username || !role) {
@@ -6493,9 +6532,11 @@ export default async function handler(req, res) {
     if (method === "POST" && action === "file-visibility")
       return await handleFileVisibility(req, res, reqId);
     if (method === "POST" && action === "shortlink/claim")
-  return await handleShortlinkClaim(req, res, reqId);
-if (method === "DELETE" && action === "shortlink/release")
-  return await handleShortlinkRelease(req, res, reqId);
+      return await handleShortlinkClaim(req, res, reqId);
+    if (method === "DELETE" && action === "shortlink/release")
+      return await handleShortlinkRelease(req, res, reqId);
+    if (method === "POST" && action === "shortlink/prefs")
+      return await handleShortlinkPrefs(req, res, reqId);
     if (method === "POST" && action === "invite/create")
       return await handleInviteCreate(req, res, reqId);
     if (method === "GET" && action === "invite/list")

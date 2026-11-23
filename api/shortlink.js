@@ -5,11 +5,13 @@
 //  ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════
 //   GET    ?key=X                → resolve (public)
+//   GET    ?key=X&go=1           → 302 if link is instant (public)
 //   GET    ?action=info&key=X    → metadata (public)
 //   GET    ?action=domains       → supported domains (public)
 //   POST   ?action=create        → auto-create on deploy
 //   POST   ?action=claim         → claim custom key (2-step collision)
 //   POST   ?action=edit          → rename existing key (keeps URL)
+//   POST   ?action=prefs         → set prefs (instant redirect, etc.)
 //   POST   ?action=transfer      → move a key to another project
 //   DELETE ?action=release&key=X → free a key
 //   GET    ?action=list          → admin: list all keys
@@ -146,6 +148,7 @@ const RATE_LIMITS = {
   create:  { max: 10,  window: 60_000 },
   claim:   { max: 15,  window: 60_000 },
   edit:    { max: 15,  window: 60_000 },
+  prefs:   { max: 20,  window: 60_000 },
   transfer: { max: 10, window: 60_000 },
   release: { max: 10,  window: 60_000 },
   info:    { max: 120, window: 60_000 },
@@ -405,6 +408,8 @@ function publicRecord(key, record) {
     createdAt: record.t || null,
     lastAccessed: record.l || null,
     editedAt: record.e || null,
+    // When true, short-domain skips animations and redirects before paint.
+    instant: !!record.instant,
   };
 }
 
@@ -496,6 +501,31 @@ async function notifyKeyEvent({
 //   - zero-count when the flush timer dies before firing
 // So: server-side tracking is deliberately removed from this handler.
 
+function wantsHttpRedirect(req) {
+  const q = req.query || {};
+  return q.go === "1" || q.redirect === "1" || q.redirect === "true";
+}
+
+function respondResolve(req, res, reqId, key, record, source) {
+  // Optional server-side 302: /api/shortlink?key=X&go=1
+  // Only when the link is marked instant. Useful if the short domain
+  // is rewritten to this endpoint (true zero-paint redirect).
+  if (wantsHttpRedirect(req) && record && record.instant && record.u && /^https:\/\//i.test(record.u)) {
+    res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");
+    res.setHeader("Location", record.u);
+    log("shortlink.resolve.redirect", { reqId, key, source });
+    return res.status(302).end();
+  }
+
+  res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
+  log("shortlink.resolve.hit", { reqId, key, source });
+  return res.status(200).json({
+    success: true,
+    data: publicRecord(key, record),
+    cached: source,
+  });
+}
+
 async function handleResolve(req, res, reqId) {
   const key = String(req.query.key || "").trim();
 
@@ -505,13 +535,7 @@ async function handleResolve(req, res, reqId) {
 
   const cached = hotGet(key);
   if (cached) {
-    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
-    log("shortlink.resolve.hit", { reqId, key, source: "hot" });
-    return res.status(200).json({
-      success: true,
-      data: publicRecord(key, cached),
-      cached: "hot",
-    });
+    return respondResolve(req, res, reqId, key, cached, "hot");
   }
 
   if (negGet(key)) {
@@ -531,14 +555,7 @@ async function handleResolve(req, res, reqId) {
 
     const record = snap.val();
     hotSet(key, record);
-
-    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
-    log("shortlink.resolve.hit", { reqId, key, source: "firebase" });
-    return res.status(200).json({
-      success: true,
-      data: publicRecord(key, record),
-      cached: "firebase",
-    });
+    return respondResolve(req, res, reqId, key, record, "firebase");
   } catch (err) {
     log("shortlink.resolve.error", { reqId, key, message: err.message });
     return res.status(503).json({ success: false, error: "Temporarily unavailable" });
@@ -693,6 +710,7 @@ async function handleCreate(req, res, reqId) {
     s: "proj",
     i: imageUrl || null,
     n: name || key,
+    instant: false,
   });
 
   const key = await claimFirstAvailableFrom(base, makeRecord, pid, startNumber);
@@ -808,6 +826,15 @@ async function handleClaim(req, res, reqId) {
     });
   }
 
+  // Preserve instant preference when the project already has a link.
+  let preserveInstant = false;
+  if (existingKey) {
+    try {
+      const prevSnap = await db.ref(`links/${existingKey}/instant`).once("value");
+      if (prevSnap.exists()) preserveInstant = !!prevSnap.val();
+    } catch {}
+  }
+
   const makeRecord = (key) => ({
     u: url,
     p: pid,
@@ -818,6 +845,7 @@ async function handleClaim(req, res, reqId) {
     s: strategy,
     i: imageUrl || null,
     n: name || key,
+    instant: preserveInstant,
   });
 
   const startNumber = rl.allowed && !confirmed ? 1 : 2;
@@ -998,6 +1026,7 @@ async function handleEdit(req, res, reqId) {
     i: cur.i || null,
     n: cur.n || key,
     e: Date.now(),
+    instant: !!cur.instant,
   });
 
   const startNumber = rl.allowed && !confirmed ? 1 : 2;
@@ -1112,6 +1141,87 @@ async function handleEdit(req, res, reqId) {
     shortUrl: shortUrlFor(newKey),
     previousKey: currentKey,
     numbered: newKey !== clean,
+  });
+}
+
+// =========================================================================
+// HANDLER: POST ?action=prefs — set non-key preferences (instant redirect)
+// =========================================================================
+//
+// Body: { pid, instant?: boolean }
+// Only mutates fields that are present. Currently supports `instant`
+// (skip interstitial and redirect before paint on the short domain).
+
+async function handlePrefs(req, res, reqId) {
+  const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
+  const { pid, instant } = body;
+
+  if (!pid) {
+    return res.status(400).json({ success: false, error: "Missing pid" });
+  }
+  if (instant !== undefined && typeof instant !== "boolean") {
+    return res.status(400).json({ success: false, error: "instant must be a boolean" });
+  }
+  if (instant === undefined) {
+    return res.status(400).json({ success: false, error: "No prefs to update" });
+  }
+
+  const authResult = await authorizeProject(req, res, pid);
+  if (!authResult.ok) {
+    return res.status(authResult.status).json({ success: false, error: authResult.error });
+  }
+
+  const rateId = authResult.via === "admin" ? `pid_${pid}` : `uid_${authResult.uid}`;
+  const rl = checkRateLimit(rateId, "prefs");
+  setRateHeaders(res, rl);
+  if (!rl.allowed) {
+    return res.status(429).json({
+      success: false,
+      error: "Rate limit exceeded",
+      retryAfter: rl.retryAfter,
+    });
+  }
+
+  const idxSnap = await db.ref(`linksByPid/${pid}`).once("value");
+  if (!idxSnap.exists()) {
+    return res.status(404).json({
+      success: false,
+      error: "No short link to update — claim one first",
+    });
+  }
+  const key = idxSnap.val();
+
+  const keySnap = await db.ref(`links/${key}`).once("value");
+  if (!keySnap.exists()) {
+    return res.status(404).json({ success: false, error: "Link record missing" });
+  }
+
+  const updates = {};
+  if (typeof instant === "boolean") {
+    updates[`links/${key}/instant`] = instant;
+  }
+  updates[`links/${key}/e`] = Date.now();
+
+  await db.ref().update(updates);
+  await invalidateKey(key, reqId);
+
+  const ownerUid = keySnap.val().o || null;
+  await logProjectEvent(pid, ownerUid, "shortlink", "shortlink.prefs", {
+    key,
+    instant: typeof instant === "boolean" ? instant : undefined,
+  });
+
+  log("shortlink.prefs", {
+    reqId, pid, key,
+    instant: typeof instant === "boolean" ? instant : undefined,
+    via: authResult.via,
+  });
+
+  return res.status(200).json({
+    success: true,
+    key,
+    shortUrl: shortUrlFor(key),
+    instant: typeof instant === "boolean" ? instant : !!keySnap.val().instant,
   });
 }
 
@@ -1371,6 +1481,10 @@ export default async function handler(req, res) {
 
     if (method === "POST" && action === "edit") {
       return await handleEdit(req, res, reqId);
+    }
+
+    if (method === "POST" && action === "prefs") {
+      return await handlePrefs(req, res, reqId);
     }
 
     if (method === "POST" && action === "transfer") {
