@@ -1,22 +1,35 @@
+
 "use strict";
 
 // ============================================================
 // FOLIO — PRODUCTION SERVICE WORKER
-// Offline-first application shell, assets, CDN modules and FCM
+// Offline-first shell, CDN assets, FCM and Device File Handling
 // ============================================================
 //
 // Build-time placeholders:
 // __FOLIO_SW_VERSION__
 // __FOLIO_SW_BUILT_AT__
 //
-// IMPORTANT:
-// - CRITICAL_FILES must contain ONLY same-origin resources.
-//   External CDN failures must never block installation.
-// - Failed installations cannot replace the previous working SW.
-// - Previous caches are preserved until the new SW activates.
-// - CodeMirror is served from deno.land today; it is OPTIONAL
-//   during install. See the note in CRITICAL_FILES below.
+// Features:
+// - Atomic installation and critical-resource verification
+// - Offline-first navigation and asset caching
+// - Optional CDN caching
+// - Firebase Cloud Messaging
+// - Push notifications
+// - Android Web Share Target file reception
+// - Persistent IndexedDB file inbox
+// - Multiple-file reception
+// - File inbox management and diagnostics
 //
+// IMPORTANT:
+// - CRITICAL_FILES must contain same-origin resources only.
+// - External CDN failures never block installation.
+// - Previous caches are preserved until successful activation.
+// - File inbox uses a separate database from Folio's main DB.
+// - File reception does not execute received content.
+// ============================================================
+
+
 // ============================================================
 // CONFIGURATION
 // ============================================================
@@ -34,14 +47,48 @@ const ASSET_TIMEOUT = 12000;
 
 const MAX_PARALLEL_INSTALLS = 6;
 
+
 // ============================================================
-// LOGGING HELPERS
+// FILE RECEIVER CONFIGURATION
 // ============================================================
-//
-// Every log line starts with "[Folio SW]" so the entire lifecycle
-// can be filtered from the DevTools console. Detail-level logs are
-// gated behind a URL flag (?sw-debug=1) or a dev host so production
-// consoles stay quiet.
+
+const FILE_RECEIVER_PATH = "/file-receiver";
+
+const FILE_INBOX_DB = "folio-file-inbox";
+const FILE_INBOX_VERSION = 1;
+const FILE_INBOX_STORE = "files";
+
+const FILE_INBOX_LIMITS = {
+  maxFiles: 10,
+  maxFileSize: 20 * 1024 * 1024,
+  maxTotalSize: 50 * 1024 * 1024,
+};
+
+const SUPPORTED_FILE_EXTENSIONS = new Set([
+  "html", "htm",
+  "css",
+  "js", "mjs", "cjs",
+  "json",
+  "md", "markdown",
+  "txt",
+  "xml",
+  "svg",
+  "yaml", "yml",
+  "toml",
+  "csv",
+  "ts", "tsx",
+  "jsx",
+  "scss", "less",
+  "php",
+  "py",
+  "sql",
+  "sh",
+]);
+
+
+// ============================================================
+// LOGGING
+// ============================================================
 
 const SW_DEBUG =
   self.location.hostname === "localhost" ||
@@ -66,6 +113,7 @@ function error(...args) {
   console.error("[Folio SW]", ...args);
 }
 
+
 // ============================================================
 // LIVE-SITE DETECTION
 // ============================================================
@@ -86,12 +134,10 @@ function isLiveSiteRequest(url) {
   }
 }
 
+
 // ============================================================
 // ALLOWED EXTERNAL HOSTS
 // ============================================================
-//
-// Requests to these hosts are allowed through the fetch handler
-// and may be cached. Any other external host is bypassed.
 
 const CDN_HOSTS = new Set([
   "deno.land",
@@ -101,8 +147,9 @@ const CDN_HOSTS = new Set([
   "www.gstatic.com",
 ]);
 
+
 // ============================================================
-// PRECACHE FILES
+// PRE-CACHE FILES
 // ============================================================
 
 const CODEMIRROR_FILES = [
@@ -124,7 +171,6 @@ const CODEMIRROR_FILES = [
 ];
 
 const CACHED_FILES = [
-  // ── HTML ─────────────────────────────────────────────────
   "/",
   "/index.html",
 
@@ -161,22 +207,17 @@ const CACHED_FILES = [
   "/ai",
   "/ai.html",
 
-  // ── CSS ──────────────────────────────────────────────────
   "/css/app.css",
   "/css/project.css",
   "/css/ai.css",
- 
 
-  // ── PWA ──────────────────────────────────────────────────
   "/manifest.json",
 
-  // ── Icons ────────────────────────────────────────────────
   "/icons/icon-144.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/notif.png",
 
-  // ── Screenshots ──────────────────────────────────────────
   "/screenshots/screenshot1.png",
   "/screenshots/screenshot2.png",
   "/screenshots/screenshot3.png",
@@ -184,7 +225,6 @@ const CACHED_FILES = [
   "/screenshots/screenshot5.png",
   "/screenshots/screenshot6.png",
 
-  // ── Scripts ──────────────────────────────────────────────
   "/install.js",
   "/update.js",
   "/fcm-client.js",
@@ -193,31 +233,15 @@ const CACHED_FILES = [
   "/js/create-project.js",
   "/js/preview.js",
 
-  // ── Firebase compat (self-hosted) ────────────────────────
   "/vendor/firebase/firebase-app-compat.js",
   "/vendor/firebase/firebase-messaging-compat.js",
 
-  // ── CodeMirror (external CDN, OPTIONAL) ──────────────────
   ...CODEMIRROR_FILES,
 ];
 
+
 // ============================================================
 // CRITICAL RESOURCES
-// ============================================================
-//
-// A resource listed here MUST be cached successfully before the
-// new service worker may activate. If any of these fail, install
-// aborts and the previous service worker remains in control.
-//
-// RULES:
-//   1. Only same-origin resources belong here.
-//   2. External CDN resources must NEVER be listed here — their
-//      availability is outside our control and a CDN failure must
-//      not brick the entire application offline mode.
-//   3. CodeMirror lives on deno.land today. It is therefore
-//      OPTIONAL. Once self-hosted at /vendor/codemirror/, you can
-//      add those paths to CRITICAL_FILES.
-//
 // ============================================================
 
 const CRITICAL_FILES = new Set([
@@ -228,11 +252,8 @@ const CRITICAL_FILES = new Set([
   "/manifest.json",
   "/install.js",
   "/update.js",
-
-  // NOTE: Do NOT add CODEMIRROR_FILES here while they are served
-  // from deno.land. External CDN failures must not block install.
-  // Add them here only after self-hosting at /vendor/codemirror/.
 ]);
+
 
 // ============================================================
 // BYPASS RULES
@@ -247,7 +268,6 @@ function shouldBypass(url, request) {
 
   if (isLiveSiteRequest(url)) return true;
 
-  // External origins must be explicitly allowed.
   if (url.origin !== self.location.origin) {
     if (!CDN_HOSTS.has(url.hostname)) {
       logDetail("Bypassing non-allowed external:", url.href);
@@ -255,10 +275,8 @@ function shouldBypass(url, request) {
     }
   }
 
-  // Never cache API responses.
   if (url.pathname.startsWith("/api/")) return true;
 
-  // Firebase messaging has its own service worker lifecycle.
   if (
     url.pathname.startsWith("/firebase-cloud-messaging-push-scope/") ||
     url.pathname === "/firebase-messaging-sw.js" ||
@@ -270,6 +288,7 @@ function shouldBypass(url, request) {
 
   return false;
 }
+
 
 // ============================================================
 // CONTENT TYPE VALIDATION
@@ -325,10 +344,13 @@ function contentTypeOk(url, response) {
 
   if (!expected) return true;
 
-  const actual = (response.headers.get("content-type") || "").toLowerCase();
+  const actual = (
+    response.headers.get("content-type") || ""
+  ).toLowerCase();
 
   return expected.some((type) => actual.includes(type));
 }
+
 
 // ============================================================
 // RESPONSE VALIDATION
@@ -336,17 +358,14 @@ function contentTypeOk(url, response) {
 
 function responseIsCacheable(url, response) {
   if (!response) return false;
-
   if (!response.ok) return false;
-
   if (response.type === "opaque") return false;
-
   if (!contentTypeOk(url, response)) return false;
-
   if (response.status === 206) return false;
 
   return true;
 }
+
 
 // ============================================================
 // CACHE HELPERS
@@ -357,41 +376,45 @@ async function getAppCache() {
 }
 
 function cacheRequestFor(url) {
-  return new Request(url instanceof Request ? url.url : url, {
-    method: "GET",
-    credentials: "omit",
-  });
+  return new Request(
+    url instanceof Request ? url.url : url,
+    {
+      method: "GET",
+      credentials: "omit",
+    }
+  );
 }
 
 async function putInCache(cache, request, response) {
   const key = request.url || request;
 
   if (!responseIsCacheable(key, response)) {
-    logDetail("Refusing to cache (validation failed):", key);
+    logDetail("Refusing to cache:", key);
     return false;
   }
 
   try {
-    await cache.put(cacheRequestFor(request), response.clone());
+    await cache.put(
+      cacheRequestFor(request),
+      response.clone()
+    );
+
     return true;
   } catch (err) {
-    warn("Cache write failed:", key, "—", err.message);
+    warn("Cache write failed:", key, err.message);
     return false;
   }
 }
 
 async function matchCached(cache, request) {
   try {
-    const hit = await cache.match(cacheRequestFor(request));
-
-    if (hit) return hit;
-
-    return null;
+    return await cache.match(cacheRequestFor(request)) || null;
   } catch (err) {
     warn("Cache match failed:", err.message);
     return null;
   }
 }
+
 
 // ============================================================
 // INSTALL FETCH
@@ -399,7 +422,8 @@ async function matchCached(cache, request) {
 
 async function fetchInstallResource(path) {
   const external =
-    new URL(path, self.location.origin).origin !== self.location.origin;
+    new URL(path, self.location.origin).origin !==
+    self.location.origin;
 
   const controller = new AbortController();
 
@@ -408,19 +432,18 @@ async function fetchInstallResource(path) {
   }, ASSET_TIMEOUT);
 
   try {
-    const response = await fetch(path, {
+    return await fetch(path, {
       method: "GET",
       cache: "no-store",
       credentials: external ? "omit" : "same-origin",
       mode: external ? "cors" : "same-origin",
       signal: controller.signal,
     });
-
-    return response;
   } finally {
     clearTimeout(timer);
   }
 }
+
 
 // ============================================================
 // INSTALL WORKER POOL
@@ -444,6 +467,400 @@ async function runInstallPool(items, concurrency, handler) {
 
   await Promise.all(workers);
 }
+
+
+// ============================================================
+// DEVICE FILE INBOX — DATABASE
+// ============================================================
+
+function openFileInboxDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(
+      FILE_INBOX_DB,
+      FILE_INBOX_VERSION
+    );
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+
+      if (!db.objectStoreNames.contains(FILE_INBOX_STORE)) {
+        const store = db.createObjectStore(
+          FILE_INBOX_STORE,
+          { keyPath: "id" }
+        );
+
+        store.createIndex(
+          "createdAt",
+          "createdAt",
+          { unique: false }
+        );
+
+        store.createIndex(
+          "status",
+          "status",
+          { unique: false }
+        );
+      }
+    };
+
+    request.onsuccess = () => {
+      resolve(request.result);
+    };
+
+    request.onerror = () => {
+      reject(
+        request.error ||
+        new Error("File inbox database failed")
+      );
+    };
+
+    request.onblocked = () => {
+      reject(new Error("File inbox database upgrade blocked"));
+    };
+  });
+}
+
+
+// ============================================================
+// DEVICE FILE HELPERS
+// ============================================================
+
+function createFileId() {
+  if (self.crypto?.randomUUID) {
+    return self.crypto.randomUUID();
+  }
+
+  return (
+    Date.now().toString(36) +
+    "-" +
+    Math.random().toString(36).slice(2) +
+    "-" +
+    Math.random().toString(36).slice(2)
+  );
+}
+
+function getFileExtension(name) {
+  const parts = String(name || "").split(".");
+
+  return parts.length > 1
+    ? parts.pop().toLowerCase()
+    : "";
+}
+
+function isSupportedDeviceFile(file) {
+  if (!file || typeof file.name !== "string") {
+    return false;
+  }
+
+  return SUPPORTED_FILE_EXTENSIONS.has(
+    getFileExtension(file.name)
+  );
+}
+
+
+// ============================================================
+// SAVE INCOMING FILES
+// ============================================================
+
+async function saveIncomingFiles(records) {
+  const db = await openFileInboxDB();
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(
+        FILE_INBOX_STORE,
+        "readwrite"
+      );
+
+      const store = transaction.objectStore(
+        FILE_INBOX_STORE
+      );
+
+      for (const record of records) {
+        store.put(record);
+      }
+
+      transaction.oncomplete = () => resolve(true);
+
+      transaction.onerror = () => {
+        reject(
+          transaction.error ||
+          new Error("File storage failed")
+        );
+      };
+
+      transaction.onabort = () => {
+        reject(
+          transaction.error ||
+          new Error("File storage aborted")
+        );
+      };
+    });
+  } finally {
+    db.close();
+  }
+}
+
+
+// ============================================================
+// RECEIVE SHARED FILES
+// ============================================================
+
+async function receiveSharedFiles(request) {
+  const contentType = (
+    request.headers.get("content-type") || ""
+  ).toLowerCase();
+
+  if (!contentType.includes("multipart/form-data")) {
+    throw new Error("Invalid file upload content type.");
+  }
+
+  const formData = await request.formData();
+
+  const entries = formData.getAll("files");
+
+  const candidates = entries.filter(
+    (item) =>
+      item &&
+      typeof item.name === "string" &&
+      typeof item.size === "number" &&
+      typeof item.arrayBuffer === "function"
+  );
+
+  if (!candidates.length) {
+    throw new Error("No files were received.");
+  }
+
+  if (candidates.length > FILE_INBOX_LIMITS.maxFiles) {
+    throw new Error(
+      `Maximum ${FILE_INBOX_LIMITS.maxFiles} files allowed per share.`
+    );
+  }
+
+  const records = [];
+  let totalSize = 0;
+
+  for (const file of candidates) {
+    if (!isSupportedDeviceFile(file)) {
+      logDetail("Unsupported shared file skipped:", file.name);
+      continue;
+    }
+
+    if (file.size > FILE_INBOX_LIMITS.maxFileSize) {
+      throw new Error(`File too large: ${file.name}`);
+    }
+
+    totalSize += file.size;
+
+    if (totalSize > FILE_INBOX_LIMITS.maxTotalSize) {
+      throw new Error("Shared files exceed the total size limit.");
+    }
+
+    records.push({
+      id: createFileId(),
+
+      name: file.name,
+      extension: getFileExtension(file.name),
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      lastModified: file.lastModified || Date.now(),
+
+      blob: file,
+
+      source: "android-share",
+      status: "pending",
+
+      createdAt: Date.now(),
+
+      metadata: {
+        title: String(formData.get("title") || ""),
+        text: String(formData.get("text") || ""),
+        url: String(formData.get("url") || ""),
+      },
+    });
+  }
+
+  if (!records.length) {
+    throw new Error("No supported file types were found.");
+  }
+
+  await saveIncomingFiles(records);
+
+  log("Device files received:", {
+    count: records.length,
+    names: records.map((file) => file.name),
+    totalSize,
+  });
+
+  return {
+    count: records.length,
+    files: records.map((file) => ({
+      id: file.id,
+      name: file.name,
+      size: file.size,
+    })),
+  };
+}
+
+
+// ============================================================
+// FILE INBOX — READ
+// ============================================================
+
+async function getFileInbox() {
+  const db = await openFileInboxDB();
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(
+        FILE_INBOX_STORE,
+        "readonly"
+      );
+
+      const request = transaction
+        .objectStore(FILE_INBOX_STORE)
+        .getAll();
+
+      request.onsuccess = () => {
+        resolve(
+          (request.result || []).sort(
+            (a, b) => b.createdAt - a.createdAt
+          )
+        );
+      };
+
+      request.onerror = () => {
+        reject(request.error);
+      };
+    });
+  } finally {
+    db.close();
+  }
+}
+
+
+// ============================================================
+// FILE INBOX — DELETE SELECTED
+// ============================================================
+
+async function deleteInboxFiles(ids) {
+  if (!Array.isArray(ids) || !ids.length) {
+    return 0;
+  }
+
+  const db = await openFileInboxDB();
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(
+        FILE_INBOX_STORE,
+        "readwrite"
+      );
+
+      const store = transaction.objectStore(
+        FILE_INBOX_STORE
+      );
+
+      let deleted = 0;
+
+      ids.forEach((id) => {
+        if (typeof id !== "string") return;
+
+        store.delete(id);
+        deleted++;
+      });
+
+      transaction.oncomplete = () => resolve(deleted);
+
+      transaction.onerror = () => {
+        reject(transaction.error);
+      };
+
+      transaction.onabort = () => {
+        reject(transaction.error);
+      };
+    });
+  } finally {
+    db.close();
+  }
+}
+
+
+// ============================================================
+// FILE INBOX — CLEAR
+// ============================================================
+
+async function clearFileInbox() {
+  const db = await openFileInboxDB();
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(
+        FILE_INBOX_STORE,
+        "readwrite"
+      );
+
+      transaction.objectStore(FILE_INBOX_STORE).clear();
+
+      transaction.oncomplete = () => resolve(true);
+
+      transaction.onerror = () => {
+        reject(transaction.error);
+      };
+
+      transaction.onabort = () => {
+        reject(transaction.error);
+      };
+    });
+  } finally {
+    db.close();
+  }
+}
+
+
+// ============================================================
+// FILE RECEIVER REDIRECT
+// ============================================================
+
+function fileReceiverRedirect(params = {}) {
+  const target = new URL("/", self.location.origin);
+
+  for (const [key, value] of Object.entries(params)) {
+    target.searchParams.set(key, String(value));
+  }
+
+  return Response.redirect(target.toString(), 303);
+}
+
+
+// ============================================================
+// FILE RECEIVER REQUEST HANDLER
+// ============================================================
+
+async function handleFileReceiver(request) {
+  try {
+    if (request.method !== "POST") {
+      return fileReceiverRedirect({
+        "folio-file-error": "invalid-method",
+      });
+    }
+
+    const result = await receiveSharedFiles(request);
+
+    return fileReceiverRedirect({
+      "folio-inbox": "1",
+      "folio-file-count": result.count,
+    });
+
+  } catch (err) {
+    error("Device file reception failed:", err);
+
+    return fileReceiverRedirect({
+      "folio-file-error": "receive-failed",
+    });
+  }
+}
+
 
 // ============================================================
 // INSTALL
@@ -475,13 +892,17 @@ self.addEventListener("install", (event) => {
         MAX_PARALLEL_INSTALLS,
         async (path) => {
           try {
-            // Skip re-download if a valid cached copy already exists.
             const existing = await cache.match(path);
 
-            if (existing && existing.ok && contentTypeOk(path, existing)) {
+            if (
+              existing &&
+              existing.ok &&
+              contentTypeOk(path, existing)
+            ) {
               report.successful++;
               report.skipped++;
-              logDetail("Cache hit (skipping download):", path);
+
+              logDetail("Cache hit:", path);
               return;
             }
 
@@ -490,17 +911,22 @@ self.addEventListener("install", (event) => {
             if (!responseIsCacheable(path, response)) {
               throw new Error(
                 `Invalid response: ${response.status} ` +
-                  `(${response.headers.get("content-type") || "no content-type"})`
+                `(${response.headers.get("content-type") || "no content-type"})`
               );
             }
 
-            const saved = await putInCache(cache, path, response);
+            const saved = await putInCache(
+              cache,
+              path,
+              response
+            );
 
             if (!saved) {
-              throw new Error("Cache storage rejected the response");
+              throw new Error("Cache storage rejected response");
             }
 
             report.successful++;
+
             logDetail("Cached:", path);
 
           } catch (err) {
@@ -516,10 +942,20 @@ self.addEventListener("install", (event) => {
 
             if (CRITICAL_FILES.has(path)) {
               report.criticalFailed.push(entry);
-              warn("CRITICAL pre-cache failed:", path, "—", err.message);
+
+              warn(
+                "CRITICAL pre-cache failed:",
+                path,
+                err.message
+              );
             } else {
               report.optionalFailed.push(entry);
-              logDetail("Optional pre-cache failed:", path, "—", err.message);
+
+              logDetail(
+                "Optional pre-cache failed:",
+                path,
+                err.message
+              );
             }
           }
         }
@@ -535,7 +971,6 @@ self.addEventListener("install", (event) => {
         optionalFailed: report.optionalFailed.length,
       });
 
-      // ── Editor-specific status ─────────────────────────────
       const editorFailures = report.optionalFailed.filter(
         (f) => f.path.includes("deno.land")
       );
@@ -543,10 +978,10 @@ self.addEventListener("install", (event) => {
       if (editorFailures.length > 0) {
         warn(
           `Editor CDN assets failed to cache ` +
-            `(${editorFailures.length}/${CODEMIRROR_FILES.length}). ` +
-            `App shell will still work offline. ` +
-            `Code editor will NOT work offline until these succeed.`
+          `(${editorFailures.length}/${CODEMIRROR_FILES.length}). ` +
+          `App shell will still work offline.`
         );
+
         logDetail(
           "Failed editor assets:",
           editorFailures.map((f) => f.path)
@@ -554,23 +989,20 @@ self.addEventListener("install", (event) => {
       } else {
         log(
           `Editor CDN assets cached ` +
-            `(${CODEMIRROR_FILES.length}/${CODEMIRROR_FILES.length}). ` +
-            `Offline editing is available.`
+          `(${CODEMIRROR_FILES.length}/${CODEMIRROR_FILES.length}).`
         );
       }
 
-      // ── Optional failures summary ──────────────────────────
       if (report.optionalFailed.length > 0) {
         logDetail(
-          "Non-critical failures (app still functional):",
+          "Non-critical failures:",
           report.optionalFailed.map((f) => f.path)
         );
       }
 
-      // ── Abort on critical failure ──────────────────────────
       if (report.criticalFailed.length > 0) {
         error(
-          "Installation ABORTED — critical resources missing:",
+          "Installation ABORTED:",
           report.criticalFailed
         );
 
@@ -579,7 +1011,6 @@ self.addEventListener("install", (event) => {
         );
       }
 
-      // ── Write completion marker ────────────────────────────
       const completion = new Response(
         JSON.stringify({
           version: CACHE_VERSION,
@@ -592,21 +1023,27 @@ self.addEventListener("install", (event) => {
           editorReady: editorFailures.length === 0,
         }),
         {
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
         }
       );
 
       await cache.put(CACHE_META_KEY, completion);
 
       log(
-        "Installation completed successfully " +
-          `(${report.successful}/${report.total} cached, ` +
-          `${report.failed} failed, ${report.skipped} reused). ` +
-          `Waiting for activation (update approval lifecycle preserved).`
+        "Installation completed successfully.",
+        {
+          version: CACHE_VERSION,
+          successful: report.successful,
+          failed: report.failed,
+          skipped: report.skipped,
+        }
       );
     })()
   );
 });
+
 
 // ============================================================
 // ACTIVATE
@@ -619,14 +1056,11 @@ self.addEventListener("activate", (event) => {
     (async () => {
       const cache = await getAppCache();
 
-      // ── Verify completion marker ───────────────────────────
       const marker = await cache.match(CACHE_META_KEY);
 
       if (!marker) {
-        error(
-          "Activation refused — missing installation marker. " +
-            "This means install did not complete cleanly."
-        );
+        error("Activation refused: missing installation marker.");
+
         throw new Error("Cannot activate incomplete Folio cache");
       }
 
@@ -635,66 +1069,68 @@ self.addEventListener("activate", (event) => {
       try {
         metadata = await marker.clone().json();
       } catch {
-        error("Activation refused — invalid installation metadata.");
+        error("Activation refused: invalid installation metadata.");
+
         throw new Error("Invalid installation metadata");
       }
 
       if (metadata.version !== CACHE_VERSION) {
-        error(
-          "Activation refused — version mismatch.",
-          { expected: CACHE_VERSION, found: metadata.version }
-        );
+        error("Activation refused: version mismatch.");
+
         throw new Error("Installation version mismatch");
       }
 
       log("Installation marker verified:", metadata);
 
-      // ── Verify critical resources still present ────────────
       const missingCritical = [];
 
       for (const path of CRITICAL_FILES) {
         const cached = await cache.match(path);
-        if (!cached) missingCritical.push(path);
+
+        if (!cached) {
+          missingCritical.push(path);
+        }
       }
 
       if (missingCritical.length > 0) {
         error(
-          "Activation refused — critical resources missing from cache:",
+          "Activation refused: missing critical resources.",
           missingCritical
         );
+
         throw new Error(
-          `Critical resources missing during activation: ${missingCritical.join(", ")}`
+          `Critical resources missing: ${missingCritical.join(", ")}`
         );
       }
 
-      log(`All ${CRITICAL_FILES.size} critical resources verified present.`);
+      log("Critical resources verified.");
 
-      // ── Delete older caches ────────────────────────────────
       const keys = await caches.keys();
 
       const staleCaches = keys.filter(
-        (key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME
+        (key) =>
+          key.startsWith(CACHE_PREFIX) &&
+          key !== CACHE_NAME
       );
 
       if (staleCaches.length > 0) {
         log("Deleting stale caches:", staleCaches);
-      } else {
-        log("No stale caches to delete.");
       }
 
-      await Promise.all(staleCaches.map((key) => caches.delete(key)));
+      await Promise.all(
+        staleCaches.map((key) => caches.delete(key))
+      );
 
-      // ── Claim clients ──────────────────────────────────────
       await self.clients.claim();
+
       log("Clients claimed.");
 
-      // ── Notify open windows ────────────────────────────────
       const clients = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
       });
 
-      log(`Notifying ${clients.length} client(s) of activation.`);
+      log(`Notifying ${clients.length} client(s).`);
 
       clients.forEach((client) => {
         try {
@@ -706,18 +1142,18 @@ self.addEventListener("activate", (event) => {
             metadata,
           });
         } catch (err) {
-          warn("Failed to postMessage to client:", err.message);
+          warn("Client notification failed:", err.message);
         }
       });
 
       log("Activated successfully.", {
         version: CACHE_VERSION,
         editorReady: metadata.editorReady,
-        metadata,
       });
     })()
   );
 });
+
 
 // ============================================================
 // FETCH HANDLER
@@ -734,26 +1170,48 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // IMPORTANT:
+  // Share Target POST requests must be handled BEFORE
+  // shouldBypass(), because normal POST requests are bypassed.
+
+  if (
+    url.origin === self.location.origin &&
+    url.pathname === FILE_RECEIVER_PATH
+  ) {
+    event.respondWith(
+      handleFileReceiver(request)
+    );
+
+    return;
+  }
+
   if (shouldBypass(url, request)) return;
 
   const isNavigation =
     request.mode === "navigate" ||
     (request.headers.get("accept") || "").includes("text/html");
 
-  // ── Navigation ─────────────────────────────────────────────
   if (isNavigation) {
-    logDetail("Navigate →", url.pathname);
-    event.respondWith(networkFirstNavigation(request));
+    logDetail("Navigate:", url.pathname);
+
+    event.respondWith(
+      networkFirstNavigation(request)
+    );
+
     return;
   }
 
-  // ── Static assets & CDN modules ───────────────────────────
   const updatePromise = updateAssetCache(request);
 
-  event.waitUntil(updatePromise.catch(() => null));
+  event.waitUntil(
+    updatePromise.catch(() => null)
+  );
 
-  event.respondWith(serveAsset(request, updatePromise));
+  event.respondWith(
+    serveAsset(request, updatePromise)
+  );
 });
+
 
 // ============================================================
 // NAVIGATION URL NORMALIZATION
@@ -778,7 +1236,9 @@ function getNavigationCandidates(request) {
     }
 
     if (path.endsWith(".html")) {
-      candidates.push(path.replace(/\.html$/i, ""));
+      candidates.push(
+        path.replace(/\.html$/i, "")
+      );
     }
   } else {
     candidates.push("/index.html");
@@ -786,6 +1246,7 @@ function getNavigationCandidates(request) {
 
   return [...new Set(candidates)];
 }
+
 
 // ============================================================
 // FIND CACHED NAVIGATION
@@ -796,7 +1257,10 @@ async function findCachedNavigation(request) {
   const cache = await getAppCache();
 
   for (const candidate of candidates) {
-    const cached = await cache.match(candidate, { ignoreSearch: true });
+    const cached = await cache.match(
+      candidate,
+      { ignoreSearch: true }
+    );
 
     if (cached) {
       logDetail("Navigation cache hit:", candidate);
@@ -804,15 +1268,19 @@ async function findCachedNavigation(request) {
     }
   }
 
-  // Migration fallback: older or unrelated caches.
   for (const candidate of candidates) {
-    const cached = await caches.match(candidate, { ignoreSearch: true });
+    const cached = await caches.match(
+      candidate,
+      { ignoreSearch: true }
+    );
 
     if (cached) {
-      const type = (cached.headers.get("content-type") || "").toLowerCase();
+      const type = (
+        cached.headers.get("content-type") || ""
+      ).toLowerCase();
 
       if (type.includes("text/html")) {
-        logDetail("Navigation fallback hit in older cache:", candidate);
+        logDetail("Older cache navigation hit:", candidate);
         return cached;
       }
     }
@@ -820,6 +1288,7 @@ async function findCachedNavigation(request) {
 
   return null;
 }
+
 
 // ============================================================
 // NETWORK FETCH WITH TIMEOUT
@@ -833,15 +1302,21 @@ async function fetchWithTimeout(request, timeout) {
   }, timeout);
 
   try {
-    return await fetch(request, { signal: controller.signal });
+    return await fetch(request, {
+      signal: controller.signal,
+    });
   } finally {
     clearTimeout(timer);
   }
 }
 
 async function fetchNavigation(request) {
-  return fetchWithTimeout(request, NAVIGATION_TIMEOUT);
+  return fetchWithTimeout(
+    request,
+    NAVIGATION_TIMEOUT
+  );
 }
+
 
 // ============================================================
 // NETWORK-FIRST NAVIGATION
@@ -855,26 +1330,30 @@ async function networkFirstNavigation(request) {
       response.headers.get("content-type") || ""
     ).toLowerCase();
 
-    // Only successful HTML responses replace cached pages.
     if (
       !response.ok ||
       !contentType.includes("text/html") ||
       response.type === "opaque"
     ) {
       logDetail(
-        "Navigation response invalid — consulting cache:",
-        request.url,
-        `status=${response.status} type=${response.type}`
+        "Navigation response invalid:",
+        request.url
       );
 
       const cached = await findCachedNavigation(request);
+
       if (cached) return cached;
 
       return response;
     }
 
     const cache = await getAppCache();
-    await putInCache(cache, request, response);
+
+    await putInCache(
+      cache,
+      request,
+      response
+    );
 
     return response;
 
@@ -882,17 +1361,17 @@ async function networkFirstNavigation(request) {
     warn(
       "Navigation network unavailable:",
       request.url,
-      "—",
       err.message
     );
 
     const cached = await findCachedNavigation(request);
+
     if (cached) return cached;
 
-    log("Serving offline fallback page for:", request.url);
     return offlinePage(request);
   }
 }
+
 
 // ============================================================
 // ASSET NETWORK FETCH
@@ -911,8 +1390,9 @@ async function fetchAsset(request) {
   );
 }
 
+
 // ============================================================
-// UPDATE ASSET CACHE (stale-while-revalidate)
+// UPDATE ASSET CACHE
 // ============================================================
 
 function updateAssetCache(request) {
@@ -933,7 +1413,12 @@ function updateAssetCache(request) {
       if (!allowed) return null;
 
       const cache = await getAppCache();
-      const saved = await putInCache(cache, request, response);
+
+      const saved = await putInCache(
+        cache,
+        request,
+        response
+      );
 
       if (saved) {
         logDetail("Asset refreshed:", url.pathname);
@@ -945,13 +1430,14 @@ function updateAssetCache(request) {
       logDetail(
         "Asset refresh failed:",
         request.url,
-        "—",
         err.message
       );
+
       return null;
     }
   })();
 }
+
 
 // ============================================================
 // SERVE STATIC ASSETS
@@ -959,11 +1445,13 @@ function updateAssetCache(request) {
 
 async function serveAsset(request, networkPromise) {
   const cache = await getAppCache();
-  const cached = await matchCached(cache, request);
 
-  if (cached) {
-    return cached;
-  }
+  const cached = await matchCached(
+    cache,
+    request
+  );
+
+  if (cached) return cached;
 
   const networkResponse = await networkPromise;
 
@@ -971,7 +1459,6 @@ async function serveAsset(request, networkPromise) {
     return networkResponse;
   }
 
-  // ── Offline fallbacks ─────────────────────────────────────
   const url = new URL(request.url);
 
   warn("Asset unavailable offline:", url.pathname);
@@ -1006,37 +1493,28 @@ async function serveAsset(request, networkPromise) {
     );
   }
 
-  return new Response("Folio resource unavailable offline.", {
-    status: 503,
-    statusText: "Offline",
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Folio-Offline": "1",
-    },
-  });
+  return new Response(
+    "Folio resource unavailable offline.",
+    {
+      status: 503,
+      statusText: "Offline",
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Folio-Offline": "1",
+      },
+    }
+  );
 }
 
-// ============================================================
-// OFFLINE PAGE URL
-// ============================================================
-
-function offlineUrlFor(request) {
-  try {
-    const url = new URL(request.url);
-    const from = url.pathname + url.search;
-    return "/offline.html?from=" + encodeURIComponent(from);
-  } catch {
-    return "/offline.html";
-  }
-}
 
 // ============================================================
-// CUSTOM OFFLINE PAGE
+// OFFLINE PAGE
 // ============================================================
 
 async function offlinePage(request) {
   const cache = await getAppCache();
+
   const cached = await cache.match("/offline.html");
 
   if (cached) return cached;
@@ -1139,26 +1617,31 @@ a {
   );
 }
 
+
 // ============================================================
 // CACHE DIAGNOSTICS
 // ============================================================
 
 async function getCacheStatus() {
   const cache = await getAppCache();
+
   const resources = [];
 
   let cachedCount = 0;
   let missingCount = 0;
 
   for (const path of CACHED_FILES) {
-    const response = await cache.match(cacheRequestFor(path));
+    const response = await cache.match(
+      cacheRequestFor(path)
+    );
 
     const item = {
       url: path,
       cached: !!response,
       critical: CRITICAL_FILES.has(path),
       external:
-        new URL(path, self.location.origin).origin !== self.location.origin,
+        new URL(path, self.location.origin).origin !==
+        self.location.origin,
     };
 
     resources.push(item);
@@ -1185,21 +1668,38 @@ async function getCacheStatus() {
     .filter((r) => !r.cached && r.url.includes("deno.land"))
     .map((r) => r.url);
 
+  let inboxCount = 0;
+
+  try {
+    const inbox = await getFileInbox();
+    inboxCount = inbox.length;
+  } catch (err) {
+    logDetail("File inbox unavailable:", err.message);
+  }
+
   return {
     version: CACHE_VERSION,
     builtAt: CACHE_BUILT_AT,
     cache: CACHE_NAME,
+
     installed: !!marker,
     metadata,
+
     total: resources.length,
     cached: cachedCount,
     missing: missingCount,
+
     missingCritical,
     missingEditor,
+
     editorReady: missingEditor.length === 0,
+
+    fileInboxCount: inboxCount,
+
     resources,
   };
 }
+
 
 // ============================================================
 // MESSAGE BUS
@@ -1211,19 +1711,25 @@ self.addEventListener("message", (event) => {
   if (!data) return;
 
   const type =
-    typeof data === "string" ? data : data.type || data.action;
+    typeof data === "string"
+      ? data
+      : data.type || data.action;
 
   logDetail("Message received:", type);
 
   switch (type) {
+
     // ── Update control ─────────────────────────────────────
+
     case "SKIP_WAITING":
     case "skipWaiting":
-      log("SKIP_WAITING received — activating new version.");
+      log("SKIP_WAITING received.");
       self.skipWaiting();
       break;
 
+
     // ── Version ────────────────────────────────────────────
+
     case "GET_VERSION":
       event.ports?.[0]?.postMessage({
         version: CACHE_VERSION,
@@ -1232,39 +1738,54 @@ self.addEventListener("message", (event) => {
       });
       break;
 
+
     // ── Cache status ───────────────────────────────────────
+
     case "GET_CACHE_STATUS":
       event.waitUntil(
         (async () => {
           try {
             const status = await getCacheStatus();
+
             event.ports?.[0]?.postMessage(status);
+
           } catch (err) {
             error("GET_CACHE_STATUS failed:", err.message);
-            event.ports?.[0]?.postMessage({ error: err.message });
+
+            event.ports?.[0]?.postMessage({
+              error: err.message,
+            });
           }
         })()
       );
       break;
 
+
     // ── Clear cache ────────────────────────────────────────
+
     case "CLEAR_CACHE":
       event.waitUntil(
         (async () => {
           try {
             const keys = await caches.keys();
 
-            const targets = keys.filter((key) =>
-              key.startsWith(CACHE_PREFIX)
+            const targets = keys.filter(
+              (key) => key.startsWith(CACHE_PREFIX)
             );
 
-            log("CLEAR_CACHE — deleting:", targets);
+            log("CLEAR_CACHE:", targets);
 
-            await Promise.all(targets.map((key) => caches.delete(key)));
+            await Promise.all(
+              targets.map((key) => caches.delete(key))
+            );
 
-            event.ports?.[0]?.postMessage({ ok: true });
+            event.ports?.[0]?.postMessage({
+              ok: true,
+            });
+
           } catch (err) {
             error("CLEAR_CACHE failed:", err.message);
+
             event.ports?.[0]?.postMessage({
               ok: false,
               error: err.message,
@@ -1274,7 +1795,9 @@ self.addEventListener("message", (event) => {
       );
       break;
 
+
     // ── Sync queue ─────────────────────────────────────────
+
     case "CHECK_QUEUE":
       event.waitUntil(
         (async () => {
@@ -1283,27 +1806,43 @@ self.addEventListener("message", (event) => {
           try {
             const request = indexedDB.open("folio", 3);
 
-            const connection = await new Promise((resolve, reject) => {
-              request.onsuccess = () => resolve(request.result);
-              request.onerror = () => reject(request.error);
-              request.onblocked = () => reject(new Error("IDB blocked"));
-            });
+            const connection = await new Promise(
+              (resolve, reject) => {
+                request.onsuccess = () => {
+                  resolve(request.result);
+                };
+
+                request.onerror = () => {
+                  reject(request.error);
+                };
+
+                request.onblocked = () => {
+                  reject(new Error("IDB blocked"));
+                };
+              }
+            );
 
             try {
-              if (connection.objectStoreNames.contains("syncQueue")) {
+              if (
+                connection.objectStoreNames.contains("syncQueue")
+              ) {
                 count = await new Promise((resolve) => {
                   try {
                     const transaction = connection.transaction(
                       "syncQueue",
                       "readonly"
                     );
+
                     const result = transaction
                       .objectStore("syncQueue")
                       .getAll();
 
-                    result.onsuccess = () =>
+                    result.onsuccess = () => {
                       resolve(result.result?.length || 0);
+                    };
+
                     result.onerror = () => resolve(0);
+
                   } catch {
                     resolve(0);
                   }
@@ -1312,6 +1851,7 @@ self.addEventListener("message", (event) => {
             } finally {
               connection.close();
             }
+
           } catch (err) {
             warn("CHECK_QUEUE failed:", err.message);
           }
@@ -1321,7 +1861,9 @@ self.addEventListener("message", (event) => {
       );
       break;
 
+
     // ── Notification state ─────────────────────────────────
+
     case "GET_NOTIFICATION_STATE":
       event.waitUntil(
         (async () => {
@@ -1341,7 +1883,9 @@ self.addEventListener("message", (event) => {
       );
       break;
 
+
     // ── Close notification ─────────────────────────────────
+
     case "CLOSE_NOTIFICATION":
       event.waitUntil(
         (async () => {
@@ -1349,7 +1893,10 @@ self.addEventListener("message", (event) => {
             const tag = data.tag || data.notificationId;
 
             if (!tag) {
-              event.ports?.[0]?.postMessage({ ok: false });
+              event.ports?.[0]?.postMessage({
+                ok: false,
+              });
+
               return;
             }
 
@@ -1362,14 +1909,19 @@ self.addEventListener("message", (event) => {
               ok: true,
               closed: notifications.length,
             });
+
           } catch {
-            event.ports?.[0]?.postMessage({ ok: false });
+            event.ports?.[0]?.postMessage({
+              ok: false,
+            });
           }
         })()
       );
       break;
 
+
     // ── List notifications ─────────────────────────────────
+
     case "LIST_ACTIVE_NOTIFICATIONS":
       event.waitUntil(
         (async () => {
@@ -1385,32 +1937,140 @@ self.addEventListener("message", (event) => {
                 data: n.data || {},
               })),
             });
+
           } catch {
-            event.ports?.[0]?.postMessage({ notifications: [] });
+            event.ports?.[0]?.postMessage({
+              notifications: [],
+            });
           }
         })()
       );
       break;
 
+
     // ── Test notification ──────────────────────────────────
+
     case "TEST_NOTIFICATION":
       event.waitUntil(
         (async () => {
           try {
-            await self.registration.showNotification("Folio test", {
-              body: "This is a test notification from the service worker.",
-              icon: "/icons/notif.png",
-              badge: "/icons/icon-144.png",
-              tag: "folio-test-" + Date.now(),
-              data: {
-                url: "/notifications",
-                notificationId: "test",
-                type: "system",
-              },
+            await self.registration.showNotification(
+              "Folio test",
+              {
+                body: "This is a test notification from the service worker.",
+                icon: "/icons/notif.png",
+                badge: "/icons/icon-144.png",
+                tag: "folio-test-" + Date.now(),
+
+                data: {
+                  url: "/notifications",
+                  notificationId: "test",
+                  type: "system",
+                },
+              }
+            );
+
+            event.ports?.[0]?.postMessage({
+              ok: true,
             });
 
-            event.ports?.[0]?.postMessage({ ok: true });
           } catch (err) {
+            event.ports?.[0]?.postMessage({
+              ok: false,
+              error: err.message,
+            });
+          }
+        })()
+      );
+      break;
+
+
+    // ========================================================
+    // DEVICE FILE INBOX
+    // ========================================================
+
+    // ── Get incoming files ─────────────────────────────────
+
+    case "GET_FILE_INBOX":
+      event.waitUntil(
+        (async () => {
+          try {
+            const files = await getFileInbox();
+
+            event.ports?.[0]?.postMessage({
+              ok: true,
+
+              files: files.map((file) => ({
+                id: file.id,
+                name: file.name,
+                extension: file.extension,
+                mimeType: file.mimeType,
+                size: file.size,
+                lastModified: file.lastModified,
+                blob: file.blob,
+                source: file.source,
+                status: file.status,
+                createdAt: file.createdAt,
+                metadata: file.metadata,
+              })),
+            });
+
+          } catch (err) {
+            error("GET_FILE_INBOX failed:", err.message);
+
+            event.ports?.[0]?.postMessage({
+              ok: false,
+              error: err.message,
+            });
+          }
+        })()
+      );
+      break;
+
+
+    // ── Delete consumed files ──────────────────────────────
+
+    case "DELETE_FILE_INBOX":
+      event.waitUntil(
+        (async () => {
+          try {
+            const deleted = await deleteInboxFiles(
+              data.ids || []
+            );
+
+            event.ports?.[0]?.postMessage({
+              ok: true,
+              deleted,
+            });
+
+          } catch (err) {
+            error("DELETE_FILE_INBOX failed:", err.message);
+
+            event.ports?.[0]?.postMessage({
+              ok: false,
+              error: err.message,
+            });
+          }
+        })()
+      );
+      break;
+
+
+    // ── Clear file inbox ───────────────────────────────────
+
+    case "CLEAR_FILE_INBOX":
+      event.waitUntil(
+        (async () => {
+          try {
+            await clearFileInbox();
+
+            event.ports?.[0]?.postMessage({
+              ok: true,
+            });
+
+          } catch (err) {
+            error("CLEAR_FILE_INBOX failed:", err.message);
+
             event.ports?.[0]?.postMessage({
               ok: false,
               error: err.message,
@@ -1421,6 +2081,7 @@ self.addEventListener("message", (event) => {
       break;
   }
 });
+
 
 // ============================================================
 // PUSH PAYLOAD NORMALIZATION
@@ -1444,7 +2105,9 @@ function normalizePushPayload(raw) {
   }
 
   const inner =
-    raw.data && typeof raw.data === "object" ? raw.data : {};
+    raw.data && typeof raw.data === "object"
+      ? raw.data
+      : {};
 
   return {
     title: raw.title || inner.title || "Folio",
@@ -1452,19 +2115,40 @@ function normalizePushPayload(raw) {
     icon: raw.icon || inner.icon || "/icons/notif.png",
     badge: raw.badge || inner.badge || "/icons/icon-144.png",
     image: raw.image || inner.image || undefined,
+
     tag:
       raw.tag ||
       inner.tag ||
       inner.notificationId ||
       "folio",
-    link: inner.link || raw.link || "/notifications",
+
+    link:
+      inner.link ||
+      raw.link ||
+      "/notifications",
+
     notificationId:
-      inner.notificationId || raw.notificationId || "",
-    type: inner.type || raw.type || "system",
-    user_id: inner.user_id || raw.user_id || "",
-    extra: inner.extra || raw.extra || "",
+      inner.notificationId ||
+      raw.notificationId ||
+      "",
+
+    type:
+      inner.type ||
+      raw.type ||
+      "system",
+
+    user_id:
+      inner.user_id ||
+      raw.user_id ||
+      "",
+
+    extra:
+      inner.extra ||
+      raw.extra ||
+      "",
   };
 }
+
 
 // ============================================================
 // PUSH EVENT
@@ -1474,10 +2158,16 @@ self.addEventListener("push", (event) => {
   let payload = null;
 
   try {
-    payload = event.data ? event.data.json() : null;
+    payload = event.data
+      ? event.data.json()
+      : null;
   } catch {
     try {
-      payload = { body: event.data ? event.data.text() : "" };
+      payload = {
+        body: event.data
+          ? event.data.text()
+          : "",
+      };
     } catch {}
   }
 
@@ -1490,7 +2180,11 @@ self.addEventListener("push", (event) => {
 
   const notification = normalizePushPayload(payload);
 
-  logDetail("Push received:", notification.notificationId, notification.type);
+  logDetail(
+    "Push received:",
+    notification.notificationId,
+    notification.type
+  );
 
   const options = {
     body: notification.body,
@@ -1498,8 +2192,10 @@ self.addEventListener("push", (event) => {
     badge: notification.badge,
     image: notification.image,
     tag: notification.tag,
+
     renotify: false,
     requireInteraction: false,
+
     data: {
       url: notification.link,
       link: notification.link,
@@ -1534,10 +2230,12 @@ self.addEventListener("push", (event) => {
             notificationType: notification.type,
           });
         });
+
       } catch {}
     })()
   );
 });
+
 
 // ============================================================
 // NOTIFICATION CLICK
@@ -1547,23 +2245,32 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const data = event.notification.data || {};
-  const target = data.url || data.link || "/notifications";
+
+  const target =
+    data.url ||
+    data.link ||
+    "/notifications";
 
   event.waitUntil(
     (async () => {
       let absoluteUrl;
 
       try {
-        absoluteUrl = new URL(target, self.location.origin).toString();
+        absoluteUrl = new URL(
+          target,
+          self.location.origin
+        ).toString();
+
       } catch {
-        absoluteUrl = self.location.origin + "/notifications";
+        absoluteUrl =
+          self.location.origin + "/notifications";
       }
 
       const parsedTarget = new URL(absoluteUrl);
 
-      // Never navigate to an external origin.
       if (parsedTarget.origin !== self.location.origin) {
-        absoluteUrl = self.location.origin + "/notifications";
+        absoluteUrl =
+          self.location.origin + "/notifications";
       }
 
       const finalTarget = new URL(absoluteUrl);
@@ -1573,7 +2280,8 @@ self.addEventListener("notificationclick", (event) => {
         return;
       }
 
-      const targetPath = finalTarget.pathname + finalTarget.search;
+      const targetPath =
+        finalTarget.pathname + finalTarget.search;
 
       const clients = await self.clients.matchAll({
         type: "window",
@@ -1635,6 +2343,7 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
+
 // ============================================================
 // NOTIFICATION CLOSE
 // ============================================================
@@ -1656,8 +2365,10 @@ self.addEventListener("notificationclose", (event) => {
           });
         });
       });
+
   } catch {}
 });
+
 
 // ============================================================
 // PUSH SUBSCRIPTION CHANGE
@@ -1671,15 +2382,17 @@ self.addEventListener("pushsubscriptionchange", (event) => {
 
         const newSubscription =
           event.newSubscription ||
-          (oldSubscription
-            ? await self.registration.pushManager.subscribe(
-                oldSubscription.options
-              )
-            : null);
+          (
+            oldSubscription
+              ? await self.registration.pushManager.subscribe(
+                  oldSubscription.options
+                )
+              : null
+          );
 
         if (!newSubscription) return;
 
-        log("Push subscription changed — notifying clients.");
+        log("Push subscription changed.");
 
         const clients = await self.clients.matchAll({
           type: "window",
@@ -1696,12 +2409,14 @@ self.addEventListener("pushsubscriptionchange", (event) => {
             } catch {}
           })
         );
+
       } catch (err) {
         warn("pushsubscriptionchange failed:", err);
       }
     })()
   );
 });
+
 
 // ============================================================
 // MESSAGE ERROR
@@ -1710,6 +2425,7 @@ self.addEventListener("pushsubscriptionchange", (event) => {
 self.addEventListener("messageerror", () => {
   warn("Message serialization error");
 });
+
 
 // ============================================================
 // STARTUP
@@ -1720,5 +2436,7 @@ log(`Loaded ${CACHE_VERSION}`, {
   cacheName: CACHE_NAME,
   criticalCount: CRITICAL_FILES.size,
   totalCount: CACHED_FILES.length,
+  fileReceiver: FILE_RECEIVER_PATH,
+  fileInboxDatabase: FILE_INBOX_DB,
   debugMode: SW_DEBUG,
 });
