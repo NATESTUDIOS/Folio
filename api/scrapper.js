@@ -1,10 +1,10 @@
 // api/scraper.js
 // ═══════════════════════════════════════════════════════════════════
-//  Folio — Universal Web Scraper & Page Intelligence API
+//  Folio — Universal Website Scanner & Page Intelligence API
 //  ────────────────────────────────────────────────────────────────
-//  ONE FILE. NO AUTH. NO DB. NO LOGGING.
+//  ONE FILE. NO AUTH. NO DB (in-memory job store; swap for Redis).
 //
-//  Endpoints (all via ?action= on a single Vercel handler):
+//  LEGACY ENDPOINTS (unchanged shapes)
 //    POST ?action=scrape        Full page scrape (default)
 //    GET  ?action=page          Page info only
 //    GET  ?action=links         Discovered links
@@ -18,28 +18,51 @@
 //    GET  ?action=inspect       Classify one URL
 //    GET  ?action=health        Liveness
 //
-//  Optional dependencies (auto-detected, graceful fallback):
-//    - linkedom        (better DOM; falls back to regex parser)
-//    - robots-parser   (robots.txt; falls back to naive allow-all)
+//  NEW SCANNER ENDPOINTS
+//    POST ?action=start-scan    Create a scan job
+//    GET  ?action=discover      Discover pages/resources for a job
+//    GET  ?action=get-queue     Pending items
+//    POST ?action=fetch-batch   Fetch next batch
+//    GET  ?action=scan-status   Progress + totals
+//    POST ?action=render        Browser render a URL
+//    GET  ?action=network       Captured network requests
+//    GET  ?action=technology    Framework detection
+//    GET  ?action=structure     DOM structure extraction
+//    GET  ?action=get-map       Relationship trees
+//    GET  ?action=get-results   Collected files
+//    POST ?action=reconstruct   Editable reconstruction
+//    POST ?action=export        Build ZIP
+//    POST ?action=compare       Visual comparison
+//    POST ?action=rescan        Rescan selected nodes
+//
+//  Optional deps (auto-detected, graceful fallback):
+//    - linkedom        (better DOM)
+//    - robots-parser   (robots.txt)
+//    - jszip           (export ZIP)
 //
 //  Environment:
-//    SCRAPER_MAX_BYTES       per-resource cap  (default 20MB)
-//    SCRAPER_TIMEOUT_MS      per-fetch timeout (default 15000)
-//    PLAYWRIGHT_BROWSER_URL  optional remote CDP (render:true)
+//    SCRAPER_MAX_BYTES          per-resource cap     (default 20MB)
+//    SCRAPER_TIMEOUT_MS         per-fetch timeout    (default 15000)
+//    PLAYWRIGHT_BROWSER_URL     remote CDP endpoint  (enables render)
+//    SCANNER_JOB_TTL_MS         job retention        (default 1h)
+//    SCANNER_MAX_JOBS           concurrent jobs      (default 25)
 // ═══════════════════════════════════════════════════════════════════
 
 import net from "node:net";
 import dns from "node:dns/promises";
 import crypto from "node:crypto";
 
-// ── Optional deps (never hard-fail) ────────────────────────────────
+// ── Optional deps ──────────────────────────────────────────────────
 let linkedom = null;
-try { linkedom = await import("linkedom"); } catch { /* fallback */ }
+try { linkedom = await import("linkedom"); } catch {}
 
 let robotsParserMod = null;
-try { robotsParserMod = await import("robots-parser"); } catch { /* fallback */ }
+try { robotsParserMod = await import("robots-parser"); } catch {}
 
-const API_VERSION = "1.0";
+let JSZipMod = null;
+try { JSZipMod = await import("jszip"); } catch {}
+
+const API_VERSION = "2.0";
 
 // ═══════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -47,6 +70,7 @@ const API_VERSION = "1.0";
 
 const MAX_BYTES = parseInt(process.env.SCRAPER_MAX_BYTES, 10) || 20 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = parseInt(process.env.SCRAPER_TIMEOUT_MS, 10) || 15_000;
+const PLAYWRIGHT_BROWSER_URL = process.env.PLAYWRIGHT_BROWSER_URL || null;
 const MAX_REDIRECTS = 5;
 const MAX_HEAD_BYTES = 256 * 1024;
 const MAX_HTML_BYTES = 5 * 1024 * 1024;
@@ -61,7 +85,15 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 const CACHE_MAX = 200;
 const POLITENESS_DELAY_MS = 250;
 
-const UA = "Mozilla/5.0 (compatible; FolioScraper/1.0; +https://folio.studio/bot)";
+const SCANNER_JOB_TTL_MS = parseInt(process.env.SCANNER_JOB_TTL_MS, 10) || 60 * 60 * 1000;
+const SCANNER_MAX_JOBS = parseInt(process.env.SCANNER_MAX_JOBS, 10) || 25;
+const SCANNER_MAX_PAGES = 500;
+const SCANNER_MAX_DEPTH = 6;
+const SCANNER_BATCH_MIN = 1;
+const SCANNER_BATCH_MAX = 8;
+const SCANNER_BATCH_DEFAULT = 3;
+
+const UA = "Mozilla/5.0 (compatible; FolioScanner/2.0; +https://folio.studio/bot)";
 
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 const DATA_URI_RE = /^data:([^;,]*)?(;base64)?,([\s\S]*)$/;
@@ -83,13 +115,6 @@ const CDN_HOSTS = new Set([
   "maxcdn.bootstrapcdn.com","use.fontawesome.com","kit.fontawesome.com",
   "cdn.tailwindcss.com","cdn.simpleicons.org",
 ]);
-
-// ── SSRF protection sets ───────────────────────────────────────────
-
-const RESERVED_V4_PREFIXES = [
-  [0,"0.0.0.0/8"],[10,"10.0.0.0/8"],[100,[64,127]],[127,"127.0.0.0/8"],
-  [169,254],[172,[16,31]],[192,168],[224,239],[240,255],
-];
 
 // ═══════════════════════════════════════════════════════════════════
 // RESPONSE HELPERS
@@ -183,12 +208,10 @@ async function validateTargetUrl(rawUrl) {
     return { ok: false, reason: "Credentials in URL not allowed" };
   }
   if (!u.hostname) return { ok: false, reason: "Missing hostname" };
-
   let ips;
   try { ips = await dns.lookup(u.hostname, { all: true }); }
   catch (err) { return { ok: false, reason: `DNS failed: ${err.code || err.message}` }; }
   if (!ips.length) return { ok: false, reason: "No DNS records" };
-
   for (const { address } of ips) {
     if (isPrivateOrReservedIp(address)) {
       return { ok: false, reason: `Resolves to private/reserved IP (${address})` };
@@ -207,9 +230,7 @@ async function safeFetch(rawUrl, {
 
   while (hops <= MAX_REDIRECTS) {
     const valid = await validateTargetUrl(current);
-    if (!valid.ok) {
-      return { ok: false, error: valid.reason, url: current, chain };
-    }
+    if (!valid.ok) return { ok: false, error: valid.reason, url: current, chain };
     chain.push(current);
 
     const controller = new AbortController();
@@ -228,9 +249,7 @@ async function safeFetch(rawUrl, {
 
     if (response.status >= 300 && response.status < 400) {
       const loc = response.headers.get("location");
-      if (!loc) {
-        return { ok: false, error: "Redirect with no Location", url: current, chain };
-      }
+      if (!loc) return { ok: false, error: "Redirect with no Location", url: current, chain };
       try { current = new URL(loc, current).toString(); }
       catch { return { ok: false, error: "Malformed redirect target", url: current, chain }; }
       hops++;
@@ -266,13 +285,8 @@ async function safeFetch(rawUrl, {
     }
 
     return {
-      ok: true,
-      url: current,
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-      body, truncated,
-      chain,
+      ok: true, url: current, status: response.status, statusText: response.statusText,
+      headers: response.headers, body, truncated, chain,
     };
   }
   return { ok: false, error: `Too many redirects (>${MAX_REDIRECTS})`, url: current, chain };
@@ -292,8 +306,7 @@ function normalizeUrl(raw, base) {
     const u = base ? new URL(trimmed, base) : new URL(trimmed);
     if (!ALLOWED_PROTOCOLS.has(u.protocol)) return null;
     u.hash = "";
-    if ((u.protocol === "http:" && u.port === "80")
-      || (u.protocol === "https:" && u.port === "443")) u.port = "";
+    if ((u.protocol === "http:" && u.port === "80") || (u.protocol === "https:" && u.port === "443")) u.port = "";
     u.hostname = u.hostname.toLowerCase();
     const params = [...u.searchParams.entries()].sort(([a], [b]) => a.localeCompare(b));
     u.search = "";
@@ -334,6 +347,10 @@ function classifyUrl(url, { pageOrigin = null } = {}) {
   return { kind: category, category, ext, host, isExternal, isCdn };
 }
 
+function sha256(buf) {
+  return crypto.createHash("sha256").update(buf).digest("hex");
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // HTML EXTRACTION
 // ═══════════════════════════════════════════════════════════════════
@@ -353,8 +370,6 @@ function decodeEntities(s) {
     .replace(/&nbsp;/g, " ").replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(parseInt(d, 10)));
 }
-
-// ── Regex-based parser (fallback + fast path) ──────────────────────
 
 function extractWithRegex(html, pageUrl) {
   const meta = {};
@@ -390,8 +405,7 @@ function extractWithRegex(html, pageUrl) {
   while ((m = linkRe.exec(html)) !== null) {
     const href = extractAttr(m[0], "href");
     const rel = extractAttr(m[0], "rel");
-    const text = ""; // regex can't easily pair text; keep light
-    if (href) links.push({ href, rel, text });
+    if (href) links.push({ href, rel, text: "" });
   }
 
   const assets = { img: [], video: [], audio: [], source: [], iframe: [] };
@@ -403,8 +417,7 @@ function extractWithRegex(html, pageUrl) {
       const dataSrc = extractAttr(m[0], "data-src");
       const dataSrcset = extractAttr(m[0], "data-srcset");
       const alt = extractAttr(m[0], "alt");
-      const tagObj = { src, srcset, dataSrc, dataSrcset, alt };
-      assets[tag]?.push(tagObj);
+      assets[tag]?.push({ src, srcset, dataSrc, dataSrcset, alt });
     }
   }
 
@@ -465,16 +478,10 @@ function extractWithRegex(html, pageUrl) {
   };
 }
 
-// ── linkedom parser (preferred when available) ─────────────────────
-
 function extractWithLinkedom(html, pageUrl) {
   const { parseHTML } = linkedom;
   const { document } = parseHTML(html);
   const baseHref = document.querySelector("base[href]")?.getAttribute("href") || null;
-
-  const pick = (sel, attr) => Array.from(document.querySelectorAll(sel))
-    .map(el => el.getAttribute(attr))
-    .filter(Boolean);
 
   const meta = {};
   for (const el of document.querySelectorAll("meta")) {
@@ -558,12 +565,10 @@ function extractWithLinkedom(html, pageUrl) {
 function extractPage(html, pageUrl) {
   if (linkedom?.parseHTML) {
     try { return { parser: "linkedom", ...extractWithLinkedom(html, pageUrl) }; }
-    catch { /* fall through */ }
+    catch {}
   }
   return { parser: "regex", ...extractWithRegex(html, pageUrl) };
 }
-
-// ── srcset ─────────────────────────────────────────────────────────
 
 function parseSrcset(srcset) {
   if (!srcset) return [];
@@ -572,8 +577,6 @@ function parseSrcset(srcset) {
     return { url: bits[0], descriptor: bits[1] || null };
   }).filter(x => x.url);
 }
-
-// ── CSS parsing ────────────────────────────────────────────────────
 
 function parseCssUrls(css, cssBaseUrl) {
   const out = new Set();
@@ -597,12 +600,9 @@ function parseCssImports(css, cssBaseUrl) {
   return [...out];
 }
 
-// ── JS parsing (regex, low confidence) ─────────────────────────────
-
 function parseJsImports(js, jsBaseUrl) {
   const staticImports = new Set();
   const dynamicImports = new Set();
-
   const staticRe = /(?:^|[\s;}])(?:import\s+(?:[^'"]*?\s+from\s+)?|export\s+[^'"]*?\s+from\s+)(['"])([^'"]+)\1/g;
   let m;
   while ((m = staticRe.exec(js)) !== null) {
@@ -610,14 +610,12 @@ function parseJsImports(js, jsBaseUrl) {
     if (abs) staticImports.add(abs);
     else if (m[2].startsWith(".")) staticImports.add(m[2]);
   }
-
   const dynamicRe = /import\s*\(\s*(['"])([^'"]+)\1\s*\)/g;
   while ((m = dynamicRe.exec(js)) !== null) {
     const abs = normalizeUrl(m[2], jsBaseUrl);
     if (abs) dynamicImports.add(abs);
     else if (m[2].startsWith(".")) dynamicImports.add(m[2]);
   }
-
   return {
     static: [...staticImports],
     dynamic: [...dynamicImports],
@@ -626,10 +624,7 @@ function parseJsImports(js, jsBaseUrl) {
   };
 }
 
-// ── Text extraction (readability-lite) ─────────────────────────────
-
 const TEXT_STRIP_TAGS = ["script","style","noscript","nav","footer","header","aside","iframe","svg","form","button"];
-
 function extractReadableText(html) {
   let s = String(html);
   for (const tag of TEXT_STRIP_TAGS) {
@@ -654,16 +649,10 @@ async function fetchResource(url, { maxBytes = MAX_BINARY_BYTES, readBody = true
   }
   const contentType = res.headers.get("content-type") || "";
   const result = {
-    url: res.url,
-    ok: true,
-    status: res.status,
-    contentType,
+    url: res.url, ok: true, status: res.status, contentType,
     contentLength: res.headers.get("content-length"),
-    truncated: res.truncated,
-    ms: Date.now() - started,
-    body: null,
-    text: null,
-    base64: null,
+    truncated: res.truncated, ms: Date.now() - started,
+    body: null, text: null, base64: null,
   };
   if (readBody && res.body) {
     const isText = /^text\/|json|xml|javascript|css|svg|html/i.test(contentType);
@@ -678,8 +667,6 @@ async function fetchResource(url, { maxBytes = MAX_BINARY_BYTES, readBody = true
   }
   return result;
 }
-
-// ── Concurrency pool ───────────────────────────────────────────────
 
 async function pool(items, limit, worker) {
   const results = new Array(items.length);
@@ -701,24 +688,16 @@ async function pool(items, limit, worker) {
 // ═══════════════════════════════════════════════════════════════════
 
 const CACHE = new Map();
-
 function cacheKey(url, opts) {
-  const sig = JSON.stringify({
-    u: url,
-    extract: (opts.extract || []).slice().sort(),
-    render: !!opts.render,
-    includeContent: !!opts.include_content,
-  });
+  const sig = JSON.stringify({ u: url, extract: (opts.extract || []).slice().sort(), render: !!opts.render, includeContent: !!opts.include_content });
   return crypto.createHash("sha256").update(sig).digest("hex").slice(0, 32);
 }
-
 function cacheGet(key) {
   const e = CACHE.get(key);
   if (!e) return null;
   if (Date.now() - e.at > CACHE_TTL_MS) { CACHE.delete(key); return null; }
   return e.value;
 }
-
 function cacheSet(key, value) {
   if (CACHE.size >= CACHE_MAX) {
     const first = CACHE.keys().next().value;
@@ -751,13 +730,10 @@ async function scrapeOnce(rawUrl, options = {}) {
   const extractSet = new Set(opts.extract);
 
   const fetched = await safeFetch(rawUrl, {
-    maxBytes: opts.max_bytes,
-    timeoutMs: opts.timeout_ms,
+    maxBytes: opts.max_bytes, timeoutMs: opts.timeout_ms,
     headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
   });
-  if (!fetched.ok) {
-    return { ok: false, error: fetched.error, chain: fetched.chain, result };
-  }
+  if (!fetched.ok) return { ok: false, error: fetched.error, chain: fetched.chain, result };
 
   result.page.status = fetched.status;
   result.page.finalUrl = fetched.url;
@@ -785,11 +761,9 @@ async function scrapeOnce(rawUrl, options = {}) {
     return { ok: true, result };
   }
 
-  // ── Parse ──────────────────────────────────────────────────────
   const parsed = extractPage(html, fetched.url);
   result.parser = parsed.parser;
 
-  // Base for URL resolution: <base href> > final URL
   let effectiveBase = fetched.url;
   if (opts.resolve_urls && parsed.baseHref) {
     const resolvedBase = normalizeUrl(parsed.baseHref, fetched.url);
@@ -797,7 +771,6 @@ async function scrapeOnce(rawUrl, options = {}) {
   }
   result.page.baseHref = effectiveBase !== fetched.url ? effectiveBase : null;
 
-  // ── Metadata ───────────────────────────────────────────────────
   result.page.title = parsed.title;
   result.page.description = parsed.description;
   result.page.keywords = parsed.meta.keywords || null;
@@ -811,7 +784,6 @@ async function scrapeOnce(rawUrl, options = {}) {
 
   const pageOrigin = (() => { try { return new URL(fetched.url).origin; } catch { return null; } })();
 
-  // ── Links ──────────────────────────────────────────────────────
   if (extractSet.has("links")) {
     const seen = new Set();
     const push = (bucket, url, source) => {
@@ -829,10 +801,8 @@ async function scrapeOnce(rawUrl, options = {}) {
       const bucket = cls.isExternal ? "external" : (cls.category === "document" ? "documents" : "internal");
       push(bucket, abs, "a[href]");
     }
-    // srcset / picture / iframe contributors to links.all too? keep to a[href] and forms.
   }
 
-  // ── Assets ─────────────────────────────────────────────────────
   if (extractSet.has("assets")) {
     const add = (list, entry) => list.push(entry);
     for (const img of parsed.assets.img || []) {
@@ -848,16 +818,10 @@ async function scrapeOnce(rawUrl, options = {}) {
       }
     }
     for (const v of parsed.assets.video || []) {
-      if (v.src) {
-        const abs = normalizeUrl(v.src, effectiveBase);
-        if (abs) add(result.assets.videos, { url: abs, source: "video" });
-      }
+      if (v.src) { const abs = normalizeUrl(v.src, effectiveBase); if (abs) add(result.assets.videos, { url: abs, source: "video" }); }
     }
     for (const a of parsed.assets.audio || []) {
-      if (a.src) {
-        const abs = normalizeUrl(a.src, effectiveBase);
-        if (abs) add(result.assets.audio, { url: abs, source: "audio" });
-      }
+      if (a.src) { const abs = normalizeUrl(a.src, effectiveBase); if (abs) add(result.assets.audio, { url: abs, source: "audio" }); }
     }
     for (const s of parsed.assets.source || []) {
       const abs = s.src ? normalizeUrl(s.src, effectiveBase) : null;
@@ -868,14 +832,10 @@ async function scrapeOnce(rawUrl, options = {}) {
       else if (cls.category === "image") add(result.assets.images, { url: abs, source: "source" });
     }
     for (const f of parsed.assets.iframe || []) {
-      if (f.src) {
-        const abs = normalizeUrl(f.src, effectiveBase);
-        if (abs) result.iframes.push({ url: abs, source: "iframe" });
-      }
+      if (f.src) { const abs = normalizeUrl(f.src, effectiveBase); if (abs) result.iframes.push({ url: abs, source: "iframe" }); }
     }
   }
 
-  // ── Scripts ────────────────────────────────────────────────────
   const scriptsToFetch = [];
   if (extractSet.has("scripts")) {
     for (const s of parsed.scripts.src || []) {
@@ -887,8 +847,7 @@ async function scrapeOnce(rawUrl, options = {}) {
     for (const s of parsed.scripts.inline || []) {
       const body = String(s.body || "");
       const entry = {
-        type: s.type || null,
-        byteLength: body.length,
+        type: s.type || null, byteLength: body.length,
         body: body.length <= MAX_INLINE_SCRIPT_BYTES ? body : body.slice(0, MAX_INLINE_SCRIPT_BYTES) + "…[truncated]",
         truncated: body.length > MAX_INLINE_SCRIPT_BYTES,
       };
@@ -899,7 +858,6 @@ async function scrapeOnce(rawUrl, options = {}) {
     }
   }
 
-  // ── Styles ─────────────────────────────────────────────────────
   const stylesToFetch = [];
   if (extractSet.has("styles")) {
     for (const l of parsed.styles.link || []) {
@@ -917,18 +875,15 @@ async function scrapeOnce(rawUrl, options = {}) {
     }
   }
 
-  // ── Forms ──────────────────────────────────────────────────────
   if (extractSet.has("forms") && parsed.forms) {
     for (const f of parsed.forms) {
       result.forms.push({
         action: f.action ? normalizeUrl(f.action, effectiveBase) : null,
-        method: f.method,
-        enctype: f.enctype || null,
+        method: f.method, enctype: f.enctype || null,
       });
     }
   }
 
-  // ── Meta tags (preload, prefetch, etc.) ────────────────────────
   if (extractSet.has("meta") && parsed.metaTags) {
     for (const p of parsed.metaTags.preload) result.meta.preload.push({ ...p, url: normalizeUrl(p.href, effectiveBase) });
     for (const p of parsed.metaTags.prefetch) result.meta.prefetch.push({ url: normalizeUrl(p.href, effectiveBase) });
@@ -936,7 +891,6 @@ async function scrapeOnce(rawUrl, options = {}) {
     for (const p of parsed.metaTags.preconnect) result.meta.preconnect.push({ url: normalizeUrl(p.href, effectiveBase) });
   }
 
-  // ── Text ───────────────────────────────────────────────────────
   if (extractSet.has("text") || opts.include_text_full) {
     const text = extractReadableText(html);
     result.source.text_available = true;
@@ -944,13 +898,11 @@ async function scrapeOnce(rawUrl, options = {}) {
     if (opts.include_text_full) result.source.text_full = text;
   }
 
-  // ── HTML (only when explicitly requested) ──────────────────────
   if (extractSet.has("html") || opts.include_content === "html") {
     result.source.html_available = true;
     result.source.html = html;
   }
 
-  // ── Fetch resource contents (scripts + styles) ─────────────────
   const contentsToFetch = [];
   if (opts.fetch_resource_contents || opts.include_content === "scripts" || opts.include_content === "styles" || opts.include_content === "all") {
     const includeScripts = opts.include_content === "scripts" || opts.include_content === "all" || opts.fetch_resource_contents;
@@ -992,7 +944,6 @@ async function scrapeOnce(rawUrl, options = {}) {
     }
   }
 
-  // ── Dedup + classify asset "all" ───────────────────────────────
   if (result.assets && extractSet.has("assets")) {
     const seen = new Set();
     const push = (bucket, entry) => {
@@ -1010,7 +961,6 @@ async function scrapeOnce(rawUrl, options = {}) {
     for (const a of auds) push(result.assets.audio, a);
   }
 
-  // ── Stats ──────────────────────────────────────────────────────
   result.statistics = {
     links_found: result.links.internal.length + result.links.external.length + result.links.documents.length,
     external_links_found: result.links.external.length,
@@ -1025,7 +975,7 @@ async function scrapeOnce(rawUrl, options = {}) {
     fetch_ms: Date.now() - started,
   };
 
-  if (opts.render) {
+  if (opts.render && !PLAYWRIGHT_BROWSER_URL) {
     result.warnings.push("render:true requested but no PLAYWRIGHT_BROWSER_URL configured — returned static HTML only");
   }
 
@@ -1033,11 +983,10 @@ async function scrapeOnce(rawUrl, options = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ROBOTS.TXT
+// ROBOTS
 // ═══════════════════════════════════════════════════════════════════
 
 const robotsCache = new Map();
-
 async function getRobots(origin) {
   if (robotsCache.has(origin)) {
     const e = robotsCache.get(origin);
@@ -1062,7 +1011,6 @@ async function getRobots(origin) {
     return null;
   }
 }
-
 async function isAllowedByRobots(url) {
   let origin;
   try { origin = new URL(url).origin; } catch { return true; }
@@ -1073,19 +1021,15 @@ async function isAllowedByRobots(url) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// CRAWL ENGINE
+// LEGACY CRAWL
 // ═══════════════════════════════════════════════════════════════════
 
 async function crawl(startUrl, options = {}) {
   const opts = {
-    depth: 1,
-    max_pages: 10,
-    max_concurrency: 4,
-    same_origin_only: true,
-    respect_robots: true,
+    depth: 1, max_pages: 10, max_concurrency: 4,
+    same_origin_only: true, respect_robots: true,
     extract: ["metadata","links","assets","scripts","styles"],
-    include_content: false,
-    ...options,
+    include_content: false, ...options,
   };
   const maxPages = Math.min(Math.max(1, opts.max_pages), MAX_CRAWL_PAGES);
   const maxDepth = Math.max(0, Math.min(opts.depth, 5));
@@ -1110,21 +1054,13 @@ async function crawl(startUrl, options = {}) {
     if (visited.size >= maxPages) return null;
     if (visited.has(url)) return null;
     visited.add(url);
-
     if (opts.respect_robots && !(await isAllowedByRobots(url))) {
       failures.push({ url, reason: "blocked_by_robots" });
       return null;
     }
     await politeWait(url);
-    const r = await scrapeOnce(url, {
-      extract: opts.extract,
-      include_content: opts.include_content,
-      resolve_urls: true,
-    });
-    if (!r.ok) {
-      failures.push({ url, reason: r.error });
-      return null;
-    }
+    const r = await scrapeOnce(url, { extract: opts.extract, include_content: opts.include_content, resolve_urls: true });
+    if (!r.ok) { failures.push({ url, reason: r.error }); return null; }
     const pageResult = {
       url, depth,
       finalUrl: r.result.page.finalUrl,
@@ -1133,18 +1069,15 @@ async function crawl(startUrl, options = {}) {
       links: r.result.links,
       stats: r.result.statistics,
     };
-    // Enqueue children
     if (depth < maxDepth) {
-      const candidates = [...r.result.links.internal, ...r.result.links.external]
-        .map(l => l.url)
-        .filter(u => {
-          if (!u) return false;
-          if (opts.same_origin_only && startOrigin) {
-            try { if (new URL(u).origin !== startOrigin) return false; } catch { return false; }
-          }
-          if (visited.has(u) || queued.has(u)) return false;
-          return true;
-        });
+      const candidates = [...r.result.links.internal, ...r.result.links.external].map(l => l.url).filter(u => {
+        if (!u) return false;
+        if (opts.same_origin_only && startOrigin) {
+          try { if (new URL(u).origin !== startOrigin) return false; } catch { return false; }
+        }
+        if (visited.has(u) || queued.has(u)) return false;
+        return true;
+      });
       for (const c of candidates) {
         if (visited.size + queued.size >= maxPages * 3) break;
         queued.add(c);
@@ -1154,7 +1087,6 @@ async function crawl(startUrl, options = {}) {
     return pageResult;
   }
 
-  // BFS
   while (queue.length && pages.length + failures.length < maxPages) {
     const batch = [];
     while (batch.length < opts.max_concurrency && queue.length) batch.push(queue.shift());
@@ -1162,15 +1094,583 @@ async function crawl(startUrl, options = {}) {
     const results = await Promise.all(batch.map(processOne));
     for (const r of results) if (r) pages.push(r);
   }
+  return { startUrl, depth: maxDepth, max_pages: maxPages, pages_fetched: pages.length, pages, failures };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SCANNER JOB STORE (in-memory, replace with Redis in prod)
+// ═══════════════════════════════════════════════════════════════════
+
+const JOBS = new Map();
+
+class ScanJob {
+  constructor(id, startUrl, options) {
+    this.id = id;
+    this.startUrl = startUrl;
+    this.startOrigin = (() => { try { return new URL(startUrl).origin; } catch { return null; } })();
+    this.options = options;
+    this.createdAt = Date.now();
+    this.updatedAt = Date.now();
+    this.status = "created"; // created | discovering | queued | fetching | paused | completed | failed
+
+    // Nodes
+    this.nodes = new Map();        // url -> NodeRecord
+    this.byParent = new Map();     // parentUrl -> Set<childUrl>
+    this.queue = [];               // { url, kind, depth, parent, addedAt }
+    this.completedBatches = [];    // batch summaries
+    this.failures = [];
+    this.renders = [];
+    this.network = [];             // network request captures
+    this.apis = new Map();         // apiKey -> API record
+    this.technology = {};
+    this.pages = {};               // url -> page result (from scrapeOnce)
+    this.resources = {};           // url -> { text/base64, contentType, byteLength, hash }
+    this.broken = new Set();
+    this.stats = {
+      discovered: 0, queued: 0, fetched: 0, failed: 0, skipped: 0,
+      bytes: 0, pages: 0, scripts: 0, styles: 0, images: 0, fonts: 0,
+    };
+
+    // Options
+    this.maxPages = Math.min(options.max_pages || SCANNER_MAX_PAGES, SCANNER_MAX_PAGES);
+    this.maxDepth = Math.min(options.depth ?? 2, SCANNER_MAX_DEPTH);
+    this.sameOriginOnly = options.same_origin_only !== false;
+    this.respectRobots = options.respect_robots !== false;
+    this.batchSize = Math.min(Math.max(options.batch_size || SCANNER_BATCH_DEFAULT, SCANNER_BATCH_MIN), SCANNER_BATCH_MAX);
+    this.includeContent = !!options.include_content;
+    this.renderPages = !!options.render;
+  }
+
+  addNode(url, { kind, depth, parent, status = "discovered" } = {}) {
+    if (this.nodes.has(url)) {
+      const existing = this.nodes.get(url);
+      if (parent && !existing.parents.includes(parent)) existing.parents.push(parent);
+      return existing;
+    }
+    const n = {
+      id: crypto.createHash("sha256").update(url).digest("hex").slice(0, 16),
+      url, kind: kind || classifyUrl(url).category,
+      depth: depth ?? 0,
+      parents: parent ? [parent] : [],
+      children: [],
+      status,
+      discoveredAt: Date.now(),
+      fetchedAt: null,
+      statusCode: null,
+      contentType: null,
+      byteLength: 0,
+      error: null,
+      hash: null,
+    };
+    this.nodes.set(url, n);
+    if (parent) {
+      if (!this.byParent.has(parent)) this.byParent.set(parent, new Set());
+      this.byParent.get(parent).add(url);
+      const parentNode = this.nodes.get(parent);
+      if (parentNode && !parentNode.children.includes(url)) parentNode.children.push(url);
+    }
+    this.stats.discovered = this.nodes.size;
+    return n;
+  }
+
+  enqueue(url, { kind, depth, parent } = {}) {
+    if (!url) return;
+    if (this.nodes.has(url) && this.nodes.get(url).status !== "discovered") return;
+    if (this.queue.some(q => q.url === url)) return;
+    this.addNode(url, { kind, depth, parent, status: "queued" });
+    const node = this.nodes.get(url);
+    node.status = "queued";
+    this.queue.push({ url, kind, depth, parent, addedAt: Date.now() });
+    this.stats.queued = this.queue.length;
+  }
+
+  nextBatch(size = this.batchSize) {
+    const pages = [];
+    const resources = [];
+    while (this.queue.length && pages.length < size) {
+      const item = this.queue[0];
+      const kind = item.kind || classifyUrl(item.url).category;
+      if (kind === "page") pages.push(this.queue.shift());
+      else if (resources.length < size) resources.push(this.queue.shift());
+      else break;
+    }
+    return [...pages, ...resources].slice(0, size);
+  }
+
+  touch() { this.updatedAt = Date.now(); }
+
+  snapshotTree() {
+    const nodeArr = [...this.nodes.values()].map(n => ({
+      ...n,
+      children: n.children.slice(),
+      parents: n.parents.slice(),
+    }));
+    const orphanPages = nodeArr.filter(n => n.kind === "page" && n.depth > 0 && n.parents.length === 0).map(n => n.url);
+    const orphanResources = nodeArr.filter(n => n.kind !== "page" && n.parents.length === 0).map(n => n.url);
+    return {
+      nodes: nodeArr,
+      pagesTree: nodeArr.filter(n => n.kind === "page"),
+      resourceTree: nodeArr.filter(n => n.kind !== "page"),
+      orphanPages,
+      orphanResources,
+      broken: [...this.broken],
+    };
+  }
+
+  apiList() {
+    return [...this.apis.values()];
+  }
+}
+
+function pruneJobs() {
+  const now = Date.now();
+  for (const [id, job] of JOBS) {
+    if (now - job.updatedAt > SCANNER_JOB_TTL_MS) JOBS.delete(id);
+  }
+  if (JOBS.size > SCANNER_MAX_JOBS) {
+    const sorted = [...JOBS.entries()].sort((a, b) => a[1].updatedAt - b[1].updatedAt);
+    while (JOBS.size > SCANNER_MAX_JOBS && sorted.length) {
+      const [id] = sorted.shift();
+      JOBS.delete(id);
+    }
+  }
+}
+
+function createJob(startUrl, options) {
+  pruneJobs();
+  const id = crypto.randomBytes(12).toString("hex");
+  const job = new ScanJob(id, startUrl, options);
+  JOBS.set(id, job);
+  return job;
+}
+
+function getJob(id) { return JOBS.get(id) || null; }
+
+// ═══════════════════════════════════════════════════════════════════
+// SCANNER: DISCOVERY
+// ═══════════════════════════════════════════════════════════════════
+
+async function runDiscovery(job) {
+  job.status = "discovering";
+  job.touch();
+
+  // Seed
+  job.addNode(job.startUrl, { kind: "page", depth: 0, status: "discovered" });
+  job.enqueue(job.startUrl, { kind: "page", depth: 0, parent: null });
+
+  // Fetch start page to seed children
+  if (job.respectRobots && !(await isAllowedByRobots(job.startUrl))) {
+    job.failures.push({ url: job.startUrl, reason: "blocked_by_robots" });
+    job.status = "failed";
+    return;
+  }
+
+  const startPage = await scrapeOnce(job.startUrl, {
+    extract: ["metadata", "links", "assets", "scripts", "styles", "meta"],
+    include_content: job.includeContent,
+  });
+  if (!startPage.ok) {
+    job.failures.push({ url: job.startUrl, reason: startPage.error });
+    job.status = "failed";
+    return;
+  }
+  const node = job.nodes.get(job.startUrl);
+  node.status = "completed";
+  node.fetchedAt = Date.now();
+  node.statusCode = startPage.result.page.status;
+  node.contentType = startPage.result.page.contentType;
+  node.byteLength = startPage.result.page.byteLength;
+  job.stats.fetched++;
+  job.stats.pages++;
+  job.pages[job.startUrl] = startPage.result;
+  job.stats.bytes += startPage.result.page.byteLength;
+
+  // Cache content hash
+  if (startPage.result.source.html) node.hash = sha256(startPage.result.source.html);
+
+  // Enqueue children (up to maxPages)
+  const childUrls = [];
+  for (const bucket of ["internal", "external"]) {
+    if (bucket === "external" && job.sameOriginOnly) continue;
+    for (const l of startPage.result.links[bucket] || []) {
+      if (childUrls.length >= job.maxPages) break;
+      if (job.sameOriginOnly && job.startOrigin) {
+        try { if (new URL(l.url).origin !== job.startOrigin) continue; } catch { continue; }
+      }
+      childUrls.push(l.url);
+    }
+  }
+  for (const u of childUrls) {
+    if (job.nodes.has(u)) continue;
+    job.enqueue(u, { kind: "page", depth: 1, parent: job.startUrl });
+  }
+
+  // Enqueue resources
+  const resources = new Set();
+  for (const s of startPage.result.scripts.external) resources.add(s.url);
+  for (const s of startPage.result.styles.external) resources.add(s.url);
+  for (const i of startPage.result.assets.images) resources.add(i.url);
+  for (const v of startPage.result.assets.videos) resources.add(v.url);
+  for (const a of startPage.result.assets.audio) resources.add(a.url);
+  for (const s of startPage.result.styles.references) resources.add(s.url);
+  for (const s of startPage.result.scripts.imports) resources.add(s.url);
+  for (const r of resources) {
+    if (job.nodes.has(r)) continue;
+    const cls = classifyUrl(r);
+    if (cls.category === "page") continue;
+    job.enqueue(r, { kind: cls.category, depth: 1, parent: job.startUrl });
+  }
+
+  // Sitemap + robots best-effort discovery
+  await discoverSitemap(job);
+
+  job.status = "queued";
+  job.touch();
+}
+
+async function discoverSitemap(job) {
+  if (!job.startOrigin) return;
+  try {
+    const res = await safeFetch(`${job.startOrigin}/sitemap.xml`, { maxBytes: 2 * 1024 * 1024, timeoutMs: 5000 });
+    if (!res.ok || res.status !== 200 || !res.body) return;
+    const xml = res.body.toString("utf8");
+    const urls = new Set();
+    const re = /<loc>\s*([^<]+)\s*<\/loc>/gi;
+    let m;
+    while ((m = re.exec(xml)) !== null) urls.add(decodeEntities(m[1].trim()));
+    for (const u of urls) {
+      if (job.nodes.size >= job.maxPages * 2) break;
+      if (job.sameOriginOnly && job.startOrigin) {
+        try { if (new URL(u).origin !== job.startOrigin) continue; } catch { continue; }
+      }
+      if (!job.nodes.has(u)) job.enqueue(u, { kind: "page", depth: 1, parent: job.startUrl });
+    }
+  } catch {}
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SCANNER: BATCH FETCH
+// ═══════════════════════════════════════════════════════════════════
+
+async function fetchBatch(job, size) {
+  job.status = "fetching";
+  job.touch();
+  const batch = job.nextBatch(size || job.batchSize);
+  const results = [];
+
+  if (!batch.length) {
+    if (job.queue.length === 0) job.status = "completed";
+    return { jobId: job.id, batch: [], done: job.queue.length === 0 };
+  }
+
+  for (const item of batch) {
+    const node = job.nodes.get(item.url);
+    if (node) node.status = "fetching";
+
+    if (job.respectRobots && !(await isAllowedByRobots(item.url))) {
+      if (node) node.status = "skipped";
+      job.failures.push({ url: item.url, reason: "blocked_by_robots" });
+      job.stats.skipped++;
+      results.push({ url: item.url, ok: false, reason: "blocked_by_robots" });
+      continue;
+    }
+
+    const kind = item.kind || classifyUrl(item.url).category;
+
+    try {
+      if (kind === "page") {
+        const r = await scrapeOnce(item.url, {
+          extract: ["metadata", "links", "assets", "scripts", "styles", "meta"],
+          include_content: job.includeContent,
+        });
+        if (!r.ok) {
+          if (node) { node.status = "failed"; node.error = r.error; }
+          job.failures.push({ url: item.url, reason: r.error });
+          job.stats.failed++;
+          results.push({ url: item.url, ok: false, reason: r.error });
+          continue;
+        }
+        if (node) {
+          node.status = "completed";
+          node.fetchedAt = Date.now();
+          node.statusCode = r.result.page.status;
+          node.contentType = r.result.page.contentType;
+          node.byteLength = r.result.page.byteLength;
+        }
+        job.pages[item.url] = r.result;
+        job.stats.fetched++;
+        job.stats.pages++;
+        job.stats.bytes += r.result.page.byteLength;
+
+        // Enqueue new children
+        if (node && node.depth < job.maxDepth) {
+          const discovered = new Set();
+          for (const bucket of ["internal", "external"]) {
+            if (bucket === "external" && job.sameOriginOnly) continue;
+            for (const l of r.result.links[bucket] || []) discovered.add(l.url);
+          }
+          for (const u of discovered) {
+            if (job.nodes.size >= job.maxPages) break;
+            if (job.sameOriginOnly && job.startOrigin) {
+              try { if (new URL(u).origin !== job.startOrigin) continue; } catch { continue; }
+            }
+            if (job.nodes.has(u) || job.queue.some(q => q.url === u)) continue;
+            job.enqueue(u, { kind: "page", depth: node.depth + 1, parent: item.url });
+          }
+          // Resources
+          const res = new Set();
+          for (const s of r.result.scripts.external) res.add(s.url);
+          for (const s of r.result.styles.external) res.add(s.url);
+          for (const i of r.result.assets.images) res.add(i.url);
+          for (const v of r.result.assets.videos) res.add(v.url);
+          for (const a of r.result.assets.audio) res.add(a.url);
+          for (const s of r.result.styles.references) res.add(s.url);
+          for (const s of r.result.scripts.imports) res.add(s.url);
+          for (const u of res) {
+            if (job.nodes.has(u) || job.queue.some(q => q.url === u)) continue;
+            const cls = classifyUrl(u);
+            if (cls.category === "page") continue;
+            job.enqueue(u, { kind: cls.category, depth: node.depth + 1, parent: item.url });
+          }
+        }
+        results.push({ url: item.url, ok: true, kind: "page", statusCode: r.result.page.status, title: r.result.page.title });
+
+      } else {
+        // Resource fetch
+        const maxBytes = kind === "image" || kind === "font" ? MAX_BINARY_BYTES : MAX_TEXT_BYTES;
+        const r = await fetchResource(item.url, { maxBytes });
+        if (!r.ok) {
+          if (node) { node.status = "failed"; node.error = r.error; }
+          job.failures.push({ url: item.url, reason: r.error });
+          job.stats.failed++;
+          job.broken.add(item.url);
+          results.push({ url: item.url, ok: false, reason: r.error });
+          continue;
+        }
+        if (node) {
+          node.status = "completed";
+          node.fetchedAt = Date.now();
+          node.statusCode = r.status;
+          node.contentType = r.contentType;
+          node.byteLength = r.byteLength || 0;
+          if (r.body) node.hash = sha256(r.body);
+        }
+        job.resources[item.url] = {
+          text: r.text, base64: r.base64, contentType: r.contentType,
+          byteLength: r.byteLength || 0, hash: node?.hash, truncated: r.truncated,
+        };
+        job.stats.fetched++;
+        job.stats.bytes += r.byteLength || 0;
+        if (kind === "script") job.stats.scripts++;
+        else if (kind === "style") job.stats.styles++;
+        else if (kind === "image") job.stats.images++;
+        else if (kind === "font") job.stats.fonts++;
+
+        // Follow CSS / JS imports one level deeper
+        if (node && node.depth < job.maxDepth) {
+          if (kind === "style" && r.text) {
+            for (const u of parseCssImports(r.text, item.url)) {
+              if (job.nodes.has(u) || job.queue.some(q => q.url === u)) continue;
+              if (job.sameOriginOnly && job.startOrigin) {
+                try { if (new URL(u).origin !== job.startOrigin) continue; } catch { continue; }
+              }
+              job.enqueue(u, { kind: "style", depth: node.depth + 1, parent: item.url });
+            }
+            for (const u of parseCssUrls(r.text, item.url)) {
+              if (job.nodes.has(u) || job.queue.some(q => q.url === u)) continue;
+              const cls = classifyUrl(u);
+              if (cls.category === "page") continue;
+              if (job.sameOriginOnly && job.startOrigin) {
+                try { if (new URL(u).origin !== job.startOrigin) continue; } catch { continue; }
+              }
+              job.enqueue(u, { kind: cls.category, depth: node.depth + 1, parent: item.url });
+            }
+          }
+          if (kind === "script" && r.text) {
+            const imp = parseJsImports(r.text, item.url);
+            for (const u of [...imp.static, ...imp.dynamic]) {
+              if (!u.startsWith("http")) continue;
+              if (job.nodes.has(u) || job.queue.some(q => q.url === u)) continue;
+              job.enqueue(u, { kind: "script", depth: node.depth + 1, parent: item.url });
+            }
+          }
+        }
+        results.push({ url: item.url, ok: true, kind, contentType: r.contentType, byteLength: r.byteLength });
+      }
+    } catch (err) {
+      if (node) { node.status = "failed"; node.error = err.message; }
+      job.failures.push({ url: item.url, reason: err.message });
+      job.stats.failed++;
+      results.push({ url: item.url, ok: false, reason: err.message });
+    }
+  }
+
+  job.completedBatches.push({ at: Date.now(), size: batch.length, items: results });
+  job.touch();
+
+  if (!job.queue.length && job.stats.fetching === 0) {
+    job.status = "completed";
+  } else {
+    job.status = "queued";
+  }
 
   return {
-    startUrl,
-    depth: maxDepth,
-    max_pages: maxPages,
-    pages_fetched: pages.length,
-    pages: pages,
-    failures,
+    jobId: job.id,
+    batch: results,
+    remaining: job.queue.length,
+    done: job.queue.length === 0 && job.status === "completed",
+    stats: { ...job.stats },
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SCANNER: TECHNOLOGY DETECTION
+// ═══════════════════════════════════════════════════════════════════
+
+function detectTechnology(job) {
+  const signals = {
+    nextjs: { weight: 0, evidence: [] },
+    react: { weight: 0, evidence: [] },
+    vue: { weight: 0, evidence: [] },
+    nuxt: { weight: 0, evidence: [] },
+    angular: { weight: 0, evidence: [] },
+    svelte: { weight: 0, evidence: [] },
+    sveltekit: { weight: 0, evidence: [] },
+    astro: { weight: 0, evidence: [] },
+    wordpress: { weight: 0, evidence: [] },
+    webflow: { weight: 0, evidence: [] },
+    shopify: { weight: 0, evidence: [] },
+    tailwind: { weight: 0, evidence: [] },
+    bootstrap: { weight: 0, evidence: [] },
+    jquery: { weight: 0, evidence: [] },
+  };
+  const add = (t, w, e) => { if (signals[t]) { signals[t].weight += w; signals[t].evidence.push(e); } };
+
+  for (const [url, page] of Object.entries(job.pages)) {
+    const html = (page.source?.html || "").slice(0, 20000) + (page.page?.meta ? JSON.stringify(page.page.meta) : "");
+    const gen = page.page?.meta?.["generator"] || "";
+    if (/next/i.test(gen) || /__NEXT_DATA__/.test(html)) add("nextjs", 3, `generator/meta at ${url}`);
+    if (/_next\/static\//.test(JSON.stringify(page.scripts)) || /_next\//.test(html)) add("nextjs", 2, `_next path at ${url}`);
+    if (/react|__REACT/i.test(html) || page.scripts.external.some(s => /react/i.test(s.url))) add("react", 2, `react signal at ${url}`);
+    if (/__VUE__|data-v-|vue\.runtime/i.test(html) || page.scripts.external.some(s => /vue/i.test(s.url))) add("vue", 2, `vue signal at ${url}`);
+    if (/__NUXT__|_nuxt\//i.test(html)) add("nuxt", 3, `nuxt signal at ${url}`);
+    if (/ng-version|angular/i.test(html)) add("angular", 2, `angular signal at ${url}`);
+    if (/svelte-|__svelte/i.test(html) || page.scripts.external.some(s => /svelte/i.test(s.url))) add("svelte", 2, `svelte signal at ${url}`);
+    if (/_app\/immutable\//.test(html)) add("sveltekit", 2, `sveltekit signal at ${url}`);
+    if (/astro-|data-astro/i.test(html)) add("astro", 2, `astro signal at ${url}`);
+    if (/wp-content\/|wp-includes\//i.test(html)) add("wordpress", 3, `wordpress paths at ${url}`);
+    if (/webflow\.(?:js|css)|data-wf-/i.test(html)) add("webflow", 3, `webflow signal at ${url}`);
+    if (/cdn\.shopify\.com|shopify\.theme/i.test(html)) add("shopify", 3, `shopify signal at ${url}`);
+    if (/tailwind/i.test(JSON.stringify(page.styles)) || /tailwind/i.test(html)) add("tailwind", 1, `tailwind signal at ${url}`);
+    if (/bootstrap/i.test(JSON.stringify(page.styles)) || /bootstrap/i.test(html)) add("bootstrap", 1, `bootstrap signal at ${url}`);
+    if (/jquery/i.test(JSON.stringify(page.scripts))) add("jquery", 1, `jquery at ${url}`);
+  }
+
+  const detected = Object.entries(signals)
+    .filter(([, v]) => v.weight > 0)
+    .map(([name, v]) => ({
+      name,
+      confidence: Math.min(1, v.weight / 5),
+      weight: v.weight,
+      evidence: v.evidence.slice(0, 10),
+    }))
+    .sort((a, b) => b.weight - a.weight);
+
+  return {
+    primary: detected[0]?.name || "plain",
+    detected,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SCANNER: NETWORK / API CAPTURE
+// ═══════════════════════════════════════════════════════════════════
+
+function recordNetwork(job, { url, method = "GET", resourceType, sourcePage, headers = {}, status, contentType, bodySample, trigger }) {
+  if (!url) return;
+  let u;
+  try { u = new URL(url); } catch { return; }
+  const redactedHeaders = { ...headers };
+  for (const k of Object.keys(redactedHeaders)) {
+    if (/authorization|cookie|x-api-key|api-key|token|secret/i.test(k)) redactedHeaders[k] = "[redacted]";
+  }
+  const entry = {
+    url: u.toString(),
+    origin: u.origin,
+    pathname: u.pathname,
+    method: (method || "GET").toUpperCase(),
+    resourceType: resourceType || "unknown",
+    sourcePage: sourcePage || null,
+    trigger: trigger || "page_load",
+    status: status ?? null,
+    contentType: contentType || null,
+    headers: redactedHeaders,
+    bodySample: bodySample ? String(bodySample).slice(0, 500) : null,
+    observedAt: Date.now(),
+    confidence: "observed",
+  };
+  job.network.push(entry);
+  if (job.network.length > 5000) job.network.shift();
+
+  // Record API candidates
+  const isApi = /\/api\/|\/graphql|\/v\d+\/|\.json(\?|$)/i.test(u.pathname) ||
+    /application\/json/i.test(contentType || "") ||
+    (resourceType || "").toLowerCase() === "xhr" ||
+    (resourceType || "").toLowerCase() === "fetch";
+  if (isApi) {
+    const key = `${entry.method} ${entry.origin}${entry.pathname}`;
+    if (!job.apis.has(key)) {
+      job.apis.set(key, {
+        key, url: entry.url, method: entry.method,
+        occurrences: [],
+        sourcePages: new Set(),
+        triggers: new Set(),
+        statuses: new Set(),
+        contentTypes: new Set(),
+        confidence: "observed",
+      });
+    }
+    const api = job.apis.get(key);
+    api.occurrences.push({ at: entry.observedAt, sourcePage: entry.sourcePage, status: entry.status });
+    if (api.occurrences.length > 100) api.occurrences.shift();
+    if (entry.sourcePage) api.sourcePages.add(entry.sourcePage);
+    api.triggers.add(entry.trigger);
+    if (entry.status != null) api.statuses.add(entry.status);
+    if (entry.contentType) api.contentTypes.add(entry.contentType);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PLAYWRIGHT BRIDGE (best-effort)
+// ═══════════════════════════════════════════════════════════════════
+
+async function renderWithPlaywright(url, options = {}) {
+  if (!PLAYWRIGHT_BROWSER_URL) {
+    return { ok: false, error: "PLAYWRIGHT_BROWSER_URL not configured" };
+  }
+  try {
+    // Minimal CDP-style JSON protocol expected from the remote service.
+    const endpoint = PLAYWRIGHT_BROWSER_URL.replace(/\/$/, "") + "/render";
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        viewport: options.viewport || { width: 1440, height: 900 },
+        mobile: !!options.mobile,
+        fullPage: options.fullPage !== false,
+        captureNetwork: options.captureNetwork !== false,
+        timeoutMs: options.timeoutMs || 20000,
+        scroll: options.scroll !== false,
+        userAgent: UA,
+      }),
+    });
+    if (!res.ok) return { ok: false, error: `Remote render failed: ${res.status}` };
+    const data = await res.json();
+    return { ok: true, ...data };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1184,7 +1684,7 @@ function readBody(req) {
     let size = 0;
     req.on("data", (c) => {
       size += c.length;
-      if (size > 1_000_000) { reject(new Error("Request body too large")); req.destroy(); return; }
+      if (size > 2_000_000) { reject(new Error("Request body too large")); req.destroy(); return; }
       chunks.push(c);
     });
     req.on("end", () => {
@@ -1197,9 +1697,7 @@ function readBody(req) {
   });
 }
 
-function parseQuery(req) {
-  return req.query || {};
-}
+function parseQuery(req) { return req.query || {}; }
 
 function normalizeOptions(input = {}) {
   const extract = Array.isArray(input.extract)
@@ -1207,7 +1705,6 @@ function normalizeOptions(input = {}) {
     : typeof input.extract === "string"
       ? input.extract.split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
       : ["metadata","links","assets","scripts","styles","forms","meta","text"];
-
   const validExtract = ["metadata","links","assets","scripts","styles","forms","meta","text","html"];
   const filtered = extract.filter(x => validExtract.includes(x));
   return {
@@ -1224,7 +1721,7 @@ function normalizeOptions(input = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// HANDLERS
+// LEGACY HANDLERS (unchanged behavior)
 // ═══════════════════════════════════════════════════════════════════
 
 async function handleScrape(req, res) {
@@ -1232,18 +1729,12 @@ async function handleScrape(req, res) {
   const q = parseQuery(req);
   const url = body.url || q.url;
   if (!url) return fail(res, 400, "MISSING_URL", "Provide ?url= or body.url");
-
   const opts = normalizeOptions({ ...q, ...body, ...(body.options || {}) });
   const key = cacheKey(url, opts);
   const cached = cacheGet(key);
-  if (cached) {
-    return sendJson(res, 200, { ...cached, cached: true });
-  }
-
+  if (cached) return sendJson(res, 200, { ...cached, cached: true });
   const r = await scrapeOnce(url, opts);
-  if (!r.ok) {
-    return fail(res, 502, "FETCH_FAILED", r.error || "Could not fetch URL", { chain: r.chain });
-  }
+  if (!r.ok) return fail(res, 502, "FETCH_FAILED", r.error || "Could not fetch URL", { chain: r.chain });
   cacheSet(key, r.result);
   return sendJson(res, 200, r.result);
 }
@@ -1254,12 +1745,7 @@ async function handlePage(req, res) {
   const opts = normalizeOptions({ ...q, extract: ["metadata"] });
   const r = await scrapeOnce(q.url, opts);
   if (!r.ok) return fail(res, 502, "FETCH_FAILED", r.error);
-  return sendJson(res, 200, {
-    success: true, apiVersion: API_VERSION,
-    page: r.result.page,
-    statistics: r.result.statistics,
-    warnings: r.result.warnings,
-  });
+  return sendJson(res, 200, { success: true, apiVersion: API_VERSION, page: r.result.page, statistics: r.result.statistics, warnings: r.result.warnings });
 }
 
 async function handleLinks(req, res) {
@@ -1268,12 +1754,7 @@ async function handleLinks(req, res) {
   const opts = normalizeOptions({ ...q, extract: ["links"] });
   const r = await scrapeOnce(q.url, opts);
   if (!r.ok) return fail(res, 502, "FETCH_FAILED", r.error);
-  return sendJson(res, 200, {
-    success: true, apiVersion: API_VERSION,
-    url: q.url, finalUrl: r.result.page.finalUrl,
-    links: r.result.links,
-    statistics: { links_found: r.result.statistics.links_found },
-  });
+  return sendJson(res, 200, { success: true, apiVersion: API_VERSION, url: q.url, finalUrl: r.result.page.finalUrl, links: r.result.links, statistics: { links_found: r.result.statistics.links_found } });
 }
 
 async function handleAssets(req, res) {
@@ -1283,14 +1764,9 @@ async function handleAssets(req, res) {
   const r = await scrapeOnce(q.url, opts);
   if (!r.ok) return fail(res, 502, "FETCH_FAILED", r.error);
   return sendJson(res, 200, {
-    success: true, apiVersion: API_VERSION,
-    url: q.url, finalUrl: r.result.page.finalUrl,
+    success: true, apiVersion: API_VERSION, url: q.url, finalUrl: r.result.page.finalUrl,
     assets: r.result.assets,
-    statistics: {
-      images_found: r.result.statistics.images_found,
-      videos_found: r.result.statistics.videos_found,
-      fonts_found: r.result.statistics.fonts_found,
-    },
+    statistics: { images_found: r.result.statistics.images_found, videos_found: r.result.statistics.videos_found, fonts_found: r.result.statistics.fonts_found },
   });
 }
 
@@ -1298,38 +1774,26 @@ async function handleScripts(req, res) {
   const q = parseQuery(req);
   if (!q.url) return fail(res, 400, "MISSING_URL", "Provide ?url=");
   const opts = normalizeOptions({
-    ...q,
-    extract: ["scripts"],
+    ...q, extract: ["scripts"],
     include_content: q.include_content === "1" || q.include_content === "true" || q.include_content === "scripts" ? "scripts" : false,
     fetch_resource_contents: q.fetch_resource_contents === "1" || q.fetch_resource_contents === "true",
   });
   const r = await scrapeOnce(q.url, opts);
   if (!r.ok) return fail(res, 502, "FETCH_FAILED", r.error);
-  return sendJson(res, 200, {
-    success: true, apiVersion: API_VERSION,
-    url: q.url, finalUrl: r.result.page.finalUrl,
-    scripts: r.result.scripts,
-    statistics: { scripts_found: r.result.statistics.scripts_found },
-  });
+  return sendJson(res, 200, { success: true, apiVersion: API_VERSION, url: q.url, finalUrl: r.result.page.finalUrl, scripts: r.result.scripts, statistics: { scripts_found: r.result.statistics.scripts_found } });
 }
 
 async function handleStyles(req, res) {
   const q = parseQuery(req);
   if (!q.url) return fail(res, 400, "MISSING_URL", "Provide ?url=");
   const opts = normalizeOptions({
-    ...q,
-    extract: ["styles"],
+    ...q, extract: ["styles"],
     include_content: q.include_content === "1" || q.include_content === "true" || q.include_content === "styles" ? "styles" : false,
     fetch_resource_contents: q.fetch_resource_contents === "1" || q.fetch_resource_contents === "true",
   });
   const r = await scrapeOnce(q.url, opts);
   if (!r.ok) return fail(res, 502, "FETCH_FAILED", r.error);
-  return sendJson(res, 200, {
-    success: true, apiVersion: API_VERSION,
-    url: q.url, finalUrl: r.result.page.finalUrl,
-    styles: r.result.styles,
-    statistics: { stylesheets_found: r.result.statistics.stylesheets_found },
-  });
+  return sendJson(res, 200, { success: true, apiVersion: API_VERSION, url: q.url, finalUrl: r.result.page.finalUrl, styles: r.result.styles, statistics: { stylesheets_found: r.result.statistics.stylesheets_found } });
 }
 
 async function handleResource(req, res) {
@@ -1341,15 +1805,9 @@ async function handleResource(req, res) {
   if (!r.ok) return fail(res, 502, "FETCH_FAILED", r.error || "Could not fetch resource");
   const cls = classifyUrl(r.url);
   const payload = {
-    success: true, apiVersion: API_VERSION,
-    url: r.url, requestedUrl: q.url,
-    status: r.status,
-    contentType: r.contentType,
-    contentLength: r.contentLength,
-    byteLength: r.byteLength,
-    truncated: r.truncated,
-    classification: cls.category,
-    fetch_ms: r.ms,
+    success: true, apiVersion: API_VERSION, url: r.url, requestedUrl: q.url,
+    status: r.status, contentType: r.contentType, contentLength: r.contentLength,
+    byteLength: r.byteLength, truncated: r.truncated, classification: cls.category, fetch_ms: r.ms,
   };
   if (asBase64) payload.base64 = r.base64;
   else if (r.text != null) payload.text = r.text;
@@ -1367,7 +1825,6 @@ async function handleSource(req, res) {
     include_text_full: mode === "text",
   });
   if (!r.ok) return fail(res, 502, "FETCH_FAILED", r.error);
-
   if (mode === "html") {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.status(200);
@@ -1380,19 +1837,13 @@ async function handleSource(req, res) {
   }
   if (mode === "metadata") {
     return sendJson(res, 200, {
-      success: true, apiVersion: API_VERSION,
-      url: q.url, finalUrl: r.result.page.finalUrl,
+      success: true, apiVersion: API_VERSION, url: q.url, finalUrl: r.result.page.finalUrl,
       metadata: {
-        title: r.result.page.title,
-        description: r.result.page.description,
-        keywords: r.result.page.keywords,
-        canonicalUrl: r.result.page.canonicalUrl,
-        lang: r.result.page.lang,
-        favicon: r.result.page.favicon,
-        og: r.result.page.og,
-        twitter: r.result.page.twitter,
-        headings: r.result.page.headings,
-        meta: r.result.page.meta,
+        title: r.result.page.title, description: r.result.page.description,
+        keywords: r.result.page.keywords, canonicalUrl: r.result.page.canonicalUrl,
+        lang: r.result.page.lang, favicon: r.result.page.favicon,
+        og: r.result.page.og, twitter: r.result.page.twitter,
+        headings: r.result.page.headings, meta: r.result.page.meta,
       },
     });
   }
@@ -1404,7 +1855,6 @@ async function handleCrawl(req, res) {
   const q = parseQuery(req);
   const url = body.url || q.url;
   if (!url) return fail(res, 400, "MISSING_URL", "Provide ?url= or body.url");
-
   const opts = {
     depth: Math.min(Number(body.depth ?? q.depth) || 1, 5),
     max_pages: Math.min(Number(body.max_pages ?? q.max_pages) || 10, MAX_CRAWL_PAGES),
@@ -1429,12 +1879,8 @@ async function handleSearch(req, res) {
   if (!r.ok) return fail(res, 502, "FETCH_FAILED", r.error);
 
   const flat = [];
-  for (const bucket of ["internal","external","documents"]) {
-    for (const l of r.result.links[bucket]) flat.push({ source: "link", bucket, url: l.url });
-  }
-  for (const bucket of ["images","videos","audio","all"]) {
-    for (const a of r.result.assets[bucket] || []) flat.push({ source: "asset", bucket, url: a.url });
-  }
+  for (const bucket of ["internal","external","documents"]) for (const l of r.result.links[bucket]) flat.push({ source: "link", bucket, url: l.url });
+  for (const bucket of ["images","videos","audio","all"]) for (const a of r.result.assets[bucket] || []) flat.push({ source: "asset", bucket, url: a.url });
   for (const s of r.result.scripts.external) flat.push({ source: "script", url: s.url });
   for (const s of r.result.styles.external) flat.push({ source: "style", url: s.url });
   for (const s of r.result.styles.references) flat.push({ source: "style-ref", url: s.url });
@@ -1456,18 +1902,14 @@ async function handleSearch(req, res) {
     }
     if (ext && getExt(item.url) !== ext) return false;
     if (domain) {
-      try { if (new URL(item.url).hostname.toLowerCase() !== domain) return false; }
-      catch { return false; }
+      try { if (new URL(item.url).hostname.toLowerCase() !== domain) return false; } catch { return false; }
     }
     return true;
   });
 
   return sendJson(res, 200, {
-    success: true, apiVersion: API_VERSION,
-    url: q.url, finalUrl: r.result.page.finalUrl,
-    total_scanned: unique.length,
-    match_count: matches.length,
-    matches,
+    success: true, apiVersion: API_VERSION, url: q.url, finalUrl: r.result.page.finalUrl,
+    total_scanned: unique.length, match_count: matches.length, matches,
   });
 }
 
@@ -1477,36 +1919,527 @@ async function handleInspect(req, res) {
   const cls = classifyUrl(q.url, { pageOrigin: q.origin || null });
   const valid = await validateTargetUrl(q.url);
   return sendJson(res, 200, {
-    success: true, apiVersion: API_VERSION,
-    url: q.url,
-    classification: cls,
-    reachable: valid.ok,
-    reason: valid.ok ? null : valid.reason,
+    success: true, apiVersion: API_VERSION, url: q.url, classification: cls,
+    reachable: valid.ok, reason: valid.ok ? null : valid.reason,
     resolvedIps: valid.ok ? valid.resolvedIps : [],
   });
 }
 
 async function handleHealth(req, res) {
   return sendJson(res, 200, {
-    success: true, apiVersion: API_VERSION,
-    status: "ok",
+    success: true, apiVersion: API_VERSION, status: "ok",
     dependencies: {
       linkedom: !!linkedom?.parseHTML,
       robots_parser: !!robotsParserMod,
+      jszip: !!JSZipMod?.default,
+      playwright: !!PLAYWRIGHT_BROWSER_URL,
     },
     limits: {
-      max_bytes: MAX_BYTES,
-      timeout_ms: FETCH_TIMEOUT_MS,
-      max_crawl_pages: MAX_CRAWL_PAGES,
-      max_crawl_concurrency: MAX_CRAWL_CONCURRENCY,
+      max_bytes: MAX_BYTES, timeout_ms: FETCH_TIMEOUT_MS,
+      max_crawl_pages: MAX_CRAWL_PAGES, max_crawl_concurrency: MAX_CRAWL_CONCURRENCY,
       max_resource_fetches: MAX_RESOURCE_FETCHES,
+      max_scan_pages: SCANNER_MAX_PAGES, max_scan_depth: SCANNER_MAX_DEPTH,
+      scanner_job_ttl_ms: SCANNER_JOB_TTL_MS, scanner_max_jobs: SCANNER_MAX_JOBS,
     },
+    jobs: { active: JOBS.size },
     endpoints: [
-      "scrape","page","links","assets","scripts","styles",
-      "resource","source","crawl","search","inspect","health",
+      "scrape","page","links","assets","scripts","styles","resource","source",
+      "crawl","search","inspect","health",
+      "start-scan","discover","get-queue","fetch-batch","scan-status",
+      "render","network","technology","structure","get-map","get-results",
+      "reconstruct","export","compare","rescan",
     ],
     timestamp: new Date().toISOString(),
   });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NEW SCANNER HANDLERS
+// ═══════════════════════════════════════════════════════════════════
+
+async function handleStartScan(req, res) {
+  const body = req.method === "POST" ? await readBody(req) : {};
+  const q = parseQuery(req);
+  const url = body.url || q.url;
+  if (!url) return fail(res, 400, "MISSING_URL", "Provide url");
+
+  const valid = await validateTargetUrl(url);
+  if (!valid.ok) return fail(res, 400, "INVALID_URL", valid.reason);
+
+  const options = {
+    depth: Math.min(Number(body.depth ?? q.depth) || 2, SCANNER_MAX_DEPTH),
+    max_pages: Math.min(Number(body.max_pages ?? q.max_pages) || 100, SCANNER_MAX_PAGES),
+    batch_size: Math.min(Math.max(Number(body.batch_size ?? q.batch_size) || SCANNER_BATCH_DEFAULT, SCANNER_BATCH_MIN), SCANNER_BATCH_MAX),
+    same_origin_only: body.same_origin_only !== false && q.same_origin_only !== "0",
+    respect_robots: body.respect_robots !== false && q.respect_robots !== "0",
+    include_content: !!(body.include_content ?? body.includeContent),
+    render: !!(body.render ?? q.render),
+  };
+
+  const job = createJob(url, options);
+
+  // Fire discovery in background (Vercel: use waitUntil if available; otherwise inline best-effort)
+  const discovery = runDiscovery(job).catch(err => {
+    job.failures.push({ url, reason: err.message });
+    job.status = "failed";
+  });
+  try {
+    if (typeof req.waitUntil === "function") req.waitUntil(discovery);
+    else await Promise.race([discovery, new Promise(r => setTimeout(r, 9000))]);
+  } catch {}
+
+  return sendJson(res, 200, {
+    success: true, apiVersion: API_VERSION,
+    jobId: job.id,
+    startUrl: job.startUrl,
+    status: job.status,
+    options: {
+      depth: job.maxDepth, max_pages: job.maxPages,
+      same_origin_only: job.sameOriginOnly, respect_robots: job.respectRobots,
+      batch_size: job.batchSize, render: job.renderPages,
+    },
+    stats: { ...job.stats },
+    next: `/api/scraper?action=get-queue&jobId=${job.id}`,
+  });
+}
+
+async function handleDiscover(req, res) {
+  const q = parseQuery(req);
+  const job = getJob(q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  if (job.status === "created") await runDiscovery(job);
+  return sendJson(res, 200, {
+    success: true, apiVersion: API_VERSION,
+    jobId: job.id, status: job.status,
+    stats: { ...job.stats },
+    queue: job.queue.slice(0, 50),
+    nodes: [...job.nodes.values()].slice(0, 200).map(n => ({ url: n.url, kind: n.kind, status: n.status, depth: n.depth })),
+  });
+}
+
+async function handleGetQueue(req, res) {
+  const q = parseQuery(req);
+  const job = getJob(q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  const limit = Math.min(Number(q.limit) || 100, 500);
+  return sendJson(res, 200, {
+    success: true, apiVersion: API_VERSION,
+    jobId: job.id, status: job.status,
+    batch_size: job.batchSize,
+    queue_size: job.queue.length,
+    queue: job.queue.slice(0, limit).map(x => ({ url: x.url, kind: x.kind, depth: x.depth, parent: x.parent, addedAt: x.addedAt })),
+    stats: { ...job.stats },
+  });
+}
+
+async function handleFetchBatch(req, res) {
+  const body = req.method === "POST" ? await readBody(req) : {};
+  const q = parseQuery(req);
+  const job = getJob(body.jobId || q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  if (job.status === "created") return fail(res, 409, "NOT_DISCOVERED", "Call ?action=discover first");
+
+  const size = Math.min(Math.max(Number(body.size ?? q.size) || job.batchSize, SCANNER_BATCH_MIN), SCANNER_BATCH_MAX);
+  const result = await fetchBatch(job, size);
+  return sendJson(res, 200, { success: true, apiVersion: API_VERSION, ...result });
+}
+
+async function handleScanStatus(req, res) {
+  const q = parseQuery(req);
+  const job = getJob(q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  const nodeStatuses = {};
+  for (const n of job.nodes.values()) nodeStatuses[n.status] = (nodeStatuses[n.status] || 0) + 1;
+  return sendJson(res, 200, {
+    success: true, apiVersion: API_VERSION,
+    jobId: job.id, status: job.status,
+    startUrl: job.startUrl,
+    startOrigin: job.startOrigin,
+    createdAt: job.createdAt, updatedAt: job.updatedAt,
+    stats: { ...job.stats },
+    node_statuses: nodeStatuses,
+    queue_size: job.queue.length,
+    completed_batches: job.completedBatches.length,
+    failures: job.failures.slice(-50),
+    broken: [...job.broken].slice(0, 100),
+    technology: job.technology.primary ? job.technology : null,
+    apis_count: job.apis.size,
+    network_count: job.network.length,
+  });
+}
+
+async function handleRender(req, res) {
+  const body = req.method === "POST" ? await readBody(req) : {};
+  const q = parseQuery(req);
+  const url = body.url || q.url;
+  if (!url) return fail(res, 400, "MISSING_URL", "Provide url");
+  const valid = await validateTargetUrl(url);
+  if (!valid.ok) return fail(res, 400, "INVALID_URL", valid.reason);
+
+  const r = await renderWithPlaywright(url, {
+    viewport: body.viewport,
+    mobile: !!body.mobile,
+    fullPage: body.fullPage !== false,
+    captureNetwork: body.captureNetwork !== false,
+    scroll: body.scroll !== false,
+    timeoutMs: body.timeoutMs,
+  });
+  if (!r.ok) return fail(res, 503, "RENDER_UNAVAILABLE", r.error);
+
+  if (body.jobId) {
+    const job = getJob(body.jobId);
+    if (job) {
+      job.renders.push({ url, at: Date.now(), ok: true, summary: { screenshots: r.screenshots ? Object.keys(r.screenshots) : [], network: (r.network || []).length } });
+      for (const req of r.network || []) recordNetwork(job, { ...req, sourcePage: url, trigger: "page_load" });
+      job.touch();
+    }
+  }
+
+  return sendJson(res, 200, {
+    success: true, apiVersion: API_VERSION, url,
+    renderedHtml: r.html || null,
+    screenshots: r.screenshots || {},
+    dimensions: r.dimensions || null,
+    network: r.network || [],
+    warnings: r.warnings || [],
+  });
+}
+
+async function handleNetwork(req, res) {
+  const q = parseQuery(req);
+  const job = getJob(q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  let items = job.network;
+  if (q.sourcePage) items = items.filter(x => x.sourcePage === q.sourcePage);
+  if (q.method) items = items.filter(x => x.method === String(q.method).toUpperCase());
+  if (q.host) items = items.filter(x => { try { return new URL(x.url).hostname === q.host; } catch { return false; } });
+  const limit = Math.min(Number(q.limit) || 500, 5000);
+  return sendJson(res, 200, {
+    success: true, apiVersion: API_VERSION, jobId: job.id,
+    count: items.length, requests: items.slice(-limit),
+    apis: job.apiList().slice(0, 500),
+  });
+}
+
+async function handleTechnology(req, res) {
+  const q = parseQuery(req);
+  const job = getJob(q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  if (!job.technology.primary && Object.keys(job.pages).length > 0) {
+    job.technology = detectTechnology(job);
+  }
+  return sendJson(res, 200, { success: true, apiVersion: API_VERSION, jobId: job.id, technology: job.technology });
+}
+
+async function handleStructure(req, res) {
+  const q = parseQuery(req);
+  const job = getJob(q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  if (!q.url) return fail(res, 400, "MISSING_URL", "Provide url");
+  const page = job.pages[q.url];
+  if (!page) return fail(res, 404, "PAGE_NOT_FOUND", "Page not in this job");
+  const html = page.source?.html || "";
+  const structure = { headings: page.page.headings, forms: page.forms, iframes: page.iframes, links: page.links, assets: page.assets, meta: page.meta };
+  if (linkedom?.parseHTML && html) {
+    try {
+      const { parseHTML } = linkedom;
+      const { document } = parseHTML(html);
+      structure.domOutline = buildDomOutline(document, 0);
+    } catch {}
+  }
+  return sendJson(res, 200, { success: true, apiVersion: API_VERSION, jobId: job.id, url: q.url, structure });
+}
+
+function buildDomOutline(node, depth) {
+  if (!node || depth > 6) return null;
+  const children = [];
+  for (const el of node.children || []) {
+    const tag = el.tagName?.toLowerCase();
+    if (!tag) continue;
+    const item = {
+      tag,
+      id: el.getAttribute?.("id") || null,
+      classes: el.getAttribute?.("class")?.split(/\s+/).filter(Boolean) || [],
+      text: (el.textContent || "").trim().slice(0, 120) || null,
+    };
+    item.children = buildDomOutline(el, depth + 1);
+    children.push(item);
+  }
+  return children.length ? children : null;
+}
+
+async function handleGetMap(req, res) {
+  const q = parseQuery(req);
+  const job = getJob(q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  const tree = job.snapshotTree();
+  return sendJson(res, 200, {
+    success: true, apiVersion: API_VERSION, jobId: job.id, status: job.status,
+    tree,
+    pagesTree: tree.pagesTree,
+    resourceTree: tree.resourceTree,
+    backendTree: {
+      apis: job.apiList(),
+      count: job.apis.size,
+    },
+    stats: { ...job.stats },
+  });
+}
+
+async function handleGetResults(req, res) {
+  const q = parseQuery(req);
+  const job = getJob(q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  const kind = q.kind || "all";
+  const includeBodies = q.bodies === "1" || q.bodies === "true";
+  const out = { success: true, apiVersion: API_VERSION, jobId: job.id, kind };
+  if (kind === "all" || kind === "pages") {
+    out.pages = Object.fromEntries(Object.entries(job.pages).map(([u, p]) => [u, {
+      url: u,
+      finalUrl: p.page.finalUrl,
+      title: p.page.title,
+      statusCode: p.page.status,
+      contentType: p.page.contentType,
+      byteLength: p.page.byteLength,
+      statistics: p.statistics,
+    }]));
+  }
+  if (kind === "all" || kind === "resources") {
+    out.resources = Object.fromEntries(Object.entries(job.resources).map(([u, r]) => [u, {
+      url: u, contentType: r.contentType, byteLength: r.byteLength, hash: r.hash, truncated: r.truncated,
+      ...(includeBodies ? { text: r.text, base64: r.base64 } : {}),
+    }]));
+  }
+  if (kind === "all" || kind === "apis") out.apis = job.apiList();
+  if (kind === "all" || kind === "network") out.network = job.network.slice(-2000);
+  return sendJson(res, 200, out);
+}
+
+async function handleReconstruct(req, res) {
+  const body = req.method === "POST" ? await readBody(req) : {};
+  const q = parseQuery(req);
+  const job = getJob(body.jobId || q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+
+  // Determine original filenames & organize
+  const pages = {};
+  for (const [url, p] of Object.entries(job.pages)) {
+    if (!p.source?.html) continue;
+    const slug = urlToSlug(url);
+    pages[slug] = {
+      originalUrl: url,
+      title: p.page.title,
+      html: p.source.html,
+      stylesheets: (p.styles.external || []).map(s => s.url),
+      scripts: (p.scripts.external || []).map(s => s.url),
+      images: (p.assets.images || []).map(i => i.url),
+    };
+  }
+
+  const styles = {};
+  const scripts = {};
+  const assets = {};
+  for (const [url, r] of Object.entries(job.resources)) {
+    const slug = urlToSlug(url);
+    if (/text\/css/i.test(r.contentType || "") || /\.css$/i.test(url)) styles[slug] = r.text || "";
+    else if (/javascript/i.test(r.contentType || "") || /\.m?js$/i.test(url)) scripts[slug] = r.text || "";
+    else assets[slug] = { contentType: r.contentType, byteLength: r.byteLength, base64: r.base64, text: r.text };
+  }
+
+  // Build an editable index
+  const manifest = {
+    generatedAt: new Date().toISOString(),
+    jobId: job.id,
+    startUrl: job.startUrl,
+    technology: job.technology,
+    stats: { ...job.stats },
+    pages,
+    styles: Object.keys(styles),
+    scripts: Object.keys(scripts),
+    assets: Object.keys(assets),
+    apis: job.apiList().map(a => ({ key: a.key, url: a.url, method: a.method, sourcePages: [...a.sourcePages], triggers: [...a.triggers], statuses: [...a.statuses] })),
+    missing: [...job.broken],
+    unreproducible: identifyUnreproducible(job),
+  };
+
+  job.reconstruction = { pages, styles, scripts, assets, manifest };
+
+  return sendJson(res, 200, {
+    success: true, apiVersion: API_VERSION, jobId: job.id,
+    reconstruction: {
+      manifest,
+      pageCount: Object.keys(pages).length,
+      styleCount: Object.keys(styles).length,
+      scriptCount: Object.keys(scripts).length,
+      assetCount: Object.keys(assets).length,
+    },
+    note: "Use ?action=export to produce a ZIP. Reconstruction is an editable mirror of accessible content; it does not reproduce protected data.",
+  });
+}
+
+function identifyUnreproducible(job) {
+  const out = [];
+  const pages = Object.keys(job.pages).length;
+  if (pages === 0) out.push("No pages fetched yet");
+  if (job.broken.size) out.push(`${job.broken.size} resources could not be fetched`);
+  if (Object.values(job.pages).some(p => (p.scripts.inline || []).some(s => /eval\(|new Function/.test(s.body || "")))) {
+    out.push("Some scripts use eval/Function — behavior may differ");
+  }
+  if (!PLAYWRIGHT_BROWSER_URL) out.push("Rendered DOM unavailable (no Playwright service configured)");
+  return out;
+}
+
+async function handleExport(req, res) {
+  const body = req.method === "POST" ? await readBody(req) : {};
+  const q = parseQuery(req);
+  const job = getJob(body.jobId || q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  if (!JSZipMod?.default) {
+    return fail(res, 503, "EXPORT_UNAVAILABLE", "jszip not installed — add it to enable ZIP export");
+  }
+  if (!job.reconstruction) {
+    await handleReconstruct(
+      Object.assign(req, { method: "POST", body: { jobId: job.id } }),
+      { status: () => {}, setHeader: () => {}, end: () => {} },
+    );
+  }
+
+  const JSZip = JSZipMod.default;
+  const zip = new JSZip();
+
+  // manifest
+  zip.file("manifest.json", JSON.stringify(job.reconstruction.manifest, null, 2));
+
+  // original
+  const original = zip.folder("original");
+  const pagesFolder = original.folder("pages");
+  const cssFolder = original.folder("css");
+  const jsFolder = original.folder("js");
+  const assetsFolder = original.folder("assets");
+
+  for (const [slug, p] of Object.entries(job.reconstruction.pages)) {
+    pagesFolder.file(`${slug}.html`, p.html || "");
+  }
+  for (const [slug, css] of Object.entries(job.reconstruction.styles)) {
+    cssFolder.file(`${slug}.css`, css || "");
+  }
+  for (const [slug, js] of Object.entries(job.reconstruction.scripts)) {
+    jsFolder.file(`${slug}.js`, js || "");
+  }
+  for (const [slug, a] of Object.entries(job.reconstruction.assets)) {
+    const ext = a.contentType?.split("/")[1]?.split(";")[0] || "bin";
+    const name = slug.includes(".") ? slug : `${slug}.${ext}`;
+    if (a.base64) assetsFolder.file(name, a.base64, { base64: true });
+    else if (a.text != null) assetsFolder.file(name, a.text);
+  }
+
+  // reconstructed (editable copy)
+  const reconstructed = zip.folder("reconstructed");
+  const rPages = reconstructed.folder("pages");
+  const rStyles = reconstructed.folder("styles");
+  const rScripts = reconstructed.folder("scripts");
+  const rAssets = reconstructed.folder("assets");
+  for (const [slug, p] of Object.entries(job.reconstruction.pages)) {
+    rPages.file(`${slug}.html`, p.html || "");
+  }
+  for (const [slug, css] of Object.entries(job.reconstruction.styles)) rStyles.file(`${slug}.css`, css || "");
+  for (const [slug, js] of Object.entries(job.reconstruction.scripts)) rScripts.file(`${slug}.js`, js || "");
+  for (const [slug, a] of Object.entries(job.reconstruction.assets)) {
+    const ext = a.contentType?.split("/")[1]?.split(";")[0] || "bin";
+    const name = slug.includes(".") ? slug : `${slug}.${ext}`;
+    if (a.base64) rAssets.file(name, a.base64, { base64: true });
+    else if (a.text != null) rAssets.file(name, a.text);
+  }
+
+  // reports
+  const reports = zip.folder("reports");
+  reports.file("technology.json", JSON.stringify(job.technology, null, 2));
+  reports.file("pages.json", JSON.stringify(job.reconstruction.pages, null, 2));
+  reports.file("resources.json", JSON.stringify(
+    Object.fromEntries(Object.entries(job.resources).map(([u, r]) => [u, { contentType: r.contentType, byteLength: r.byteLength, hash: r.hash, truncated: r.truncated }])),
+    null, 2,
+  ));
+  reports.file("apis.json", JSON.stringify(job.apiList(), null, 2));
+  reports.file("dependencies.json", JSON.stringify(buildDependencyReport(job), null, 2));
+  reports.file("missing-resources.json", JSON.stringify([...job.broken], null, 2));
+  reports.file("comparison.json", JSON.stringify(job.comparison || { note: "Use ?action=compare first" }, null, 2));
+
+  const buffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="folio-scan-${job.id}.zip"`);
+  res.status(200);
+  return res.end(buffer);
+}
+
+function buildDependencyReport(job) {
+  const parentOf = {};
+  const childrenOf = {};
+  for (const n of job.nodes.values()) {
+    if (n.parents.length) parentOf[n.url] = n.parents;
+    if (n.children.length) childrenOf[n.url] = n.children;
+  }
+  return { parentOf, childrenOf, broken: [...job.broken], orphans: job.snapshotTree().orphanResources };
+}
+
+async function handleCompare(req, res) {
+  const body = req.method === "POST" ? await readBody(req) : {};
+  const q = parseQuery(req);
+  const job = getJob(body.jobId || q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+
+  const comparison = {
+    generatedAt: new Date().toISOString(),
+    note: "Structural comparison of original vs reconstructed content. Visual diff requires Playwright screenshots.",
+    original: {
+      pages: Object.keys(job.pages).length,
+      resources: Object.keys(job.resources).length,
+      bytes: job.stats.bytes,
+    },
+    reconstructed: job.reconstruction
+      ? {
+          pages: Object.keys(job.reconstruction.pages).length,
+          styles: Object.keys(job.reconstruction.styles).length,
+          scripts: Object.keys(job.reconstruction.scripts).length,
+          assets: Object.keys(job.reconstruction.assets).length,
+        }
+      : null,
+    coverage: job.stats.discovered ? Math.min(1, job.stats.fetched / job.stats.discovered) : 0,
+    broken: [...job.broken],
+    missing: [...job.broken],
+    unreproducible: identifyUnreproducible(job),
+  };
+  job.comparison = comparison;
+  job.touch();
+  return sendJson(res, 200, { success: true, apiVersion: API_VERSION, jobId: job.id, comparison });
+}
+
+async function handleRescan(req, res) {
+  const body = req.method === "POST" ? await readBody(req) : {};
+  const q = parseQuery(req);
+  const job = getJob(body.jobId || q.jobId);
+  if (!job) return fail(res, 404, "JOB_NOT_FOUND", "Unknown jobId");
+  const targets = Array.isArray(body.urls) ? body.urls : (body.url ? [body.url] : (Array.isArray(q.urls) ? q.urls : (q.url ? [q.url] : [])));
+  if (!targets.length) return fail(res, 400, "MISSING_URL", "Provide urls[] or url");
+  const reaped = [];
+  for (const u of targets) {
+    const node = job.nodes.get(u);
+    if (!node) { reaped.push({ url: u, ok: false, reason: "not_in_job" }); continue; }
+    node.status = "queued";
+    if (!job.queue.some(x => x.url === u)) job.queue.unshift({ url: u, kind: node.kind, depth: node.depth, parent: node.parents[0] || null, addedAt: Date.now() });
+    reaped.push({ url: u, ok: true });
+  }
+  job.touch();
+  return sendJson(res, 200, { success: true, apiVersion: API_VERSION, jobId: job.id, requeued: reaped, queue_size: job.queue.length });
+}
+
+function urlToSlug(url) {
+  try {
+    const u = new URL(url);
+    const path = (u.pathname || "/").replace(/^\/|\/$/g, "");
+    const name = path ? path.replace(/[^a-z0-9-_]+/gi, "_") : "index";
+    return name + (getExt(url) ? "" : ".html");
+  } catch { return "index.html"; }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1514,6 +2447,7 @@ async function handleHealth(req, res) {
 // ═══════════════════════════════════════════════════════════════════
 
 const ROUTES = {
+  // Legacy
   scrape: handleScrape,
   page: handlePage,
   links: handleLinks,
@@ -1526,25 +2460,34 @@ const ROUTES = {
   search: handleSearch,
   inspect: handleInspect,
   health: handleHealth,
+  // New scanner
+  "start-scan": handleStartScan,
+  discover: handleDiscover,
+  "get-queue": handleGetQueue,
+  "fetch-batch": handleFetchBatch,
+  "scan-status": handleScanStatus,
+  render: handleRender,
+  network: handleNetwork,
+  technology: handleTechnology,
+  structure: handleStructure,
+  "get-map": handleGetMap,
+  "get-results": handleGetResults,
+  reconstruct: handleReconstruct,
+  export: handleExport,
+  compare: handleCompare,
+  rescan: handleRescan,
 };
 
 export default async function handler(req, res) {
   setCors(req, res);
-
-  if (req.method === "OPTIONS") {
-    res.status(204);
-    return res.end();
-  }
+  if (req.method === "OPTIONS") { res.status(204); return res.end(); }
 
   const q = parseQuery(req);
   const action = String(q.action || (req.method === "POST" ? "scrape" : "health")).toLowerCase();
   const fn = ROUTES[action];
   if (!fn) {
-    return fail(res, 404, "UNKNOWN_ACTION", `Unknown action: ${action}`, {
-      available: Object.keys(ROUTES),
-    });
+    return fail(res, 404, "UNKNOWN_ACTION", `Unknown action: ${action}`, { available: Object.keys(ROUTES) });
   }
-
   try {
     return await fn(req, res);
   } catch (err) {
@@ -1553,16 +2496,13 @@ export default async function handler(req, res) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// CLI (optional: `node api/scraper.js <url>`)
+// CLI
 // ═══════════════════════════════════════════════════════════════════
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const argUrl = process.argv[2];
-  if (!argUrl) {
-    console.error("Usage: node api/scraper.js <url>");
-    process.exit(1);
-  }
-  const r = await scrapeOnce(argUrl, { extract: ["metadata","links","assets","scripts","styles","text"], include_text_full: false });
+  if (!argUrl) { console.error("Usage: node api/scraper.js <url>"); process.exit(1); }
+  const r = await scrapeOnce(argUrl, { extract: ["metadata","links","assets","scripts","styles","text"] });
   console.log(JSON.stringify(r.ok ? r.result : r, null, 2));
   process.exit(r.ok ? 0 : 1);
 }
