@@ -23,8 +23,8 @@
 //  Public API:  window.__folioPreview  (see bottom)
 // ═══════════════════════════════════════════════════════════════════
 
-const PREVIEW_VERSION = "3.1.0";
-const PREVIEW_BUILD = "2026.11.22";
+const PREVIEW_VERSION = "3.2.0";
+const PREVIEW_BUILD = "2026.11.26";
 
 // ─────────────────────────────────────────────────────────────────
 //  CONSTANTS
@@ -49,10 +49,10 @@ const DEVICE_PRESETS = {
   "fhd":             { w: 1920, h: 1080, label: "1920 × 1080",    dpr: 1, category: "Desktop" },
   "qhd":             { w: 2560, h: 1440, label: "2560 × 1440",    dpr: 1, category: "Desktop" },
   "4k":              { w: 3840, h: 2160, label: "3840 × 2160",    dpr: 1, category: "Desktop" },
-  // quick presets
-  "phone":           { w: 393,  h: 852,  label: "Phone",          dpr: 3, category: "Quick", chrome: 16, notch: true },
-  "tablet":          { w: 820,  h: 1180, label: "Tablet",         dpr: 2, category: "Quick", chrome: 16 },
-  "laptop":          { w: 1440, h: 900,  label: "Laptop",         dpr: 2, category: "Quick", chrome: 16 },
+  // quick presets — use real device categories so chrome CSS applies
+  "phone":           { w: 393,  h: 852,  label: "Phone",          dpr: 3, category: "Phone",  chrome: 16, notch: true },
+  "tablet":          { w: 820,  h: 1180, label: "Tablet",         dpr: 2, category: "Tablet", chrome: 16 },
+  "laptop":          { w: 1440, h: 900,  label: "Laptop",         dpr: 2, category: "Laptop", chrome: 16 },
 };
 
 const SIZE_QUICK = ["fit", "phone", "tablet", "laptop", "custom"];
@@ -75,7 +75,6 @@ const MSG = {
   RESPONSIVE_RESULT: "folio:responsive-result",
   EVAL_RESULT: "folio:eval-result",
   ASSETS_RESULT: "folio:assets-result",
-  SCREENSHOT_DATA: "folio:screenshot-data",
   HEATMAP_DATA: "folio:heatmap-data",
   CSS_VARS: "folio:css-vars",
   ELEMENT_STYLE: "folio:element-style",
@@ -96,7 +95,6 @@ const REQ = {
   RELOAD: "folio:reload",
   PATCH: "folio:patch",
   ASSETS_SCAN: "folio:assets-scan",
-  SCREENSHOT: "folio:screenshot",
   START_HEATMAP: "folio:start-heatmap",
   STOP_HEATMAP: "folio:stop-heatmap",
   GET_CSS_VARS: "folio:get-css-vars",
@@ -128,6 +126,7 @@ const DEFAULT_SETTINGS = {
   autoRefreshDelay: 800,
   autoRefreshOnSave: true,
   showBreakpointRuler: true,
+  showGridLines: true,
   showTouchHeatmap: false,
   screenshotFormat: "png",    // "png" | "jpeg" | "webp"
   screenshotQuality: 0.92,
@@ -245,6 +244,10 @@ const PREVIEW_CSS = `
   --fp-z-palette: 970;
   --fp-z-toast: 980;
   --fp-speed: 1;
+  --fp-sat: env(safe-area-inset-top, 0px);
+  --fp-sar: env(safe-area-inset-right, 0px);
+  --fp-sab: env(safe-area-inset-bottom, 0px);
+  --fp-sal: env(safe-area-inset-left, 0px);
 }
 [data-theme="light"] {
   --fp-bg: #f4f6f9;
@@ -378,18 +381,18 @@ const PREVIEW_CSS = `
 }
 
 /* ─── OVERLAY ─── */
-.fp-overlay{position:fixed;inset:0;z-index:var(--fp-z-base);background:var(--fp-bg);display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity calc(.2s/var(--fp-speed)) var(--fp-ease);font-family:var(--fp-sans);color:var(--fp-text)}
+.fp-overlay{position:fixed;inset:0;box-sizing:border-box;padding:var(--fp-sat) var(--fp-sar) var(--fp-sab) var(--fp-sal);z-index:var(--fp-z-base);background:var(--fp-bg);display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity calc(.2s/var(--fp-speed)) var(--fp-ease);font-family:var(--fp-sans);color:var(--fp-text)}
 .fp-overlay[data-open="true"]{opacity:1;pointer-events:auto}
 .fp-overlay[data-fullscreen="true"] .fp-header,
 .fp-overlay[data-fullscreen="true"] .fp-dock{display:none!important}
-.fp-overlay[data-fullscreen="true"] .fp-stage-wrap{position:fixed;inset:0;z-index:10;padding:0}
+.fp-overlay[data-fullscreen="true"] .fp-stage-wrap{position:fixed;top:var(--fp-sat);right:var(--fp-sar);bottom:var(--fp-sab);left:var(--fp-sal);z-index:10;padding:0}
 .fp-overlay[data-fullscreen="true"] .fp-stage{padding:0}
 .fp-overlay[data-fullscreen="true"] .fp-frame{margin:0!important;border-radius:0!important;border:none!important;box-shadow:none!important}
 .fp-overlay[data-fullscreen="true"] .fp-frame::before,
 .fp-overlay[data-fullscreen="true"] .fp-frame::after{display:none!important}
 .fp-overlay[data-fullscreen="true"] .fp-frame iframe{border-radius:0!important}
 .fp-overlay[data-fullscreen="true"] .fp-ruler{display:none!important}
-.fp-fs-exit{position:fixed;top:14px;right:14px;z-index:30;width:40px;height:40px;border-radius:10px;background:rgba(20,22,28,.88);backdrop-filter:blur(12px);border:1px solid var(--fp-border-strong);color:var(--fp-text);cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 8px 32px rgba(0,0,0,.4);transition:transform .15s,background .15s}
+.fp-fs-exit{position:fixed;top:calc(14px + var(--fp-sat));right:calc(14px + var(--fp-sar));z-index:30;width:40px;height:40px;border-radius:10px;background:rgba(20,22,28,.88);backdrop-filter:blur(12px);border:1px solid var(--fp-border-strong);color:var(--fp-text);cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 8px 32px rgba(0,0,0,.4);transition:transform .15s,background .15s}
 .fp-overlay[data-fullscreen="true"] .fp-fs-exit{display:flex}
 .fp-fs-exit:hover{background:var(--fp-accent);color:#0a0c10;transform:scale(1.05)}
 .fp-fs-exit svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2}
@@ -398,11 +401,11 @@ const PREVIEW_CSS = `
 .fp-overlay[data-dock-right="true"]{flex-direction:row;flex-wrap:wrap;align-content:flex-start}
 .fp-overlay[data-dock-right="true"] .fp-header{width:100%;order:0}
 .fp-overlay[data-dock-right="true"] .fp-stage-wrap{flex:1 1 auto;width:calc(100% - 360px);min-width:0;order:1;height:calc(100% - 42px)}
-.fp-overlay[data-dock-right="true"] .fp-dock{width:360px;max-width:40vw;height:calc(100% - 42px)!important;order:2;border-left:1px solid var(--fp-border);border-top:none;flex-direction:column;overflow:hidden}
+.fp-overlay[data-dock-right="true"] .fp-dock{max-height:none;width:360px;max-width:40vw;height:calc(100% - 42px)!important;order:2;border-left:1px solid var(--fp-border);border-top:none;flex-direction:column;overflow:hidden}
 .fp-overlay[data-dock-right="true"] .fp-dock[data-expanded="true"]{height:calc(100% - 42px)!important}
 .fp-overlay[data-dock-right="true"] .fp-dock-bar{flex-shrink:0}
 .fp-overlay[data-dock-right="true"] .fp-sections{flex:1;min-height:0;overflow:hidden}
-.fp-overlay[data-dock-right="true"] .fp-toasts{right:380px;left:auto;transform:none;bottom:16px}
+.fp-overlay[data-dock-right="true"] .fp-toasts{right:calc(380px + var(--fp-sar));left:auto;transform:none;bottom:calc(16px + var(--fp-sab))}
 @media (max-width: 900px) {
   .fp-overlay[data-dock-right="true"]{flex-direction:column}
   .fp-overlay[data-dock-right="true"] .fp-stage-wrap{width:100%;height:auto;order:1}
@@ -424,7 +427,7 @@ const PREVIEW_CSS = `
 .fp-url-wrap{display:flex;align-items:center;gap:4px;flex:1;min-width:0;max-width:420px}
 .fp-url-input{height:26px;padding:0 8px;border-radius:5px;background:rgba(255,255,255,.05);border:1px solid var(--fp-border);color:var(--fp-text);font-size:11px;font-family:var(--fp-mono);min-width:0;flex:1;outline:none;transition:border-color .15s}
 .fp-url-input:focus{border-color:var(--fp-accent);background:var(--fp-accent-soft)}
-.fp-size-bar{display:flex;gap:2px;align-items:center;overflow-x:auto;padding:2px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid var(--fp-border);flex-shrink:0;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.fp-size-bar{display:flex;gap:2px;align-items:center;overflow-x:auto;padding:2px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid var(--fp-border);flex-shrink:1;min-width:0;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .fp-size-bar::-webkit-scrollbar{display:none}
 .fp-size-btn{padding:0;width:28px;height:28px;border-radius:6px;background:transparent;border:none;color:var(--fp-text-2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all calc(.12s/var(--fp-speed)) var(--fp-ease);font-family:inherit;flex-shrink:0}
 .fp-size-btn:hover{background:rgba(255,255,255,.08);color:var(--fp-text)}.fp-size-btn svg{width:14px;height:14px;display:block;stroke:currentColor;fill:none;stroke-width:2}
@@ -445,10 +448,16 @@ const PREVIEW_CSS = `
 /* ─── STAGE ─── */
 .fp-stage-wrap{flex:1;position:relative;overflow:hidden;background:repeating-conic-gradient(rgba(255,255,255,.015) 0% 25%,transparent 0% 50%) 50%/20px 20px;min-height:0;transition:padding-bottom calc(.28s/var(--fp-speed)) var(--fp-ease)}
 .fp-stage{position:absolute;inset:0;display:grid;place-items:center;padding:12px;overflow:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box}
-.fp-frame{position:relative;background:#0a0c10;transform-origin:center center;transition:width .25s var(--fp-ease),height .25s var(--fp-ease),border .25s,border-radius .25s,box-shadow .25s,margin .25s;flex-shrink:0;margin:0 auto;display:flex;overflow:hidden;max-width:100%;box-sizing:border-box}
+.fp-frame{position:relative;background:#0a0c10;transform-origin:center center;transition:border-radius .25s,box-shadow .25s;flex-shrink:0;margin:0 auto;display:flex;overflow:hidden;max-width:100%;box-sizing:border-box}
 .fp-frame iframe{display:block;width:100%;height:100%;border:none;background:#fff;flex:1;max-width:100%}
-.fp-frame[data-rotated="true"]{transition:width .3s var(--fp-ease-spring),height .3s var(--fp-ease-spring),border-radius .3s}
 .fp-frame--edge{border:none!important;border-radius:0!important;box-shadow:none!important;margin:0!important}
+
+/* Sized modes: the frame keeps its real device size, is centred on the stage,
+   then scaled. It is out of flow so it can never widen or push the stage. */
+.fp-stage[data-scaled="true"]{display:block;overflow:hidden}
+.fp-stage[data-scaled="true"]>.fp-frame{position:absolute;left:50%;top:50%;margin:0!important}
+/* borders sit outside the screen, so the iframe is exactly the device viewport */
+.fp-frame[data-device="true"]{box-sizing:content-box}
 
 /* Loading overlay on stage */
 .fp-loading{position:absolute;inset:0;z-index:8;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:rgba(10,12,16,.55);backdrop-filter:blur(6px);pointer-events:none}
@@ -470,12 +479,12 @@ const PREVIEW_CSS = `
 .fp-frame[data-device="true"][data-category="Tablet"] iframe{border-radius:6px}
 
 /* Laptop frame — contained chrome (no layout-breaking 140% pseudo) */
-.fp-frame[data-device="true"][data-category="Laptop"]{border-radius:8px 8px 0 0;border:10px solid #1c1c1e;border-bottom-width:0;box-shadow:0 12px 40px rgba(0,0,0,.4);overflow:visible;margin-bottom:22px}
-.fp-frame[data-device="true"][data-category="Laptop"]::before{content:'';position:absolute;bottom:-16px;left:0;right:0;height:16px;background:linear-gradient(to bottom,#2a2a2e,#1a1a1c);border-radius:0 0 8px 8px;z-index:1;pointer-events:none;box-shadow:0 6px 16px rgba(0,0,0,.3)}
+.fp-frame[data-device="true"][data-category="Laptop"]{border-radius:8px 8px 0 0;border:10px solid #1c1c1e;border-bottom-width:0;box-shadow:0 12px 40px rgba(0,0,0,.4);overflow:visible;margin-bottom:22px;--fp-base:16px}
+.fp-frame[data-device="true"][data-category="Laptop"]::before{content:'';position:absolute;bottom:calc(-1 * var(--fp-base));left:calc(-1 * var(--fp-edge,10px));right:calc(-1 * var(--fp-edge,10px));height:var(--fp-base);background:linear-gradient(to bottom,#2a2a2e,#1a1a1c);border-radius:0 0 8px 8px;z-index:1;pointer-events:none;box-shadow:0 6px 16px rgba(0,0,0,.3)}
 .fp-frame[data-device="true"][data-category="Laptop"]::after{content:'';position:absolute;bottom:-9px;left:50%;transform:translateX(-50%);width:48px;height:3px;background:#0a0a0c;border-radius:2px;z-index:2;pointer-events:none}
 .fp-frame[data-device="true"][data-category="Laptop"] iframe{border-radius:3px}
 .fp-frame[data-device="true"][data-category="Laptop"][data-rotated="true"]{border-radius:0 8px 8px 0;border-width:10px 0 10px 10px;margin-bottom:0;margin-left:22px}
-.fp-frame[data-device="true"][data-category="Laptop"][data-rotated="true"]::before{bottom:0;top:0;left:-16px;right:auto;width:16px;height:auto;border-radius:8px 0 0 8px}
+.fp-frame[data-device="true"][data-category="Laptop"][data-rotated="true"]::before{bottom:0;top:0;left:calc(-1 * var(--fp-base));right:auto;width:var(--fp-base);height:auto;border-radius:8px 0 0 8px}
 .fp-frame[data-device="true"][data-category="Laptop"][data-rotated="true"]::after{bottom:auto;top:50%;left:-9px;transform:translateY(-50%);width:3px;height:48px}
 
 /* Desktop / generic device */
@@ -492,10 +501,9 @@ const PREVIEW_CSS = `
   .fp-frame[data-device="true"][data-category="Phone"]::before{height:14px;width:min(80px,36%)}
   .fp-frame[data-device="true"][data-category="Phone"] iframe{border-radius:16px}
   .fp-frame[data-device="true"][data-category="Tablet"]{border-width:6px;border-radius:10px}
-  .fp-frame[data-device="true"][data-category="Laptop"]{border-width:6px;margin-bottom:14px}
-  .fp-frame[data-device="true"][data-category="Laptop"]::before{bottom:-12px;height:12px}
-  .fp-frame[data-device="true"][data-category="Laptop"]::after{bottom:-7px;width:36px;height:2px}
-  .fp-frame[data-device="true"][data-category="Laptop"][data-rotated="true"]{margin-left:14px;margin-bottom:0}
+  .fp-frame[data-device="true"][data-category="Laptop"]{border-width:6px;margin-bottom:14px;--fp-base:12px;--fp-edge:6px}
+    .fp-frame[data-device="true"][data-category="Laptop"]::after{bottom:-7px;width:36px;height:2px}
+  .fp-frame[data-device="true"][data-category="Laptop"][data-rotated="true"]{border-width:6px 0 6px 6px;margin-left:14px;margin-bottom:0}
   .fp-frame[data-device="true"][data-category="Desktop"],
   .fp-frame[data-device="true"][data-category="Quick"]{border-width:4px}
   .fp-readout{font-size:10px;bottom:-36px;padding:4px 8px}
@@ -509,16 +517,24 @@ const PREVIEW_CSS = `
 .fp-resize:hover::after{opacity:1;transform:scale(1.15)}
 .fp-readout{position:absolute;bottom:-46px;left:50%;transform:translateX(-50%);padding:5px 11px;border-radius:6px;background:rgba(20,22,28,.94);backdrop-filter:blur(12px);border:1px solid var(--fp-border);font-family:var(--fp-mono);font-size:11px;font-weight:700;color:var(--fp-accent);white-space:nowrap;pointer-events:none;display:none}
 .fp-frame[data-mode="custom"] .fp-readout{display:block}
+.fp-frame[data-mode="custom"]{overflow:visible}
+.fp-frame[data-mode="custom"] .fp-resize{transform:scale(var(--fp-inv,1))}
+.fp-frame[data-mode="custom"] .fp-readout{bottom:auto;top:100%;margin-top:calc(10px * var(--fp-inv,1));transform-origin:50% 0;transform:translateX(-50%) scale(var(--fp-inv,1))}
 
 /* breakpoint ruler */
 .fp-ruler{position:absolute;top:0;left:0;right:0;height:24px;display:none;align-items:flex-end;justify-content:center;gap:0;padding:0 16px;pointer-events:none;z-index:5;opacity:0;transition:opacity .2s}
 .fp-overlay[data-ruler="true"] .fp-ruler{display:flex;opacity:1}
 .fp-ruler-mark{position:absolute;bottom:0;transform:translateX(-50%);font-size:9px;font-family:var(--fp-mono);font-weight:700;color:var(--fp-text-3);padding:2px 6px;background:rgba(20,22,28,.85);border-radius:3px;border:1px solid var(--fp-border);pointer-events:auto;cursor:pointer;transition:color .12s,background .12s}
+[data-theme="light"] .fp-ruler-mark{background:rgba(255,255,255,.92)}
 .fp-ruler-mark:hover{color:var(--fp-accent);background:var(--fp-accent-soft)}
 .fp-ruler-mark::before{content:'';position:absolute;top:100%;left:50%;width:1px;height:2000px;background:linear-gradient(to bottom,rgba(245,158,11,.3),transparent 40%);transform:translateX(-50%);pointer-events:none}
 
+/* grid lines switch (Settings → General) */
+.fp-overlay[data-grid="false"] .fp-stage-wrap{background:none}
+.fp-overlay[data-grid="false"] .fp-ruler-mark::before{display:none}
+
 /* ─── DOCK ─── */
-.fp-dock{flex-shrink:0;background:rgba(20,22,28,.94);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);border-top:1px solid var(--fp-border);box-shadow:0 -8px 32px rgba(0,0,0,.35);display:flex;flex-direction:column;transition:height calc(.28s/var(--fp-speed)) var(--fp-ease);height:var(--fp-dock-h);overflow:hidden;z-index:10;contain:layout paint}
+.fp-dock{flex-shrink:0;background:rgba(20,22,28,.94);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);border-top:1px solid var(--fp-border);box-shadow:0 -8px 32px rgba(0,0,0,.35);display:flex;flex-direction:column;transition:height calc(.28s/var(--fp-speed)) var(--fp-ease);height:var(--fp-dock-h);overflow:hidden;z-index:10;contain:layout paint;max-height:calc(100% - 140px)}
 .fp-dock[data-expanded="true"]{height:var(--fp-dock-h-expanded)}
 .fp-dock-bar{display:flex;align-items:center;gap:4px;padding:4px 8px;min-height:var(--fp-dock-h);flex-shrink:0;border-bottom:1px solid transparent}
 .fp-dock[data-expanded="true"] .fp-dock-bar{border-bottom-color:var(--fp-border)}
@@ -766,9 +782,9 @@ const PREVIEW_CSS = `
 .fp-search-match-hit{background:rgba(245,158,11,.3);color:#FBBF24;padding:0 1px;border-radius:2px}
 
 /* ─── DIALOGS ─── */
-.fp-dialog-backdrop{position:fixed;inset:0;z-index:var(--fp-z-dialog);background:rgba(5,7,10,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;pointer-events:none;transition:opacity calc(.2s/var(--fp-speed)) var(--fp-ease)}
+.fp-dialog-backdrop{position:fixed;inset:0;z-index:var(--fp-z-dialog);background:rgba(5,7,10,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:calc(16px + var(--fp-sat)) calc(16px + var(--fp-sar)) calc(16px + var(--fp-sab)) calc(16px + var(--fp-sal));opacity:0;pointer-events:none;transition:opacity calc(.2s/var(--fp-speed)) var(--fp-ease)}
 .fp-dialog-backdrop[data-open="true"]{opacity:1;pointer-events:auto}
-.fp-dialog{width:100%;max-width:540px;max-height:min(85vh,720px);background:var(--fp-surface-2);border:1px solid var(--fp-border-strong);border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden;transform:scale(.94) translateY(8px);transition:transform calc(.28s/var(--fp-speed)) var(--fp-ease-spring);font-family:var(--fp-sans);color:var(--fp-text)}
+.fp-dialog{width:100%;max-width:540px;max-height:min(100%,720px);background:var(--fp-surface-2);border:1px solid var(--fp-border-strong);border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden;transform:scale(.94) translateY(8px);transition:transform calc(.28s/var(--fp-speed)) var(--fp-ease-spring);font-family:var(--fp-sans);color:var(--fp-text)}
 .fp-dialog-backdrop[data-open="true"] .fp-dialog{transform:scale(1) translateY(0)}
 .fp-dialog.wide{max-width:720px}
 .fp-dialog.narrow{max-width:420px}
@@ -845,7 +861,7 @@ const PREVIEW_CSS = `
 .fp-device-btn.active .fp-device-btn-dims{color:rgba(245,158,11,.7)}
 
 /* command palette */
-.fp-palette-backdrop{position:fixed;inset:0;z-index:var(--fp-z-palette);background:rgba(5,7,10,.72);backdrop-filter:blur(8px);display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;opacity:0;pointer-events:none;transition:opacity .18s var(--fp-ease)}
+.fp-palette-backdrop{position:fixed;inset:0;z-index:var(--fp-z-palette);background:rgba(5,7,10,.72);backdrop-filter:blur(8px);display:flex;align-items:flex-start;justify-content:center;padding:calc(15vh + var(--fp-sat)) var(--fp-sar) var(--fp-sab) var(--fp-sal);opacity:0;pointer-events:none;transition:opacity .18s var(--fp-ease)}
 .fp-palette-backdrop[data-open="true"]{opacity:1;pointer-events:auto}
 .fp-palette{width:100%;max-width:560px;background:var(--fp-surface-2);border:1px solid var(--fp-border-strong);border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,.6);overflow:hidden;transform:scale(.96) translateY(-8px);transition:transform .22s var(--fp-ease-spring);font-family:var(--fp-sans);color:var(--fp-text)}
 .fp-palette-backdrop[data-open="true"] .fp-palette{transform:scale(1) translateY(0)}
@@ -854,7 +870,7 @@ const PREVIEW_CSS = `
 .fp-palette-input{flex:1;background:transparent;border:none;outline:none;color:var(--fp-text);font-size:14px;font-family:inherit;font-weight:500}
 .fp-palette-input::placeholder{color:var(--fp-text-3)}
 .fp-palette-hint{padding:3px 8px;border-radius:4px;background:rgba(255,255,255,.06);border:1px solid var(--fp-border);color:var(--fp-text-3);font-size:9.5px;font-weight:700;font-family:var(--fp-mono)}
-.fp-palette-results{max-height:min(60vh,420px);overflow-y:auto;padding:6px}
+.fp-palette-results{max-height:min(60vh,420px);max-height:min(50dvh,420px);overflow-y:auto;padding:6px}
 .fp-palette-group-label{padding:8px 10px 4px;font-size:9.5px;font-weight:800;color:var(--fp-text-3);text-transform:uppercase;letter-spacing:.6px}
 .fp-palette-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:background .1s;font-size:12px}
 .fp-palette-item[data-active="true"]{background:var(--fp-accent-soft)}
@@ -866,7 +882,7 @@ const PREVIEW_CSS = `
 .fp-palette-item-kbd{font-family:var(--fp-mono);font-size:9.5px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.06);color:var(--fp-text-3);flex-shrink:0}
 
 /* screenshot annotator */
-.fp-annotator{position:fixed;inset:0;z-index:var(--fp-z-dialog);background:rgba(5,7,10,.88);display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .2s}
+.fp-annotator{position:fixed;inset:0;box-sizing:border-box;padding:var(--fp-sat) var(--fp-sar) var(--fp-sab) var(--fp-sal);z-index:var(--fp-z-dialog);background:rgba(5,7,10,.88);display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .2s;font-family:var(--fp-sans)}
 .fp-annotator[data-open="true"]{opacity:1;pointer-events:auto}
 .fp-annotator-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--fp-border);flex-shrink:0;background:var(--fp-surface)}
 .fp-annotator-title{font-size:13px;font-weight:800;color:var(--fp-text);flex:1}
@@ -874,15 +890,15 @@ const PREVIEW_CSS = `
 .fp-annotator-tool{width:30px;height:30px;border-radius:4px;background:transparent;border:none;color:var(--fp-text-3);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s}
 .fp-annotator-tool:hover{color:var(--fp-text);background:rgba(255,255,255,.06)}
 .fp-annotator-tool.active{color:var(--fp-accent);background:var(--fp-accent-soft)}
-.fp-annotator-tool svg{width:14px;height:14px}
+.fp-annotator-tool svg,.fp-annotator .fp-dialog-close svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.2}
 .fp-annotator-canvas-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:20px;min-height:0}
 .fp-annotator-canvas{position:relative;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.5);line-height:0}
-.fp-annotator-canvas img{display:block;max-width:100%;max-height:100%;user-select:none;pointer-events:none}
-.fp-annotator-layer{position:absolute;inset:0;cursor:crosshair}
+.fp-annotator-canvas img{display:block;max-width:calc(100vw - 40px - var(--fp-sal) - var(--fp-sar));max-height:calc(100vh - 170px);max-height:calc(100dvh - 170px - var(--fp-sat) - var(--fp-sab));user-select:none;pointer-events:none}
+.fp-annotator-layer{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;touch-action:none}
 .fp-annotator-actions{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--fp-border);justify-content:flex-end;flex-shrink:0;background:var(--fp-surface)}
 
 /* toasts */
-.fp-toasts{position:fixed;bottom:calc(var(--fp-dock-h) + 12px);left:50%;transform:translateX(-50%);z-index:var(--fp-z-toast);width:calc(100% - 24px);max-width:380px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.fp-toasts{position:fixed;bottom:calc(var(--fp-dock-h) + 12px + var(--fp-sab));left:50%;transform:translateX(-50%);z-index:var(--fp-z-toast);width:calc(100% - 24px);max-width:380px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
 .fp-toast{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--fp-surface-3);border:1px solid var(--fp-border-strong);border-radius:10px;font-size:12px;color:var(--fp-text);box-shadow:0 10px 40px rgba(0,0,0,.5);transform:translateY(20px);opacity:0;transition:all .3s var(--fp-ease-spring);pointer-events:auto;font-family:var(--fp-sans)}
 .fp-toast.show{transform:translateY(0);opacity:1}
 .fp-toast-icon{width:16px;height:16px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
@@ -901,7 +917,7 @@ const PREVIEW_CSS = `
 
 /* more menu */
 .fp-more-wrap{position:relative;display:inline-flex}
-.fp-more-menu{position:absolute;top:calc(100% + 6px);right:0;min-width:200px;max-width:min(260px,calc(100vw - 16px));background:var(--fp-surface-2);border:1px solid var(--fp-border-strong);border-radius:10px;box-shadow:0 16px 48px rgba(0,0,0,.55);padding:4px;z-index:40;opacity:0;pointer-events:none;transform:translateY(-4px) scale(.98);transition:opacity .15s var(--fp-ease),transform .15s var(--fp-ease-spring)}
+.fp-more-menu{position:absolute;top:calc(100% + 6px);right:0;min-width:200px;max-width:min(260px,calc(100vw - 16px));background:var(--fp-surface-2);border:1px solid var(--fp-border-strong);border-radius:10px;box-shadow:0 16px 48px rgba(0,0,0,.55);padding:4px;max-height:calc(100vh - 64px);max-height:calc(100dvh - 64px - var(--fp-sat) - var(--fp-sab));overflow-y:auto;overscroll-behavior:contain;z-index:40;opacity:0;pointer-events:none;transform:translateY(-4px) scale(.98);transition:opacity .15s var(--fp-ease),transform .15s var(--fp-ease-spring)}
 .fp-more-menu[data-open="true"]{opacity:1;pointer-events:auto;transform:translateY(0) scale(1)}
 .fp-more-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:none;border-radius:7px;background:transparent;color:var(--fp-text);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;text-align:left;transition:background .12s}
 .fp-more-item:hover{background:rgba(255,255,255,.07)}
@@ -936,16 +952,15 @@ const PREVIEW_CSS = `
   .fp-stor-row{grid-template-columns:1fr 1fr 40px;font-size:9.5px}
   .fp-resp-grid,.fp-perf-vitals{grid-template-columns:repeat(2,1fr)}
   .fp-devtools-grid{grid-template-columns:1fr 1fr}
-  .fp-dialog{max-height:92vh;border-radius:12px;width:calc(100% - 12px)}
+  .fp-dialog{max-height:100%;border-radius:12px;width:calc(100% - 12px)}
   .fp-dialog.wide,.fp-dialog.narrow{max-width:calc(100vw - 12px)}
   .fp-dialog-foot{flex-wrap:wrap}
-  .fp-palette-backdrop{padding:6vh 8px 8px}
+  .fp-palette-backdrop{padding:calc(6vh + var(--fp-sat)) calc(8px + var(--fp-sar)) calc(8px + var(--fp-sab)) calc(8px + var(--fp-sal))}
   .fp-toolbar{gap:3px}
   .fp-chip{padding:3px 7px;font-size:9.5px}
 }
 
 @media (max-width: 400px) {
-  .fp-size-bar .fp-size-btn[data-size="laptop"]{display:none}
   .fp-header{padding:4px 6px}
   .fp-btn.icon{width:26px;height:26px}
 }
@@ -1292,25 +1307,6 @@ const BRIDGE_SCRIPT = `
     else if (t === "folio:get-element-style") getElementStyle(e.data.path);
     else if (t === "folio:start-heatmap") _heatActive = true;
     else if (t === "folio:stop-heatmap") { _heatActive = false; post("folio:heatmap-data", { points: [] }); _heatPoints = []; }
-    else if (t === "folio:screenshot") {
-      try {
-        var html = document.documentElement.outerHTML;
-        var w = e.data.width || window.innerWidth;
-        var h = e.data.height || window.innerHeight;
-        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:' + w + 'px;height:' + h + 'px">' + html + '</div></foreignObject></svg>';
-        var blob = new Blob([svg], { type: "image/svg+xml" });
-        var url = URL.createObjectURL(blob);
-        var img = new Image();
-        img.onload = function() {
-          var c = document.createElement("canvas"); c.width = w; c.height = h;
-          var ctx = c.getContext("2d"); ctx.drawImage(img, 0, 0, w, h);
-          URL.revokeObjectURL(url);
-          post("folio:screenshot-data", { dataUrl: c.toDataURL("image/png") });
-        };
-        img.onerror = function() { post("folio:screenshot-data", { dataUrl: null }); };
-        img.src = url;
-      } catch (err) { post("folio:screenshot-data", { dataUrl: null }); }
-    }
   });
 
   post("folio:ready", {});
@@ -1433,7 +1429,7 @@ const ST = {
   pinnedSections: new Set(),
   fullscreen: false,
   source: { kind: "project", file: null, url: null },
-  sizer: { mode: "fit", device: "phone", custom: { w: 768, h: 1024 }, rotated: false, scale: 1, pid: null },
+  sizer: { mode: "fit", device: null, custom: { w: 768, h: 1024 }, rotated: false, scale: 1, pid: null },
   pid: null,
   projectName: null,
   activeFile: null,
@@ -1575,7 +1571,7 @@ function fmtTime(ts) {
   return [d.getHours(), d.getMinutes(), d.getSeconds()].map(x => String(x).padStart(2, "0")).join(":");
 }
 
-function toast(msg, type = "info", duration) {
+function toast(msg, type = "info", duration, action) {
   const d = duration ?? (type === "error" || type === "warning" ? 4500 : 3000);
   const container = ensureToastContainer();
   const iconName = type === "success" ? "check" : type === "error" ? "alert" : type === "warning" ? "alert" : "info";
@@ -1583,6 +1579,9 @@ function toast(msg, type = "info", duration) {
     el("span", { class: "fp-toast-icon", html: svgIcon(iconName) }),
     el("span", { class: "fp-toast-msg" }, msg)
   );
+  if (action) {
+    node.appendChild(el("button", { class: "fp-toast-action", type: "button", onclick: () => { node.remove(); action.onClick(); } }, action.label));
+  }
   container.appendChild(node);
   requestAnimationFrame(() => node.classList.add("show"));
   setTimeout(() => { node.classList.remove("show"); setTimeout(() => node.remove(), 300); }, d);
@@ -1667,6 +1666,8 @@ function applySettings() {
   }
 
   ST.overlayEl?.setAttribute("data-ruler", s.showBreakpointRuler ? "true" : "false");
+  ST.overlayEl?.setAttribute("data-grid", s.showGridLines ? "true" : "false");
+  if (ST.frameEl?.isConnected) renderRuler();
   if (ST.devtools) ST.devtools.throttlePreset = s.throttlePreset;
 
   // Apply throttle if bridge ready
@@ -2962,7 +2963,6 @@ function handleMessage(e) {
       if (e.data.style) renderInspectorStyles(e.data.style);
       break;
     case MSG.HEATMAP_DATA: renderHeatmap(e.data.points || []); break;
-    case MSG.SCREENSHOT_DATA: break; // handled by promise
   }
   updateSectionMeta();
   if (ST.openSections.size) for (const id of ST.openSections) { const sec = ST.sectionsEl.querySelector(`[data-section="${id}"]`); if (sec?.getAttribute("data-open") === "true") renderSection(id); }
@@ -3000,13 +3000,15 @@ function applySize(mode, custom) {
   frame.setAttribute("data-mode", mode);
   frame.setAttribute("data-rotated", rotated ? "true" : "false");
 
-  // Reset margins that device chrome may set
-  frame.style.marginBottom = "";
-  frame.style.marginLeft = "";
-  frame.style.marginRight = "";
-  frame.style.marginTop = "";
+  // Reset anything a previous mode set
+  frame.style.margin = "";
+  frame.style.transform = "";
+  frame.style.transformOrigin = "center center";
+  frame.style.removeProperty("--fp-inv");
 
   if (mode === "fit") {
+    stage.removeAttribute("data-scaled");
+    stage.scrollTo(0, 0);
     frame.style.width = "100%";
     frame.style.height = "100%";
     frame.style.maxWidth = "100%";
@@ -3014,60 +3016,66 @@ function applySize(mode, custom) {
     frame.setAttribute("data-device", "false");
     frame.removeAttribute("data-category");
     frame.removeAttribute("data-notch");
+    ST.sizer.scale = 1;
     const readout = $("#fpReadout");
     if (readout) readout.textContent = "";
+    renderRuler();
     return;
   }
 
-  let w, h, isDevice = mode !== "custom";
+  let w, h, isDevice = true;
   let category = "Desktop";
   let notch = false;
   if (mode === "custom") {
     w = custom?.w || ST.sizer.custom.w;
     h = custom?.h || ST.sizer.custom.h;
     isDevice = false;
-  } else if (ST.sizer.device && DEVICE_PRESETS[ST.sizer.device]) {
-    const preset = DEVICE_PRESETS[ST.sizer.device];
+  } else {
+    // A picked device only applies in "device" mode; the quick buttons use their own preset
+    const preset = (mode === "device" ? DEVICE_PRESETS[ST.sizer.device] : DEVICE_PRESETS[mode]) || DEVICE_PRESETS.phone;
     w = preset.w; h = preset.h;
-    isDevice = true;
     category = preset.category || "Desktop";
     notch = !!preset.notch;
-  } else if (DEVICE_PRESETS[mode]) {
-    const p = DEVICE_PRESETS[mode];
-    w = p.w; h = p.h;
-    category = p.category || "Quick";
-    notch = !!p.notch;
-  } else {
-    w = 393; h = 852;
-    category = "Phone";
   }
   if (rotated) [w, h] = [h, w];
 
-  // Account for stage padding + device chrome so frame stays centered on all screens
-  const stagePad = window.innerWidth <= 640 ? 16 : 24;
-  const chromeExtra = category === "Laptop" ? (rotated ? 24 : 28) : (category === "Phone" || category === "Tablet" ? 12 : 8);
-  const availW = Math.max(100, (stage.clientWidth || stage.offsetWidth || 320) - stagePad - chromeExtra);
-  const availH = Math.max(100, (stage.clientHeight || stage.offsetHeight || 480) - stagePad - chromeExtra);
-  const scale = Math.min(1, availW / w, availH / h);
-  ST.sizer.scale = scale;
-
-  const fw = Math.max(80, Math.round(w * scale));
-  const fh = Math.max(80, Math.round(h * scale));
-  frame.style.width = fw + "px";
-  frame.style.height = fh + "px";
-  frame.style.maxWidth = "100%";
-  frame.style.maxHeight = "none";
+  // Chrome attributes first, so border sizes can be measured below
   frame.setAttribute("data-device", isDevice ? "true" : "false");
   frame.setAttribute("data-category", category);
   if (notch) frame.setAttribute("data-notch", "true");
   else frame.removeAttribute("data-notch");
 
-  // Laptop base margin is handled by CSS; keep JS margin only as scale-aware tweak on large scales
-  if (category === "Laptop" && !rotated && scale > 0.5) {
-    frame.style.marginBottom = Math.round(16 * Math.min(1, scale)) + "px";
-  } else if (category === "Laptop" && rotated && scale > 0.5) {
-    frame.style.marginLeft = Math.round(16 * Math.min(1, scale)) + "px";
-  }
+  // Real logical size — never shrink the viewport itself
+  stage.setAttribute("data-scaled", "true");
+  stage.scrollTo(0, 0);
+  frame.style.width  = w + "px";
+  frame.style.height = h + "px";
+  frame.style.maxWidth = "none";
+  frame.style.maxHeight = "none";
+
+  // Total footprint = screen + bezel + laptop base
+  const cs = getComputedStyle(frame);
+  const px = (v) => parseFloat(v) || 0;
+  const base = isDevice && category === "Laptop" && !ST.fullscreen ? px(cs.getPropertyValue("--fp-base")) : 0;
+  const baseLeft = rotated ? base : 0;
+  const baseBottom = rotated ? 0 : base;
+  const outerW = w + px(cs.borderLeftWidth) + px(cs.borderRightWidth) + baseLeft;
+  const outerH = h + px(cs.borderTopWidth) + px(cs.borderBottomWidth) + baseBottom;
+
+  // Breathing room; custom mode also needs space for the handles and readout
+  const gutter = ST.fullscreen ? 0 : (window.innerWidth <= 640 ? 16 : 24);
+  const gutterW = mode === "custom" ? Math.max(gutter, 40) : gutter;
+  const gutterH = mode === "custom" ? Math.max(gutter, 84) : gutter;
+  const availW = Math.max(40, (stage.clientWidth || window.innerWidth) - gutterW);
+  const availH = Math.max(40, (stage.clientHeight || window.innerHeight) - gutterH);
+  const scale = Math.min(1, availW / outerW, availH / outerH);
+  ST.sizer.scale = scale;
+
+  // translate(-50%) centres the true-size box on the stage; scale() shrinks it in place
+  const dx = (baseLeft * scale) / 2;
+  const dy = (-baseBottom * scale) / 2;
+  frame.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(${scale})`;
+  frame.style.setProperty("--fp-inv", String(1 / scale));
 
   const readout = $("#fpReadout");
   if (readout) readout.textContent = `${w} × ${h}${scale < 0.99 ? " · " + Math.round(scale * 100) + "%" : ""}`;
@@ -3079,15 +3087,45 @@ function renderRuler() {
   const ruler = $("#fpRuler");
   if (!ruler) return;
   ruler.innerHTML = "";
-  if (!ST.settings.showBreakpointRuler) return;
-  const marks = [320, 375, 414, 768, 1024, 1280, 1440, 1920];
-  const stageW = ST.stageEl.clientWidth;
-  const frameW = ST.frameEl.offsetWidth;
-  for (const m of marks) {
-    if (m > frameW) continue;
-    const pct = (m / frameW) * 100;
-    const mark = el("div", { class: "fp-ruler-mark", style: { left: pct + "%" }, title: `${m}px` }, String(m));
-    ruler.appendChild(mark);
+  if (!ST.settings.showBreakpointRuler || ST.sizer.mode === "fit") return;
+  const screen = ST.iframeEl;
+  const logicalW = screen.offsetWidth;
+  if (!logicalW) return;
+  const box = screen.getBoundingClientRect();
+  const origin = ruler.getBoundingClientRect();
+  const scale = box.width / logicalW;
+  let lastX = -Infinity;
+  for (const m of [320, 375, 414, 768, 1024, 1280, 1440, 1920]) {
+    if (m > logicalW) break;
+    const x = box.left - origin.left + m * scale;
+    if (x - lastX < 30 || x > origin.width - 18) continue; // avoid overlapping labels
+    lastX = x;
+    ruler.appendChild(el("div", { class: "fp-ruler-mark", style: { left: x + "px" }, title: `${m}px` }, String(m)));
+  }
+}
+
+/** Re-fit whenever the stage itself changes size (dock, rotation, keyboard, safe areas). */
+function watchStage() {
+  ST.stageObserver?.disconnect();
+  if (typeof ResizeObserver === "undefined") return;
+  ST.stageObserver = new ResizeObserver(() => requestAnimationFrame(() => applySize(ST.sizer.mode, ST.sizer.custom)));
+  ST.stageObserver.observe(ST.stageEl);
+}
+
+/** Installed PWAs only report safe-area insets with viewport-fit=cover. Restored on close. */
+function setViewportFit(enable) {
+  let meta = document.querySelector('meta[name="viewport"]');
+  if (enable) {
+    if (!meta) {
+      meta = el("meta", { name: "viewport", content: "width=device-width, initial-scale=1" });
+      document.head.appendChild(meta);
+    }
+    if (ST.prevViewport == null) ST.prevViewport = meta.getAttribute("content") || "";
+    const parts = ST.prevViewport.split(",").map(p => p.trim()).filter(p => p && !/^viewport-fit/i.test(p));
+    meta.setAttribute("content", [...parts, "viewport-fit=cover"].join(", "));
+  } else if (meta && ST.prevViewport != null) {
+    meta.setAttribute("content", ST.prevViewport);
+    ST.prevViewport = null;
   }
 }
 
@@ -3285,6 +3323,7 @@ function showSettings() {
   g.appendChild(createSelect("Theme", [{ v: "auto", l: "Auto" }, { v: "dark", l: "Dark" }, { v: "light", l: "Light" }], s.theme, v => { s.theme = v; saveSettings(); }));
   g.appendChild(createSelect("Reduced motion", [{ v: "system", l: "System" }, { v: "true", l: "On" }, { v: "false", l: "Off" }], s.reducedMotion, v => { s.reducedMotion = v; saveSettings(); }));
   g.appendChild(createSlider("Animation speed", 0.5, 2, 0.1, s.animationSpeed, v => { s.animationSpeed = v; saveSettings(); }));
+  g.appendChild(createToggle("Show grid lines", s.showGridLines, v => { s.showGridLines = v; saveSettings(); }));
   g.appendChild(createToggle("Show breakpoint ruler", s.showBreakpointRuler, v => { s.showBreakpointRuler = v; saveSettings(); }));
   g.appendChild(createToggle("Auto refresh on save", s.autoRefreshOnSave, v => { s.autoRefreshOnSave = v; saveSettings(); }));
 
@@ -3707,67 +3746,425 @@ async function pushDevEdit() {
 // ─────────────────────────────────────────────────────────────────
 //  SCREENSHOT + ANNOTATOR
 // ─────────────────────────────────────────────────────────────────
+const SHOT = {
+  maxNodes: 8000,
+  maxPixels: 16000000,      // iOS canvas limit is ~16.7 MP
+  fetchTimeout: 4000,
+  blank: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+  skip: new Set(["script", "style", "link", "meta", "title", "head", "noscript", "template", "base", "source", "track"]),
+};
+const SVG_NS = "http://www.w3.org/2000/svg";
+const XLINK_NS = "http://www.w3.org/1999/xlink";
+
 async function takeScreenshot({ download = ST.settings.screenshotDownload, toClipboard = ST.settings.screenshotCopy, annotate = ST.settings.screenshotAnnotate, filename } = {}) {
+  if (ST.capturing) return;
+  ST.capturing = true;
   try {
-    const frame = ST.frameEl;
-    const w = frame.offsetWidth;
-    const h = frame.offsetHeight;
-    let dataUrl = null;
-    if (ST.source.kind === "project" && ST.bridgeReady) {
-      dataUrl = await new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve(null), 6000);
-        const handler = (e) => {
-          if (!e.data || e.data.__folio !== true) return;
-          if (e.data.type === MSG.SCREENSHOT_DATA) {
-            clearTimeout(timeout);
-            window.removeEventListener("message", handler);
-            resolve(e.data.dataUrl);
-          }
-        };
-        window.addEventListener("message", handler);
-        postToChild(REQ.SCREENSHOT, { width: w, height: h });
-      });
+    // Decided synchronously: screen capture must start inside the user's tap
+    const doc = getFrameDocument();
+    let canvas;
+    if (doc) {
+      setPreviewLoading(true, "Capturing screenshot…");
+      canvas = await renderIframeToCanvas(ST.iframeEl);
+    } else {
+      canvas = await captureViaDisplayMedia();
     }
-    if (!dataUrl) {
-      try { const canvas = await renderIframeToCanvas(ST.iframeEl, w, h); dataUrl = canvas.toDataURL("image/png"); } catch {}
-    }
-    if (!dataUrl) { toast("Screenshot failed", "error"); return; }
+    const dataUrl = canvas.toDataURL("image/png");
+    setPreviewLoading(false);
     if (annotate) openAnnotator(dataUrl, { download, toClipboard, filename });
     else await saveScreenshot(dataUrl, { download, toClipboard, filename });
-  } catch (err) { toast("Screenshot failed: " + err.message, "error"); }
+  } catch (err) {
+    setPreviewLoading(false);
+    if (err?.name === "NotAllowedError" || err?.name === "AbortError") toast("Screenshot cancelled", "info");
+    else {
+      console.warn("[preview] screenshot failed:", err);
+      toast("Screenshot failed: " + (err?.message || err), "error");
+    }
+  } finally {
+    ST.capturing = false;
+  }
 }
 
-async function renderIframeToCanvas(iframe, w, h) {
+/** The preview's document, or null when it is cross-origin. */
+function getFrameDocument() {
+  try {
+    const doc = ST.iframeEl?.contentDocument;
+    if (!doc?.body) return null;
+    if (ST.source?.kind === "url" && doc.URL === "about:blank") return null;
+    return doc;
+  } catch { return null; }
+}
+
+/** Paints what is visible in the preview (current scroll position) onto a canvas. */
+async function renderIframeToCanvas(iframe) {
   const doc = iframe.contentDocument;
-  if (!doc) throw new Error("cross-origin");
-  const html = doc.documentElement.outerHTML;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:${w}px;height:${h}px">${html}</div></foreignObject></svg>`;
-  const blob = new Blob([svg], { type: "image/svg+xml" });
-  const url = URL.createObjectURL(blob);
-  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+  const win = doc.defaultView;
+  const w = iframe.clientWidth;
+  const h = iframe.clientHeight;
+  if (!w || !h) throw new Error("preview has no size yet");
+  await Promise.race([doc.fonts?.ready, new Promise(r => setTimeout(r, 1500))]);
+
+  // Blank sandbox used to learn each tag's default styles, so only differences are copied
+  const sandbox = document.createElement("iframe");
+  sandbox.setAttribute("aria-hidden", "true");
+  sandbox.style.cssText = "position:fixed;left:-9999px;top:0;width:10px;height:10px;border:0;visibility:hidden";
+  document.body.appendChild(sandbox);
+
+  try {
+    const ctx = { doc, win, sandbox, jobs: [], pseudo: [], cache: new Map(), defaults: new Map(), families: new Set(), count: 0 };
+    const tree = cloneForCapture(doc.documentElement, null, ctx, null);
+    await Promise.all(ctx.jobs);
+    const fontCss = await collectFontCss(ctx);
+
+    const rootBg = [doc.documentElement, doc.body]
+      .map(n => win.getComputedStyle(n).backgroundColor)
+      .find(c => c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)") || "#ffffff";
+
+    const page = document.createElement("div");
+    page.style.cssText = `position:relative;overflow:hidden;width:${w}px;height:${h}px;transform:translateZ(0);background:${rootBg}`;
+    const style = document.createElement("style");
+    style.textContent = fontCss + ctx.pseudo.map(p => `${p.selector}{${p.css}}`).join("");
+    const scroller = document.createElement("div");
+    scroller.style.cssText = `position:relative;left:${-win.scrollX}px;top:${-win.scrollY}px;width:${w}px;height:${h}px`;
+    scroller.appendChild(tree);
+    page.append(style, scroller);
+
+    const wantedDpr = DEVICE_PRESETS[ST.sizer.mode === "device" ? ST.sizer.device : ST.sizer.mode]?.dpr || window.devicePixelRatio || 1;
+    const ratio = Math.min(Math.max(1, wantedDpr), Math.sqrt(SHOT.maxPixels / (w * h)));
+    const outW = Math.floor(w * ratio);
+    const outH = Math.floor(h * ratio);
+
+    const markup = new XMLSerializer().serializeToString(page);
+    const svg = `<svg xmlns="${SVG_NS}" width="${outW}" height="${outH}" viewBox="0 0 ${w} ${h}"><foreignObject x="0" y="0" width="${w}" height="${h}">${markup}</foreignObject></svg>`
+      // strip characters XML does not allow (keeps valid surrogate pairs such as emoji)
+      .replace(/([\uD800-\uDBFF][\uDC00-\uDFFF])|[\x00-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF￾￿]/g, (m, pair) => pair || "");
+
+    // data: URL, not blob: — a blob SVG with foreignObject taints the canvas
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error("this page could not be rendered to an image"));
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    });
+    try { await img.decode(); } catch {}
+    await new Promise(r => setTimeout(r, 120)); // WebKit paints embedded images a beat late
+
+    const canvas = document.createElement("canvas");
+    canvas.width = outW;
+    canvas.height = outH;
+    const g = canvas.getContext("2d");
+    g.fillStyle = rootBg;
+    g.fillRect(0, 0, outW, outH);
+    g.drawImage(img, 0, 0, outW, outH);
+    return canvas;
+  } finally {
+    sandbox.remove();
+  }
+}
+
+function captureDefaults(ctx, ns, tag, type) {
+  const key = `${ns}|${tag}|${type || ""}`;
+  if (!ctx.defaults.has(key)) {
+    const d = ctx.sandbox.contentDocument;
+    const probe = ns === SVG_NS ? d.createElementNS(SVG_NS, tag) : d.createElement(tag);
+    if (type) probe.setAttribute("type", type);
+    let host = d.body;
+    if (ns === SVG_NS && tag !== "svg") { host = d.createElementNS(SVG_NS, "svg"); d.body.appendChild(host); }
+    host.appendChild(probe);
+    ctx.defaults.set(key, ctx.sandbox.contentWindow.getComputedStyle(probe));
+    // probes stay attached (a detached element has no computed style); sandbox is discarded afterwards
+  }
+  return ctx.defaults.get(key);
+}
+
+function captureCss(cs, defaults, parentCs) {
+  let css = "";
+  for (let i = 0; i < cs.length; i++) {
+    const prop = cs[i];
+    if (prop.startsWith("--") || prop.startsWith("animation") || prop.startsWith("transition")) continue;
+    const value = cs.getPropertyValue(prop);
+    const always = (prop === "width" || prop === "height" || prop === "display") && value !== "auto";
+    if (!always && value === defaults.getPropertyValue(prop) && (!parentCs || value === parentCs.getPropertyValue(prop))) continue;
+    css += `${prop}:${value};`;
+  }
+  return css;
+}
+
+function fetchAsDataUrl(url, ctx) {
+  if (url.startsWith("data:")) return Promise.resolve(url);
+  if (!ctx.cache.has(url)) {
+    ctx.cache.set(url, (async () => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), SHOT.fetchTimeout);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal });
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        return await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        });
+      } catch { return null; }
+      finally { clearTimeout(timer); }
+    })());
+  }
+  return ctx.cache.get(url);
+}
+
+/** Replaces every url(...) in a CSS string with embedded data (SVG images cannot load files). */
+async function inlineCssUrls(css, ctx, baseUrl) {
+  const pattern = /url\(\s*(["']?)((?:\\.|(?!\1\)).)*?)\1\s*\)/g;
+  const found = [...css.matchAll(pattern)];
+  const replacements = await Promise.all(found.map(async (m) => {
+    const raw = m[2].replace(/\\(["'])/g, "$1");
+    if (raw.startsWith("data:")) return m[0];
+    if (raw.startsWith("#") || raw.startsWith("about:srcdoc#")) return `url("#${raw.split("#")[1]}")`;
+    let abs = raw;
+    try { abs = new URL(raw, baseUrl || ctx.doc.baseURI).href; } catch {}
+    return `url("${(await fetchAsDataUrl(abs, ctx)) || SHOT.blank}")`;
+  }));
+  let i = 0;
+  return css.replace(pattern, () => replacements[i++]);
+}
+
+function snapshotElement(node) {
+  try {
+    const c = document.createElement("canvas");
+    c.width = node.videoWidth || node.naturalWidth || node.width;
+    c.height = node.videoHeight || node.naturalHeight || node.height;
+    c.getContext("2d").drawImage(node, 0, 0, c.width, c.height);
+    return c.toDataURL("image/png");
+  } catch { return null; }
+}
+
+/** Deep-clones a live node with its computed styles baked in. */
+function cloneForCapture(node, parentCs, ctx, shift) {
+  if (node.nodeType === 3) {
+    if (!shift || !node.nodeValue.trim()) return document.createTextNode(node.nodeValue);
+    const span = document.createElement("span");
+    span.style.cssText = `position:relative;left:${-shift.x}px;top:${-shift.y}px`;
+    span.textContent = node.nodeValue;
+    return span;
+  }
+  if (node.nodeType !== 1) return null;
+  const tag = node.localName;
+  const ns = node.namespaceURI;
+  const isSvg = ns === SVG_NS;
+  if (!isSvg && SHOT.skip.has(tag)) return null;
+  const cs = ctx.win.getComputedStyle(node);
+  if (!isSvg && cs.display === "none") return null;
+  if (++ctx.count > SHOT.maxNodes) return null;
+
+  let outTag = tag;
+  if (!isSvg) {
+    if (tag === "html" || tag === "body" || tag.includes("-") || ["iframe", "embed", "object"].includes(tag)) outTag = "div";
+    else if (tag === "canvas" || tag === "video") outTag = "img";
+  }
+  let out;
+  try { out = isSvg || ns !== "http://www.w3.org/1999/xhtml" ? document.createElementNS(ns, outTag) : document.createElement(outTag); }
+  catch { out = document.createElement("div"); }
+
+  for (const { name, value } of node.attributes) {
+    if (/^(on|xmlns)|^(style|class|src|srcset|sizes|loading|nonce|autofocus)$/i.test(name)) continue;
+    if (name === "xlink:href") { out.setAttributeNS(XLINK_NS, name, value); continue; }
+    if (!/^[A-Za-z_][\w.-]*$/.test(name)) continue; // e.g. @click or :value would break the XML
+    try { out.setAttribute(name, value); } catch {}
+  }
+
+  ctx.families.add(cs.fontFamily);
+  let css = captureCss(cs, captureDefaults(ctx, isSvg ? SVG_NS : "html", outTag, tag === "input" ? node.type : ""), parentCs);
+  if (/(auto|scroll)/.test(cs.overflowX + cs.overflowY)) css += "overflow:hidden;";
+  if (shift) css += `translate:${-shift.x}px ${-shift.y}px;`;
+  out.setAttribute("style", css);
+  if (css.includes("url(")) ctx.jobs.push(inlineCssUrls(css, ctx).then(v => out.setAttribute("style", v)));
+
+  if (!isSvg) {
+    for (const pseudo of ["::before", "::after"]) {
+      const ps = ctx.win.getComputedStyle(node, pseudo);
+      if (!ps.content || ps.content === "none" || ps.content === "normal" || ps.display === "none") continue;
+      const cls = `fpc${ctx.count}`;
+      out.classList.add(cls);
+      const rule = { selector: `.${cls}${pseudo}`, css: captureCss(ps, captureDefaults(ctx, "html", "span"), cs) + `content:${ps.content};` };
+      ctx.pseudo.push(rule);
+      if (rule.css.includes("url(")) ctx.jobs.push(inlineCssUrls(rule.css, ctx).then(v => { rule.css = v; }));
+    }
+  }
+
+  if (tag === "img" && !isSvg) {
+    const src = node.currentSrc || node.src;
+    if (src) ctx.jobs.push(fetchAsDataUrl(src, ctx).then(data => out.setAttribute("src", data || snapshotElement(node) || SHOT.blank)));
+    return out;
+  }
+  if (tag === "canvas" || tag === "video") {
+    let data = null;
+    try { data = tag === "canvas" ? node.toDataURL() : snapshotElement(node); } catch {}
+    out.setAttribute("src", data || SHOT.blank);
+    return out;
+  }
+  if (["iframe", "embed", "object"].includes(tag)) {
+    out.textContent = "Embedded content";
+    return out;
+  }
+  if (isSvg && tag === "image") {
+    const href = node.href?.baseVal;
+    if (href) ctx.jobs.push(fetchAsDataUrl(new URL(href, ctx.doc.baseURI).href, ctx).then(data => out.setAttribute("href", data || SHOT.blank)));
+  }
+  if (tag === "textarea") { out.textContent = node.value; return out; }
+  if (tag === "input") {
+    out.setAttribute("value", node.type === "password" ? "•".repeat(node.value.length) : node.value);
+    if (node.checked) out.setAttribute("checked", "checked"); else out.removeAttribute("checked");
+    return out;
+  }
+  if (tag === "option") { if (node.selected) out.setAttribute("selected", "selected"); else out.removeAttribute("selected"); }
+
+  const isScroller = node !== ctx.doc.documentElement && node !== ctx.doc.scrollingElement && (node.scrollTop || node.scrollLeft);
+  const childShift = isScroller ? { x: node.scrollLeft, y: node.scrollTop } : null;
+  let children = node.childNodes;
+  if (node.shadowRoot) children = node.shadowRoot.childNodes;
+  else if (tag === "slot" && node.assignedNodes?.().length) children = node.assignedNodes();
+  for (const child of children) {
+    const copy = cloneForCapture(child, cs, ctx, childShift);
+    if (copy) out.appendChild(copy);
+  }
+  return out;
+}
+
+/** Embeds the @font-face rules the page actually uses. */
+async function collectFontCss(ctx) {
+  const used = [...ctx.families].join(",").toLowerCase();
+  const faces = [];
+  const consider = (text, base) => {
+    const family = /font-family\s*:\s*["']?([^;"'}]+)/i.exec(text)?.[1]?.trim().toLowerCase();
+    if (!family || !used.includes(family)) return;
+    const range = /unicode-range\s*:\s*([^;}]+)/i.exec(text)?.[1];
+    if (range && !/U\+0000/i.test(range)) return; // keep the basic Latin subset only
+    faces.push({ text, base });
+  };
+  const walk = (rules, base) => {
+    for (const rule of rules) {
+      if (rule.type === 5) consider(rule.cssText, base);
+      else if (rule.styleSheet) { try { walk(rule.styleSheet.cssRules, rule.styleSheet.href || base); } catch {} }
+      else if (rule.cssRules) walk(rule.cssRules, base);
+    }
+  };
+  for (const sheet of ctx.doc.styleSheets) {
+    const base = sheet.href || ctx.doc.baseURI;
+    try { walk(sheet.cssRules, base); }
+    catch {
+      // Cross-origin stylesheet (e.g. Google Fonts): read it over CORS
+      if (!sheet.href) continue;
+      try {
+        const text = await (await fetch(sheet.href, { signal: AbortSignal.timeout?.(SHOT.fetchTimeout) })).text();
+        for (const block of text.match(/@font-face\s*{[^}]*}/g) || []) consider(block, sheet.href);
+      } catch {}
+    }
+  }
+  return (await Promise.all(faces.slice(0, 24).map(f => inlineCssUrls(f.text, ctx, f.base)))).join("");
+}
+
+/** Cross-origin URL previews: capture the tab and crop to the preview (desktop browsers). */
+async function captureViaDisplayMedia() {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    throw new Error("external sites can't be captured on this device. Use your phone's screenshot buttons, or preview a project file");
+  }
+  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false, preferCurrentTab: true, selfBrowserSurface: "include" });
+  try {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+    await video.play();
+    await new Promise(r => setTimeout(r, 450)); // let the share prompt disappear
+    const isTab = stream.getVideoTracks()[0]?.getSettings().displaySurface === "browser";
+    let sx = 0, sy = 0, sw = video.videoWidth, sh = video.videoHeight;
+    if (isTab) {
+      const r = ST.iframeEl.getBoundingClientRect();
+      const kx = video.videoWidth / window.innerWidth;
+      const ky = video.videoHeight / window.innerHeight;
+      sx = Math.max(0, r.left * kx);
+      sy = Math.max(0, r.top * ky);
+      sw = Math.min(video.videoWidth - sx, r.width * kx);
+      sh = Math.min(video.videoHeight - sy, r.height * ky);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(sw);
+    canvas.height = Math.round(sh);
+    canvas.getContext("2d").drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  } finally {
+    stream.getTracks().forEach(t => t.stop());
+  }
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [head, body] = dataUrl.split(",");
+  const bytes = atob(body);
+  const buf = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+  return new Blob([buf], { type: head.slice(5, head.indexOf(";")) });
+}
+
+/** Applies the Format and Quality settings. */
+async function encodeScreenshot(pngUrl) {
+  const format = ST.settings.screenshotFormat || "png";
+  if (format === "png") return pngUrl;
+  const img = new Image();
+  img.src = pngUrl;
+  await img.decode();
   const canvas = document.createElement("canvas");
-  canvas.width = w; canvas.height = h;
-  canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-  URL.revokeObjectURL(url);
-  return canvas;
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.getContext("2d").drawImage(img, 0, 0);
+  return canvas.toDataURL(`image/${format}`, ST.settings.screenshotQuality);
+}
+
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = el("a", { href: url, download: name });
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+/** iOS (especially installed PWAs) saves reliably only through the share sheet. */
+async function deliverScreenshot(blob, name) {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const file = typeof File === "function" ? new File([blob], name, { type: blob.type }) : null;
+  if (isIOS && file && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); }
+    catch (err) {
+      if (err.name === "AbortError") return;
+      if (err.name === "NotAllowedError") {
+        // The original tap expired while capturing — ask for a fresh one
+        toast("Screenshot ready", "success", 12000, { label: "Save", onClick: () => deliverScreenshot(blob, name) });
+        return;
+      }
+      downloadBlob(blob, name);
+    }
+    return;
+  }
+  downloadBlob(blob, name);
+  toast("Screenshot saved", "success");
 }
 
 async function saveScreenshot(dataUrl, { download, toClipboard, filename }) {
   emit("screenshot", { dataUrl });
   if (toClipboard) {
     try {
-      const blob = await (await fetch(dataUrl)).blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": dataUrlToBlob(dataUrl) })]);
       toast("Screenshot copied", "success");
-    } catch { toast("Copy failed", "error"); }
+    } catch { toast("Copy failed — the browser blocked clipboard access", "error"); }
   }
   if (download) {
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = filename || `preview-${Date.now()}.png`;
-    a.click();
-    toast("Screenshot saved", "success");
+    const blob = dataUrlToBlob(await encodeScreenshot(dataUrl));
+    const ext = blob.type.split("/")[1].replace("jpeg", "jpg");
+    await deliverScreenshot(blob, filename || `preview-${Date.now()}.${ext}`);
   }
+  if (!toClipboard && !download) toast("Turn on Download or Copy in Settings → Screenshots", "warning");
 }
 
 function openAnnotator(dataUrl, { download, toClipboard, filename }) {
@@ -3800,11 +4197,14 @@ function openAnnotator(dataUrl, { download, toClipboard, filename }) {
   const layer = $("#fpAnnLayer", overlay);
   const canvasWrap = $("#fpAnnCanvas", overlay);
   let ctx;
-  img.onload = () => {
-    layer.width = img.width;
-    layer.height = img.height;
+  const initLayer = () => {
+    if (ctx) return;
+    layer.width = img.naturalWidth;
+    layer.height = img.naturalHeight;
     ctx = layer.getContext("2d");
   };
+  img.onload = initLayer;
+  if (img.complete && img.naturalWidth) initLayer();
 
   let tool = "box", drawing = false, startX = 0, startY = 0, curX = 0, curY = 0;
   const annotations = [];
@@ -3816,6 +4216,7 @@ function openAnnotator(dataUrl, { download, toClipboard, filename }) {
 
   layer.addEventListener("pointerdown", (e) => {
     const r = layer.getBoundingClientRect();
+    try { layer.setPointerCapture(e.pointerId); } catch {}
     drawing = true;
     startX = (e.clientX - r.left) * (layer.width / r.width);
     startY = (e.clientY - r.top) * (layer.height / r.height);
@@ -3834,6 +4235,7 @@ function openAnnotator(dataUrl, { download, toClipboard, filename }) {
     annotations.push({ tool, x1: startX, y1: startY, x2: curX, y2: curY });
     drawAll();
   });
+  layer.addEventListener("pointercancel", () => { drawing = false; drawAll(); });
 
   function drawAll() {
     if (!ctx) return;
@@ -3845,14 +4247,16 @@ function openAnnotator(dataUrl, { download, toClipboard, filename }) {
   function drawShape({ tool, x1, y1, x2, y2 }) {
     ctx.strokeStyle = "#F59E0B";
     ctx.fillStyle = "rgba(245,158,11,0.15)";
-    ctx.lineWidth = 3;
+    // keep strokes the same on-screen thickness whatever the image resolution
+    const k = layer.width / (layer.getBoundingClientRect().width || layer.width);
+    ctx.lineWidth = 3 * k;
     if (tool === "box") {
       ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
       ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
     } else if (tool === "arrow") {
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
       const angle = Math.atan2(y2 - y1, x2 - x1);
-      const head = 16;
+      const head = 16 * k;
       ctx.beginPath();
       ctx.moveTo(x2, y2);
       ctx.lineTo(x2 - head * Math.cos(angle - Math.PI / 6), y2 - head * Math.sin(angle - Math.PI / 6));
@@ -3870,13 +4274,15 @@ function openAnnotator(dataUrl, { download, toClipboard, filename }) {
   $("#fpAnnCancel", overlay).addEventListener("click", close);
   $("#fpAnnSave", overlay).addEventListener("click", async () => {
     const finalCanvas = document.createElement("canvas");
-    finalCanvas.width = img.width; finalCanvas.height = img.height;
+    finalCanvas.width = img.naturalWidth; finalCanvas.height = img.naturalHeight;
     const finalCtx = finalCanvas.getContext("2d");
     finalCtx.drawImage(img, 0, 0);
     finalCtx.drawImage(layer, 0, 0);
     const finalUrl = finalCanvas.toDataURL("image/png");
-    await saveScreenshot(finalUrl, { download, toClipboard, filename });
+    // start saving while the tap still counts as a user gesture, then close
+    const saving = saveScreenshot(finalUrl, { download, toClipboard, filename });
     close();
+    await saving;
   });
 }
 
@@ -3919,6 +4325,7 @@ function openPalette() {
     { group: "Panel", icon: "database", label: "Open Storage", desc: "localStorage / sessionStorage", action: () => openSection("storage") },
     { group: "Panel", icon: "search", label: "Open Search", desc: "Search across files", action: () => openSection("search") },
     { group: "Panel", icon: "tool", label: "Open Dev Tools", desc: "Advanced actions", action: () => openSection("devtools") },
+    { group: "Actions", icon: "ruler", label: "Toggle grid lines", desc: "Stage grid and ruler guides", action: () => { ST.settings.showGridLines = !ST.settings.showGridLines; saveSettings(); } },
     { group: "Actions", icon: "camera", label: "Screenshot", desc: "Capture the frame", action: () => takeScreenshot() },
     { group: "Actions", icon: "code", label: "Live code editor", desc: "Edit and push changes", action: openDevEditor },
     { group: "Actions", icon: "snippets", label: "Snippets", desc: "Manage snippets", action: showSnippetsDialog },
@@ -4081,6 +4488,7 @@ function saveSnapshot(label) {
 // ─────────────────────────────────────────────────────────────────
 async function open(opts = {}) {
   injectStyles();
+  setViewportFit(true);
   loadSettings();
   ST.options = opts;
   ST.hooks = opts.hooks || {};
@@ -4104,10 +4512,11 @@ async function open(opts = {}) {
 
   window.addEventListener("message", handleMessage);
 
+  applySettings();
   applySize(ST.sizer.mode, ST.sizer.custom);
+  watchStage();
   setSource(ST.source);
   updateRotateMenuIcon();
-  applySettings();
 
   // save initial snapshot
   setTimeout(() => saveSnapshot("Initial"), 600);
@@ -4129,6 +4538,8 @@ function close() {
   closeDevEditor();
   closeDialog();
   if (ST.palette.close) ST.palette.close();
+  ST.stageObserver?.disconnect();
+  setViewportFit(false);
   ST.iframeEl.src = "about:blank";
   emit("close");
 }
@@ -4170,7 +4581,7 @@ const API = {
     if (hEl) hEl.value = ST.sizer.custom.h;
     applySize("custom", ST.sizer.custom);
   },
-  setDevice: (key) => { ST.sizer.device = key; applySize("device"); },
+  setDevice: (key) => { ST.sizer.device = key; ST.sizer.mode = "device"; applySize("device"); },
   rotate,
   toggleFullscreen,
   openSection, closeSection,
