@@ -16,6 +16,7 @@ Write, preview, manage, and deploy websites directly from your phone. No desktop
 
 [Website](https://foliostudios.vercel.app) · [Documentation](https://foliostudios.vercel.app/docs) · [Report a bug](https://github.com/YOUR_USERNAME/folio/issues)
 
+[![Repository Size](https://img.shields.io/github/repo-size/Sketchware-Pro/Sketchware-Pro)](https://github.com/Sketchware-Pro/Sketchware-Pro)
 </div>
 
 ---
