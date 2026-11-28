@@ -19,7 +19,8 @@ Write, preview, manage, and deploy websites directly from your phone. No desktop
 [![Repository Size](https://img.shields.io/github/repo-size/natestudios/folio)](https://github.com/natestudios/folio)
 </div>
 
----
+
+[![GitHub last commit](https://img.shields.io/github/last-commit/natestudios/folio)](https://github.com/natestudios/folio/commits/)
 
 ## Table of contents
 
