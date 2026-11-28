@@ -17,10 +17,10 @@ Write, preview, manage, and deploy websites directly from your phone. No desktop
 [Website](https://foliostudios.vercel.app) · [Documentation](https://foliostudios.vercel.app/docs) · [Report a bug](https://github.com/natstudios/folio/issues)
 
 [![Repository Size](https://img.shields.io/github/repo-size/natestudios/folio)](https://github.com/natestudios/folio)
-</div>
 
 
 [![GitHub last commit](https://img.shields.io/github/last-commit/natestudios/folio)](https://github.com/natestudios/folio/commits/)
+</div>
 
 ## Table of contents
 
